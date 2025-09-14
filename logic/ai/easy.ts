@@ -46,10 +46,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
-        case 'select_card_from_other_lanes_to_delete':
         case 'select_card_to_delete_for_death_1':
         case 'plague_4_opponent_delete': {
-            // FIX: Check for `disallowedIds` property only on actions that have it.
             const disallowedIds = ('disallowedIds' in action && action.disallowedIds) ? action.disallowedIds : [];
             // Prioritize player cards, but otherwise make a simple choice.
             const allowedPlayerCards = state.player.lanes.flat().filter(c => !disallowedIds.includes(c.id));
@@ -60,6 +58,28 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const allowedOpponentCards = state.opponent.lanes.flat().filter(c => !disallowedIds.includes(c.id));
             if (allowedOpponentCards.length > 0) {
                 return { type: 'deleteCard', cardId: allowedOpponentCards[0].id };
+            }
+            return { type: 'skip' };
+        }
+        
+        case 'select_card_from_other_lanes_to_delete': {
+            const { disallowedLaneIndex, lanesSelected } = action;
+            const validTargets: PlayedCard[] = [];
+            for (let i = 0; i < 3; i++) {
+                if (i === disallowedLaneIndex || lanesSelected.includes(i)) continue;
+                // Prefer player cards
+                const playerLane = state.player.lanes[i];
+                if (playerLane.length > 0) {
+                    validTargets.push(playerLane[playerLane.length - 1]); // target top card
+                    continue;
+                }
+                const opponentLane = state.opponent.lanes[i];
+                if (opponentLane.length > 0) {
+                    validTargets.push(opponentLane[opponentLane.length - 1]);
+                }
+            }
+            if (validTargets.length > 0) {
+                return { type: 'deleteCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
         }
@@ -138,6 +158,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
             if (allCards.length > 0) {
                 const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
+                return { type: 'deleteCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_card_to_flip_and_shift_for_gravity_2': {
+            const playerCards = state.player.lanes.flat();
+            if (playerCards.length > 0) {
+                const randomCard = playerCards[Math.floor(Math.random() * playerCards.length)];
                 return { type: 'deleteCard', cardId: randomCard.id };
             }
             return { type: 'skip' };

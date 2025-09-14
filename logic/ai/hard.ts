@@ -152,7 +152,6 @@ const getBestMove = (state: GameState): AIAction => {
     }
 
     possibleMoves.sort((a, b) => b.score - a.score);
-    // console.log("AI Choices:", possibleMoves.slice(0, 5).map(m => `${m.description} (Score: ${m.score.toFixed(0)})`).join('\n'));
     return possibleMoves[0].move;
 };
 
@@ -167,7 +166,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete':
         case 'select_card_to_delete_for_death_1': {
-            // FIX: Check for `disallowedIds` on appropriate action types. For `select_card_to_delete_for_death_1`, the source card is disallowed.
             const disallowedIds = action.type === 'select_cards_to_delete'
                 ? action.disallowedIds
                 : (action.type === 'select_card_to_delete_for_death_1' ? [action.sourceCardId] : []);
@@ -176,6 +174,56 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (allowedPlayerCards.length > 0) {
                 const bestTarget = allowedPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
                 return { type: 'deleteCard', cardId: bestTarget.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_any_card_to_flip_optional':
+        case 'select_any_card_to_flip':
+        case 'select_card_to_flip_for_fire_3':
+        case 'select_any_other_card_to_flip':
+        case 'select_card_to_flip_for_light_0':
+        case 'select_any_other_card_to_flip_for_water_0':
+        case 'select_opponent_face_up_card_to_flip':
+        case 'select_opponent_card_to_flip': {
+            const potentialTargets: { cardId: string; score: number }[] = [];
+            // 1. Score flipping opponent's face-up cards (high threat = high score)
+            player.lanes.flat().forEach(c => {
+                if (c.isFaceUp) {
+                    potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                }
+            });
+            // 2. Score flipping own face-down cards (consistent gain + reveals card)
+            opponent.lanes.flat().forEach(c => {
+                if (!c.isFaceUp) {
+                    const valueGain = (getCardThreat({ ...c, isFaceUp: true }, 'opponent', state)) - getCardThreat(c, 'opponent', state);
+                    potentialTargets.push({ cardId: c.id, score: valueGain + 3 }); // +3 for reveal utility
+                }
+            });
+
+            if (potentialTargets.length > 0) {
+                potentialTargets.sort((a, b) => b.score - a.score);
+                if (potentialTargets[0].score > 0) {
+                    return { type: 'flipCard', cardId: potentialTargets[0].cardId };
+                }
+            }
+            if ('optional' in action && action.optional) return { type: 'skip' };
+            return { type: 'skip' };
+        }
+
+        case 'select_card_from_other_lanes_to_delete': {
+            const { disallowedLaneIndex, lanesSelected } = action;
+            const validTargets: PlayedCard[] = [];
+             for (let i = 0; i < 3; i++) {
+                if (i === disallowedLaneIndex || lanesSelected.includes(i)) continue;
+                 // Get all valid player cards from valid lanes
+                const playerLane = state.player.lanes[i];
+                validTargets.push(...playerLane);
+            }
+             if (validTargets.length > 0) {
+                // Target highest threat card among valid targets
+                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'deleteCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
         }
@@ -197,41 +245,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_opponent_face_up_card_to_flip': {
-            const faceUpPlayerCards = player.lanes.flat().filter(c => c.isFaceUp);
-            if (faceUpPlayerCards.length > 0) {
-                const bestTarget = faceUpPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
-                return { type: 'flipCard', cardId: bestTarget.id };
-            }
-            return { type: 'skip' };
-        }
-        case 'select_opponent_card_to_flip': {
-            const faceUpPlayerCards = player.lanes.flat().filter(c => c.isFaceUp);
-            if (faceUpPlayerCards.length > 0) {
-                // Best action is to flip the most threatening card
-                const bestTarget = faceUpPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
-                return { type: 'flipCard', cardId: bestTarget.id };
-            }
-            
-            // If no face-up cards, must flip a face-down one.
-            const faceDownPlayerCards = player.lanes.flat().filter(c => !c.isFaceUp);
-            if (faceDownPlayerCards.length > 0) {
-                // Heuristic: flip a card in the player's highest value lane, hoping to disrupt it.
-                const laneValues = state.player.laneValues.map((value, index) => ({ value, index }));
-                laneValues.sort((a, b) => b.value - a.value);
-
-                for (const lane of laneValues) {
-                    const cardsInLane = state.player.lanes[lane.index].filter(c => !c.isFaceUp);
-                    if (cardsInLane.length > 0) {
-                        return { type: 'flipCard', cardId: cardsInLane[0].id }; // Pick the first face-down card in the highest-value lane
-                    }
-                }
-                // Fallback if logic fails (shouldn't happen)
-                return { type: 'flipCard', cardId: faceDownPlayerCards[0].id };
-            }
-
-            return { type: 'skip' }; // No cards to flip
-        }
         case 'select_own_covered_card_in_lane_to_flip': {
             const { laneIndex } = action;
             const ownLane = state.opponent.lanes[laneIndex];
@@ -282,19 +295,34 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'rearrangeProtocols', newOrder };
 
         case 'select_card_to_shift_for_gravity_1': {
+            const playerCards = state.player.lanes.flat();
+            if (playerCards.length > 0) {
+                // Target player's most threatening card
+                playerCards.sort((a,b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'deleteCard', cardId: playerCards[0].id };
+            }
             const ownCards = state.opponent.lanes.flat();
-            const ownCardsOutsideSource = ownCards.filter(c => !state.opponent.lanes[action.sourceLaneIndex].some(cardInLane => cardInLane.id === c.id));
-            if (ownCardsOutsideSource.length > 0) {
-                ownCardsOutsideSource.sort((a, b) => getCardPower(b) - getCardPower(a));
-                return { type: 'deleteCard', cardId: ownCardsOutsideSource[0].id };
+            if (ownCards.length > 0) {
+                 // Fallback: shift own least powerful card
+                ownCards.sort((a,b) => getCardPower(a) - getCardPower(b));
+                return { type: 'deleteCard', cardId: ownCards[0].id };
             }
-            
-            const ownCardsInSource = state.opponent.lanes[action.sourceLaneIndex];
-            if (ownCardsInSource.length > 0) {
-                ownCardsInSource.sort((a, b) => getCardPower(a) - getCardPower(b));
-                return { type: 'deleteCard', cardId: ownCardsInSource[0].id };
+            return { type: 'skip' };
+        }
+        
+        case 'select_card_to_flip_and_shift_for_gravity_2': {
+            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+            if (allCards.length > 0) {
+                // Target the most threatening card on the board, prioritizing player cards
+                allCards.sort((a, b) => {
+                    const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
+                    const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
+                    if (aIsPlayer && !bIsPlayer) return -1;
+                    if (!aIsPlayer && bIsPlayer) return 1;
+                    return getCardThreat(b, aIsPlayer ? 'player' : 'opponent', state) - getCardThreat(a, bIsPlayer ? 'player' : 'opponent', state);
+                });
+                return { type: 'deleteCard', cardId: allCards[0].id };
             }
-
             return { type: 'skip' };
         }
 
@@ -352,17 +380,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (validTargets.length > 0) {
                 // Hard AI: shift the card from the player's strongest lane to weaken it.
-                // Prioritize high-value face-up cards within that lane.
+                // Prioritize high-threat face-up cards within that lane.
                 validTargets.sort((a, b) => {
                     const laneValueA = state.player.laneValues[a.laneIndex];
                     const laneValueB = state.player.laneValues[b.laneIndex];
                     if (laneValueA !== laneValueB) {
                         return laneValueB - laneValueA; // 1. Strongest lane
                     }
-                    if (a.card.isFaceUp && !b.card.isFaceUp) return -1; // 2. Face-up over face-down
-                    if (!a.card.isFaceUp && b.card.isFaceUp) return 1;
-                    if (a.card.isFaceUp && b.card.isFaceUp) return b.card.value - a.card.value; // 3. Highest value
-                    return 0;
+                    return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
                 });
                 return { type: 'deleteCard', cardId: validTargets[0].card.id };
             }

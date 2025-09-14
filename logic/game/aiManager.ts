@@ -401,27 +401,44 @@ export const runOpponentTurn = (
 
                 setTimeout(() => { // Play card animation delay
                     const onAnimsComplete = () => {
-                        setGameState(s_after_all_anims => {
-                            let stateForOnPlay = { ...s_after_all_anims };
+                        setGameState(s_after_cover_anims => { // Renamed for clarity
+                            let stateForOnPlay = { ...s_after_cover_anims };
                             let onPlayResult: EffectResult = { newState: stateForOnPlay };
-
+                
                             if (stateForOnPlay.queuedEffect) {
                                 const { card, laneIndex } = stateForOnPlay.queuedEffect;
                                 onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, 'opponent');
                                 onPlayResult.newState.queuedEffect = undefined;
                             }
                             
-                            // NOTE: Assuming for simplicity that AI on-play effects don't create new animations that need queueing.
-                            const finalState = onPlayResult.newState;
-                            if (finalState.actionRequired) {
-                                runOpponentTurn(finalState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                            const onPlayAnims = onPlayResult.animationRequests;
+                            const stateAfterOnPlayLogic = onPlayResult.newState;
+                
+                            const onAllAnimsComplete = () => {
+                                setGameState(s_after_all_anims => {
+                                    if (s_after_all_anims.actionRequired) {
+                                        runOpponentTurn(s_after_all_anims, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                    } else {
+                                        setGameState(phaseManager.processEndOfAction(s_after_all_anims));
+                                    }
+                                    return s_after_all_anims;
+                                });
+                            };
+                
+                            if (onPlayAnims && onPlayAnims.length > 0) {
+                                processAnimationQueue(onPlayAnims, onAllAnimsComplete);
+                                return stateAfterOnPlayLogic; 
                             } else {
-                                setGameState(phaseManager.processEndOfAction(finalState));
+                                if (stateAfterOnPlayLogic.actionRequired) {
+                                    runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                } else {
+                                    setGameState(phaseManager.processEndOfAction(stateAfterOnPlayLogic));
+                                }
+                                return stateAfterOnPlayLogic;
                             }
-                            return finalState; // must return a state from updater
                         });
                     };
-
+                
                     setGameState(s => {
                         const stateAfterPlayAnim = { ...s, animationState: null };
                         if (onCoverAnims && onCoverAnims.length > 0) {
@@ -431,7 +448,7 @@ export const runOpponentTurn = (
                         }
                         return stateAfterPlayAnim;
                     });
-
+                
                 }, 500);
                 
                 return stateWithPlayAnimation;
