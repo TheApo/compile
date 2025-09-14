@@ -7,8 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Card } from "../data/cards";
 import { GameState, PlayedCard, Player, PlayerState } from "../types";
 import { shuffleDeck } from './gameLogic';
-import { log } from '../logic/utils/log';
-import { recalculateAllLaneValues } from '../logic/game/stateManager';
+import { log } from '../utils/log';
+import { recalculateAllLaneValues } from '../game/stateManager';
 
 /**
  * Draws a specified number of cards from a deck, handling reshuffling the discard pile if necessary.

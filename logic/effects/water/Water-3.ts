@@ -15,6 +15,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             actionRequired: {
                 type: 'select_lane_for_water_3',
                 sourceCardId: card.id,
+                actor,
             }
         }
     };

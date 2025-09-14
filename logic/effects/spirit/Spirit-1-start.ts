@@ -15,6 +15,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
             actionRequired: {
                 type: 'prompt_spirit_1_start',
                 sourceCardId: card.id,
+                actor: state.turn,
             }
         }
     };

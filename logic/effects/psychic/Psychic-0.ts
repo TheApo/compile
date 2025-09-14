@@ -26,7 +26,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         // Queue the hand reveal after the discard
         newState.queuedActions = [
             ...(newState.queuedActions || []),
-            { type: 'reveal_opponent_hand', sourceCardId: card.id }
+            // FIX: Added the missing 'actor' property to satisfy the ActionRequired type.
+            { type: 'reveal_opponent_hand', sourceCardId: card.id, actor }
         ];
     }
     return { newState };

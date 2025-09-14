@@ -12,8 +12,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let newState = { ...state };
     
     const faceDownInLine = [
-        ...newState.player.lanes[laneIndex], 
-        ...newState.opponent.lanes[laneIndex]
+        ...newState[actor].lanes[laneIndex], 
+        ...newState[actor === 'player' ? 'opponent' : 'player'].lanes[laneIndex]
     ].filter(c => !c.isFaceUp);
     
     if (faceDownInLine.length > 0) {
@@ -21,6 +21,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_lane_to_shift_cards_for_light_3',
             sourceCardId: card.id,
             sourceLaneIndex: laneIndex,
+            actor,
         };
     }
 

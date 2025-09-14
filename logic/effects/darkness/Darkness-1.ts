@@ -17,6 +17,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         newState.actionRequired = {
             type: 'select_opponent_card_to_flip',
             sourceCardId: card.id,
+            actor,
         };
     }
 

@@ -18,6 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                 actionRequired: {
                     type: 'select_opponent_face_down_card_to_shift',
                     sourceCardId: card.id,
+                    actor: actor,
                 }
             }
         };

@@ -70,7 +70,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             newState = internalResolveTargetedFlip(prev, targetCardId);
             break;
         case 'select_opponent_card_to_flip': { // Darkness-1
-            newState = internalResolveTargetedFlip(prev, targetCardId, { type: 'shift_flipped_card_optional', cardId: targetCardId, sourceCardId: prev.actionRequired.sourceCardId, optional: true });
+            const { actor } = prev.actionRequired;
+            newState = internalResolveTargetedFlip(prev, targetCardId, { type: 'shift_flipped_card_optional', cardId: targetCardId, sourceCardId: prev.actionRequired.sourceCardId, optional: true, actor });
             requiresTurnEnd = false; // This action has a follow-up
             break;
         }
@@ -81,8 +82,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_opponent_covered_card_to_shift':
         case 'select_face_down_card_to_shift_for_darkness_4':
         case 'select_own_other_card_to_shift':
-        case 'select_opponent_face_down_card_to_shift':
         case 'select_any_opponent_card_to_shift': {
+            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
@@ -100,7 +101,34 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor,
+                    };
+                    newState.actionRequired = nextAction;
+                }
+            }
+            requiresTurnEnd = false; // This action has a follow-up
+            break;
+        }
+        case 'select_opponent_face_down_card_to_shift': { // Speed-4
+            const { actor } = prev.actionRequired;
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (cardInfo) {
+                const { owner: cardOwner } = cardInfo;
+                let originalLaneIndex = -1;
+                for (let i = 0; i < prev[cardOwner].lanes.length; i++) {
+                    if (prev[cardOwner].lanes[i].some(c => c.id === targetCardId)) {
+                        originalLaneIndex = i;
+                        break;
+                    }
+                }
+                if (originalLaneIndex !== -1) {
+                    const nextAction: ActionRequired = {
+                        type: 'select_lane_for_shift',
+                        cardToShiftId: targetCardId,
+                        cardOwner,
+                        originalLaneIndex,
+                        sourceCardId: prev.actionRequired.sourceCardId,
+                        actor: actor,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -109,6 +137,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_own_card_to_shift_for_speed_3': {
+            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
@@ -126,7 +155,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor,
                         sourceEffect: 'speed_3_end',
                     };
                     newState.actionRequired = nextAction;
@@ -136,13 +165,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_card_to_delete_for_death_1': {
-            const { sourceCardId } = prev.actionRequired;
+            const { sourceCardId, actor } = prev.actionRequired;
             const cardInfoToDelete = findCardOnBoard(prev, targetCardId);
             const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
 
             if (!cardInfoToDelete || !sourceCardInfo) return { nextState: prev };
 
-            const actor = prev.turn;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfoToDelete.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfoToDelete.card.isFaceUp ? `${cardInfoToDelete.card.protocol}-${cardInfoToDelete.card.value}` : 'a face-down card';
@@ -275,27 +303,29 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'plague_4_opponent_delete': {
+            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
-            const opponentOfTurnPlayer = prev.turn === 'player' ? 'opponent' : 'player';
+            const opponentOfActor = actor === 'player' ? 'opponent' : 'player';
             // The person who needs to act is the opponent of the current turn player.
             // The card they target must be their own and face-down.
-            if (cardInfo.owner === opponentOfTurnPlayer && !cardInfo.card.isFaceUp) {
-                const actorName = opponentOfTurnPlayer === 'player' ? 'Player' : 'Opponent';
+            if (cardInfo.owner === opponentOfActor && !cardInfo.card.isFaceUp) {
+                const actorName = opponentOfActor === 'player' ? 'Player' : 'Opponent';
                 const cardName = `${cardInfo.card.protocol}-${cardInfo.card.value}`; // Opponent knows their card
-                newState = log(newState, opponentOfTurnPlayer, `Plague-4: ${actorName} deletes their face-down card (${cardName}).`);
+                newState = log(newState, opponentOfActor, `Plague-4: ${actorName} deletes their face-down card (${cardName}).`);
                 
                 newState.actionRequired = null;
                 requiresAnimation = {
                     animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                     onCompleteCallback: (s, endTurnCb) => {
-                        // The optional flip is for the player whose turn it is.
+                        // The optional flip is for the player whose card triggered the effect.
                         return {
                             ...s,
                             actionRequired: {
                                 type: 'plague_4_player_flip_optional',
                                 sourceCardId: prev.actionRequired!.sourceCardId,
-                                optional: true
+                                optional: true,
+                                actor,
                             }
                         };
                     }
@@ -330,7 +360,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             newState = internalResolveTargetedFlip(prev, targetCardId);
             break;
         case 'select_card_to_shift_for_gravity_1': {
-            const { sourceLaneIndex, sourceCardId } = prev.actionRequired;
+            const { sourceLaneIndex, sourceCardId, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
@@ -350,7 +380,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     cardOwner: cardInfo.owner,
                     originalLaneIndex: sourceLaneIndex,
                     sourceCardId: sourceCardId,
-                    actor: prev.turn,
+                    actor,
                 };
                 requiresTurnEnd = false;
             } else {
@@ -360,24 +390,31 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const { targetLaneIndex } = prev.actionRequired;
+            const { targetLaneIndex, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
-            // This function performs both actions sequentially in the state.
-            // The flip animation will start, but the card's position will update immediately.
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId);
-            newState = internalShiftCard(stateAfterFlip, targetCardId, cardInfo.owner, targetLaneIndex, prev.turn);
+            // Manual log and flip to use the correct actor
+            const { card, owner } = cardInfo;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const ownerName = owner === 'player' ? "Player's" : "Opponent's";
+            const faceDirection = card.isFaceUp ? "face-down" : "face-up";
+            const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : `a face-down card`;
+            let stateAfterLog = log(prev, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
+            let stateAfterFlip = findAndFlipCards(new Set([targetCardId]), stateAfterLog);
+            stateAfterFlip.animationState = { type: 'flipCard', cardId: targetCardId };
+            
+            newState = internalShiftCard(stateAfterFlip, targetCardId, cardInfo.owner, targetLaneIndex, actor);
             newState.actionRequired = null;
             break;
         }
         case 'select_face_down_card_to_shift_for_gravity_4': {
-            const { targetLaneIndex } = prev.actionRequired;
+            const { targetLaneIndex, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo || cardInfo.card.isFaceUp) { // Target must be face-down
                 return { nextState: prev };
             }
-            newState = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, prev.turn);
+            newState = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, actor);
             break;
         }
         case 'select_any_card_to_flip': {
@@ -411,11 +448,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_face_down_card_to_reveal_for_light_2': {
+            const { actor } = prev.actionRequired;
             newState = internalResolveTargetedFlip(prev, targetCardId, {
                 type: 'prompt_shift_or_flip_for_light_2',
                 sourceCardId: prev.actionRequired.sourceCardId,
                 revealedCardId: targetCardId,
                 optional: true,
+                actor,
             });
             requiresTurnEnd = false;
             break;
@@ -448,7 +487,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 export const flipCard = (prevState: GameState, cardId: string): GameState => {
     const action = prevState.actionRequired;
     if (action?.type === 'select_opponent_card_to_flip') { // Darkness-1 context
-        const stateAfterFlip = internalResolveTargetedFlip(prevState, cardId, { type: 'shift_flipped_card_optional', cardId: cardId, sourceCardId: action.sourceCardId, optional: true });
+        const { actor } = action;
+        const stateAfterFlip = internalResolveTargetedFlip(prevState, cardId, { type: 'shift_flipped_card_optional', cardId: cardId, sourceCardId: action.sourceCardId, optional: true, actor });
         return stateAfterFlip;
     }
 

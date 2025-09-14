@@ -21,6 +21,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                     count: 1, 
                     sourceCardId: card.id,
                     disallowedIds: [card.id],
+                    actor,
                 }
             }
         };

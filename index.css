@@ -479,6 +479,9 @@ p {
   font-weight: 600;
   border-radius: 4px;
   animation: reveal 0.5s ease-out forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .protocol-display-card.player {

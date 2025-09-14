@@ -36,6 +36,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
                 count: 1,
                 sourceCardId: sourceCardId,
                 disallowedIds: [sourceCardId],
+                actor: player,
             };
             break;
         case 'fire_2':
@@ -43,6 +44,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             newState.actionRequired = {
                 type: 'select_card_to_return',
                 sourceCardId: sourceCardId,
+                actor: player,
             };
             break;
         case 'fire_3':
@@ -50,6 +52,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             newState.actionRequired = {
                 type: 'select_card_to_flip_for_fire_3',
                 sourceCardId: sourceCardId,
+                actor: player,
             };
             break;
         case 'spirit_1_start':
@@ -144,7 +147,8 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         const effectKey = `${cardToBeCovered.protocol}-${cardToBeCovered.value}`;
         const onCoverExecute = effectRegistryOnCover[effectKey];
         if (onCoverExecute) {
-            const result = onCoverExecute(cardToBeCovered, targetLaneIndex, newState);
+            // FIX: Added missing 'cardOwner' argument for the owner of the covered card.
+            const result = onCoverExecute(cardToBeCovered, targetLaneIndex, newState, cardOwner);
             newState = result.newState;
             // Note: Shift does not currently handle animations from onCover effects.
         }

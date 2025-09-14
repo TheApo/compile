@@ -36,14 +36,17 @@ export type ActionRequired = {
     type: 'select_opponent_face_up_card_to_flip';
     count: number;
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_own_face_up_covered_card_to_flip';
     count: number;
     optional: true;
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_opponent_covered_card_to_shift';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_lane_for_shift';
     cardToShiftId: string;
@@ -55,202 +58,261 @@ export type ActionRequired = {
 } | {
     type: 'select_opponent_card_to_flip';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'shift_flipped_card_optional';
     cardId: string;
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_own_covered_card_in_lane_to_flip';
     laneIndex: number;
     sourceCardId:string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_card_from_hand_to_play';
     disallowedLaneIndex: number;
     sourceCardId: string;
     isFaceDown?: boolean;
+    actor: Player;
 } | {
     type: 'select_lane_for_play';
     cardInHandId: string;
     disallowedLaneIndex: number;
     sourceCardId: string;
     isFaceDown?: boolean;
+    actor: Player;
 } | {
     type: 'select_face_down_card_to_shift_for_darkness_4';
     sourceCardId: string;
+    actor: Player;
+} | {
+    type: 'select_face_down_card_to_shift_for_gravity_4';
+    sourceCardId: string;
+    targetLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_cards_to_delete';
     count: number;
     sourceCardId: string;
     disallowedIds: string[];
+    actor: Player;
 } | {
     type: 'select_face_down_card_to_delete';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_low_value_card_to_delete';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_card_from_other_lanes_to_delete';
     sourceCardId: string;
     disallowedLaneIndex: number;
     lanesSelected: number[];
     count: number;
+    actor: Player;
 } | {
     type: 'select_lane_for_death_2';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_death_1_effect';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_card_to_delete_for_death_1';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_give_card_for_love_1';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_card_from_hand_to_give';
     sourceCardId: string;
     sourceEffect: 'love_1_end' | 'love_3';
+    actor: Player;
 } | {
     type: 'select_card_from_hand_to_reveal';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'plague_2_player_discard';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'plague_2_opponent_discard';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'plague_4_opponent_delete';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'plague_4_player_flip_optional';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_any_other_card_to_flip';
     sourceCardId: string;
     draws: number;
+    actor: Player;
 } | {
     type: 'select_card_to_return';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_fire_3_discard';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_card_to_flip_for_fire_3';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_cards_from_hand_to_discard_for_fire_4';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_cards_from_hand_to_discard_for_hate_1';
     sourceCardId: string;
     count: number;
+    actor: Player;
 } | {
     type: 'select_card_to_shift_for_gravity_1';
     sourceCardId: string;
     sourceLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_card_to_flip_and_shift_for_gravity_2';
     sourceCardId: string;
     targetLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_face_down_card_to_shift_for_gravity_4';
     sourceCardId: string;
     targetLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_any_card_to_flip';
     count: number;
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_any_face_down_card_to_flip_optional';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_any_card_to_flip_optional';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'prompt_spirit_1_start';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_shift_for_spirit_3';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'prompt_swap_protocols';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_lane_for_life_3_play';
     sourceCardId: string;
     disallowedLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_card_to_flip_for_light_0';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_face_down_card_to_reveal_for_light_2';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_shift_or_flip_for_light_2';
     sourceCardId: string;
     revealedCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_lane_to_shift_revealed_card_for_light_2';
     sourceCardId: string;
     revealedCardId: string;
+    actor: Player;
 } | {
     type: 'select_lane_to_shift_cards_for_light_3';
     sourceCardId: string;
     sourceLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_lane_for_metal_3_delete';
     sourceCardId: string;
     disallowedLaneIndex: number;
+    actor: Player;
 } | {
     type: 'select_any_other_card_to_flip_for_water_0';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_rearrange_protocols';
     sourceCardId: string;
     target: Player;
+    actor: Player;
 } | {
     type: 'select_lane_for_water_3';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_own_card_to_return_for_water_4';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_own_other_card_to_shift';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_shift_for_speed_3';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_own_card_to_shift_for_speed_3';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_opponent_face_down_card_to_shift';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'reveal_opponent_hand';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'select_any_opponent_card_to_shift';
     sourceCardId: string;
+    actor: Player;
 } | {
     type: 'prompt_return_for_psychic_4';
     sourceCardId: string;
     optional: true;
+    actor: Player;
 } | {
     type: 'select_opponent_card_to_return';
     sourceCardId: string;
+    actor: Player;
 } | null;
 
 export type AnimationState = 

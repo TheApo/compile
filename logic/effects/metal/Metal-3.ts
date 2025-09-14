@@ -29,6 +29,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_lane_for_metal_3_delete',
             sourceCardId: card.id,
             disallowedLaneIndex: laneIndex,
+            actor,
         };
     }
 

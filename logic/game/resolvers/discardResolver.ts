@@ -191,7 +191,9 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
         type: 'select_cards_to_delete',
         count: 2,
         sourceCardId,
-        disallowedIds: [sourceCardId]
+        disallowedIds: [sourceCardId],
+        // FIX: Added the missing 'actor' property to satisfy the ActionRequired type.
+        actor: player,
     };
 
     return newState;

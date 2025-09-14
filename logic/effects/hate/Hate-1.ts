@@ -19,6 +19,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_cards_from_hand_to_discard_for_hate_1', 
             count: maxDiscard, 
             sourceCardId: card.id,
+            actor,
         };
     } else {
         // No cards to discard, proceed directly to deleting.
@@ -26,7 +27,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_cards_to_delete',
             count: 2,
             sourceCardId: card.id,
-            disallowedIds: [card.id]
+            disallowedIds: [card.id],
+            actor,
         };
     }
     return { newState };

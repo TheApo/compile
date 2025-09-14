@@ -17,6 +17,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_card_to_flip_and_shift_for_gravity_2',
             sourceCardId: card.id,
             targetLaneIndex: laneIndex,
+            actor: actor,
         };
     }
 

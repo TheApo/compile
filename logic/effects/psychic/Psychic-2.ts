@@ -15,7 +15,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     
     const opponentHandCount = newState[opponent].hand.length;
 
-    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent };
+    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent, actor };
     
     if (opponentHandCount > 0) {
         newState.actionRequired = {

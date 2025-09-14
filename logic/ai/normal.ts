@@ -127,6 +127,34 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'select_any_face_down_card_to_flip_optional': {
+            const potentialTargets: { cardId: string; score: number }[] = [];
+            // Score flipping own face-down cards. Higher score for lanes that are close to compiling.
+            state.opponent.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        let score = 5; // Base score for revealing a card
+                        score += state.opponent.laneValues[i]; // Higher score for stronger lanes
+                        potentialTargets.push({ cardId: c.id, score });
+                    }
+                });
+            });
+            // Score flipping player's face-down cards. Lower priority.
+            state.player.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        potentialTargets.push({ cardId: c.id, score: 1 });
+                    }
+                });
+            });
+            
+            if (potentialTargets.length > 0) {
+                potentialTargets.sort((a,b) => b.score - a.score);
+                return { type: 'flipCard', cardId: potentialTargets[0].cardId };
+            }
+            return { type: 'skip' }; // It's optional.
+        }
+
         case 'select_any_card_to_flip_optional':
         case 'select_any_card_to_flip':
         case 'select_card_to_flip_for_fire_3':
@@ -308,6 +336,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             if (ownTargets.length > 0) {
                 return { type: 'deleteCard', cardId: ownTargets[0].id };
+            }
+            return { type: 'skip' };
+        }
+        
+        case 'select_any_opponent_card_to_shift': {
+            const validTargets = state.player.lanes.flat();
+            if (validTargets.length > 0) {
+                // Target player's highest value card to disrupt their strongest lane
+                validTargets.sort((a, b) => b.value - a.value);
+                return { type: 'deleteCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
         }

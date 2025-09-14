@@ -19,6 +19,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                     type: 'prompt_give_card_for_love_1',
                     sourceCardId: card.id,
                     optional: true,
+                    actor: player,
                 }
             }
         };

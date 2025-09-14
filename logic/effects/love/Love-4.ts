@@ -15,6 +15,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         newState.actionRequired = {
             type: 'select_card_from_hand_to_reveal',
             sourceCardId: card.id,
+            actor,
         };
     }
     

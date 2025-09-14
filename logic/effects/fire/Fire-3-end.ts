@@ -18,6 +18,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                     type: 'prompt_fire_3_discard',
                     sourceCardId: card.id,
                     optional: true,
+                    actor: player,
                 }
             }
         };

@@ -18,6 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         type: 'prompt_rearrange_protocols',
         sourceCardId: card.id,
         target: actor,
+        actor,
     };
     
     return { newState };

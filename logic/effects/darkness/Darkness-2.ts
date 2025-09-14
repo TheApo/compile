@@ -19,6 +19,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             laneIndex,
             sourceCardId: card.id,
             optional: true,
+            actor,
         };
     }
 

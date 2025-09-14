@@ -70,11 +70,19 @@ export const resolveRequiredOpponentAction = (
         const action = state.actionRequired;
         if (!action) return state;
 
-        const isOpponentAction = (action.type === 'discard' && action.player === 'opponent') || 
-                                 (action.type === 'select_lane_for_shift' && action.actor === 'opponent') ||
-                                 action.type === 'plague_4_opponent_delete' || 
-                                 action.type === 'reveal_opponent_hand';
-        if (!isOpponentAction) return state;
+        // Determine if the AI ('opponent') needs to act during the player's turn.
+        let isOpponentInterrupt = false;
+        if (action.type === 'discard' && action.player === 'opponent') {
+            isOpponentInterrupt = true;
+        } else if (action.type === 'plague_4_opponent_delete' && action.actor === 'player') {
+            // Player's card forces opponent to act.
+            isOpponentInterrupt = true;
+        } else if ('actor' in action && action.actor === 'opponent') {
+            // General case: an effect triggered that requires the opponent to act.
+            isOpponentInterrupt = true;
+        }
+        
+        if (!isOpponentInterrupt) return state;
 
         const aiDecision = getAIAction(state, action, difficulty);
         
@@ -103,7 +111,8 @@ export const resolveRequiredOpponentAction = (
                     actionRequired: {
                         type: 'plague_4_player_flip_optional',
                         sourceCardId: sourceCardId,
-                        optional: true
+                        optional: true,
+                        actor: 'player', // The human player gets the option to flip their card.
                     }
                 }))
             );
@@ -333,13 +342,20 @@ export const runOpponentTurn = (
 
         if (currentState.actionRequired) {
             const action = currentState.actionRequired;
-            // These actions require input from the human player, so the AI should wait.
-            const isPlayerAction = (action.type === 'discard' && action.player === 'player') || 
-                                 (action.type === 'select_lane_for_shift' && action.actor === 'player') ||
-                                 action.type === 'plague_2_player_discard' || 
-                                 action.type === 'plague_4_opponent_delete';
+            // Determine if this action requires the human player to act. If so, AI must wait.
+            let isPlayerAction = false;
+            if (action.type === 'discard' && action.player === 'player') {
+                isPlayerAction = true;
+            } else if (action.type === 'plague_4_opponent_delete' && action.actor === 'opponent') {
+                // The AI's card makes the player delete a card.
+                isPlayerAction = true;
+            } else if ('actor' in action && action.actor === 'player') {
+                // General case: The action is for the human player to resolve.
+                isPlayerAction = true;
+            }
+
             if (isPlayerAction) {
-                return currentState;
+                return currentState; // Wait for player input.
             }
         }
 

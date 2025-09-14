@@ -24,6 +24,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                     type: 'select_any_other_card_to_flip',
                     sourceCardId: card.id,
                     draws: 2,
+                    actor,
                 }
             }
         };

@@ -13,6 +13,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                 type: 'prompt_death_1_effect',
                 sourceCardId: card.id,
                 optional: true,
+                actor: state.turn,
             }
         }
     };

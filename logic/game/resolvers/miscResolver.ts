@@ -130,7 +130,8 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
     
-    const { disallowedLaneIndex, sourceCardId, isFaceDown } = prevState.actionRequired;
+    // FIX: Destructure 'actor' to pass it to the next action.
+    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor } = prevState.actionRequired;
     return {
         ...prevState,
         actionRequired: {
@@ -139,6 +140,7 @@ export const selectHandCardForAction = (prevState: GameState, cardId: string): G
             disallowedLaneIndex,
             sourceCardId,
             isFaceDown,
+            actor,
         }
     };
 };

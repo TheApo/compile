@@ -15,9 +15,13 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     const opponent = { ...newState[opponentId] };
 
     if (opponent.hand.length > 0) {
-        opponent.hand = opponent.hand.map(c => ({ ...c, isRevealed: true }));
-        newState[opponentId] = opponent;
-        newState = log(newState, actor, "Light-4: Opponent reveals their hand.");
+        // This is now an action that must be resolved, to allow the AI to "act"
+        // and for the game state to correctly pause and show the hand.
+        newState.actionRequired = {
+            type: 'reveal_opponent_hand',
+            sourceCardId: card.id,
+            actor,
+        };
     }
 
     return { newState };

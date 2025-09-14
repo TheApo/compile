@@ -9,7 +9,8 @@ import { GameState, PlayedCard, EffectResult } from "../../../types";
  * Plague-4 End Phase Effect: Your opponent deletes 1 of their face-down cards. You may flip this card.
  */
 export const execute = (card: PlayedCard, state: GameState): EffectResult => {
-    const opponent = state.turn === 'player' ? 'opponent' : 'player';
+    const actor = state.turn;
+    const opponent = actor === 'player' ? 'opponent' : 'player';
     const opponentFaceDownCards = state[opponent].lanes.flat().filter(c => !c.isFaceUp);
 
     if (opponentFaceDownCards.length > 0) {
@@ -18,7 +19,8 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                 ...state,
                 actionRequired: {
                     type: 'plague_4_opponent_delete',
-                    sourceCardId: card.id
+                    sourceCardId: card.id,
+                    actor,
                 }
             }
         };
@@ -31,7 +33,8 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
             actionRequired: {
                 type: 'plague_4_player_flip_optional',
                 sourceCardId: card.id,
-                optional: true
+                optional: true,
+                actor,
             }
         }
     };

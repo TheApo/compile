@@ -20,6 +20,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                     type: 'prompt_shift_for_speed_3',
                     sourceCardId: card.id,
                     optional: true,
+                    actor: player,
                 }
             }
         };

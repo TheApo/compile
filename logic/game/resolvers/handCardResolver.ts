@@ -58,6 +58,7 @@ export const resolveActionWithHandCard = (prevState: GameState, cardId: string):
             newState = { ...newState, [actor]: actorState };
 
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            // FIX: Corrected typo from `cardToGive` to `cardToReveal`.
             const cardName = `${cardToReveal.protocol}-${cardToReveal.value}`;
             newState = log(newState, actor, `Love-4: ${actorName} reveals ${cardName} from their hand.`);
             
@@ -65,7 +66,8 @@ export const resolveActionWithHandCard = (prevState: GameState, cardId: string):
             newState.actionRequired = {
                 type: 'select_any_card_to_flip',
                 count: 1,
-                sourceCardId: actionRequired.sourceCardId
+                sourceCardId: actionRequired.sourceCardId,
+                actor,
             };
             return newState;
         }

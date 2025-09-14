@@ -6,6 +6,7 @@
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
 import { shuffleDeck } from '../../utils/gameLogic';
 import { normalAI } from './normal';
+import { getEffectiveCardValue } from '../game/stateManager';
 
 type ScoredMove = {
     move: AIAction;
@@ -176,6 +177,49 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'deleteCard', cardId: bestTarget.id };
             }
             return { type: 'skip' };
+        }
+
+        case 'select_any_face_down_card_to_flip_optional': {
+            const potentialTargets: { card: PlayedCard; score: number }[] = [];
+
+            // Evaluate flipping own face-down cards
+            state.opponent.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        const faceDownValue = getEffectiveCardValue(c, lane);
+                        // Value gain is the card's real value minus what it was contributing as face-down
+                        const valueGain = c.value - faceDownValue;
+                        let score = 5 + valueGain;
+                        // Huge bonus if this flip helps compile
+                        if ((state.opponent.laneValues[i] + valueGain) >= 10) {
+                            score += 100;
+                        }
+                        potentialTargets.push({ card: c, score });
+                    }
+                });
+            });
+
+            // Evaluate flipping player's face-down cards. This is risky, could help the player.
+            // Hard AI might do this to gain information.
+            state.player.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        // Low score, it's just for information. Less valuable if player lane is already strong.
+                        let score = 3 - state.player.laneValues[i]; 
+                        potentialTargets.push({ card: c, score });
+                    }
+                });
+            });
+            
+            if (potentialTargets.length > 0) {
+                potentialTargets.sort((a, b) => b.score - a.score);
+                // Hard AI will only make the move if it's beneficial (score > 0)
+                if (potentialTargets[0].score > 0) {
+                    return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+                }
+            }
+
+            return { type: 'skip' }; // It's optional, skip if no good move.
         }
 
         case 'select_any_card_to_flip_optional':
@@ -355,6 +399,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'deleteCard', cardId: ownTargets[0].id };
             }
 
+            return { type: 'skip' };
+        }
+        
+        case 'select_any_opponent_card_to_shift': {
+            const validTargets = state.player.lanes.flat();
+            if (validTargets.length > 0) {
+                // Target player's highest threat card
+                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'deleteCard', cardId: validTargets[0].id };
+            }
             return { type: 'skip' };
         }
 

@@ -18,6 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                 actionRequired: {
                     type: 'select_card_to_flip_for_light_0',
                     sourceCardId: card.id,
+                    actor,
                 }
             }
         };

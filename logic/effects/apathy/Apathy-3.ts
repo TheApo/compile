@@ -13,7 +13,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let newState = { ...state };
     const opponentFaceUpCards = newState[opponent].lanes.flat().filter(c => c.isFaceUp);
     if (opponentFaceUpCards.length > 0) {
-        newState.actionRequired = { type: 'select_opponent_face_up_card_to_flip', count: 1, sourceCardId: card.id };
+        newState.actionRequired = { type: 'select_opponent_face_up_card_to_flip', count: 1, sourceCardId: card.id, actor };
     }
     return { newState };
 }

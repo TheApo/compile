@@ -13,7 +13,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let newState = { ...state };
     
     const opponentHandCount = newState[opponent].hand.length;
-    const shiftAction = { type: 'select_any_opponent_card_to_shift' as const, sourceCardId: card.id };
+    const shiftAction = { type: 'select_any_opponent_card_to_shift' as const, sourceCardId: card.id, actor };
 
     if (opponentHandCount > 0) {
         newState.actionRequired = {

@@ -118,16 +118,7 @@ export const advancePhase = (state: GameState): GameState => {
 export const processEndOfAction = (state: GameState): GameState => {
     if (state.winner) return state;
 
-    // If the preceding action resulted in a new action, stop here and wait for it to be resolved.
-    if (state.actionRequired) {
-        // If the action required is for the other player (e.g. discard), don't proceed.
-        const isOpponentAction = state.actionRequired.type === 'discard' && state.actionRequired.player !== state.turn;
-        if (isOpponentAction) {
-            return state;
-        }
-    }
-
-    // Check for a completed interrupt first. If so, just restore the turn and return.
+    // Check for a completed interrupt first.
     if (state._interruptedTurn) {
         const originalTurnPlayer = state._interruptedTurn;
         let restoredState = { ...state };
@@ -135,9 +126,9 @@ export const processEndOfAction = (state: GameState): GameState => {
         restoredState.turn = originalTurnPlayer;
         
         // The interrupt is over. The original turn player's action that was
-        // interrupted is now considered complete. Return the restored state
-        // so the game loop can continue their turn.
-        return restoredState;
+        // interrupted is now considered complete. Continue processing the rest
+        // of their turn from this restored state, without returning early.
+        state = restoredState;
     }
 
     // Check for a queued ACTION first.

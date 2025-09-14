@@ -112,7 +112,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_own_face_up_covered_card_to_flip':
         case 'select_any_other_card_to_flip':
         case 'select_any_card_to_flip':
-        case 'select_any_face_down_card_to_flip_optional':
         case 'select_any_card_to_flip_optional':
         case 'select_card_to_flip_for_fire_3':
         case 'select_card_to_flip_for_light_0':
@@ -122,6 +121,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (allCards.length > 0) return { type: 'flipCard', cardId: allCards[0].id };
             if ('optional' in action && action.optional) return { type: 'skip' };
             return { type: 'skip' };
+        }
+        case 'select_any_face_down_card_to_flip_optional': {
+            const faceDownCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => !c.isFaceUp);
+            if (faceDownCards.length > 0) {
+                // Easy AI just flips a random one
+                const randomCard = faceDownCards[Math.floor(Math.random() * faceDownCards.length)];
+                return { type: 'flipCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' }; // It's optional, so skip if no targets
         }
         case 'select_own_covered_card_in_lane_to_flip': {
             const { laneIndex } = action;
@@ -275,6 +283,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 // Using 'deleteCard' as the action type to trigger resolveActionWithCard
                 return { type: 'deleteCard', cardId: randomTarget.id };
+            }
+            return { type: 'skip' };
+        }
+        case 'select_any_opponent_card_to_shift': {
+            const validTargets = state.player.lanes.flat();
+            if (validTargets.length > 0) {
+                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
+                return { type: 'deleteCard', cardId: randomTarget.id }; // 'deleteCard' is a proxy for selecting a card
             }
             return { type: 'skip' };
         }

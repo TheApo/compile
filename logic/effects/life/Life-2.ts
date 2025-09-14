@@ -21,6 +21,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_any_face_down_card_to_flip_optional',
             sourceCardId: card.id,
             optional: true,
+            actor,
         };
     }
 

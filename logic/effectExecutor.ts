@@ -9,6 +9,7 @@ import { effectRegistryStart } from "./effects/effectRegistryStart";
 import { effectRegistryEnd } from "./effects/effectRegistryEnd";
 import { effectRegistryOnCover } from "./effects/effectRegistryOnCover";
 import { recalculateAllLaneValues } from "./game/stateManager";
+import { log } from "./utils/log";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
@@ -58,11 +59,27 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         return { newState: state };
     }
 
+    const players: Player[] = ['player', 'opponent'];
+    let owner: Player | null = null;
+    for (const p of players) {
+        // An on-cover effect can only trigger on a card owned by the player whose turn it is,
+        // or on a card owned by the opponent. The card must be in the correct lane.
+        if (state[p].lanes[laneIndex].some(c => c.id === coveredCard.id)) {
+            owner = p;
+            break;
+        }
+    }
+
+    if (!owner) {
+        console.error("Could not find owner for onCover effect card", coveredCard);
+        return { newState: state };
+    }
+
     const effectKey = `${coveredCard.protocol}-${coveredCard.value}`;
     const execute = effectRegistryOnCover[effectKey];
 
     if (execute) {
-        const result = execute(coveredCard, laneIndex, state);
+        const result = execute(coveredCard, laneIndex, state, owner);
         const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
         return {
             ...result,

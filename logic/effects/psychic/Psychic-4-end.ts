@@ -9,7 +9,8 @@ import { GameState, PlayedCard, EffectResult } from "../../../types";
  * Psychic-4 End Phase: You may return 1 of your opponent's cards. If you do, flip this card.
  */
 export const execute = (card: PlayedCard, state: GameState): EffectResult => {
-    const opponent = state.turn === 'player' ? 'opponent' : 'player';
+    const actor = state.turn;
+    const opponent = actor === 'player' ? 'opponent' : 'player';
     const opponentHasCards = state[opponent].lanes.flat().length > 0;
 
     if (opponentHasCards) {
@@ -20,6 +21,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                     type: 'prompt_return_for_psychic_4',
                     sourceCardId: card.id,
                     optional: true,
+                    actor,
                 }
             }
         };

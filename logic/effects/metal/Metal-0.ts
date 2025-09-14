@@ -20,6 +20,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                     type: 'select_any_card_to_flip',
                     count: 1,
                     sourceCardId: card.id,
+                    actor,
                 }
             }
         };

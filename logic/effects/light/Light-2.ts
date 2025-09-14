@@ -20,6 +20,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         newState.actionRequired = {
             type: 'select_face_down_card_to_reveal_for_light_2',
             sourceCardId: card.id,
+            actor,
         };
     }
 

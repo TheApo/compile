@@ -18,6 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_card_from_hand_to_play',
             disallowedLaneIndex: -1, // No disallowed lane
             sourceCardId: card.id,
+            actor,
             // isFaceDown is omitted, to be determined by game rules in the resolver
         };
     }

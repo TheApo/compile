@@ -17,6 +17,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                 actionRequired: {
                     type: 'select_own_other_card_to_shift',
                     sourceCardId: card.id,
+                    actor,
                 }
             }
         };

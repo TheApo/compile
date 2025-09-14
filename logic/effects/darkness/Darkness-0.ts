@@ -24,6 +24,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         newState.actionRequired = {
             type: 'select_opponent_covered_card_to_shift',
             sourceCardId: card.id,
+            actor,
         };
     }
 

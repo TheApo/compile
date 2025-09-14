@@ -15,7 +15,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             actionRequired: {
                 type: 'select_own_card_to_return_for_water_4',
                 sourceCardId: card.id,
+                actor,
             }
         }
     };
-};
+}

@@ -44,7 +44,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             const effectKey = `${cardToBeCovered.protocol}-${cardToBeCovered.value}`;
             const onCoverExecute = effectRegistryOnCover[effectKey];
             if (onCoverExecute) {
-                const onCoverResult = onCoverExecute(cardToBeCovered, laneIndex, finalResult.newState);
+                // FIX: Added missing 'opponent' argument for the owner of the covered card.
+                const onCoverResult = onCoverExecute(cardToBeCovered, laneIndex, finalResult.newState, opponent);
                 finalResult.newState = onCoverResult.newState;
                 if (onCoverResult.animationRequests) {
                     finalResult.animationRequests = [

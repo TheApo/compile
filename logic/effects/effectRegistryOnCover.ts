@@ -10,28 +10,19 @@ import { execute as fire0OnCover } from './fire/Fire-0-oncover';
 import { execute as life3OnCover } from './life/Life-3-oncover';
 import { log } from "../utils/log";
 
-type OnCoverEffectExecutor = (coveredCard: PlayedCard, laneIndex: number, state: GameState) => EffectResult;
+type OnCoverEffectExecutor = (coveredCard: PlayedCard, laneIndex: number, state: GameState, owner: Player) => EffectResult;
 
-const apathy2: OnCoverEffectExecutor = (coveredCard, laneIndex, state) => {
+const apathy2: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
     // When this card would be covered: First, flip this card.
-    const actor = state.turn;
+    const actor = state.turn; // The player causing the cover event
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
+    // The log should be from the actor's perspective, but the effect is tied to the card.
     let newState = log(state, actor, `${cardName} effect triggers: flipping itself face-down.`);
     newState = findAndFlipCards(new Set([coveredCard.id]), newState);
     return { newState };
 };
 
-const life0: OnCoverEffectExecutor = (coveredCard, laneIndex, state) => {
-    const players: Player[] = ['player', 'opponent'];
-    let owner: Player | null = null;
-    for (const p of players) {
-        if (state[p].lanes[laneIndex].some(c => c.id === coveredCard.id)) {
-            owner = p;
-            break;
-        }
-    }
-    if (!owner) return { newState: state };
-
+const life0: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
     const actor = state.turn;
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
     let newState = log(state, actor, `${cardName} effect triggers: deleting itself.`);
@@ -41,17 +32,7 @@ const life0: OnCoverEffectExecutor = (coveredCard, laneIndex, state) => {
     };
 };
 
-const metal6: OnCoverEffectExecutor = (coveredCard, laneIndex, state) => {
-    const players: Player[] = ['player', 'opponent'];
-    let owner: Player | null = null;
-    for (const p of players) {
-        if (state[p].lanes[laneIndex].some(c => c.id === coveredCard.id)) {
-            owner = p;
-            break;
-        }
-    }
-    if (!owner) return { newState: state };
-
+const metal6: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
     const actor = state.turn;
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
     let newState = log(state, actor, `${cardName} effect triggers on cover: deleting itself.`);

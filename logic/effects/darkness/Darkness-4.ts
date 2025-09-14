@@ -22,6 +22,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         newState.actionRequired = {
             type: 'select_face_down_card_to_shift_for_darkness_4',
             sourceCardId: card.id,
+            actor,
         };
     }
 

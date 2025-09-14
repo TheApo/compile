@@ -9,7 +9,7 @@ import { log } from "../../../logic/utils/log";
 /**
  * Hate-4: When this card would be covered: First, delete the lowest value covered card in this line.
  */
-export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state: GameState): EffectResult => {
+export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state: GameState, owner: Player): EffectResult => {
     const players: Player[] = ['player', 'opponent'];
     const allCoveredCardsInLine: { card: PlayedCard, owner: Player }[] = [];
 
@@ -40,13 +40,12 @@ export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state
         return getEffectiveValue(current) < getEffectiveValue(lowest) ? current : lowest;
     });
 
-    let newState = { ...state };
     const triggeringCardName = `${coveredCard.protocol}-${coveredCard.value}`;
-    const deletedCardName = `${cardToDelete.card.protocol}-${cardToDelete.card.value}`;
+    const deletedCardName = cardToDelete.card.isFaceUp ? `${cardToDelete.card.protocol}-${cardToDelete.card.value}` : 'a face-down card';
     const deletedOwnerName = cardToDelete.owner === 'player' ? "Player's" : "Opponent's";
-    const actor = state.turn; // The player whose action is covering the card
-
-    newState = log(newState, actor, `${triggeringCardName} effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
+    
+    // The log should be attributed to the card's owner, who is performing the effect.
+    let newState = log(state, owner, `${triggeringCardName} effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
 
     return {
         newState,

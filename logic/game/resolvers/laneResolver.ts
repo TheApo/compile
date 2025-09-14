@@ -45,9 +45,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_play': {
-            const { cardInHandId, isFaceDown } = prev.actionRequired;
-            const player = prev.turn;
-            const cardInHand = prev[player].hand.find(c => c.id === cardInHandId);
+            const { cardInHandId, isFaceDown, actor } = prev.actionRequired;
+            const cardInHand = prev[actor].hand.find(c => c.id === cardInHandId);
             
             if (!cardInHand) {
                 console.error("Card for play not found in hand");
@@ -61,11 +60,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 canPlayFaceUp = !isFaceDown;
             } else {
                 // Game rules decide
-                const playerHasSpiritOne = prev[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-                canPlayFaceUp = playerHasSpiritOne || cardInHand.protocol === prev[player].protocols[targetLaneIndex];
+                const playerHasSpiritOne = prev[actor].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+                canPlayFaceUp = playerHasSpiritOne || cardInHand.protocol === prev[actor].protocols[targetLaneIndex];
             }
             
-            const { newState: stateAfterPlay } = playCard(prev, cardInHandId, targetLaneIndex, canPlayFaceUp, player);
+            const { newState: stateAfterPlay } = playCard(prev, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);
             newState = stateAfterPlay;
             newState.actionRequired = null;
             break;
@@ -159,8 +158,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_life_3_play': {
-            const player = prev.turn;
-            const playerState = { ...prev[player] };
+            const { actor } = prev.actionRequired;
+            const playerState = { ...prev[actor] };
             const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerState.deck, playerState.discard, 1);
 
             if (drawnCards.length > 0) {
@@ -175,37 +174,36 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     discard: newDiscard,
                 };
 
-                newState = { ...prev, [player]: newPlayerState, actionRequired: null };
+                newState = { ...prev, [actor]: newPlayerState, actionRequired: null };
 
-                newState = log(newState, player, `Life-3 On-Cover: Plays a card face-down.`);
+                newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
             } else {
                 newState.actionRequired = null;
             }
             break;
         }
         case 'select_lane_to_shift_revealed_card_for_light_2': {
-            const { revealedCardId } = prev.actionRequired;
+            const { revealedCardId, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, revealedCardId);
             if (cardInfo) {
-                newState = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, prev.turn);
+                newState = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
             }
             break;
         }
         case 'select_lane_to_shift_cards_for_light_3': {
-            const { sourceLaneIndex } = prev.actionRequired;
-            const player = prev.turn;
-            const opponent = player === 'player' ? 'opponent' : 'player';
+            const { sourceLaneIndex, actor } = prev.actionRequired;
+            const opponent = actor === 'player' ? 'opponent' : 'player';
 
-            const playerFaceDown = prev.player.lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
-            const opponentFaceDown = prev.opponent.lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
+            const actorFaceDown = prev[actor].lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
+            const opponentFaceDown = prev[opponent].lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
 
-            const newPlayerLanes = prev.player.lanes.map((lane, i) => {
+            const newActorLanes = prev[actor].lanes.map((lane, i) => {
                 if (i === sourceLaneIndex) return lane.filter(c => c.isFaceUp);
-                if (i === targetLaneIndex) return [...lane, ...playerFaceDown];
+                if (i === targetLaneIndex) return [...lane, ...actorFaceDown];
                 return lane;
             });
 
-            const newOpponentLanes = prev.opponent.lanes.map((lane, i) => {
+            const newOpponentLanes = prev[opponent].lanes.map((lane, i) => {
                 if (i === sourceLaneIndex) return lane.filter(c => c.isFaceUp);
                 if (i === targetLaneIndex) return [...lane, ...opponentFaceDown];
                 return lane;
@@ -213,16 +211,16 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             
             newState = {
                 ...prev,
-                player: { ...prev.player, lanes: newPlayerLanes },
-                opponent: { ...prev.opponent, lanes: newOpponentLanes },
+                [actor]: { ...prev[actor], lanes: newActorLanes },
+                [opponent]: { ...prev[opponent], lanes: newOpponentLanes },
                 actionRequired: null,
             };
             
-            const totalShifted = playerFaceDown.length + opponentFaceDown.length;
+            const totalShifted = actorFaceDown.length + opponentFaceDown.length;
             if (totalShifted > 0) {
-                const sourceProtocol = prev[player].protocols[sourceLaneIndex];
-                const targetProtocol = prev[player].protocols[targetLaneIndex];
-                newState = log(newState, player, `Light-3: Shifts ${totalShifted} face-down card(s) from Protocol ${sourceProtocol} to Protocol ${targetProtocol}.`);
+                const sourceProtocol = prev[actor].protocols[sourceLaneIndex];
+                const targetProtocol = prev[actor].protocols[targetLaneIndex];
+                newState = log(newState, actor, `Light-3: Shifts ${totalShifted} face-down card(s) from Protocol ${sourceProtocol} to Protocol ${targetProtocol}.`);
             }
             break;
         }

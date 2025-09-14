@@ -14,7 +14,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         return {
             newState: {
                 ...state,
-                actionRequired: { type: 'select_face_down_card_to_delete', sourceCardId: card.id }
+                actionRequired: { type: 'select_face_down_card_to_delete', sourceCardId: card.id, actor }
             }
         };
     }

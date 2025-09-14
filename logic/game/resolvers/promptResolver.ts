@@ -12,8 +12,7 @@ import { recalculateAllLaneValues } from '../stateManager';
 export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
 
-    const actor = prevState.turn;
-    const { sourceCardId } = prevState.actionRequired;
+    const { sourceCardId, actor } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -23,6 +22,7 @@ export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): Game
         newState.actionRequired = {
             type: 'select_card_to_delete_for_death_1',
             sourceCardId,
+            actor,
         };
     } else {
         newState = log(newState, actor, "Death-1: Player skips the effect.");
@@ -34,7 +34,7 @@ export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): Game
 export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_give_card_for_love_1') return prevState;
 
-    const actor = prevState.turn;
+    const { actor } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -43,6 +43,7 @@ export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameS
             type: 'select_card_from_hand_to_give',
             sourceCardId: prevState.actionRequired.sourceCardId,
             sourceEffect: 'love_1_end',
+            actor,
         };
     } else {
         newState = log(newState, actor, "Love-1 End: Player skips the effect.");
@@ -73,7 +74,7 @@ export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player
 export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_fire_3_discard') return prevState;
     
-    const actor = prevState.turn;
+    const { actor } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -95,7 +96,7 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
 export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_shift_for_speed_3') return prevState;
 
-    const actor = prevState.turn;
+    const { actor } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -103,6 +104,7 @@ export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): Game
         newState.actionRequired = {
             type: 'select_own_card_to_shift_for_speed_3',
             sourceCardId: prevState.actionRequired.sourceCardId,
+            actor,
         };
     } else {
         newState = log(newState, actor, "Speed-3 End: Player skips the shift.");
@@ -114,8 +116,7 @@ export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): Game
 export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'flip' | 'skip'): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_shift_or_flip_for_light_2') return prevState;
 
-    const actor = prevState.turn;
-    const { sourceCardId, revealedCardId } = prevState.actionRequired;
+    const { actor, sourceCardId, revealedCardId } = prevState.actionRequired;
     let newState = { ...prevState };
 
     switch (choice) {
@@ -125,6 +126,7 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
                 type: 'select_lane_to_shift_revealed_card_for_light_2',
                 sourceCardId,
                 revealedCardId,
+                actor,
             };
             break;
         case 'flip':
@@ -144,7 +146,7 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
 export const resolveRearrangeProtocols = (prevState: GameState, newOrder: string[]): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_rearrange_protocols') return prevState;
 
-    const { target } = prevState.actionRequired;
+    const { target, actor } = prevState.actionRequired;
     let newState = { ...prevState };
     const targetState = { ...newState[target] };
 
@@ -164,9 +166,9 @@ export const resolveRearrangeProtocols = (prevState: GameState, newOrder: string
     newState[target] = targetState;
     newState.actionRequired = null;
 
-    const actorName = prevState.turn === 'player' ? 'Player' : 'Opponent';
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const targetName = target === 'player' ? 'Player' : 'Opponent';
-    newState = log(newState, prevState.turn, `${actorName} rearranges ${targetName}'s protocols.`);
+    newState = log(newState, actor, `${actorName} rearranges ${targetName}'s protocols.`);
 
     // Recalculating all values will correctly update laneValues based on the new protocol-to-lane mapping.
     return recalculateAllLaneValues(newState);
@@ -176,7 +178,7 @@ export const resolveRearrangeProtocols = (prevState: GameState, newOrder: string
 export const resolvePsychic4Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_return_for_psychic_4') return prevState;
     
-    const actor = prevState.turn;
+    const { actor } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -184,6 +186,7 @@ export const resolvePsychic4Prompt = (prevState: GameState, accept: boolean): Ga
         newState.actionRequired = {
             type: 'select_opponent_card_to_return',
             sourceCardId: prevState.actionRequired.sourceCardId,
+            actor,
         };
     } else {
         newState = log(newState, actor, "Psychic-4 End: Player skips the effect.");
@@ -195,8 +198,7 @@ export const resolvePsychic4Prompt = (prevState: GameState, accept: boolean): Ga
 export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | 'flip'): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_spirit_1_start') return prevState;
 
-    const actor = prevState.turn;
-    const { sourceCardId } = prevState.actionRequired;
+    const { actor, sourceCardId } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (choice === 'discard') {
@@ -220,8 +222,7 @@ export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | '
 export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_shift_for_spirit_3') return prevState;
 
-    const actor = prevState.turn;
-    const { sourceCardId } = prevState.actionRequired;
+    const { actor, sourceCardId } = prevState.actionRequired;
     let newState = { ...prevState };
 
     if (accept) {
@@ -258,8 +259,8 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
 export const resolveSwapProtocols = (prevState: GameState, indices: [number, number]): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_swap_protocols') return prevState;
     
-    const player = prevState.turn;
-    const playerState = { ...prevState[player] };
+    const { actor } = prevState.actionRequired;
+    const playerState = { ...prevState[actor] };
     const [index1, index2] = indices.sort((a,b) => a-b);
 
     const newProtocols = [...playerState.protocols];
@@ -272,8 +273,8 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
     playerState.protocols = newProtocols;
     playerState.compiled = newCompiled;
     
-    let newState = { ...prevState, [player]: playerState, actionRequired: null };
-    newState = log(newState, player, `${player === 'player' ? 'Player' : 'Opponent'} swaps protocols ${newProtocols[index2]} and ${newProtocols[index1]}.`);
+    let newState = { ...prevState, [actor]: playerState, actionRequired: null };
+    newState = log(newState, actor, `${actor === 'player' ? 'Player' : 'Opponent'} swaps protocols ${newProtocols[index2]} and ${newProtocols[index1]}.`);
 
     return recalculateAllLaneValues(newState);
 };

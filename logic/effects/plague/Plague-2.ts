@@ -15,12 +15,14 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         if (actor === 'player') {
             newState.actionRequired = { 
                 type: 'plague_2_player_discard', 
-                sourceCardId: card.id 
+                sourceCardId: card.id,
+                actor,
             };
         } else { // Opponent's turn
             newState.actionRequired = { 
                 type: 'plague_2_opponent_discard', 
-                sourceCardId: card.id 
+                sourceCardId: card.id,
+                actor,
             };
         }
     }

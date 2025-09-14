@@ -41,6 +41,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         type: 'select_card_from_hand_to_give',
         sourceCardId: card.id,
         sourceEffect: 'love_3',
+        actor,
     };
 
     return { newState };

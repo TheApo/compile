@@ -16,6 +16,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                 actionRequired: {
                     type: 'select_cards_from_hand_to_discard_for_fire_4',
                     sourceCardId: card.id,
+                    actor,
                 }
             }
         };
