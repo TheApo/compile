@@ -22,6 +22,13 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
         compiled: [false, false, false],
         laneValues: [0, 0, 0],
         cannotCompile: false,
+        stats: {
+            cardsPlayed: 0,
+            cardsDiscarded: 0,
+            cardsDeleted: 0,
+            cardsFlipped: 0,
+            cardsShifted: 0,
+        },
     };
 };
 
@@ -43,6 +50,10 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
         processedStartEffectIds: [],
         processedEndEffectIds: [],
         lastPlayedCardId: undefined,
+        stats: {
+            player: playerState.stats,
+            opponent: opponentState.stats,
+        }
     };
      return log(initialState, 'player', 'Game Started.');
 }

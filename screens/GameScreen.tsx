@@ -22,7 +22,8 @@ import { DebugModal } from '../components/DebugModal';
 
 interface GameScreenProps {
   onBack: () => void;
-  onEndGame: (winner: Player) => void;
+  // FIX: Updated onEndGame prop type to match the expected signature from App.tsx and useGameState hook.
+  onEndGame: (winner: Player, finalState: GameState) => void;
   playerProtocols: string[];
   opponentProtocols: string[];
   difficulty: Difficulty;

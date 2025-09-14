@@ -7,6 +7,7 @@ import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../t
 import { shuffleDeck } from '../../utils/gameLogic';
 import { normalAI } from './normal';
 import { getEffectiveCardValue } from '../game/stateManager';
+import { findCardOnBoard } from '../game/helpers/actionUtils';
 
 type ScoredMove = {
     move: AIAction;
@@ -323,11 +324,38 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_lane_for_shift':
-            // If shifting own card, move to highest priority lane.
-            // If shifting opponent card, move to their lowest priority lane.
-            // (Simplified for now)
-            return { type: 'selectLane', laneIndex: 0 };
+        case 'select_lane_for_shift': {
+            const { cardToShiftId, cardOwner, originalLaneIndex } = action;
+            const cardToShift = findCardOnBoard(state, cardToShiftId)?.card;
+            if (!cardToShift) return { type: 'skip' };
+
+            const possibleLanes = [0, 1, 2].filter(i => i !== originalLaneIndex);
+            
+            if (cardOwner === 'opponent') { // AI is shifting its own card
+                // Score each possible lane based on how much it helps the AI.
+                const scoredLanes = possibleLanes.map(laneIndex => {
+                    const valueToAdd = getEffectiveCardValue(cardToShift, state.opponent.lanes[laneIndex]);
+                    const futureLaneValue = state.opponent.laneValues[laneIndex] + valueToAdd;
+                    const futureLead = futureLaneValue - state.player.laneValues[laneIndex];
+                    let score = futureLead; // Higher lead is better.
+                    if (futureLaneValue >= 10 && futureLaneValue > state.player.laneValues[laneIndex]) score += 100; // Compile setup is great.
+                    return { laneIndex, score };
+                });
+                scoredLanes.sort((a, b) => b.score - a.score); // Best lane first
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            } else { // AI is shifting player's card
+                // Score each possible lane based on how much it hurts the player.
+                const scoredLanes = possibleLanes.map(laneIndex => {
+                    const valueToAdd = getEffectiveCardValue(cardToShift, state.player.lanes[laneIndex]);
+                    const futureLaneValue = state.player.laneValues[laneIndex] + valueToAdd;
+                    const futureLead = futureLaneValue - state.opponent.laneValues[laneIndex];
+                    // AI wants to MINIMIZE the player's future lead. So we sort ascending.
+                    return { laneIndex, score: futureLead };
+                });
+                 scoredLanes.sort((a, b) => a.score - b.score); // Worst lane for player first
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+        }
         
         case 'prompt_rearrange_protocols':
             // Smart rearrangement: put lanes where AI is winning/strongest first.

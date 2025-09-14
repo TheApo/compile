@@ -9,7 +9,7 @@ import { ProtocolSelection } from './screens/ProtocolSelection';
 import { GameScreen } from './screens/GameScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { CardLibraryScreen } from './screens/CardLibraryScreen';
-import { Difficulty } from './types';
+import { Difficulty, GameState } from './types';
 
 type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary';
 export type Player = 'player' | 'opponent';
@@ -20,12 +20,14 @@ export function App() {
   const [opponentProtocols, setOpponentProtocols] = useState<string[]>([]);
   const [winner, setWinner] = useState<Player | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
+  const [finalGameState, setFinalGameState] = useState<GameState | null>(null);
 
   const handleBackToMenu = useCallback(() => {
     setScreen('MainMenu');
     setPlayerProtocols([]);
     setOpponentProtocols([]);
     setWinner(null);
+    setFinalGameState(null);
   }, []);
 
   useEffect(() => {
@@ -44,11 +46,14 @@ export function App() {
   const startGame = useCallback((playerProtos: string[], opponentProtos: string[]) => {
     setPlayerProtocols(playerProtos);
     setOpponentProtocols(opponentProtos);
+    setWinner(null);
+    setFinalGameState(null);
     setScreen('GameScreen');
   }, []);
 
-  const handleEndGame = useCallback((winner: Player) => {
+  const handleEndGame = useCallback((winner: Player, finalState: GameState) => {
     setWinner(winner);
+    setFinalGameState(finalState);
     setScreen('ResultsScreen');
   }, []);
 
@@ -80,7 +85,7 @@ export function App() {
           />
         );
       case 'ResultsScreen':
-        return <ResultsScreen onPlayAgain={handleBackToMenu} winner={winner} />;
+        return <ResultsScreen onPlayAgain={handleBackToMenu} winner={winner} finalState={finalGameState} />;
       case 'CardLibrary':
         return <CardLibraryScreen onBack={handleBackToMenu} />;
       default:

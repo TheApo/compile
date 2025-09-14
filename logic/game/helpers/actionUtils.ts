@@ -76,6 +76,7 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
 
     let newState = log(state, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
     newState = findAndFlipCards(new Set([targetCardId]), newState);
+    newState[actor].stats.cardsFlipped++;
     newState.animationState = { type: 'flipCard', cardId: targetCardId };
     newState.actionRequired = nextAction;
     return newState;
@@ -138,6 +139,7 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     const cardName = cardToShift.isFaceUp ? `${cardToShift.protocol}-${cardToShift.value}` : 'a card';
     const targetProtocol = newState[cardOwner].protocols[targetLaneIndex];
     newState = log(newState, actor, `${actorName} shifts ${ownerName} ${cardName} to Protocol ${targetProtocol}.`);
+    newState[actor].stats.cardsShifted++;
     
     newState.actionRequired = null;
     newState = recalculateAllLaneValues(newState);

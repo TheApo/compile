@@ -13,6 +13,14 @@ export interface PlayedCard extends Card {
     isRevealed?: boolean;
 }
 
+export interface PlayerStats {
+    cardsPlayed: number;
+    cardsDiscarded: number;
+    cardsDeleted: number;
+    cardsFlipped: number;
+    cardsShifted: number;
+}
+
 export interface PlayerState {
     protocols: string[];
     deck: Card[];
@@ -22,6 +30,7 @@ export interface PlayerState {
     compiled: boolean[];
     laneValues: number[];
     cannotCompile: boolean;
+    stats: PlayerStats;
 }
 
 export type GamePhase = 'start' | 'control' | 'compile' | 'action' | 'hand_limit' | 'end';
@@ -346,6 +355,10 @@ export interface GameState {
     processedEndEffectIds?: string[];
     lastPlayedCardId?: string;
     _interruptedTurn?: Player;
+    stats: {
+        player: PlayerStats,
+        opponent: PlayerStats,
+    }
 }
 
 export type AIAction = 

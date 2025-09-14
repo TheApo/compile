@@ -33,6 +33,7 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // 2. Physically play the card onto the board from the state returned by the onCover effect.
     const playerStateAfterOnCover = { ...stateAfterOnCover[player] };
     playerStateAfterOnCover.hand = playerStateAfterOnCover.hand.filter(c => c.id !== cardId);
+    playerStateAfterOnCover.stats.cardsPlayed++; // Increment stats
     const lanesAfterOnCover = [...playerStateAfterOnCover.lanes];
     // Create the card instance that will be placed on the board.
     const newCardOnBoard: PlayedCard = { ...cardToPlay, isFaceUp, isRevealed: false };

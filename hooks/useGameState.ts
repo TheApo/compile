@@ -15,7 +15,7 @@ import { handleChainedEffectsOnDiscard } from '../logic/game/helpers/actionUtils
 export const useGameState = (
     playerProtocols: string[], 
     opponentProtocols: string[],
-    onEndGame: (winner: Player) => void,
+    onEndGame: (winner: Player, finalState: GameState) => void,
     difficulty: Difficulty
 ) => {
     const [gameState, setGameState] = useState<GameState>(() => {
@@ -140,6 +140,9 @@ export const useGameState = (
             setTimeout(() => {
                 setGameState(currentState => {
                     const nextState = resolvers.compileLane(currentState, laneIndex, onEndGame);
+                    if (nextState.winner) {
+                        return nextState; // Stop progression if game is over
+                    }
                     const finalState = turnProgressionCb(nextState);
                     // Clear the animation state as we transition to the next turn/action.
                     return { ...finalState, animationState: null };

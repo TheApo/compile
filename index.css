@@ -1617,3 +1617,89 @@ p {
     padding: 2rem;
     text-align: center;
 }
+
+/* --- Results Screen --- */
+.results-screen-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    padding: 2.5rem;
+    background-color: var(--surface-color);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.results-header h1 {
+    font-size: 4rem;
+    margin-bottom: 0.5rem;
+}
+.results-header p {
+    font-size: 1.1rem;
+}
+
+.results-screen.victory .results-header h1 {
+    color: var(--primary-color);
+    text-shadow: 0 0 15px var(--primary-color);
+}
+
+.results-screen.defeat .results-header h1 {
+    color: var(--danger-color);
+    text-shadow: 0 0 15px var(--danger-color);
+}
+
+.results-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+}
+
+.final-score-section, .stats-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.results-body h3 {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--secondary-color);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--surface-hover);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.final-score-section .protocol-bars-container {
+    border: none;
+    padding: 0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 2rem;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.stat-item-label {
+    font-size: 0.9rem;
+    color: var(--secondary-color);
+}
+
+.stat-item-value {
+    font-size: 1.5rem;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+}
+
+.stat-item-value.player {
+    color: var(--primary-color);
+}
+.stat-item-value.opponent {
+    color: var(--danger-color);
+}

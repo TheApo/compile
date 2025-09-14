@@ -5,22 +5,100 @@
 
 import React from 'react';
 import { Player } from '../App';
+import { GameState } from '../types';
 
 interface ResultsScreenProps {
   onPlayAgain: () => void;
   winner: Player | null;
+  finalState: GameState | null;
 }
 
-export function ResultsScreen({ onPlayAgain, winner }: ResultsScreenProps) {
-  const hasWon = winner === 'player'; 
+export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreenProps) {
+  if (!finalState) {
+    return (
+      <div className="screen">
+        <h1>Loading Results...</h1>
+        <button className="btn" onClick={onPlayAgain}>
+          Back to Menu
+        </button>
+      </div>
+    );
+  }
+
+  const hasWon = winner === 'player';
+  const getProtocolClass = (baseClass: string, isCompiled: boolean) => {
+      let classes = [baseClass];
+      if (isCompiled) classes.push('compiled');
+      return classes.join(' ');
+  }
 
   return (
-    <div className="screen">
-      <h1>{hasWon ? 'VICTORY' : 'DEFEAT'}</h1>
-      <p>{hasWon ? 'System compiled successfully.' : 'Critical error in the mainframe.'}</p>
-      <button className="btn" onClick={onPlayAgain}>
-        Play Again
-      </button>
+    <div className={`screen results-screen ${hasWon ? 'victory' : 'defeat'}`}>
+      <div className="results-screen-content">
+        <header className="results-header">
+            <h1>{hasWon ? 'VICTORY' : 'DEFEAT'}</h1>
+            <p>{hasWon ? 'System compiled successfully.' : 'Critical error in the mainframe.'}</p>
+        </header>
+
+        <div className="results-body">
+            <div className="final-score-section">
+                <h3>Final Score</h3>
+                <div className="protocol-bars-container">
+                    <div className="protocol-bar opponent-bar">
+                        {finalState.opponent.protocols.map((p, i) => 
+                            <div key={`opp-proto-${p}-${i}`} className={getProtocolClass('protocol-display', finalState.opponent.compiled[i])}>
+                                <span className="protocol-name">{p}</span>
+                                <span className="protocol-value">{finalState.opponent.laneValues[i]}</span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="protocol-bar player-bar">
+                        {finalState.player.protocols.map((p, i) => 
+                            <div key={`player-proto-${p}-${i}`} className={getProtocolClass('protocol-display', finalState.player.compiled[i])}>
+                                <span className="protocol-name">{p}</span>
+                                <span className="protocol-value">{finalState.player.laneValues[i]}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="stats-section">
+                <h3>Statistics</h3>
+                <div className="stats-grid">
+                    <div className="stat-item">
+                        <span className="stat-item-label">Cards Played</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsPlayed}</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsPlayed}</span>
+                    </div>
+                     <div className="stat-item">
+                        <span className="stat-item-label">Cards Discarded</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsDiscarded}</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsDiscarded}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-item-label">Cards Deleted</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsDeleted}</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsDeleted}</span>
+                    </div>
+                     <div className="stat-item">
+                        <span className="stat-item-label">Cards Flipped</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsFlipped}</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsFlipped}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-item-label">Cards Shifted</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsShifted}</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsShifted}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <button className="btn" onClick={onPlayAgain}>
+            Play Again
+        </button>
+      </div>
     </div>
   );
 }

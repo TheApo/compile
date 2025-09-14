@@ -25,6 +25,7 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
         ...prevState,
         player: { ...prevState.player, hand: newHand, discard: newDiscard },
     };
+    newState.player.stats.cardsDiscarded++;
 
     const cardName = `${cardToDiscard.protocol}-${cardToDiscard.value}`;
     newState = log(newState, 'player', `Player discards ${cardName}.`);
@@ -67,6 +68,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
 
     let newState = { ...prevState, [player]: { ...playerState, hand: newHand, discard: newDiscard }, actionRequired: null };
+    newState[player].stats.cardsDiscarded += discardedCards.length;
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     let logMessage: string;

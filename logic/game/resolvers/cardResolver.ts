@@ -23,6 +23,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (cardInfo && cardInfo.card.protocol === 'Metal' && cardInfo.card.value === 6) {
         let newState = log(state, state.turn, `Metal-6 effect triggers on flip: deleting itself.`);
+        newState[state.turn].stats.cardsDeleted++;
         
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             let stateAfterTriggers = checkForHate3Trigger(s, state.turn);
@@ -81,9 +82,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'shift_flipped_card_optional':
         case 'select_opponent_covered_card_to_shift':
         case 'select_face_down_card_to_shift_for_darkness_4':
-        case 'select_own_other_card_to_shift':
         case 'select_any_opponent_card_to_shift': {
-            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
@@ -101,7 +100,33 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor,
+                        actor: prev.turn,
+                    };
+                    newState.actionRequired = nextAction;
+                }
+            }
+            requiresTurnEnd = false; // This action has a follow-up
+            break;
+        }
+        case 'select_own_other_card_to_shift': {
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (cardInfo) {
+                const { owner: cardOwner } = cardInfo;
+                let originalLaneIndex = -1;
+                for (let i = 0; i < prev[cardOwner].lanes.length; i++) {
+                    if (prev[cardOwner].lanes[i].some(c => c.id === targetCardId)) {
+                        originalLaneIndex = i;
+                        break;
+                    }
+                }
+                if (originalLaneIndex !== -1) {
+                    const nextAction: ActionRequired = {
+                        type: 'select_lane_for_shift',
+                        cardToShiftId: targetCardId,
+                        cardOwner,
+                        originalLaneIndex,
+                        sourceCardId: prev.actionRequired.sourceCardId,
+                        actor: prev.turn,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -110,7 +135,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_opponent_face_down_card_to_shift': { // Speed-4
-            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
@@ -128,7 +152,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: actor,
+                        actor: prev.turn,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -137,7 +161,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_own_card_to_shift_for_speed_3': {
-            const { actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
@@ -155,7 +178,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor,
+                        actor: prev.turn,
                         sourceEffect: 'speed_3_end',
                     };
                     newState.actionRequired = nextAction;
@@ -176,6 +199,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardName = cardInfoToDelete.card.isFaceUp ? `${cardInfoToDelete.card.protocol}-${cardInfoToDelete.card.value}` : 'a face-down card';
             
             newState = log(newState, actor, `Death-1: ${actorName} deletes ${ownerName} ${cardName} and the Death-1 card itself.`);
+            newState[actor].stats.cardsDeleted += 2;
 
             newState.actionRequired = null;
             requiresAnimation = {
@@ -213,6 +237,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
             newState = log(newState, prev.turn, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
+            newState[prev.turn].stats.cardsDeleted++;
 
             newState.actionRequired = null;
             requiresAnimation = {
@@ -266,6 +291,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
             newState = log(newState, prev.turn, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
+            newState[prev.turn].stats.cardsDeleted++;
 
             newState.actionRequired = null;
             requiresAnimation = {
@@ -313,6 +339,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 const actorName = opponentOfActor === 'player' ? 'Player' : 'Opponent';
                 const cardName = `${cardInfo.card.protocol}-${cardInfo.card.value}`; // Opponent knows their card
                 newState = log(newState, opponentOfActor, `Plague-4: ${actorName} deletes their face-down card (${cardName}).`);
+                newState[opponentOfActor].stats.cardsDeleted++;
                 
                 newState.actionRequired = null;
                 requiresAnimation = {
@@ -401,6 +428,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const faceDirection = card.isFaceUp ? "face-down" : "face-up";
             const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : `a face-down card`;
             let stateAfterLog = log(prev, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
+            stateAfterLog[actor].stats.cardsFlipped++;
             let stateAfterFlip = findAndFlipCards(new Set([targetCardId]), stateAfterLog);
             stateAfterFlip.animationState = { type: 'flipCard', cardId: targetCardId };
             

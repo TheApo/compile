@@ -11,7 +11,7 @@ import { findCardOnBoard } from "../helpers/actionUtils";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
 import { checkForHate3Trigger } from "../../effects/hate/Hate-3";
 
-export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player) => void): GameState => {
+export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     const compiler = prevState.turn;
     const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
     
@@ -39,6 +39,10 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
         }
         return true;
     });
+
+    // Update stats for deleted cards
+    compilerState.stats.cardsDeleted += compilerDeletedCards.length;
+    nonCompilerState.stats.cardsDeleted += nonCompilerDeletedCards.length;
 
     // Move the remaining cards to discard.
     compilerState.discard = [...compilerState.discard, ...compilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
@@ -76,7 +80,8 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
     const win = compilerState.compiled.every(c => c === true);
     if (win) {
         newState.winner = compiler;
-        onEndGame(compiler);
+        onEndGame(compiler, newState);
+        return newState;
     }
 
     // Trigger Hate-3 for all deleted cards

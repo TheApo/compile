@@ -99,6 +99,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Death-2';
                 // FIX: Corrected variable name from `sourceName` to `sourceCardName`.
                 newState = log(newState, actor, `${sourceCardName}: Deleting ${deletedCardNames.join(', ')}.`);
+                newState[actor].stats.cardsDeleted += deletedCardNames.length;
             }
 
             newState.actionRequired = null;
@@ -135,6 +136,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 }
             }
             
+            newState[actor].stats.cardsDeleted += cardsToDelete.length;
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
                 requiresAnimation = {
@@ -221,6 +223,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const sourceProtocol = prev[actor].protocols[sourceLaneIndex];
                 const targetProtocol = prev[actor].protocols[targetLaneIndex];
                 newState = log(newState, actor, `Light-3: Shifts ${totalShifted} face-down card(s) from Protocol ${sourceProtocol} to Protocol ${targetProtocol}.`);
+                newState[actor].stats.cardsShifted += totalShifted;
             }
             break;
         }

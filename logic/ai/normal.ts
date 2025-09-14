@@ -353,12 +353,21 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // --- Default/Simple handlers for other actions ---
         case 'select_lane_for_shift': {
             const { cardOwner, originalLaneIndex } = action;
-            // Try to move to the lane with the lowest value to build it up.
-            const targetLanes = state[cardOwner].laneValues
-                .map((value, index) => ({ value, index }))
-                .filter(l => l.index !== originalLaneIndex)
-                .sort((a, b) => a.value - b.value);
-            return { type: 'selectLane', laneIndex: targetLanes[0].index };
+            const possibleLanes = [0, 1, 2].filter(i => i !== originalLaneIndex);
+            
+            if (cardOwner === 'opponent') { // AI shifts its own card
+                // Move to its weakest lane to build it up
+                const targetLanes = possibleLanes
+                    .map(index => ({ value: state.opponent.laneValues[index], index }))
+                    .sort((a, b) => a.value - b.value); // sort ascending by value
+                return { type: 'selectLane', laneIndex: targetLanes[0].index };
+            } else { // AI shifts player's card
+                // Move to player's strongest lane to concentrate their power / disrupt
+                const targetLanes = possibleLanes
+                    .map(index => ({ value: state.player.laneValues[index], index }))
+                    .sort((a, b) => b.value - a.value); // sort descending by value
+                return { type: 'selectLane', laneIndex: targetLanes[0].index };
+            }
         }
         
         // For most optional effects, a normal AI will usually accept if it seems beneficial

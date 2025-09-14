@@ -221,7 +221,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if ('originalLaneIndex' in action && action.originalLaneIndex !== undefined) {
                 possibleLanes = possibleLanes.filter(l => l !== action.originalLaneIndex);
             }
-            if (possibleLanes.length > 0) return { type: 'selectLane', laneIndex: possibleLanes[0] };
+            if (possibleLanes.length > 0) {
+                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
             if ('optional' in action && action.optional) return { type: 'skip' };
             return { type: 'skip' };
         }
