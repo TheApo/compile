@@ -12,7 +12,7 @@ import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
 
 type ActionDispatchers = {
-    compileLane: (s: GameState, l: number, onEndGame: (winner: Player) => void) => GameState,
+    compileLane: (s: GameState, l: number) => GameState,
     playCard: (s: GameState, c: string, l: number, f: boolean, p: Player) => EffectResult,
     fillHand: (s: GameState, p: Player) => GameState,
     discardCards: (s: GameState, c: string[], p: Player) => GameState,
@@ -390,7 +390,10 @@ export const runOpponentTurn = (
                 const laneIndex = compileAction.laneIndex;
                 setTimeout(() => {
                     setGameState(s => {
-                        const nextState = resolvers.compileLane(s, laneIndex, () => {});
+                        const nextState = actions.compileLane(s, laneIndex);
+                        if (nextState.winner) {
+                            return nextState; // Stop processing if game is over
+                        }
                         return phaseManager.processEndOfAction(nextState);
                     });
                 }, 1000);

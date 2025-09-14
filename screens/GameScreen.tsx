@@ -128,6 +128,26 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     setShowSwapModal(gameState.actionRequired?.type === 'prompt_swap_protocols' && gameState.turn === 'player');
   }, [gameState.actionRequired, gameState.turn]);
 
+  useEffect(() => {
+    const handleDebugKeyDown = (event: KeyboardEvent) => {
+        if (event.ctrlKey && event.shiftKey) {
+            event.preventDefault();
+            if (event.key.toLowerCase() === 'w') {
+                console.log('Debug: Forcing player win.');
+                onEndGame('player', gameState);
+            } else if (event.key.toLowerCase() === 'l') {
+                console.log('Debug: Forcing opponent win.');
+                onEndGame('opponent', gameState);
+            }
+        }
+    };
+
+    window.addEventListener('keydown', handleDebugKeyDown);
+    return () => {
+        window.removeEventListener('keydown', handleDebugKeyDown);
+    };
+  }, [gameState, onEndGame]);
+
   const handleLaneMouseDown = (laneIndex: number) => {
     const { actionRequired, turn, phase, compilableLanes, player, opponent } = gameState;
 
