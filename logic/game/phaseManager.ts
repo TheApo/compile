@@ -118,6 +118,13 @@ export const advancePhase = (state: GameState): GameState => {
 export const processEndOfAction = (state: GameState): GameState => {
     if (state.winner) return state;
 
+    // This is the crucial check. If an action is required, the turn cannot end.
+    // This handles both actions for the current turn player (which the AI manager will loop on)
+    // and interrupt actions for the other player (which the useGameState hook will trigger the AI for).
+    if (state.actionRequired) {
+        return state;
+    }
+
     // Check for a completed interrupt first.
     if (state._interruptedTurn) {
         const originalTurnPlayer = state._interruptedTurn;
