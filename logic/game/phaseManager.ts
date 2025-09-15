@@ -133,10 +133,42 @@ export const processEndOfAction = (state: GameState): GameState => {
 
     // Check for a queued ACTION first.
     if (state.queuedActions && state.queuedActions.length > 0) {
-        const queuedActions = [...state.queuedActions];
-        const nextAction = queuedActions.shift();
-        // Return immediately with the new action required.
-        return { ...state, actionRequired: nextAction, queuedActions };
+        let mutableState = { ...state };
+        let queuedActions = [...mutableState.queuedActions];
+        
+        // This loop handles auto-resolving actions from the queue.
+        while (queuedActions.length > 0) {
+            const nextAction = queuedActions[0]; // Peek
+
+            if (nextAction.type === 'reveal_opponent_hand') {
+                queuedActions.shift(); // Consume
+                
+                const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
+                const opponentState = { ...mutableState[opponentId] };
+
+                if (opponentState.hand.length > 0) {
+                    opponentState.hand = opponentState.hand.map(c => ({ ...c, isRevealed: true }));
+                    mutableState[opponentId] = opponentState;
+                    const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                    const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                    mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent reveals their hand.`);
+                } else {
+                    const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                    const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                    mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent has no cards to reveal.`);
+                }
+                
+                // Continue loop
+            } else {
+                // Not an auto-resolving action, set it and break.
+                mutableState.actionRequired = queuedActions.shift();
+                mutableState.queuedActions = queuedActions;
+                return mutableState;
+            }
+        }
+        
+        // All queued actions were auto-resolved.
+        state = { ...mutableState, queuedActions: [], actionRequired: null };
     }
 
     // Check for a queued effect before advancing phase.
