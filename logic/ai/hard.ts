@@ -79,6 +79,8 @@ const getBestMove = (state: GameState): AIAction => {
         .filter(c => c.isFaceUp)
         .sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
 
+    const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+
     // --- Evaluate Playing Cards ---
     for (const card of opponent.hand) {
         for (let i = 0; i < 3; i++) {
@@ -87,7 +89,7 @@ const getBestMove = (state: GameState): AIAction => {
             const baseScore = getCardPower(card);
             
             // 1. Evaluate Face-Up Play
-            if (card.protocol === opponent.protocols[i]) {
+            if (card.protocol === opponent.protocols[i] && !playerHasPsychic1) {
                 let score = baseScore;
                 let description = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
                 const valueToAdd = card.value;

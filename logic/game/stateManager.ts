@@ -13,6 +13,15 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
     const deck = shuffleDeck(buildDeck(protocols));
     const { drawnCards, remainingDeck } = drawCardsUtil(deck, [], 5);
 
+    const initialStats = {
+        cardsPlayed: 0,
+        cardsDiscarded: 0,
+        cardsDeleted: 0,
+        cardsFlipped: 0,
+        cardsShifted: 0,
+        cardsDrawn: drawnCards.length, // Initial draw
+    };
+
     return {
         protocols,
         deck: remainingDeck,
@@ -22,13 +31,7 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
         compiled: [false, false, false],
         laneValues: [0, 0, 0],
         cannotCompile: false,
-        stats: {
-            cardsPlayed: 0,
-            cardsDiscarded: 0,
-            cardsDeleted: 0,
-            cardsFlipped: 0,
-            cardsShifted: 0,
-        },
+        stats: initialStats,
     };
 };
 

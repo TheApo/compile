@@ -28,13 +28,15 @@ const getBestMove = (state: GameState): AIAction => {
     const { opponent, player } = state;
     const possibleMoves: ScoredMove[] = [];
 
+    const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+
     // Evaluate playing each card in hand
     for (const card of opponent.hand) {
         for (let i = 0; i < 3; i++) {
             if (opponent.compiled[i]) continue; // Don't play in compiled lanes
 
             // --- Evaluate playing face-up ---
-            const canPlayFaceUp = card.protocol === opponent.protocols[i];
+            const canPlayFaceUp = card.protocol === opponent.protocols[i] && !playerHasPsychic1;
             if (canPlayFaceUp) {
                 let score = 0;
                 const valueToAdd = card.value;

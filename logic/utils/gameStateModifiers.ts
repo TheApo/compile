@@ -91,6 +91,8 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         hand: [...playerState.hand, ...newHandCards],
     };
 
+    newPlayerState.stats.cardsDrawn += drawnCards.length;
+
     let newState: GameState = { ...state, [player]: newPlayerState };
 
     if (drawnCardIds.length > 0) {

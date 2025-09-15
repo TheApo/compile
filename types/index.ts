@@ -19,6 +19,7 @@ export interface PlayerStats {
     cardsDeleted: number;
     cardsFlipped: number;
     cardsShifted: number;
+    cardsDrawn: number;
 }
 
 export interface PlayerState {

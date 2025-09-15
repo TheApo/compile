@@ -1630,6 +1630,11 @@ p {
     max-width: 900px;
 }
 
+.results-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
 .results-header h1 {
     font-size: 4rem;
     margin-bottom: 0.5rem;
@@ -1672,6 +1677,23 @@ p {
 .final-score-section .protocol-bars-container {
     border: none;
     padding: 0;
+}
+
+.results-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.final-score-section .results-opponent-label {
+    color: var(--danger-color);
+    margin-bottom: 0.5rem;
+}
+
+.final-score-section .results-player-label {
+    color: var(--primary-color);
+    margin-top: 0.5rem;
 }
 
 .stats-grid {

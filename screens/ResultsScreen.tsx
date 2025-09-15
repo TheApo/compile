@@ -43,6 +43,7 @@ export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreen
         <div className="results-body">
             <div className="final-score-section">
                 <h3>Final Score</h3>
+                <h4 className="results-label results-opponent-label">Opponent (AI)</h4>
                 <div className="protocol-bars-container">
                     <div className="protocol-bar opponent-bar">
                         {finalState.opponent.protocols.map((p, i) => 
@@ -61,6 +62,7 @@ export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreen
                         )}
                     </div>
                 </div>
+                <h4 className="results-label results-player-label">Player</h4>
             </div>
 
             <div className="stats-section">
@@ -68,28 +70,33 @@ export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreen
                 <div className="stats-grid">
                     <div className="stat-item">
                         <span className="stat-item-label">Cards Played</span>
-                        <span className="stat-item-value player">{finalState.stats.player.cardsPlayed}</span>
                         <span className="stat-item-value opponent">{finalState.stats.opponent.cardsPlayed}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsPlayed}</span>
+                    </div>
+                     <div className="stat-item">
+                        <span className="stat-item-label">Cards Drawn</span>
+                        <span className="stat-item-value opponent">{finalState.stats.opponent.cardsDrawn}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsDrawn}</span>
                     </div>
                      <div className="stat-item">
                         <span className="stat-item-label">Cards Discarded</span>
-                        <span className="stat-item-value player">{finalState.stats.player.cardsDiscarded}</span>
                         <span className="stat-item-value opponent">{finalState.stats.opponent.cardsDiscarded}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsDiscarded}</span>
                     </div>
-                    <div className="stat-item">
+                     <div className="stat-item">
                         <span className="stat-item-label">Cards Deleted</span>
-                        <span className="stat-item-value player">{finalState.stats.player.cardsDeleted}</span>
                         <span className="stat-item-value opponent">{finalState.stats.opponent.cardsDeleted}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsDeleted}</span>
                     </div>
                      <div className="stat-item">
                         <span className="stat-item-label">Cards Flipped</span>
-                        <span className="stat-item-value player">{finalState.stats.player.cardsFlipped}</span>
                         <span className="stat-item-value opponent">{finalState.stats.opponent.cardsFlipped}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsFlipped}</span>
                     </div>
                     <div className="stat-item">
                         <span className="stat-item-label">Cards Shifted</span>
-                        <span className="stat-item-value player">{finalState.stats.player.cardsShifted}</span>
                         <span className="stat-item-value opponent">{finalState.stats.opponent.cardsShifted}</span>
+                        <span className="stat-item-value player">{finalState.stats.player.cardsShifted}</span>
                     </div>
                 </div>
             </div>

@@ -11,6 +11,8 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     const { opponent, player } = state;
     if (opponent.hand.length === 0) return null;
 
+    const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+
     // 1. Super Simple Offensive Logic: If a lane is at 8 or 9, play any card face down to compile.
     for (let i = 0; i < 3; i++) {
         if (!opponent.compiled[i] && (opponent.laneValues[i] === 8 || opponent.laneValues[i] === 9)) {
@@ -24,9 +26,11 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     const cardToPlay = sortedHand[0];
 
     // Try to find a lane where it can be played face up.
-    for (let i = 0; i < 3; i++) {
-        if (cardToPlay.protocol === opponent.protocols[i]) {
-            return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
+    if (!playerHasPsychic1) {
+        for (let i = 0; i < 3; i++) {
+            if (cardToPlay.protocol === opponent.protocols[i]) {
+                return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
+            }
         }
     }
 
