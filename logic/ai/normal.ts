@@ -57,6 +57,13 @@ const getBestMove = (state: GameState): AIAction => {
                  // D: Reward gaining/extending a lead
                 score += (resultingValue - player.laneValues[i]);
 
+                // E: Special strategy for Metal-6
+                if (card.protocol === 'Metal' && card.value === 6) {
+                    if (opponent.lanes[i].length < 4) {
+                        score -= 50; // Penalize playing Metal-6 too early
+                    }
+                }
+
                 possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score });
             }
 
@@ -72,6 +79,13 @@ const getBestMove = (state: GameState): AIAction => {
 
             // B: Still good to build up points, especially to contest a lane
             score += valueToAdd + (resultingValue - player.laneValues[i]);
+
+            // C: Special strategy for Metal-6
+            if (card.protocol === 'Metal' && card.value === 6) {
+                if (opponent.lanes[i].length < 4) {
+                    score -= 50; // Also penalize playing it face-down early
+                }
+            }
 
             possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score });
         }
@@ -170,7 +184,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Score flipping opponent cards (higher value = better target)
             state.player.lanes.flat().forEach(c => {
                 if (c.isFaceUp) {
-                    potentialTargets.push({ cardId: c.id, score: c.value });
+                    // Heavily prioritize flipping higher value cards
+                    potentialTargets.push({ cardId: c.id, score: c.value * 2 + 2 });
                 }
             });
 

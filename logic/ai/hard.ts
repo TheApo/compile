@@ -90,6 +90,16 @@ const getBestMove = (state: GameState): AIAction => {
             
             // 1. Evaluate Face-Up Play
             if (card.protocol === opponent.protocols[i] && !playerHasPsychic1) {
+                // Special strategy for Metal-6
+                if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4) {
+                    // Hard AI avoids this move unless it's a game-winning compile setup.
+                    const valueToAdd = card.value;
+                    const resultingValue = opponent.laneValues[i] + valueToAdd;
+                    if (!(resultingValue >= 10 && resultingValue > player.laneValues[i])) {
+                        continue; // Skip this bad move
+                    }
+                }
+
                 let score = baseScore;
                 let description = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
                 const valueToAdd = card.value;
@@ -119,9 +129,14 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // 2. Evaluate Face-Down Play
+             // Special strategy for Metal-6
+            if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4) {
+                // Playing face down is never a good idea with Metal-6 early on.
+                continue; // Skip this bad move
+            }
             let score = 0; // Face-down plays are purely positional
             let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
-            const valueToAdd = 2; // TODO: Check for Darkness-2
+            const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
             const resultingValue = opponent.laneValues[i] + valueToAdd;
 
             if (resultingValue >= 10 && resultingValue > player.laneValues[i] && opponent.laneValues[i] >= 8) {

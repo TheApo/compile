@@ -100,14 +100,21 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_opponent_face_up_card_to_flip': {
             const validTargets = state.player.lanes.flat().filter(c => c.isFaceUp);
             if (validTargets.length > 0) {
-                const randomCard = validTargets[Math.floor(Math.random() * validTargets.length)];
-                return { type: 'flipCard', cardId: randomCard.id };
+                validTargets.sort((a, b) => b.value - a.value); // Sort descending by value
+                return { type: 'flipCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
         }
         case 'select_opponent_card_to_flip': {
             const validTargets = state.player.lanes.flat();
             if (validTargets.length > 0) {
+                // Prioritize face-up cards to reduce score
+                const faceUpTargets = validTargets.filter(c => c.isFaceUp);
+                if (faceUpTargets.length > 0) {
+                    faceUpTargets.sort((a, b) => b.value - a.value);
+                    return { type: 'flipCard', cardId: faceUpTargets[0].id };
+                }
+                // If no face-up targets, flip a random one
                 const randomCard = validTargets[Math.floor(Math.random() * validTargets.length)];
                 return { type: 'flipCard', cardId: randomCard.id };
             }
@@ -121,15 +128,29 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_flip_for_light_0':
         case 'select_face_down_card_to_reveal_for_light_2':
         case 'select_any_other_card_to_flip_for_water_0': {
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) return { type: 'flipCard', cardId: allCards[0].id };
+            // Prioritize flipping opponent's highest value face-up card.
+            const opponentFaceUpCards = state.player.lanes.flat().filter(c => c.isFaceUp);
+            if (opponentFaceUpCards.length > 0) {
+                opponentFaceUpCards.sort((a, b) => b.value - a.value);
+                return { type: 'flipCard', cardId: opponentFaceUpCards[0].id };
+            }
+            // Fallback: flip own face-down card to get value on board.
+            const ownFaceDownCards = state.opponent.lanes.flat().filter(c => !c.isFaceUp);
+            if (ownFaceDownCards.length > 0) {
+                return { type: 'flipCard', cardId: ownFaceDownCards[0].id };
+            }
             if ('optional' in action && action.optional) return { type: 'skip' };
+            // As a last resort, flip any of player's face-down cards
+            const opponentFaceDown = state.player.lanes.flat().filter(c => !c.isFaceUp);
+            if (opponentFaceDown.length > 0) {
+                return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+            }
             return { type: 'skip' };
         }
         case 'select_any_face_down_card_to_flip_optional': {
             const faceDownCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => !c.isFaceUp);
             if (faceDownCards.length > 0) {
-                // Easy AI just flips a random one
+                // Easy AI just flips a random one.
                 const randomCard = faceDownCards[Math.floor(Math.random() * faceDownCards.length)];
                 return { type: 'flipCard', cardId: randomCard.id };
             }

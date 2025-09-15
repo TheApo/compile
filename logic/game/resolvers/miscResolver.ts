@@ -26,14 +26,14 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
     const nonCompilerSpeed2sToShift: PlayedCard[] = [];
 
     const compilerDeletedCards = compilerState.lanes[laneIndex].filter(c => {
-        if (c.protocol === 'Speed' && c.value === 2) {
+        if (c.protocol === 'Speed' && c.value === 2 && c.isFaceUp) {
             compilerSpeed2sToShift.push(c);
             return false;
         }
         return true;
     });
     const nonCompilerDeletedCards = nonCompilerState.lanes[laneIndex].filter(c => {
-        if (c.protocol === 'Speed' && c.value === 2) {
+        if (c.protocol === 'Speed' && c.value === 2 && c.isFaceUp) {
             nonCompilerSpeed2sToShift.push(c);
             return false;
         }

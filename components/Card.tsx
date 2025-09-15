@@ -39,6 +39,9 @@ export function CardComponent({ card, onMouseDown, onMouseEnter, onMouseLeave, i
   const isDiscarding = owner === 'player' && animationState?.type === 'discardCard' && animationState.cardIds.includes(card.id);
 
   const classNames = ['card-component'];
+  if (card.protocol) {
+    classNames.push(`card-protocol-${card.protocol.toLowerCase()}`);
+  }
   if (isSelected) classNames.push('selected');
   if (isMultiSelected) classNames.push('multi-selected');
   if (isDiscarding) classNames.push('is-discarding');
