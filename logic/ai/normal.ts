@@ -387,6 +387,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
         }
         
+        case 'select_own_card_to_shift_for_speed_3': {
+            const ownCards = state.opponent.lanes.flat();
+            // This action is mandatory and is only dispatched if the AI has at least one card.
+            // Normal AI: shift the card with the lowest power to move it to a better lane.
+            ownCards.sort((a, b) => getCardPower(a) - getCardPower(b));
+            return { type: 'deleteCard', cardId: ownCards[0].id };
+        }
+
         // For most optional effects, a normal AI will usually accept if it seems beneficial
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: true };
         case 'prompt_give_card_for_love_1': return { type: 'resolveLove1Prompt', accept: true };
@@ -399,21 +407,23 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_or_flip_for_light_2': return { type: 'resolveLight2Prompt', choice: 'shift' };
         
         case 'select_opponent_covered_card_to_shift': {
-            const validTargets: PlayedCard[] = [];
-            for (const lane of state.player.lanes) {
-                for (let i = 0; i < lane.length - 1; i++) {
-                    validTargets.push(lane[i]);
+            const validTargets: { card: PlayedCard; laneIndex: number }[] = [];
+            for (let i = 0; i < state.player.lanes.length; i++) {
+                const lane = state.player.lanes[i];
+                for (let j = 0; j < lane.length - 1; j++) {
+                    validTargets.push({ card: lane[j], laneIndex: i });
                 }
             }
+
             if (validTargets.length > 0) {
                 // Normal AI: prioritize highest-value face-up covered cards.
                 validTargets.sort((a, b) => {
-                    if (a.isFaceUp && !b.isFaceUp) return -1;
-                    if (!a.isFaceUp && b.isFaceUp) return 1;
-                    if (a.isFaceUp && b.isFaceUp) return b.value - a.value;
+                    if (a.card.isFaceUp && !b.card.isFaceUp) return -1;
+                    if (!a.card.isFaceUp && b.card.isFaceUp) return 1;
+                    if (a.card.isFaceUp && b.card.isFaceUp) return b.card.value - a.card.value;
                     return 0; // if both face-down, order doesn't matter
                 });
-                return { type: 'deleteCard', cardId: validTargets[0].id };
+                return { type: 'deleteCard', cardId: validTargets[0].card.id };
             }
             return { type: 'skip' };
         }

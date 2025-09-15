@@ -374,6 +374,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
         }
         
+        case 'select_own_card_to_shift_for_speed_3': {
+            const ownCards = state.opponent.lanes.flat();
+            // This action is mandatory and is only dispatched if the AI has at least one card.
+            // Hard AI: shift its highest-threat card, assuming it's moving it to an even better position.
+            ownCards.sort((a, b) => getCardThreat(b, 'opponent', state) - getCardThreat(a, 'opponent', state));
+            return { type: 'deleteCard', cardId: ownCards[0].id };
+        }
+        
         case 'prompt_rearrange_protocols':
             // Smart rearrangement: put lanes where AI is winning/strongest first.
             const laneData = state[action.target].protocols.map((p, i) => ({

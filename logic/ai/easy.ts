@@ -299,6 +299,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (cardToShift) return { type: 'deleteCard', cardId: cardToShift.id }; // Typo but fine for easy
             return { type: 'skip' };
         }
+        case 'select_own_card_to_shift_for_speed_3': {
+            const ownCards = state.opponent.lanes.flat();
+            // This action is mandatory and is only dispatched if the AI has at least one card.
+            // Easy AI just picks the first card it finds.
+            return { type: 'deleteCard', cardId: ownCards[0].id };
+        }
         case 'select_opponent_covered_card_to_shift': {
             const validTargets: PlayedCard[] = [];
             for (const lane of state.player.lanes) {

@@ -89,11 +89,16 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         deck: remainingDeck,
         discard: newDiscard,
         hand: [...playerState.hand, ...newHandCards],
+        stats: {
+            ...playerState.stats,
+            cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
+        }
     };
 
-    newPlayerState.stats.cardsDrawn += drawnCards.length;
-
     let newState: GameState = { ...state, [player]: newPlayerState };
+    // Also update the top-level stats object for the results screen
+    newState.stats[player].cardsDrawn = newPlayerState.stats.cardsDrawn;
+
 
     if (drawnCardIds.length > 0) {
         newState.animationState = { type: 'drawCard', owner: player, cardIds: drawnCardIds };
