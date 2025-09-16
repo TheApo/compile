@@ -95,7 +95,7 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // DEBUG: Force AI to pick specific protocols for testing
-        const debugProtocols = ["Plague"];
+        const debugProtocols = [];
 
         // Select protocols
         const availableForOpponent = uniqueProtocols.filter(p => !chosenProtocols.has(p));
