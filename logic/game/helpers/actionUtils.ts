@@ -3,12 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// FIX: Implemented the entire module which was missing and causing multiple import errors.
 import { GameState, PlayedCard, Player, ActionRequired, EffectResult } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { recalculateAllLaneValues } from "../stateManager";
-import { executeOnCoverEffect } from '../../effectExecutor';
+import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
     if (!cardId) return null;
@@ -88,11 +87,39 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     return newState;
 }
 
-export function internalReturnCard(state: GameState, targetCardId: string): GameState {
+
+export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: number): EffectResult {
+    const lane = state[owner].lanes[laneIndex];
+    if (lane.length === 0) {
+        return { newState: state };
+    }
+
+    const uncoveredCard = lane[lane.length - 1];
+    
+    // The effect only triggers if the newly uncovered card is FACE UP.
+    if (uncoveredCard.isFaceUp) {
+        const newState = log(state, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
+        // Re-triggering the on-play effect is the main part of the mechanic.
+        // Static/triggered effects become active automatically because the card is now the last in the array.
+        return executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
+    }
+    
+    return { newState: state };
+}
+
+export function internalReturnCard(state: GameState, targetCardId: string): EffectResult {
     const cardInfo = findCardOnBoard(state, targetCardId);
-    if (!cardInfo) return state;
+    if (!cardInfo) return { newState: state };
 
     const { card, owner } = cardInfo;
+
+    const laneIndex = state[owner].lanes.findIndex(l => l.some(c => c.id === card.id));
+    if (laneIndex === -1) return { newState: state };
+
+    // Snapshot before removal
+    const laneBeforeRemoval = state[owner].lanes[laneIndex];
+    const isRemovingTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === targetCardId;
+
     let newState = { ...state };
     const ownerState = { ...newState[owner] };
 
@@ -110,7 +137,13 @@ export function internalReturnCard(state: GameState, targetCardId: string): Game
     newState = log(newState, actor, `${actorName} returns ${ownerName} ${cardName} to their hand.`);
 
     newState.actionRequired = null;
-    return recalculateAllLaneValues(newState);
+    const stateAfterRecalc = recalculateAllLaneValues(newState);
+
+    if (isRemovingTopCard) {
+        return handleUncoverEffect(stateAfterRecalc, owner, laneIndex);
+    }
+
+    return { newState: stateAfterRecalc };
 }
 
 export function internalShiftCard(state: GameState, cardToShiftId: string, cardOwner: Player, targetLaneIndex: number, actor: Player): EffectResult {
@@ -129,6 +162,10 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     }
 
     if (originalLaneIndex === -1) return { newState: state };
+    
+    // Snapshot before removal from original lane
+    const laneBeforeRemoval = state[cardOwner].lanes[originalLaneIndex];
+    const isRemovingTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === cardToShiftId;
 
     // Create a new lanes array with the card removed from the original lane.
     const lanesAfterRemoval = ownerState.lanes.map((lane, index) => {
@@ -150,45 +187,41 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         return lane;
     });
     
-    // Create a new player state with the updated lanes.
-    const newOwnerState = {
-        ...ownerState,
-        lanes: lanesAfterAddition,
-    };
-
-    // Create a new game state.
-    let newState = {
-        ...state,
-        [cardOwner]: newOwnerState,
-    };
+    const newOwnerState = { ...ownerState, lanes: lanesAfterAddition };
+    let newState = { ...state, [cardOwner]: newOwnerState };
     
-    // Log the action.
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
     const cardName = cardToShift.isFaceUp ? `${cardToShift.protocol}-${cardToShift.value}` : 'a card';
     const targetProtocol = newState[cardOwner].protocols[targetLaneIndex];
     newState = log(newState, actor, `${actorName} shifts ${ownerName} ${cardName} to Protocol ${targetProtocol}.`);
     
-    // Update stats immutably.
     const newStats = { ...newState.stats[actor], cardsShifted: newState.stats[actor].cardsShifted + 1 };
     const newActorState = { ...newState[actor], stats: newStats };
     newState = { ...newState, [actor]: newActorState, stats: { ...newState.stats, [actor]: newStats } };
     
     newState.actionRequired = null;
 
-    // Recalculate values based on the definitive new board state.
     let stateAfterRecalc = recalculateAllLaneValues(newState);
 
-    // After shifting and recalculating, check for onCover effect.
-    let finalResult: EffectResult = { newState: stateAfterRecalc };
-
+    let resultAfterOnCover: EffectResult = { newState: stateAfterRecalc };
     if (cardToBeCovered) {
-        const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc);
-        finalResult.newState = onCoverResult.newState;
-        if (onCoverResult.animationRequests) {
-            finalResult.animationRequests = onCoverResult.animationRequests;
-        }
+        resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc);
     }
 
-    return finalResult;
+    if (isRemovingTopCard) {
+        const uncoverResult = handleUncoverEffect(resultAfterOnCover.newState, cardOwner, originalLaneIndex);
+        
+        const combinedAnimations = [
+            ...(resultAfterOnCover.animationRequests || []),
+            ...(uncoverResult.animationRequests || [])
+        ];
+        
+        return {
+            newState: uncoverResult.newState,
+            animationRequests: combinedAnimations.length > 0 ? combinedAnimations : undefined,
+        };
+    }
+
+    return resultAfterOnCover;
 }

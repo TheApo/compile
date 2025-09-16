@@ -1,0 +1,13 @@
+Selecting / Targeting Cards for Effects
+By default, only uncovered cards on either player's side of the field can be selected as the
+target of a flip, delete, return, shift, or reveal (e.g. "Flip 1 card." can be understood as "Flip 1
+uncovered card.").
+Unless otherwise specified, your cards or your opponent's card can both be selected (e.g.
+"Flip 1 card." can target your uncovered cards or your opponent's uncovered cards but "Flip
+1 of your cards." can only target yours).
+Covered cards can be chosen by text that uses "covered" or "all" (e.g. "Flip 1 covered card."
+or "Delete all cards in a line").
+If text uses "this card" or "that card", then no selection is necessary and the card referred
+to, regardless of being covered or uncovered, can be manipulated (e.g. "Flip 1 card. Shift
+that card to this line." The flip would follow the normal targeting rules. Then the shift can
+manipulate the card regardless of whether it has been covered since.)

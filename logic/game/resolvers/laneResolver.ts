@@ -208,7 +208,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
 
                 if (cardToBeCovered) {
-                    const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, newState, actor);
+                    // FIX: Removed the extra 'actor' argument from the function call.
+                    const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, newState);
                     newState = onCoverResult.newState;
                     if (onCoverResult.animationRequests) {
                         requiresAnimation = {

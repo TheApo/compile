@@ -463,7 +463,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_card_to_return':
         case 'select_opponent_card_to_return': {
-            newState = internalReturnCard(prev, targetCardId);
+            const returnResult = internalReturnCard(prev, targetCardId);
+            newState = returnResult.newState;
+            if (returnResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: returnResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                };
+            }
+
             if(prev.actionRequired.type === 'select_opponent_card_to_return' && prev.actionRequired.sourceCardId) {
                 const psychic4CardId = prev.actionRequired.sourceCardId;
                 newState = log(newState, prev.turn, `Psychic-4: Flipping itself.`);
@@ -687,7 +695,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_own_card_to_return_for_water_4': {
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo && cardInfo.owner === prev.turn) {
-                newState = internalReturnCard(prev, targetCardId);
+                const returnResult = internalReturnCard(prev, targetCardId);
+                newState = returnResult.newState;
+                if (returnResult.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: returnResult.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    };
+                }
             }
             break;
         }
@@ -715,5 +730,6 @@ export const flipCard = (prevState: GameState, cardId: string): GameState => {
 }
 
 export const returnCard = (prevState: GameState, cardId: string): GameState => {
-    return internalReturnCard(prevState, cardId);
+    const { newState } = internalReturnCard(prevState, cardId);
+    return newState;
 }
