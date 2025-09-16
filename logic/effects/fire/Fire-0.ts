@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Fire-0: Flip 1 other card. Draw 2 cards.

@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, Player, EffectResult, AnimationRequest } from "../../../types";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Hate-2: Delete your highest value card. Delete your opponent's highest value card.

@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawCards, checkForSpirit3Trigger } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Love-1: Draw the top card of your opponent's deck.

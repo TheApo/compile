@@ -18,7 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     if (opponentHandCount > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: opponent,
+            actor: opponent,
             count: 1,
             sourceCardId: card.id,
         };

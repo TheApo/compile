@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawForPlayer, refreshHandForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Love-2: Your opponent draws 1 card. Refresh.

@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Plague-3: Flip each other face-up card.

@@ -11,6 +11,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         return false;
     }
 
+    // Only the 'actor' specified in the action can perform it.
+    // The UI is for the 'player', so if the actor isn't 'player', they can't target anything.
+    if ('actor' in actionRequired && actionRequired.actor !== 'player') {
+        return false;
+    }
+
     let owner: Player | null = null;
     let laneIndex: number = -1;
     let lane: PlayedCard[] = [];
@@ -45,9 +51,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner === 'opponent';
         case 'shift_flipped_card_optional': // Darkness-1 (Part 2)
             return card.id === actionRequired.cardId;
-        case 'select_own_covered_card_in_lane_to_flip': { // Darkness-2
+        case 'select_covered_card_in_line_to_flip_optional': { // Darkness-2
             const cardIndex = lane.findIndex(c => c.id === card.id);
-            return owner === 'player' && laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
+            // Card must be in the correct lane, and must be covered (not the last card in its stack).
+            return laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
         }
         case 'select_face_down_card_to_shift_for_darkness_4': // Darkness-4
             return !card.isFaceUp;

@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Darkness-4: Shift 1 face-down card.

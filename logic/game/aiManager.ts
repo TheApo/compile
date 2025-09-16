@@ -72,7 +72,7 @@ export const resolveRequiredOpponentAction = (
 
         // Determine if the AI ('opponent') needs to act during the player's turn.
         let isOpponentInterrupt = false;
-        if (action.type === 'discard' && action.player === 'opponent') {
+        if (action.type === 'discard' && action.actor === 'opponent') {
             isOpponentInterrupt = true;
         } else if (action.type === 'plague_4_opponent_delete' && action.actor === 'player') {
             // Player's card forces opponent to act.
@@ -228,7 +228,17 @@ const handleRequiredAction = (
         return phaseManager.processEndOfAction(nextState);
     }
 
-    if (aiDecision.type === 'selectLane' && (action.type === 'select_lane_for_shift' || action.type === 'select_lane_for_death_2' || action.type === 'select_lane_for_play' || action.type === 'select_lane_for_water_3' || action.type === 'select_lane_for_metal_3_delete')) {
+    if (aiDecision.type === 'selectLane' && (
+        action.type === 'select_lane_for_shift' || 
+        action.type === 'select_lane_for_death_2' || 
+        action.type === 'select_lane_for_play' || 
+        action.type === 'select_lane_for_water_3' || 
+        action.type === 'select_lane_for_metal_3_delete' ||
+        action.type === 'select_lane_for_life_3_play' ||
+        action.type === 'shift_flipped_card_optional' ||
+        action.type === 'select_lane_to_shift_revealed_card_for_light_2' ||
+        action.type === 'select_lane_to_shift_cards_for_light_3'
+    )) {
         const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
@@ -344,7 +354,7 @@ export const runOpponentTurn = (
             const action = currentState.actionRequired;
             // Determine if this action requires the human player to act. If so, AI must wait.
             let isPlayerAction = false;
-            if (action.type === 'discard' && action.player === 'player') {
+            if (action.type === 'discard' && action.actor === 'player') {
                 isPlayerAction = true;
             } else if (action.type === 'plague_4_opponent_delete' && action.actor === 'opponent') {
                 // The AI's card makes the player delete a card.
@@ -394,7 +404,9 @@ export const runOpponentTurn = (
                         if (nextState.winner) {
                             return nextState; // Stop processing if game is over
                         }
-                        return phaseManager.processEndOfAction(nextState);
+                        const finalState = phaseManager.processEndOfAction(nextState);
+                        // Clear the animation state after the compile logic has run and the turn has processed.
+                        return { ...finalState, animationState: null };
                     });
                 }, 1000);
                 return { 

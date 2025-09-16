@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawCards } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 import { v4 as uuidv4 } from 'uuid';
 
 /**

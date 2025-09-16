@@ -11,10 +11,18 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     const { opponent, player } = state;
     if (opponent.hand.length === 0) return null;
 
+    const isLaneBlockedByPlague0 = (laneIndex: number): boolean => {
+        const playerLane = state.player.lanes[laneIndex];
+        if (playerLane.length === 0) return false;
+        const topCard = playerLane[playerLane.length - 1];
+        return topCard.isFaceUp && topCard.protocol === 'Plague' && topCard.value === 0;
+    };
+
     const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
 
     // 1. Super Simple Offensive Logic: If a lane is at 8 or 9, play any card face down to compile.
     for (let i = 0; i < 3; i++) {
+        if (isLaneBlockedByPlague0(i)) continue;
         if (!opponent.compiled[i] && (opponent.laneValues[i] === 8 || opponent.laneValues[i] === 9)) {
             // Found a compile setup opportunity. Play the first available card face-down.
             return { cardId: opponent.hand[0].id, laneIndex: i, isFaceUp: false };
@@ -28,14 +36,19 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     // Try to find a lane where it can be played face up.
     if (!playerHasPsychic1) {
         for (let i = 0; i < 3; i++) {
+            if (isLaneBlockedByPlague0(i)) continue;
             if (cardToPlay.protocol === opponent.protocols[i]) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
         }
     }
 
-    // If not, just play it face down in a random lane.
-    const randomLane = Math.floor(Math.random() * 3);
+    // If not, just play it face down in a random playable lane.
+    const playableLanes = [0, 1, 2].filter(i => !isLaneBlockedByPlague0(i));
+    if (playableLanes.length === 0) {
+        return null; // No valid lanes to play in
+    }
+    const randomLane = playableLanes[Math.floor(Math.random() * playableLanes.length)];
     return { cardId: cardToPlay.id, laneIndex: randomLane, isFaceUp: false };
 };
 
@@ -97,73 +110,43 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_opponent_face_up_card_to_flip': {
-            const validTargets = state.player.lanes.flat().filter(c => c.isFaceUp);
-            if (validTargets.length > 0) {
-                validTargets.sort((a, b) => b.value - a.value); // Sort descending by value
-                return { type: 'flipCard', cardId: validTargets[0].id };
-            }
-            return { type: 'skip' };
-        }
-        case 'select_opponent_card_to_flip': {
-            const validTargets = state.player.lanes.flat();
-            if (validTargets.length > 0) {
-                // Prioritize face-up cards to reduce score
-                const faceUpTargets = validTargets.filter(c => c.isFaceUp);
-                if (faceUpTargets.length > 0) {
-                    faceUpTargets.sort((a, b) => b.value - a.value);
-                    return { type: 'flipCard', cardId: faceUpTargets[0].id };
-                }
-                // If no face-up targets, flip a random one
-                const randomCard = validTargets[Math.floor(Math.random() * validTargets.length)];
-                return { type: 'flipCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
         case 'select_own_face_up_covered_card_to_flip':
+            // Easy AI doesn't bother with this complex optional move.
+            return { type: 'skip' };
+
+        case 'select_opponent_face_up_card_to_flip':
+        case 'select_opponent_card_to_flip':
         case 'select_any_other_card_to_flip':
         case 'select_any_card_to_flip':
         case 'select_any_card_to_flip_optional':
         case 'select_card_to_flip_for_fire_3':
         case 'select_card_to_flip_for_light_0':
         case 'select_face_down_card_to_reveal_for_light_2':
-        case 'select_any_other_card_to_flip_for_water_0': {
-            // Prioritize flipping opponent's highest value face-up card.
-            const opponentFaceUpCards = state.player.lanes.flat().filter(c => c.isFaceUp);
-            if (opponentFaceUpCards.length > 0) {
-                opponentFaceUpCards.sort((a, b) => b.value - a.value);
-                return { type: 'flipCard', cardId: opponentFaceUpCards[0].id };
-            }
-            // Fallback: flip own face-down card to get value on board.
-            const ownFaceDownCards = state.opponent.lanes.flat().filter(c => !c.isFaceUp);
-            if (ownFaceDownCards.length > 0) {
-                return { type: 'flipCard', cardId: ownFaceDownCards[0].id };
-            }
-            if ('optional' in action && action.optional) return { type: 'skip' };
-            // As a last resort, flip any of player's face-down cards
+        case 'select_any_other_card_to_flip_for_water_0':
+        case 'select_any_face_down_card_to_flip_optional':
+        case 'select_covered_card_in_line_to_flip_optional': {
+            // Easy AI: Find any valid target and flip it, with a simple priority order.
+            const isOptional = 'optional' in action && action.optional;
+
+            // Priority 1: Flip opponent's highest-value face-up card.
+            const opponentFaceUp = state.player.lanes.flat().filter(c => c.isFaceUp).sort((a,b) => b.value - a.value);
+            if (opponentFaceUp.length > 0) return { type: 'flipCard', cardId: opponentFaceUp[0].id };
+            
+            // Priority 2: Flip own face-down card to get points on the board.
+            const ownFaceDown = state.opponent.lanes.flat().filter(c => !c.isFaceUp);
+            if (ownFaceDown.length > 0) return { type: 'flipCard', cardId: ownFaceDown[0].id };
+
+            // Priority 3: Flip opponent's face-down card to see it.
             const opponentFaceDown = state.player.lanes.flat().filter(c => !c.isFaceUp);
-            if (opponentFaceDown.length > 0) {
-                return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+            if (opponentFaceDown.length > 0) return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+            
+            // Priority 4: Flip own face-up card (bad move, but mandatory actions must be resolved).
+            const ownFaceUp = state.opponent.lanes.flat().filter(c => c.isFaceUp && c.id !== action.sourceCardId);
+            if (ownFaceUp.length > 0) {
+                if (!isOptional) return { type: 'flipCard', cardId: ownFaceUp[0].id };
             }
-            return { type: 'skip' };
-        }
-        case 'select_any_face_down_card_to_flip_optional': {
-            const faceDownCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => !c.isFaceUp);
-            if (faceDownCards.length > 0) {
-                // Easy AI just flips a random one.
-                const randomCard = faceDownCards[Math.floor(Math.random() * faceDownCards.length)];
-                return { type: 'flipCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' }; // It's optional, so skip if no targets
-        }
-        case 'select_own_covered_card_in_lane_to_flip': {
-            const { laneIndex } = action;
-            const ownLane = state.opponent.lanes[laneIndex];
-            const coveredCards = ownLane.filter((c, i, arr) => i < arr.length - 1);
-            if (coveredCards.length > 0) {
-                // Just flip the first available one.
-                return { type: 'flipCard', cardId: coveredCards[0].id };
-            }
+
+            // If we reach here, no valid targets were found or it was an optional bad move.
             return { type: 'skip' };
         }
 
@@ -230,6 +213,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'select_face_down_card_to_shift_for_darkness_4': {
+            const allFaceDownCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => !c.isFaceUp);
+            if (allFaceDownCards.length > 0) {
+                const randomCard = allFaceDownCards[Math.floor(Math.random() * allFaceDownCards.length)];
+                return { type: 'deleteCard', cardId: randomCard.id }; // Using deleteCard as a proxy for selecting a card
+            }
+            return { type: 'skip' }; // Should not happen if action was created correctly
+        }
+
         case 'select_lane_for_shift':
         case 'shift_flipped_card_optional':
         case 'select_lane_for_play':
@@ -291,8 +283,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_rearrange_protocols':
             const newOrder = shuffleDeck([...state[action.target].protocols]);
             return { type: 'rearrangeProtocols', newOrder };
-        case 'prompt_swap_protocols':
-            return { type: 'skip' };
+        case 'prompt_swap_protocols': {
+            // Easy AI: Pick two random, distinct indices to swap.
+            const index1 = Math.floor(Math.random() * 3);
+            let index2 = Math.floor(Math.random() * 3);
+            while (index1 === index2) {
+                index2 = Math.floor(Math.random() * 3);
+            }
+            return { type: 'resolveSwapProtocols', indices: [index1, index2] };
+        }
 
         case 'select_own_other_card_to_shift': {
             const cardToShift = state.opponent.lanes.flat().find(c => c.id !== action.sourceCardId);

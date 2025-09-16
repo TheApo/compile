@@ -9,7 +9,6 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
  * Psychic-2: Your opponent discards 2 cards. Rearrange their protocols.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    // FIX: Explicitly type `opponent` as `Player` to prevent type widening to `string`.
     const opponent: Player = actor === 'player' ? 'opponent' : 'player';
     let newState = { ...state };
     
@@ -20,7 +19,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     if (opponentHandCount > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: opponent,
+            actor: opponent,
             count: Math.min(2, opponentHandCount),
             sourceCardId: card.id,
         };

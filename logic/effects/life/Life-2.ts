@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Life-2: Draw 1 card. You may flip 1 face-down card.

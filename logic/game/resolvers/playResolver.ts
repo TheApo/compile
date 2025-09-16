@@ -17,7 +17,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
     const opponent = player === 'player' ? 'opponent' : 'player';
     const opponentLane = prevState[opponent].lanes[laneIndex];
-    if (opponentLane.some(c => c.isFaceUp && c.protocol === 'Plague' && c.value === 0)) {
+    const topOpponentCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
+
+    // RULE: An opponent's uncovered Plague-0 blocks playing into a lane.
+    if (topOpponentCard && topOpponentCard.isFaceUp && topOpponentCard.protocol === 'Plague' && topOpponentCard.value === 0) {
         return { newState: prevState };
     }
 
@@ -32,14 +35,30 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
     // 2. Physically play the card onto the board from the state returned by the onCover effect.
     const playerStateAfterOnCover = { ...stateAfterOnCover[player] };
-    playerStateAfterOnCover.hand = playerStateAfterOnCover.hand.filter(c => c.id !== cardId);
-    playerStateAfterOnCover.stats.cardsPlayed++; // Increment stats
-    const lanesAfterOnCover = [...playerStateAfterOnCover.lanes];
-    // Create the card instance that will be placed on the board.
     const newCardOnBoard: PlayedCard = { ...cardToPlay, isFaceUp, isRevealed: false };
-    lanesAfterOnCover[laneIndex] = [...lanesAfterOnCover[laneIndex], newCardOnBoard];
-    playerStateAfterOnCover.lanes = lanesAfterOnCover;
-    let stateAfterMove = { ...stateAfterOnCover, [player]: playerStateAfterOnCover };
+    
+    const newStats = {
+        ...playerStateAfterOnCover.stats,
+        cardsPlayed: playerStateAfterOnCover.stats.cardsPlayed + 1,
+    };
+    
+    const newPlayerState = {
+        ...playerStateAfterOnCover,
+        hand: playerStateAfterOnCover.hand.filter(c => c.id !== cardId),
+        lanes: playerStateAfterOnCover.lanes.map((lane, i) =>
+            i === laneIndex ? [...lane, newCardOnBoard] : lane
+        ),
+        stats: newStats,
+    };
+
+    let stateAfterMove: GameState = { 
+        ...stateAfterOnCover, 
+        [player]: newPlayerState,
+        stats: {
+            ...stateAfterOnCover.stats,
+            [player]: newStats
+        }
+    };
     
     // Set the last played card ID for the UI
     stateAfterMove.lastPlayedCardId = newCardOnBoard.id;
@@ -120,16 +139,26 @@ export const fillHand = (prevState: GameState, player: Player): GameState => {
     const newHandCards = drawnCards.map(c => ({...c, id: uuidv4(), isFaceUp: true}));
     const drawnCardIds = newHandCards.map(c => c.id);
 
+    const newStats = {
+        ...playerState.stats,
+        cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
+    };
+
     const newPlayerState = {
         ...playerState,
         deck: remainingDeck,
         discard: newDiscard,
         hand: [...playerState.hand, ...newHandCards],
+        stats: newStats,
     };
 
     let newState: GameState = { 
         ...prevState, 
         [player]: newPlayerState,
+        stats: {
+            ...prevState.stats,
+            [player]: newStats
+        },
         animationState: { type: 'drawCard', owner: player, cardIds: drawnCardIds }
     };
 

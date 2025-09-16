@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Speed-0: Play 1 card.

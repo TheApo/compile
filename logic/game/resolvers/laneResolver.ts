@@ -11,6 +11,9 @@ import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
 import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
+import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
+// FIX: Import 'executeOnCoverEffect' to resolve a compilation error.
+import { executeOnCoverEffect } from '../../effectExecutor';
 
 type LaneActionResult = {
     nextState: GameState;
@@ -29,7 +32,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
     switch (prev.actionRequired.type) {
         case 'select_lane_for_shift': {
             const { cardToShiftId, cardOwner, actor, sourceEffect } = prev.actionRequired;
-            newState = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
+            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+            if (shiftResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: shiftResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                };
+            }
+
             if (sourceEffect === 'speed_3_end') {
                  const speed3CardId = prev.actionRequired.sourceCardId;
                  newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
@@ -41,7 +52,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         case 'shift_flipped_card_optional': {
             const cardToShiftId = prev.actionRequired.cardId;
             const cardOwner: Player = prev.turn === 'player' ? 'opponent' : 'player';
-            newState = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, prev.turn);
+            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, prev.turn);
+            newState = shiftResult.newState;
+            if (shiftResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: shiftResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                };
+            }
             break;
         }
         case 'select_lane_for_play': {
@@ -97,9 +115,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (deletedCardNames.length > 0) {
                 const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
                 const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Death-2';
-                // FIX: Corrected variable name from `sourceName` to `sourceCardName`.
                 newState = log(newState, actor, `${sourceCardName}: Deleting ${deletedCardNames.join(', ')}.`);
-                newState[actor].stats.cardsDeleted += deletedCardNames.length;
+                
+                const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + deletedCardNames.length };
+                const newPlayerState = { ...newState[actor], stats: newStats };
+                newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
             }
 
             newState.actionRequired = null;
@@ -136,7 +156,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 }
             }
             
-            newState[actor].stats.cardsDeleted += cardsToDelete.length;
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
                 requiresAnimation = {
@@ -162,6 +185,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         case 'select_lane_for_life_3_play': {
             const { actor } = prev.actionRequired;
             const playerState = { ...prev[actor] };
+            
+            const cardToBeCovered = playerState.lanes[targetLaneIndex].length > 0
+                ? playerState.lanes[targetLaneIndex][playerState.lanes[targetLaneIndex].length - 1]
+                : null;
+
             const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerState.deck, playerState.discard, 1);
 
             if (drawnCards.length > 0) {
@@ -177,8 +205,19 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 };
 
                 newState = { ...prev, [actor]: newPlayerState, actionRequired: null };
-
                 newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
+
+                if (cardToBeCovered) {
+                    const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, newState, actor);
+                    newState = onCoverResult.newState;
+                    if (onCoverResult.animationRequests) {
+                        requiresAnimation = {
+                            animationRequests: onCoverResult.animationRequests,
+                            onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                        };
+                    }
+                }
+
             } else {
                 newState.actionRequired = null;
             }
@@ -188,7 +227,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const { revealedCardId, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, revealedCardId);
             if (cardInfo) {
-                newState = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
+                const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
+                newState = shiftResult.newState;
+                if (shiftResult.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: shiftResult.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    };
+                }
             }
             break;
         }
@@ -211,19 +257,22 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 return lane;
             });
             
+            const totalShifted = actorFaceDown.length + opponentFaceDown.length;
+            const newStats = { ...prev.stats[actor], cardsShifted: prev.stats[actor].cardsShifted + totalShifted };
+            const newPlayerState = { ...prev[actor], lanes: newActorLanes, stats: newStats };
+
             newState = {
                 ...prev,
-                [actor]: { ...prev[actor], lanes: newActorLanes },
+                [actor]: newPlayerState,
                 [opponent]: { ...prev[opponent], lanes: newOpponentLanes },
+                stats: { ...prev.stats, [actor]: newStats },
                 actionRequired: null,
             };
             
-            const totalShifted = actorFaceDown.length + opponentFaceDown.length;
             if (totalShifted > 0) {
                 const sourceProtocol = prev[actor].protocols[sourceLaneIndex];
                 const targetProtocol = prev[actor].protocols[targetLaneIndex];
                 newState = log(newState, actor, `Light-3: Shifts ${totalShifted} face-down card(s) from Protocol ${sourceProtocol} to Protocol ${targetProtocol}.`);
-                newState[actor].stats.cardsShifted += totalShifted;
             }
             break;
         }

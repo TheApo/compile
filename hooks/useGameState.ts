@@ -117,7 +117,7 @@ export const useGameState = (
 
     const discardCardFromHand = useCallback((cardId: string) => {
         setGameState(prev => {
-            if (prev.actionRequired?.type !== 'discard') return prev;
+            if (prev.actionRequired?.type !== 'discard' || prev.actionRequired.actor !== 'player') return prev;
             return {
                 ...prev,
                 animationState: { type: 'discardCard', owner: 'player', cardIds: [cardId], originalAction: prev.actionRequired }
@@ -499,7 +499,7 @@ export const useGameState = (
             gameState.turn === 'player' &&
             !gameState.animationState &&
             action && (
-                (action.type === 'discard' && action.player === 'opponent') ||
+                (action.type === 'discard' && action.actor === 'opponent') ||
                 (action.type === 'select_lane_for_shift' && action.actor === 'opponent') ||
                 action.type === 'plague_4_opponent_delete' ||
                 action.type === 'reveal_opponent_hand'

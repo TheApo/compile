@@ -946,12 +946,6 @@ p {
     pointer-events: none; /* Make container non-interactive */
 }
 
-.player-hand-area.action-required {
-    outline: 2px solid var(--danger-color);
-    border-radius: 8px;
-    box-shadow: 0 0 15px var(--danger-color);
-}
-
 .card-component.in-hand {
     transition: all 0.2s ease-in-out;
     cursor: pointer;
@@ -1373,6 +1367,21 @@ p {
     background: var(--surface-color);
     position: relative;
     z-index: 10; /* Lower than hand */
+}
+
+.phase-controller.action-required-player,
+.phase-controller.action-required-opponent {
+    transition: box-shadow 0.3s ease-in-out, border-top-color 0.3s ease-in-out;
+}
+
+.phase-controller.action-required-player {
+    box-shadow: 0 -4px 20px -5px var(--primary-color);
+    border-top-color: var(--primary-color);
+}
+
+.phase-controller.action-required-opponent {
+    box-shadow: 0 -4px 20px -5px var(--danger-color);
+    border-top-color: var(--danger-color);
 }
 
 .effect-source-info {

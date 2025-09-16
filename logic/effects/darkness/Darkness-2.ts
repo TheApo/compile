@@ -10,12 +10,16 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     let newState = { ...state };
-    
-    const coveredCardsInLane = newState[actor].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
+    const opponent = actor === 'player' ? 'opponent' : 'player';
 
-    if (coveredCardsInLane.length > 0) {
+    // A card is covered if it's not the last one in the stack.
+    const ownCovered = newState[actor].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
+    const opponentCovered = newState[opponent].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
+    const allCoveredInLine = [...ownCovered, ...opponentCovered];
+
+    if (allCoveredInLine.length > 0) {
         newState.actionRequired = {
-            type: 'select_own_covered_card_in_lane_to_flip',
+            type: 'select_covered_card_in_line_to_flip_optional',
             laneIndex,
             sourceCardId: card.id,
             optional: true,

@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawCards } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 import { effectRegistryOnCover } from "../effectRegistryOnCover";
 
 /**
@@ -54,7 +54,6 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         const effectKey = `${coveredCard.protocol}-${coveredCard.value}`;
         const onCoverExecute = effectRegistryOnCover[effectKey];
         if (onCoverExecute) {
-            // FIX: Added missing 'actor' argument for the owner of the covered card.
             const onCoverResult = onCoverExecute(coveredCard, coveredLaneIndex, finalResult.newState, actor);
             finalResult.newState = onCoverResult.newState;
             if (onCoverResult.animationRequests) {

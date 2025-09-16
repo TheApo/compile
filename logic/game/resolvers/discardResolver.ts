@@ -10,7 +10,7 @@ import { handleChainedEffectsOnDiscard } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
 
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {
-    if (!prevState.actionRequired || prevState.actionRequired.type !== 'discard' || prevState.actionRequired.player !== 'player') return prevState;
+    if (!prevState.actionRequired || prevState.actionRequired.type !== 'discard' || prevState.actionRequired.actor !== 'player') return prevState;
 
     const cardToDiscard = prevState.player.hand.find(c => c.id === cardId);
     if (!cardToDiscard) return prevState;
@@ -21,12 +21,15 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
     const currentAction = prevState.actionRequired;
     const remainingDiscards = currentAction.count - 1;
 
+    const newStats = { ...prevState.player.stats, cardsDiscarded: prevState.player.stats.cardsDiscarded + 1 };
+    const newPlayerState = { ...prevState.player, hand: newHand, discard: newDiscard, stats: newStats };
+
     let newState: GameState = {
         ...prevState,
-        player: { ...prevState.player, hand: newHand, discard: newDiscard },
+        player: newPlayerState,
+        stats: { ...prevState.stats, player: newStats }
     };
-    newState.player.stats.cardsDiscarded++;
-
+    
     const cardName = `${cardToDiscard.protocol}-${cardToDiscard.value}`;
     newState = log(newState, 'player', `Player discards ${cardName}.`);
 
@@ -67,8 +70,15 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         ? prevState.animationState.originalAction
         : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
 
-    let newState = { ...prevState, [player]: { ...playerState, hand: newHand, discard: newDiscard }, actionRequired: null };
-    newState[player].stats.cardsDiscarded += discardedCards.length;
+    const newStats = { ...playerState.stats, cardsDiscarded: playerState.stats.cardsDiscarded + discardedCards.length };
+    const newPlayerState = { ...playerState, hand: newHand, discard: newDiscard, stats: newStats };
+
+    let newState = { 
+        ...prevState, 
+        [player]: newPlayerState, 
+        stats: { ...prevState.stats, [player]: newPlayerState, },
+        actionRequired: null 
+    };
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     let logMessage: string;
@@ -82,7 +92,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     newState = log(newState, player, logMessage);
 
     // This is primarily for player-driven discards which are handled one by one.
-    if (originalAction && originalAction.player === player) {
+    if (originalAction && originalAction.actor === player) {
         const remainingDiscards = originalAction.count - cardIds.length;
         if (remainingDiscards > 0) {
             newState.actionRequired = { ...originalAction, count: remainingDiscards };
@@ -98,7 +108,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     // Fallback for AI or other logic that discards without an animation state
     // For example, the hand limit check.
     const directAction = prevState.actionRequired;
-    if (directAction && directAction.type === 'discard' && directAction.player === player) {
+    if (directAction && directAction.type === 'discard' && directAction.actor === player) {
         const remainingDiscards = directAction.count - cardIds.length;
         if (remainingDiscards > 0) {
             newState.actionRequired = { ...directAction, count: remainingDiscards };
@@ -131,7 +141,7 @@ export const resolvePlague2Discard = (prev: GameState, cardIdsToDiscard: string[
     if (newState[opponent].hand.length > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: opponent,
+            actor: opponent,
             count: Math.min(opponentDiscardCount, newState[opponent].hand.length),
             sourceCardId: prev.actionRequired.sourceCardId
         };
@@ -156,7 +166,7 @@ export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard:
     if (newState[opponent].hand.length > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: opponent,
+            actor: opponent,
             count: Math.min(opponentDiscardCount, newState[opponent].hand.length),
             sourceCardId: prev.actionRequired.sourceCardId
         };
@@ -194,7 +204,6 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
         count: 2,
         sourceCardId,
         disallowedIds: [sourceCardId],
-        // FIX: Added the missing 'actor' property to satisfy the ActionRequired type.
         actor: player,
     };
 

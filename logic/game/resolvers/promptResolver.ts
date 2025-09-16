@@ -81,7 +81,7 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
         newState = log(newState, actor, "Fire-3 End: Player chooses to discard 1 to flip 1.");
         newState.actionRequired = {
             type: 'discard',
-            player: actor,
+            actor: actor,
             count: 1,
             sourceCardId: prevState.actionRequired.sourceCardId,
             sourceEffect: 'fire_3',
@@ -205,7 +205,7 @@ export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | '
         newState = log(newState, actor, "Spirit-1 Start: Player chooses to discard 1 card.");
         newState.actionRequired = {
             type: 'discard',
-            player: actor,
+            actor: actor,
             count: 1,
             sourceCardId,
             sourceEffect: 'spirit_1_start',

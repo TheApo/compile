@@ -12,7 +12,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let newState = { ...state };
     const currentPlayerState = newState[actor];
     if (currentPlayerState.hand.length > 0) {
-        newState.actionRequired = { type: 'discard', player: actor, count: 1, sourceCardId: card.id };
+        newState.actionRequired = { type: 'discard', actor: actor, count: 1, sourceCardId: card.id };
     }
     return { newState };
 }

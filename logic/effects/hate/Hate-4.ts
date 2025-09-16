@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Hate-4: When this card would be covered: First, delete the lowest value covered card in this line.

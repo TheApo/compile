@@ -72,7 +72,6 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSpirit1Prompt,
     resolveSpirit3Prompt,
     resolveSwapProtocols,
-    // FIX: Destructure `resolveSpeed3Prompt` from the `useGameState` hook to make it available.
     resolveSpeed3Prompt,
     resolvePsychic4Prompt,
   } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty);
@@ -85,6 +84,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   const [showRearrangeModal, setShowRearrangeModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [debugModalPlayer, setDebugModalPlayer] = useState<Player | null>(null);
+
+  const gameStateRef = useRef(gameState);
+  useEffect(() => {
+      gameStateRef.current = gameState;
+  }, [gameState]);
 
   const lastPlayedCardInfo = useMemo(() => {
     if (gameState.lastPlayedCardId) {
@@ -149,58 +153,75 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   }, [gameState, onEndGame]);
 
   const handleLaneMouseDown = (laneIndex: number) => {
-    const { actionRequired, turn, phase, compilableLanes, player, opponent } = gameState;
+    const currentState = gameStateRef.current;
+    if (currentState.animationState) return;
 
-    // Determine if an action can be taken on this lane
-    const isActionTarget = turn === 'player' && actionRequired &&
-        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3'].includes(actionRequired.type);
+    const { actionRequired, turn, phase, compilableLanes, player, opponent } = currentState;
+
+    // Highest priority: Compiling
+    if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
+        if (actionRequired) {
+            console.warn("Compile click blocked by pending action:", actionRequired);
+            // Don't proceed, but also don't do anything else that could change state
+            return;
+        }
+        compileLane(laneIndex);
+        return;
+    }
+
+    // Second priority: Resolving a required action that targets a lane
+    if (turn === 'player' && actionRequired &&
+        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete'].includes(actionRequired.type)) {
+        resolveActionWithLane(laneIndex);
+        return;
+    }
     
-    const isCompileTarget = turn === 'player' && !actionRequired &&
-        phase === 'compile' && compilableLanes.includes(laneIndex);
-        
+    // Third priority: Playing a card from hand
     const opponentHasPsychic1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+    const oppLane = opponent.lanes[laneIndex];
+    const isLaneBlockedByPlague0 = oppLane.length > 0 &&
+                                   oppLane[oppLane.length - 1].isFaceUp &&
+                                   oppLane[oppLane.length - 1].protocol === 'Plague' &&
+                                   oppLane[oppLane.length - 1].value === 0;
+
     const isPlayTarget = selectedCard && phase === 'action' && !actionRequired && player.hand.some(c => c.id === selectedCard) &&
-        !opponent.lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Plague' && c.value === 0);
+        !isLaneBlockedByPlague0;
 
-    const canTakeAction = isActionTarget || isCompileTarget || isPlayTarget;
-
-    if (canTakeAction) {
-        if (isActionTarget) {
-            resolveActionWithLane(laneIndex);
-        } else if (isCompileTarget) {
-            compileLane(laneIndex);
-        } else if (isPlayTarget) {
-            const cardInHand = player.hand.find(c => c.id === selectedCard)!;
-            const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-            const canPlayFaceUp = (playerHasSpiritOne || cardInHand.protocol === player.protocols[laneIndex]) && !opponentHasPsychic1;
-            playSelectedCard(laneIndex, canPlayFaceUp);
-            setHoveredCard(null);
-        }
-    } else {
-        // If no action can be taken and a card is selected, deselect it.
-        if (selectedCard) {
-            setSelectedCard(null);
-            setHoveredCard(null);
-        }
+    if (isPlayTarget) {
+        const cardInHand = player.hand.find(c => c.id === selectedCard)!;
+        const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+        const canPlayFaceUp = (playerHasSpiritOne || cardInHand.protocol === player.protocols[laneIndex]) && !opponentHasPsychic1;
+        playSelectedCard(laneIndex, canPlayFaceUp);
+        setHoveredCard(null);
+        return;
+    }
+    
+    // Fallback: Deselect card if clicking an invalid target
+    if (selectedCard) {
+        setSelectedCard(null);
+        setHoveredCard(null);
     }
   };
 
 
   const handleHandCardMouseDown = (card: PlayedCard) => {
-    if (gameState.actionRequired) {
-      if (gameState.actionRequired.type === 'discard' && gameState.actionRequired.player === 'player') {
+    const currentState = gameStateRef.current;
+    if (currentState.animationState) return;
+
+    if (currentState.actionRequired) {
+      if (currentState.actionRequired.type === 'discard' && currentState.actionRequired.actor === 'player') {
         discardCardFromHand(card.id);
         return;
       }
-      if (gameState.actionRequired.type === 'select_card_from_hand_to_play') {
+      if (currentState.actionRequired.type === 'select_card_from_hand_to_play') {
         selectHandCardForAction(card.id);
         return;
       }
-      if (gameState.actionRequired.type === 'select_card_from_hand_to_give' || gameState.actionRequired.type === 'select_card_from_hand_to_reveal') {
+      if (currentState.actionRequired.type === 'select_card_from_hand_to_give' || currentState.actionRequired.type === 'select_card_from_hand_to_reveal') {
         resolveActionWithHandCard(card.id);
         return;
       }
-      if (gameState.actionRequired.type === 'plague_2_player_discard' || gameState.actionRequired.type === 'select_cards_from_hand_to_discard_for_fire_4' || gameState.actionRequired.type === 'select_cards_from_hand_to_discard_for_hate_1') {
+      if (currentState.actionRequired.type === 'plague_2_player_discard' || currentState.actionRequired.type === 'select_cards_from_hand_to_discard_for_fire_4' || currentState.actionRequired.type === 'select_cards_from_hand_to_discard_for_hate_1') {
         setMultiSelectedCardIds(prev => {
             if (prev.includes(card.id)) {
                 return prev.filter(id => id !== card.id);
@@ -212,7 +233,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
       return;
     }
     
-    if (gameState.turn !== 'player' || (gameState.phase !== 'action' && gameState.phase !== 'compile')) return;
+    if (currentState.turn !== 'player' || (currentState.phase !== 'action' && currentState.phase !== 'compile')) return;
 
     if (card.id === selectedCard) {
       setSelectedCard(null);
@@ -224,36 +245,29 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   };
 
   const handleBoardCardMouseDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
-      const { actionRequired, turn, phase, compilableLanes } = gameState;
-      
-      const isLaneTargetAction = actionRequired && ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3'].includes(actionRequired.type);
+      const currentState = gameStateRef.current;
+      if (currentState.animationState) return;
 
-      if (isLaneTargetAction) {
-          // Player needs to click a valid LANE, not a card. A click on a card in this context
-          // should just update the preview and do nothing else.
-          const showContents = owner === 'player' || card.isFaceUp;
-          setHoveredCard({ card, showContents });
+      const { actionRequired, turn, phase, compilableLanes } = currentState;
+      
+      // Proxy click to lane if in compile phase
+      if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
+          handleLaneMouseDown(laneIndex);
           return;
       }
-
-      // Clicks on board cards can sometimes be treated as lane clicks (e.g., when playing a card from hand).
-      const isPlayCardContext = turn === 'player' && !actionRequired && selectedCard && phase === 'action';
-      const isCompileContext = turn === 'player' && !actionRequired && phase === 'compile' && compilableLanes.includes(laneIndex);
-
-      if (isPlayCardContext || isCompileContext) {
+      
+      // Proxy click to lane if playing a card from hand
+      if (turn === 'player' && !actionRequired && selectedCard && phase === 'action') {
           handleLaneMouseDown(laneIndex);
           return;
       }
 
-      // If it's not a lane click proxy, it's a card-specific interaction.
-      const canTakeAction = isCardTargetable(card, gameState);
-      
-      if (canTakeAction) {
+      // If it's not a proxy, it's a card-specific interaction.
+      if (isCardTargetable(card, currentState)) {
           resolveActionWithCard(card.id);
       } else {
-          // FIX: `selectedCard` is a state variable, not a property of `gameState`.
+          // If a hand card was selected, but the click was on an invalid target card, deselect.
           if (selectedCard) {
-              // A hand card was selected, but the click was on an invalid target card, so deselect.
               setSelectedCard(null);
               setHoveredCard(null);
           } else {
@@ -313,6 +327,15 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                                gameState.compilableLanes.length > 0;
 
   const sourceCardId = gameState.actionRequired?.sourceCardId ?? null;
+
+  const actionRequiredClass = useMemo(() => {
+    if (gameState.actionRequired?.actor) {
+        return gameState.actionRequired.actor === 'player'
+            ? 'action-required-player'
+            : 'action-required-opponent';
+    }
+    return '';
+  }, [gameState.actionRequired]);
 
   return (
     <div className="screen game-screen">
@@ -408,8 +431,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onResolveSpirit3Prompt={resolveSpirit3Prompt}
                     selectedCardId={selectedCard}
                     multiSelectedCardIds={multiSelectedCardIds}
+                    actionRequiredClass={actionRequiredClass}
                   />
-                  <div className={`player-hand-area ${gameState.actionRequired ? 'action-required' : ''}`}>
+                  <div className="player-hand-area">
                     {gameState.player.hand.map((card) => (
                       <CardComponent 
                         key={card.id} 

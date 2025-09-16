@@ -13,7 +13,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     if (newState[actor].hand.length > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: actor,
+            actor: actor,
             count: 1,
             sourceCardId: card.id,
             sourceEffect: 'fire_2',

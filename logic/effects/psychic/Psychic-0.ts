@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Psychic-0: Draw 2 cards. Your opponent discards 2 cards, then reveals their hand.
@@ -19,14 +19,13 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     if (opponentHandCount > 0) {
         newState.actionRequired = {
             type: 'discard',
-            player: opponent,
+            actor: opponent,
             count: Math.min(2, opponentHandCount),
             sourceCardId: card.id,
         };
         // Queue the hand reveal after the discard
         newState.queuedActions = [
             ...(newState.queuedActions || []),
-            // FIX: Added the missing 'actor' property to satisfy the ActionRequired type.
             { type: 'reveal_opponent_hand', sourceCardId: card.id, actor }
         ];
     }

@@ -5,7 +5,7 @@
 
 import { GameState, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Plague-1 Trigger: After your opponent discards cards: Draw 1 card.

@@ -4,6 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { log } from "../../utils/log";
 
 /**
  * Fire-4: Discard 1 or more cards. Draw the amount discarded plus 1.

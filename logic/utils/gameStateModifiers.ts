@@ -4,10 +4,10 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { Card } from "../data/cards";
-import { GameState, PlayedCard, Player, PlayerState } from "../types";
-import { shuffleDeck } from './gameLogic';
-import { log } from '../utils/log';
+import { Card } from "../../data/cards";
+import { GameState, PlayedCard, Player, PlayerState, ActionRequired } from "../../types";
+import { shuffleDeck } from '../../utils/gameLogic';
+import { log } from './log';
 import { recalculateAllLaneValues } from '../game/stateManager';
 
 /**
@@ -54,14 +54,15 @@ export function checkForSpirit3Trigger(state: GameState, player: Player): GameSt
     if (allSpirit3Cards.length > 0) {
         for (const spirit3 of allSpirit3Cards) {
              newState = log(newState, player, "Spirit-3 triggers after drawing: You may shift this card.");
+             const action: ActionRequired = {
+                type: 'prompt_shift_for_spirit_3',
+                sourceCardId: spirit3.id,
+                optional: true,
+                actor: player,
+             };
              newState.queuedActions = [
                 ...(newState.queuedActions || []),
-                {
-                    type: 'prompt_shift_for_spirit_3',
-                    sourceCardId: spirit3.id,
-                    optional: true,
-                    actor: player,
-                }
+                action
              ];
         }
     }
@@ -84,21 +85,27 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
     const newHandCards = drawnCards.map(c => ({...c, id: uuidv4(), isFaceUp: true}));
     const drawnCardIds = newHandCards.map(c => c.id);
     
+    const newStats = {
+        ...playerState.stats,
+        cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
+    };
+
     const newPlayerState: PlayerState = {
         ...playerState,
         deck: remainingDeck,
         discard: newDiscard,
         hand: [...playerState.hand, ...newHandCards],
-        stats: {
-            ...playerState.stats,
-            cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
-        }
+        stats: newStats,
     };
 
-    let newState: GameState = { ...state, [player]: newPlayerState };
-    // Also update the top-level stats object for the results screen
-    newState.stats[player].cardsDrawn = newPlayerState.stats.cardsDrawn;
-
+    let newState: GameState = { 
+        ...state, 
+        [player]: newPlayerState,
+        stats: {
+            ...state.stats,
+            [player]: newStats,
+        }
+    };
 
     if (drawnCardIds.length > 0) {
         newState.animationState = { type: 'drawCard', owner: player, cardIds: drawnCardIds };

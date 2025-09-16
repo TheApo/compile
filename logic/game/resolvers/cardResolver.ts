@@ -39,7 +39,11 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (cardInfo && cardInfo.card.protocol === 'Metal' && cardInfo.card.value === 6) {
         let newState = log(state, state.turn, `Metal-6 effect triggers on flip: deleting itself.`);
-        newState[state.turn].stats.cardsDeleted++;
+        
+        const actor = state.turn;
+        const newStats = { ...state.stats[actor], cardsDeleted: state.stats[actor].cardsDeleted + 1 };
+        const newPlayerState = { ...state[actor], stats: newStats };
+        newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
         
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             let stateAfterTriggers = checkForHate3Trigger(s, s.turn);
@@ -84,7 +88,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     switch (prev.actionRequired.type) {
         case 'select_opponent_face_up_card_to_flip':
         case 'select_own_face_up_covered_card_to_flip':
-        case 'select_own_covered_card_in_lane_to_flip':
+        case 'select_covered_card_in_line_to_flip_optional':
         case 'select_any_card_to_flip_optional':
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_card_to_flip_for_fire_3': {
@@ -250,7 +254,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardName = cardInfoToDelete.card.isFaceUp ? `${cardInfoToDelete.card.protocol}-${cardInfoToDelete.card.value}` : 'a face-down card';
             
             newState = log(newState, actor, `Death-1: ${actorName} deletes ${ownerName} ${cardName} and the Death-1 card itself.`);
-            newState[actor].stats.cardsDeleted += 2;
+            
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 2 };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
             newState.actionRequired = null;
             requiresAnimation = {
@@ -282,14 +289,18 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
-            const actorName = prev.turn === 'player' ? 'Player' : 'Opponent';
+            const actor = prev.turn;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-            newState = log(newState, prev.turn, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
-            newState[prev.turn].stats.cardsDeleted++;
-
+            newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
+            
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+            
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -336,13 +347,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
             if (cardLaneIndex === -1) return { nextState: prev };
 
-            const actorName = prev.turn === 'player' ? 'Player' : 'Opponent';
+            const actor = prev.turn;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-            newState = log(newState, prev.turn, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
-            newState[prev.turn].stats.cardsDeleted++;
+            newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
+            
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
             newState.actionRequired = null;
             requiresAnimation = {
@@ -380,36 +395,39 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'plague_4_opponent_delete': {
-            const { actor } = prev.actionRequired;
+            const { actor, sourceCardId } = prev.actionRequired; // The actor is the player who must delete a card.
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
-            const opponentOfActor = actor === 'player' ? 'opponent' : 'player';
-            // The person who needs to act is the opponent of the current turn player.
-            // The card they target must be their own and face-down.
-            if (cardInfo.owner === opponentOfActor && !cardInfo.card.isFaceUp) {
-                const actorName = opponentOfActor === 'player' ? 'Player' : 'Opponent';
-                const cardName = `${cardInfo.card.protocol}-${cardInfo.card.value}`; // Opponent knows their card
-                newState = log(newState, opponentOfActor, `Plague-4: ${actorName} deletes their face-down card (${cardName}).`);
-                newState[opponentOfActor].stats.cardsDeleted++;
+
+            // The actor must delete one of THEIR OWN face-down cards.
+            if (cardInfo.owner === actor && !cardInfo.card.isFaceUp) {
+                const actorName = actor === 'player' ? 'Player' : 'Opponent';
+                const cardName = `${cardInfo.card.protocol}-${cardInfo.card.value}`;
+                newState = log(newState, actor, `Plague-4: ${actorName} deletes their face-down card (${cardName}).`);
                 
+                const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
+                const newPlayerState = { ...newState[actor], stats: newStats };
+                newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
                 newState.actionRequired = null;
                 requiresAnimation = {
                     animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                     onCompleteCallback: (s, endTurnCb) => {
+                        const originalTurnPlayer = prev.turn; // The one who owns Plague-4
                         // The optional flip is for the player whose card triggered the effect.
                         return {
                             ...s,
                             actionRequired: {
                                 type: 'plague_4_player_flip_optional',
-                                sourceCardId: prev.actionRequired!.sourceCardId,
+                                sourceCardId: sourceCardId,
                                 optional: true,
-                                actor,
+                                actor: originalTurnPlayer,
                             }
                         };
                     }
                 };
             }
-            requiresTurnEnd = false;
+            requiresTurnEnd = false; // Turn doesn't end here, it goes to the flip prompt.
             break;
         }
         case 'select_any_other_card_to_flip': {
@@ -480,7 +498,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 requiresTurnEnd = false;
             } else {
                 // Card is TO the source lane, execute immediately.
-                newState = internalShiftCard(prev, targetCardId, cardInfo.owner, sourceLaneIndex, prev.turn);
+                const shiftResult = internalShiftCard(prev, targetCardId, cardInfo.owner, sourceLaneIndex, prev.turn);
+                newState = shiftResult.newState;
+                if (shiftResult.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: shiftResult.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    };
+                }
             }
             break;
         }
@@ -496,11 +521,22 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const faceDirection = card.isFaceUp ? "face-down" : "face-up";
             const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : `a face-down card`;
             let stateAfterLog = log(prev, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
-            stateAfterLog[actor].stats.cardsFlipped++;
+            
+            const newStats = { ...stateAfterLog.stats[actor], cardsFlipped: stateAfterLog.stats[actor].cardsFlipped + 1 };
+            const newPlayerState = { ...stateAfterLog[actor], stats: newStats };
+            stateAfterLog = { ...stateAfterLog, [actor]: newPlayerState, stats: { ...stateAfterLog.stats, [actor]: newStats } };
+
             let stateAfterFlip = findAndFlipCards(new Set([targetCardId]), stateAfterLog);
             stateAfterFlip.animationState = { type: 'flipCard', cardId: targetCardId };
             
-            newState = internalShiftCard(stateAfterFlip, targetCardId, cardInfo.owner, targetLaneIndex, actor);
+            const shiftResult = internalShiftCard(stateAfterFlip, targetCardId, cardInfo.owner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+            if (shiftResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: shiftResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                };
+            }
             newState.actionRequired = null;
             break;
         }
@@ -510,7 +546,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (!cardInfo || cardInfo.card.isFaceUp) { // Target must be face-down
                 return { nextState: prev };
             }
-            newState = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, actor);
+            const shiftResult = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+            if (shiftResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: shiftResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                };
+            }
             break;
         }
         case 'select_any_card_to_flip': {
@@ -525,12 +568,23 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const result = handleOnFlipToFaceUp(newState, targetCardId);
+                const onPlayAction = result.newState.actionRequired;
+                
+                // If the on-flip effect created a new action, we must prioritize it
+                // and queue the remaining flips.
+                if (onPlayAction && onPlayAction !== nextAction) {
+                    result.newState.actionRequired = onPlayAction;
+                    if (nextAction) {
+                        result.newState.queuedActions = [...(result.newState.queuedActions || []), nextAction];
+                    }
+                }
                 newState = result.newState;
+
                 if (result.animationRequests) {
                     requiresAnimation = {
                         animationRequests: result.animationRequests,
                         onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired) return s;
+                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
                             return endTurnCb(s);
                         }
                     };

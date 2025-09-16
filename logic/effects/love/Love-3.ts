@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Love-3: Take 1 random card from your opponent's hand. Give 1 card from your hand to your opponent.

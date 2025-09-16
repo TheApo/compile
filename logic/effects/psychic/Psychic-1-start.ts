@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log } from "../../utils/log";
 
 /**
  * Psychic-1 Start Phase: Flip this card.

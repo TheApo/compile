@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../types";
 import { drawForPlayer } from "../../utils/gameStateModifiers";
-import { log } from "../../logic/utils/log";
+import { log } from "../utils/log";
 import { execute as apathy1 } from './apathy/Apathy-1';
 import { execute as apathy3 } from './apathy/Apathy-3';
 import { execute as apathy4 } from './apathy/Apathy-4';

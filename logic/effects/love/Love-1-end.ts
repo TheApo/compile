@@ -4,6 +4,7 @@
  */
 
 import { GameState, PlayedCard, EffectResult } from "../../../types";
+import { log } from "../../utils/log";
 
 /**
  * Love-1 End Phase: You may give 1 card from your hand to your opponent. If you do, draw 2 cards.

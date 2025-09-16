@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// FIX: Implemented the entire module which was missing and causing multiple import/property errors.
 import { GameState, Player, PlayedCard } from "../../../types";
 import { log } from "../../utils/log";
 import { recalculateAllLaneValues } from "../stateManager";
@@ -40,9 +39,18 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
         return true;
     });
 
-    // Update stats for deleted cards
-    compilerState.stats.cardsDeleted += compilerDeletedCards.length;
-    nonCompilerState.stats.cardsDeleted += nonCompilerDeletedCards.length;
+    // Create new stats objects immutably
+    const newCompilerStats = {
+        ...compilerState.stats,
+        cardsDeleted: compilerState.stats.cardsDeleted + compilerDeletedCards.length,
+    };
+    const newNonCompilerStats = {
+        ...nonCompilerState.stats,
+        cardsDeleted: nonCompilerState.stats.cardsDeleted + nonCompilerDeletedCards.length,
+    };
+
+    compilerState.stats = newCompilerStats;
+    nonCompilerState.stats = newNonCompilerStats;
 
     // Move the remaining cards to discard.
     compilerState.discard = [...compilerState.discard, ...compilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
@@ -62,7 +70,16 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
     newCompiled[laneIndex] = true;
     compilerState.compiled = newCompiled;
 
-    newState = { ...newState, [compiler]: compilerState, [nonCompiler]: nonCompilerState };
+    newState = { 
+        ...newState, 
+        [compiler]: compilerState, 
+        [nonCompiler]: nonCompilerState,
+        stats: {
+            ...newState.stats,
+            [compiler]: newCompilerStats,
+            [nonCompiler]: newNonCompilerStats,
+        }
+    };
 
     const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
     const protocolName = compilerState.protocols[laneIndex];
@@ -135,7 +152,6 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
     
-    // FIX: Destructure 'actor' to pass it to the next action.
     const { disallowedLaneIndex, sourceCardId, isFaceDown, actor } = prevState.actionRequired;
     return {
         ...prevState,

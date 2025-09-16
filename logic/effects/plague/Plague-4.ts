@@ -20,7 +20,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                 actionRequired: {
                     type: 'plague_4_opponent_delete',
                     sourceCardId: card.id,
-                    actor,
+                    actor: opponent,
                 }
             }
         };

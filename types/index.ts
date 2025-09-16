@@ -38,7 +38,7 @@ export type GamePhase = 'start' | 'control' | 'compile' | 'action' | 'hand_limit
 
 export type ActionRequired = {
     type: 'discard';
-    player: Player;
+    actor: Player;
     count: number;
     sourceCardId?: string;
     sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start';
@@ -76,7 +76,7 @@ export type ActionRequired = {
     optional: true;
     actor: Player;
 } | {
-    type: 'select_own_covered_card_in_lane_to_flip';
+    type: 'select_covered_card_in_line_to_flip_optional';
     laneIndex: number;
     sourceCardId:string;
     optional: true;

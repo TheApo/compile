@@ -73,7 +73,7 @@ export const advancePhase = (state: GameState): GameState => {
             if (playerState.hand.length > 5) {
                 return {
                     ...nextState,
-                    actionRequired: { type: 'discard', player: turnPlayer, count: playerState.hand.length - 5 }
+                    actionRequired: { type: 'discard', actor: turnPlayer, count: playerState.hand.length - 5 }
                 };
             }
             
@@ -143,13 +143,11 @@ export const processEndOfAction = (state: GameState): GameState => {
         let mutableState = { ...state };
         let queuedActions = [...mutableState.queuedActions];
         
-        // This loop handles auto-resolving actions from the queue.
         while (queuedActions.length > 0) {
-            const nextAction = queuedActions[0]; // Peek
+            const nextAction = queuedActions.shift()!;
 
+            // --- Auto-resolving actions ---
             if (nextAction.type === 'reveal_opponent_hand') {
-                queuedActions.shift(); // Consume
-                
                 const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
                 const opponentState = { ...mutableState[opponentId] };
 
@@ -164,17 +162,27 @@ export const processEndOfAction = (state: GameState): GameState => {
                     const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
                     mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent has no cards to reveal.`);
                 }
-                
-                // Continue loop
-            } else {
-                // Not an auto-resolving action, set it and break.
-                mutableState.actionRequired = queuedActions.shift();
-                mutableState.queuedActions = queuedActions;
-                return mutableState;
+                continue; // Action resolved, move to next in queue
             }
+
+            // --- Conditional actions (check if possible) ---
+            if (nextAction.type === 'select_any_opponent_card_to_shift') {
+                const opponent = nextAction.actor === 'player' ? 'opponent' : 'player';
+                if (mutableState[opponent].lanes.flat().length === 0) {
+                    const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                    const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                    mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
+                    continue; // Action impossible, skip and move to next in queue
+                }
+            }
+
+            // --- If we reach here, the action is not auto-resolving and is possible ---
+            mutableState.actionRequired = nextAction;
+            mutableState.queuedActions = queuedActions; // Update the state with the rest of the queue
+            return mutableState; // Break loop and return to wait for user/AI input
         }
         
-        // All queued actions were auto-resolved.
+        // All queued actions were auto-resolved or impossible.
         state = { ...mutableState, queuedActions: [], actionRequired: null };
     }
 

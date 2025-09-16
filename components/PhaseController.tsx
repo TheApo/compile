@@ -24,6 +24,7 @@ interface PhaseControllerProps {
     onResolveSpirit3Prompt: (accept: boolean) => void;
     selectedCardId: string | null;
     multiSelectedCardIds: string[];
+    actionRequiredClass: string;
 }
 
 export const PhaseController: React.FC<PhaseControllerProps> = ({ 
@@ -32,7 +33,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     onResolveSpeed3Prompt,
     onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
-    selectedCardId, multiSelectedCardIds 
+    selectedCardId, multiSelectedCardIds, actionRequiredClass
 }) => {
     const { phase, turn, actionRequired, player, compilableLanes } = gameState;
 
@@ -200,7 +201,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
         if (actionRequired) {
             switch (actionRequired.type) {
                 case 'discard':
-                    if (actionRequired.player === 'player') {
+                    if (actionRequired.actor === 'player') {
                         return `Action: Discard ${actionRequired.count} card(s) from your hand`;
                     } else {
                         return 'Waiting for Opponent to discard...';
@@ -217,7 +218,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select an opponent\'s card to flip';
                 case 'shift_flipped_card_optional':
                     return 'Action: You may shift the card you just flipped. Select a lane or skip.';
-                case 'select_own_covered_card_in_lane_to_flip':
+                case 'select_covered_card_in_line_to_flip_optional':
                     return 'Action: You may flip one of your covered cards in this lane. Select a card or skip.';
                 case 'select_card_from_hand_to_play':
                     return 'Action: Select a card from your hand to play';
@@ -322,7 +323,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     }
 
     return (
-        <div className="phase-controller">
+        <div className={`phase-controller ${actionRequiredClass}`}>
              <div className="effect-source-info">
                 <span>{turnText}'s Turn</span>
                 {actionRequired && sourceCard && (

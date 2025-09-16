@@ -81,9 +81,17 @@ const getBestMove = (state: GameState): AIAction => {
 
     const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
 
+    const isLaneBlockedByPlague0 = (laneIndex: number): boolean => {
+        const playerLane = state.player.lanes[laneIndex];
+        if (playerLane.length === 0) return false;
+        const topCard = playerLane[playerLane.length - 1];
+        return topCard.isFaceUp && topCard.protocol === 'Plague' && topCard.value === 0;
+    };
+
     // --- Evaluate Playing Cards ---
     for (const card of opponent.hand) {
         for (let i = 0; i < 3; i++) {
+            if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue;
 
             const baseScore = getCardPower(card);
@@ -197,80 +205,83 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_any_face_down_card_to_flip_optional': {
+        case 'select_own_face_up_covered_card_to_flip': {
             const potentialTargets: { card: PlayedCard; score: number }[] = [];
 
-            // Evaluate flipping own face-down cards
-            state.opponent.lanes.forEach((lane, i) => {
-                lane.forEach(c => {
-                    if (!c.isFaceUp) {
-                        const faceDownValue = getEffectiveCardValue(c, lane);
-                        // Value gain is the card's real value minus what it was contributing as face-down
-                        const valueGain = c.value - faceDownValue;
-                        let score = 5 + valueGain;
-                        // Huge bonus if this flip helps compile
-                        if ((state.opponent.laneValues[i] + valueGain) >= 10) {
-                            score += 100;
-                        }
-                        potentialTargets.push({ card: c, score });
+            // Find valid targets: opponent's (AI's) own face-up, covered cards.
+            state.opponent.lanes.forEach(lane => {
+                // A card is covered if it's not the last one in the stack.
+                for (let i = 0; i < lane.length - 1; i++) {
+                    const card = lane[i];
+                    if (card.isFaceUp) {
+                        const faceDownValue = getEffectiveCardValue({ ...card, isFaceUp: false }, lane);
+                        const faceUpValue = card.value;
+                        const score = faceDownValue - faceUpValue;
+                        potentialTargets.push({ card, score });
                     }
-                });
+                }
             });
 
-            // Evaluate flipping player's face-down cards. This is risky, could help the player.
-            // Hard AI might do this to gain information.
-            state.player.lanes.forEach((lane, i) => {
-                lane.forEach(c => {
-                    if (!c.isFaceUp) {
-                        // Low score, it's just for information. Less valuable if player lane is already strong.
-                        let score = 3 - state.player.laneValues[i]; 
-                        potentialTargets.push({ card: c, score });
-                    }
-                });
-            });
-            
             if (potentialTargets.length > 0) {
                 potentialTargets.sort((a, b) => b.score - a.score);
-                // Hard AI will only make the move if it's beneficial (score > 0)
-                if (potentialTargets[0].score > 0) {
-                    return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+                const bestTarget = potentialTargets[0];
+                
+                // It's optional, so only do it if there's a point gain.
+                if (bestTarget.score > 0) {
+                    return { type: 'flipCard', cardId: bestTarget.card.id };
                 }
             }
-
-            return { type: 'skip' }; // It's optional, skip if no good move.
+            
+            // If no beneficial targets, skip the action.
+            return { type: 'skip' };
         }
 
+        case 'select_opponent_face_up_card_to_flip':
+        case 'select_opponent_card_to_flip':
         case 'select_any_card_to_flip_optional':
         case 'select_any_card_to_flip':
         case 'select_card_to_flip_for_fire_3':
         case 'select_any_other_card_to_flip':
         case 'select_card_to_flip_for_light_0':
         case 'select_any_other_card_to_flip_for_water_0':
-        case 'select_opponent_face_up_card_to_flip':
-        case 'select_opponent_card_to_flip': {
+        case 'select_any_face_down_card_to_flip_optional':
+        case 'select_covered_card_in_line_to_flip_optional': {
             const potentialTargets: { cardId: string; score: number }[] = [];
+            const isOptional = 'optional' in action && action.optional;
+            const sourceCardId = action.sourceCardId;
+
             // 1. Score flipping opponent's face-up cards (high threat = high score)
             player.lanes.flat().forEach(c => {
-                if (c.isFaceUp) {
-                    potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
-                }
+                if (c.isFaceUp) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
             });
-            // 2. Score flipping own face-down cards (consistent gain + reveals card)
+            // 2. Score flipping own face-down cards (value gain + reveal)
             opponent.lanes.flat().forEach(c => {
                 if (!c.isFaceUp) {
-                    const valueGain = (getCardThreat({ ...c, isFaceUp: true }, 'opponent', state)) - getCardThreat(c, 'opponent', state);
-                    potentialTargets.push({ cardId: c.id, score: valueGain + 3 }); // +3 for reveal utility
+                    const valueGain = getCardThreat({ ...c, isFaceUp: true }, 'opponent', state) - getCardThreat(c, 'opponent', state);
+                    potentialTargets.push({ cardId: c.id, score: valueGain + 3 });
                 }
             });
+            // 3. Score flipping opponent's face-down cards (info gain)
+            player.lanes.flat().forEach(c => {
+                if (!c.isFaceUp) potentialTargets.push({ cardId: c.id, score: 2 });
+            });
+            // 4. Score flipping own face-up cards (usually bad, negative score)
+            opponent.lanes.flat().forEach(c => {
+                if (c.isFaceUp && c.id !== sourceCardId) potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
+            });
 
-            if (potentialTargets.length > 0) {
-                potentialTargets.sort((a, b) => b.score - a.score);
-                if (potentialTargets[0].score > 0) {
-                    return { type: 'flipCard', cardId: potentialTargets[0].cardId };
-                }
+            if (potentialTargets.length === 0) {
+                return { type: 'skip' };
             }
-            if ('optional' in action && action.optional) return { type: 'skip' };
-            return { type: 'skip' };
+            
+            potentialTargets.sort((a, b) => b.score - a.score);
+            const bestTarget = potentialTargets[0];
+            
+            if (isOptional && bestTarget.score <= 0) {
+                return { type: 'skip' };
+            }
+            
+            return { type: 'flipCard', cardId: bestTarget.cardId };
         }
 
         case 'select_card_from_other_lanes_to_delete': {
@@ -307,35 +318,33 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_own_covered_card_in_lane_to_flip': {
-            const { laneIndex } = action;
-            const ownLane = state.opponent.lanes[laneIndex];
-            const coveredCards = ownLane.filter((c, i, arr) => i < arr.length - 1);
-            
-            // Hard AI sees the value in revealing its own cards. It will always flip a face-down card.
-            const faceDownTarget = coveredCards.find(c => !c.isFaceUp);
-            if (faceDownTarget) {
-                return { type: 'flipCard', cardId: faceDownTarget.id };
-            }
-            
-            // It's a bad move to flip your own powerful face-up cards face-down.
-            return { type: 'skip' };
-        }
-
         case 'select_own_card_to_return_for_water_4': {
-            const ownCards = opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                // Hard AI: Prioritize returning a low-value card with a reusable on-play effect.
-                const scoredCards = ownCards.map(card => {
-                    let score = 10 - card.value; // Higher score for lower value
-                    const hasGoodEffect = card.keywords.delete || card.keywords.play || card.keywords.draw || card.keywords.flip;
-                    if (hasGoodEffect) {
-                        score += 5; // Bonus for good on-play effect
+            const ownCardsWithContext: { card: PlayedCard, lane: PlayedCard[] }[] = [];
+            opponent.lanes.forEach(lane => {
+                lane.forEach(card => {
+                    ownCardsWithContext.push({ card, lane });
+                });
+            });
+
+            if (ownCardsWithContext.length > 0) {
+                // Hard AI: Prioritize returning a card that minimizes point loss on the board,
+                // while also considering the value of reusing its on-play effect.
+                const scoredCards = ownCardsWithContext.map(({ card, lane }) => {
+                    const effectiveValue = getEffectiveCardValue(card, lane);
+                    // Base score is negative effective value. We want to maximize this (i.e., minimize value).
+                    let score = -effectiveValue; 
+                    
+                    const hasGoodEffect = card.keywords.delete || card.keywords.play || card.keywords.draw || card.keywords.flip || card.keywords.return;
+                    
+                    // Add bonus for reusing a good effect, but not for the source card itself.
+                    if (hasGoodEffect && card.id !== action.sourceCardId) {
+                        score += 5;
                     }
+                    
                     return { card, score };
                 });
 
-                scoredCards.sort((a, b) => b.score - a.score); // Sort descending by score
+                scoredCards.sort((a, b) => b.score - a.score); // Higher score is better.
                 return { type: 'returnCard', cardId: scoredCards[0].card.id };
             }
             return { type: 'skip' };
@@ -390,6 +399,43 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             })).sort((a, b) => b.valueDifference - a.valueDifference);
             const newOrder = laneData.map(d => d.protocol);
             return { type: 'rearrangeProtocols', newOrder };
+
+        case 'prompt_swap_protocols': {
+            const { opponent } = state;
+            const possibleSwaps: [number, number][] = [[0, 1], [0, 2], [1, 2]];
+            let bestSwap: [number, number] = [0, 1]; // Default swap
+            let bestScore = -Infinity;
+
+            for (const swap of possibleSwaps) {
+                const [i, j] = swap;
+                const newProtocols = [...opponent.protocols];
+                [newProtocols[i], newProtocols[j]] = [newProtocols[j], newProtocols[i]];
+                
+                let score = 0;
+                
+                // Calculate the score change based on hand playability.
+                for (const card of opponent.hand) {
+                    const couldPlayBeforeI = card.protocol === opponent.protocols[i];
+                    const couldPlayBeforeJ = card.protocol === opponent.protocols[j];
+                    const canPlayNowI = card.protocol === newProtocols[i]; // which is opponent.protocols[j]
+                    const canPlayNowJ = card.protocol === newProtocols[j]; // which is opponent.protocols[i]
+
+                    // It's a gain if a card can now be played face up where it couldn't before.
+                    if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card);
+                    if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card);
+                    
+                    // It's a loss if a card can no longer be played face up where it could before.
+                    if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card);
+                    if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card);
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestSwap = swap;
+                }
+            }
+            return { type: 'resolveSwapProtocols', indices: bestSwap };
+        }
 
         case 'select_card_to_shift_for_gravity_1': {
             const playerCards = state.player.lanes.flat();
@@ -454,6 +500,39 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             return { type: 'skip' };
         }
+
+        case 'select_face_down_card_to_shift_for_darkness_4': {
+            // Score each face-down card based on its disruptive potential.
+            // Higher score for shifting a player's card from a high-value lane.
+            // Lower score for shifting own card.
+            const potentialTargets: { cardId: string; score: number }[] = [];
+
+            // Player's face-down cards
+            state.player.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        const score = state.player.laneValues[i]; // Score is the value of the lane it's in
+                        potentialTargets.push({ cardId: c.id, score });
+                    }
+                });
+            });
+
+            // Opponent's (AI's) face-down cards. Negative score to avoid unless necessary.
+            state.opponent.lanes.forEach((lane, i) => {
+                lane.forEach(c => {
+                    if (!c.isFaceUp) {
+                        const score = -5 - state.opponent.laneValues[i]; // Avoid shifting own cards from high-value lanes.
+                        potentialTargets.push({ cardId: c.id, score });
+                    }
+                });
+            });
+
+            if (potentialTargets.length > 0) {
+                potentialTargets.sort((a, b) => b.score - a.score);
+                return { type: 'deleteCard', cardId: potentialTargets[0].cardId };
+            }
+            return { type: 'skip' };
+        }
         
         case 'select_any_opponent_card_to_shift': {
             const validTargets = state.player.lanes.flat();
@@ -468,7 +547,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // Hard AI always accepts potentially beneficial optional effects
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: true };
         case 'prompt_give_card_for_love_1': return { type: 'resolveLove1Prompt', accept: true };
-        case 'plague_4_player_flip_optional': return { type: 'resolvePlague4Flip', accept: true };
+        case 'plague_4_player_flip_optional': return { type: 'resolvePlague4Flip', accept: false };
         case 'prompt_fire_3_discard': return { type: 'resolveFire3Prompt', accept: state.opponent.hand.length > 1 };
         case 'prompt_shift_for_speed_3': return { type: 'resolveSpeed3Prompt', accept: true };
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };

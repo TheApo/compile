@@ -4,11 +4,11 @@
  */
 
 // FIX: Implemented the entire module which was missing and causing multiple import errors.
-import { GameState, PlayedCard, Player, ActionRequired } from "../../../types";
+import { GameState, PlayedCard, Player, ActionRequired, EffectResult } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { recalculateAllLaneValues } from "../stateManager";
-import { effectRegistryOnCover } from "../../effects/effectRegistryOnCover";
+import { executeOnCoverEffect } from '../../effectExecutor';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
     if (!cardId) return null;
@@ -27,6 +27,8 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     let newState = { ...state };
     const sourceCard = findCardOnBoard(newState, sourceCardId)?.card;
     const sourceCardName = sourceCard ? `${sourceCard.protocol}-${sourceCard.value}` : 'A card effect';
+
+    newState.actionRequired = null; // Clear the completed discard action before setting a new one
 
     switch (sourceEffect) {
         case 'fire_1':
@@ -75,8 +77,12 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : `a face-down card`;
 
     let newState = log(state, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
+    
+    const newStats = { ...newState.stats[actor], cardsFlipped: newState.stats[actor].cardsFlipped + 1 };
+    const newPlayerState = { ...newState[actor], stats: newStats };
+    newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
     newState = findAndFlipCards(new Set([targetCardId]), newState);
-    newState[actor].stats.cardsFlipped++;
     newState.animationState = { type: 'flipCard', cardId: targetCardId };
     newState.actionRequired = nextAction;
     return newState;
@@ -107,54 +113,82 @@ export function internalReturnCard(state: GameState, targetCardId: string): Game
     return recalculateAllLaneValues(newState);
 }
 
-export function internalShiftCard(state: GameState, cardToShiftId: string, cardOwner: Player, targetLaneIndex: number, actor: Player): GameState {
-    let newState = { ...state };
-    const ownerState = { ...newState[cardOwner] };
-    const cardToShift = ownerState.lanes.flat().find(c => c.id === cardToShiftId);
-    if (!cardToShift) return state;
+export function internalShiftCard(state: GameState, cardToShiftId: string, cardOwner: Player, targetLaneIndex: number, actor: Player): EffectResult {
+    const cardToShiftInfo = findCardOnBoard(state, cardToShiftId);
+    if (!cardToShiftInfo || cardToShiftInfo.owner !== cardOwner) return { newState: state };
+    const { card: cardToShift } = cardToShiftInfo;
 
-    // Remove card from its original lane
+    const ownerState = state[cardOwner];
+
     let originalLaneIndex = -1;
-    ownerState.lanes = ownerState.lanes.map((lane, index) => {
-        if (lane.some(c => c.id === cardToShiftId)) {
-            originalLaneIndex = index;
+    for (let i = 0; i < ownerState.lanes.length; i++) {
+        if (ownerState.lanes[i].some(c => c.id === cardToShiftId)) {
+            originalLaneIndex = i;
+            break;
+        }
+    }
+
+    if (originalLaneIndex === -1) return { newState: state };
+
+    // Create a new lanes array with the card removed from the original lane.
+    const lanesAfterRemoval = ownerState.lanes.map((lane, index) => {
+        if (index === originalLaneIndex) {
             return lane.filter(c => c.id !== cardToShiftId);
         }
         return lane;
     });
 
-    if (originalLaneIndex === -1) return state; // Card not found
-
-    const cardToBeCovered = ownerState.lanes[targetLaneIndex].length > 0
-        ? ownerState.lanes[targetLaneIndex][ownerState.lanes[targetLaneIndex].length - 1]
+    const cardToBeCovered = lanesAfterRemoval[targetLaneIndex].length > 0
+        ? lanesAfterRemoval[targetLaneIndex][lanesAfterRemoval[targetLaneIndex].length - 1]
         : null;
 
-    // Add card to the new lane
-    ownerState.lanes[targetLaneIndex] = [...ownerState.lanes[targetLaneIndex], cardToShift];
+    // Create another new lanes array with the card added to the target lane.
+    const lanesAfterAddition = lanesAfterRemoval.map((lane, index) => {
+        if (index === targetLaneIndex) {
+            return [...lane, cardToShift];
+        }
+        return lane;
+    });
     
-    newState[cardOwner] = ownerState;
+    // Create a new player state with the updated lanes.
+    const newOwnerState = {
+        ...ownerState,
+        lanes: lanesAfterAddition,
+    };
+
+    // Create a new game state.
+    let newState = {
+        ...state,
+        [cardOwner]: newOwnerState,
+    };
     
+    // Log the action.
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
     const cardName = cardToShift.isFaceUp ? `${cardToShift.protocol}-${cardToShift.value}` : 'a card';
     const targetProtocol = newState[cardOwner].protocols[targetLaneIndex];
     newState = log(newState, actor, `${actorName} shifts ${ownerName} ${cardName} to Protocol ${targetProtocol}.`);
-    newState[actor].stats.cardsShifted++;
+    
+    // Update stats immutably.
+    const newStats = { ...newState.stats[actor], cardsShifted: newState.stats[actor].cardsShifted + 1 };
+    const newActorState = { ...newState[actor], stats: newStats };
+    newState = { ...newState, [actor]: newActorState, stats: { ...newState.stats, [actor]: newStats } };
     
     newState.actionRequired = null;
-    newState = recalculateAllLaneValues(newState);
 
-    // After shifting, check for onCover effect
+    // Recalculate values based on the definitive new board state.
+    let stateAfterRecalc = recalculateAllLaneValues(newState);
+
+    // After shifting and recalculating, check for onCover effect.
+    let finalResult: EffectResult = { newState: stateAfterRecalc };
+
     if (cardToBeCovered) {
-        const effectKey = `${cardToBeCovered.protocol}-${cardToBeCovered.value}`;
-        const onCoverExecute = effectRegistryOnCover[effectKey];
-        if (onCoverExecute) {
-            // FIX: Added missing 'cardOwner' argument for the owner of the covered card.
-            const result = onCoverExecute(cardToBeCovered, targetLaneIndex, newState, cardOwner);
-            newState = result.newState;
-            // Note: Shift does not currently handle animations from onCover effects.
+        const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc);
+        finalResult.newState = onCoverResult.newState;
+        if (onCoverResult.animationRequests) {
+            finalResult.animationRequests = onCoverResult.animationRequests;
         }
     }
 
-    return newState;
+    return finalResult;
 }

@@ -103,8 +103,9 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
             if (card.isFaceUp) {
                 switch (`${card.protocol}-${card.value}`) {
                     case 'Apathy-0': { // Your total value in this line is increased by 1 for each face-down card in this line.
-                        const faceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalPlayerValues[i] += faceDownCount;
+                        const playerFaceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
+                        const opponentFaceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
+                        finalPlayerValues[i] += (playerFaceDownCount + opponentFaceDownCount);
                         break;
                     }
                      case 'Darkness-2': { // All face-down cards in this stack have a value of 4.
@@ -120,8 +121,9 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
             if (card.isFaceUp) {
                  switch (`${card.protocol}-${card.value}`) {
                     case 'Apathy-0': {
-                        const faceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalOpponentValues[i] += faceDownCount;
+                        const playerFaceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
+                        const opponentFaceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
+                        finalOpponentValues[i] += (playerFaceDownCount + opponentFaceDownCount);
                         break;
                     }
                      case 'Darkness-2': {
