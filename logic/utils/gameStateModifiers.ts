@@ -70,7 +70,7 @@ export function checkForSpirit3Trigger(state: GameState, player: Player): GameSt
 }
 
 /**
- * A helper function to apply the draw logic to a player's state.
+ * A helper function to apply the draw logic to a player's state from their own deck.
  * @param state - The current GameState.
  * @param player - The player who is drawing.
  * @param count - The number of cards to draw.
@@ -123,6 +123,64 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
     
     return newState;
 }
+
+/**
+ * A helper function to apply draw logic from an opponent's deck.
+ * @param state - The current GameState.
+ * @param drawingPlayer - The player who is drawing.
+ * @param count - The number of cards to draw.
+ * @returns The new GameState.
+ */
+export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, count: number): GameState {
+    const opponentPlayer = drawingPlayer === 'player' ? 'opponent' : 'player';
+    
+    let newState = { ...state };
+    const opponentState = { ...newState[opponentPlayer] };
+    const drawingPlayerState = { ...newState[drawingPlayer] };
+
+    const { drawnCards, remainingDeck, newDiscard, reshuffled } = drawCards(opponentState.deck, opponentState.discard, count);
+    
+    if (drawnCards.length > 0) {
+        const newCardsForHand = drawnCards.map(c => ({ ...c, id: uuidv4(), isFaceUp: true }));
+        const drawnCardIds = newCardsForHand.map(c => c.id);
+        
+        drawingPlayerState.hand = [...drawingPlayerState.hand, ...newCardsForHand];
+        
+        const newDrawingPlayerStats = {
+            ...drawingPlayerState.stats,
+            cardsDrawn: drawingPlayerState.stats.cardsDrawn + drawnCards.length,
+        };
+        drawingPlayerState.stats = newDrawingPlayerStats;
+
+        opponentState.deck = remainingDeck;
+        opponentState.discard = newDiscard;
+        
+        newState = {
+            ...newState,
+            [drawingPlayer]: drawingPlayerState,
+            [opponentPlayer]: opponentState,
+            stats: {
+                ...newState.stats,
+                [drawingPlayer]: newDrawingPlayerStats,
+            },
+        };
+
+        if (drawnCardIds.length > 0) {
+            newState.animationState = { type: 'drawCard', owner: drawingPlayer, cardIds: drawnCardIds };
+        }
+
+        if (reshuffled) {
+            const opponentName = opponentPlayer === 'player' ? 'Player' : 'Opponent';
+            newState = log(newState, drawingPlayer, `${opponentName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
+        }
+
+        // After drawing, check for the trigger for the player who just drew.
+        newState = checkForSpirit3Trigger(newState, drawingPlayer);
+    }
+
+    return newState;
+}
+
 
 /**
  * A helper for the 'Refresh' keyword - draws until the player has 5 cards.

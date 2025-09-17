@@ -233,3 +233,22 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     return resultAfterOnCover;
 }
+
+export const countValidDeleteTargets = (state: GameState, disallowedIds: string[], allowedLaneIndices?: number[]): number => {
+    let count = 0;
+    for (const p of ['player', 'opponent'] as Player[]) {
+        for (let i = 0; i < state[p].lanes.length; i++) {
+            if (allowedLaneIndices && !allowedLaneIndices.includes(i)) {
+                continue;
+            }
+            const lane = state[p].lanes[i];
+            if (lane.length > 0) {
+                const topCard = lane[lane.length - 1];
+                if (!disallowedIds.includes(topCard.id)) {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+};

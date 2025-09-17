@@ -6,7 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
-import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard } from '../helpers/actionUtils';
+import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { executeOnPlayEffect } from '../../effectExecutor';
 
@@ -259,6 +259,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
+            // --- Uncover Logic Setup ---
+            const targetLaneIndex = prev[cardInfoToDelete.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            const targetLane = prev[cardInfoToDelete.owner].lanes[targetLaneIndex];
+            const targetWasTopCard = targetLane && targetLane.length > 0 && targetLane[targetLane.length - 1].id === targetCardId;
+
+            const sourceLaneIndex = prev[sourceCardInfo.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
+            const sourceLane = prev[sourceCardInfo.owner].lanes[sourceLaneIndex];
+            const sourceWasTopCard = sourceLane && sourceLane.length > 0 && sourceLane[sourceLane.length - 1].id === sourceCardId;
+
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [
@@ -269,6 +278,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     let stateAfterDelete = checkForHate3Trigger(s, actor); // Trigger for target
                     stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor); // Trigger for self-delete
                     
+                    // --- Uncover Logic Execution ---
+                    if (targetWasTopCard) {
+                        const uncoverResult = handleUncoverEffect(stateAfterDelete, cardInfoToDelete.owner, targetLaneIndex);
+                        stateAfterDelete = uncoverResult.newState;
+                    }
+                    if (sourceWasTopCard) {
+                        const uncoverResult = handleUncoverEffect(stateAfterDelete, sourceCardInfo.owner, sourceLaneIndex);
+                        stateAfterDelete = uncoverResult.newState;
+                    }
+
                     stateAfterDelete.actionRequired = null;
                     if (stateAfterDelete.queuedActions && stateAfterDelete.queuedActions.length > 0) {
                         const newQueue = [...stateAfterDelete.queuedActions];
@@ -285,7 +304,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
-        case 'select_low_value_card_to_delete': {
+        case 'select_low_value_card_to_delete':
+        case 'select_card_from_other_lanes_to_delete': {
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
@@ -301,22 +321,91 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
             
+            const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            const lane = prev[cardInfo.owner].lanes[laneIndex];
+            const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
                     const deletingPlayer = prev.turn;
                     let stateWithTriggers = checkForHate3Trigger(s, deletingPlayer);
-
-                    if (prev.actionRequired?.type === 'select_cards_to_delete') {
-                        const remainingCount = prev.actionRequired.count - 1;
+                    let uncoverResult: EffectResult | null = null;
+        
+                    if (wasTopCard) {
+                        uncoverResult = handleUncoverEffect(stateWithTriggers, cardInfo.owner, laneIndex);
+                        stateWithTriggers = uncoverResult.newState;
+                    }
+        
+                    // If the uncover effect created an interrupting action, queue the rest of the original action.
+                    if (uncoverResult && uncoverResult.newState.actionRequired) {
+                        const currentAction = prev.actionRequired;
+                        let remainingCount = 0;
+                        
+                        if (currentAction?.type === 'select_cards_to_delete') {
+                            remainingCount = currentAction.count - 1;
+                            if (remainingCount > 0) {
+                                const queuedAction: ActionRequired = {
+                                    ...currentAction,
+                                    count: remainingCount,
+                                    disallowedIds: [...currentAction.disallowedIds, targetCardId]
+                                };
+                                stateWithTriggers.queuedActions = [queuedAction, ...(stateWithTriggers.queuedActions || [])];
+                            }
+                        } else if (currentAction?.type === 'select_card_from_other_lanes_to_delete') {
+                            remainingCount = currentAction.count - 1;
+                            if (remainingCount > 0) {
+                                const cardLaneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+                                const queuedAction: ActionRequired = {
+                                    ...currentAction,
+                                    lanesSelected: [...currentAction.lanesSelected, cardLaneIndex],
+                                    count: remainingCount
+                                };
+                                stateWithTriggers.queuedActions = [queuedAction, ...(stateWithTriggers.queuedActions || [])];
+                            }
+                        }
+                        
+                        return stateWithTriggers; // Return with the new interrupting action.
+                    }
+        
+                    // No interrupt, continue processing the original action.
+                    const currentAction = prev.actionRequired;
+                    if (currentAction?.type === 'select_cards_to_delete') {
+                        const remainingCount = currentAction.count - 1;
                         if (remainingCount > 0) {
-                            stateWithTriggers.actionRequired = {
-                                ...prev.actionRequired,
-                                count: remainingCount,
-                                disallowedIds: [...prev.actionRequired.disallowedIds, targetCardId]
-                            };
-                            return stateWithTriggers; // Don't end turn yet
+                            const newDisallowedIds = [...currentAction.disallowedIds, targetCardId];
+                            if (countValidDeleteTargets(s, newDisallowedIds) > 0) {
+                                stateWithTriggers.actionRequired = {
+                                    ...currentAction,
+                                    count: remainingCount,
+                                    disallowedIds: newDisallowedIds,
+                                };
+                                return stateWithTriggers;
+                            } else {
+                                stateWithTriggers = log(stateWithTriggers, prev.turn, `No more valid targets to delete. Effect ends.`);
+                                stateWithTriggers.actionRequired = null;
+                            }
+                        }
+                    } else if (currentAction?.type === 'select_card_from_other_lanes_to_delete') {
+                        const remainingCount = currentAction.count - 1;
+                        if (remainingCount > 0) {
+                            const cardLaneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+                            const newLanesSelected = [...currentAction.lanesSelected, cardLaneIndex];
+                            const allowedLanes = [0, 1, 2].filter(i => i !== currentAction.disallowedLaneIndex && !newLanesSelected.includes(i));
+                            const areThereTargetsInRemainingLanes = allowedLanes.some(laneIdx => s.player.lanes[laneIdx].length > 0 || s.opponent.lanes[laneIdx].length > 0);
+
+                            if (areThereTargetsInRemainingLanes) {
+                                stateWithTriggers.actionRequired = {
+                                    ...currentAction,
+                                    lanesSelected: newLanesSelected,
+                                    count: remainingCount
+                                };
+                                return stateWithTriggers;
+                            } else {
+                                stateWithTriggers = log(stateWithTriggers, prev.turn, `No more valid targets to delete. Effect ends.`);
+                                stateWithTriggers.actionRequired = null;
+                            }
                         }
                     }
 
@@ -327,68 +416,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         const nextAction = newQueue.shift();
                         return { ...stateWithTriggers, actionRequired: nextAction, queuedActions: newQueue };
                     }
-
+        
                     return endTurnCb(stateWithTriggers);
-                }
-            };
-            requiresTurnEnd = false;
-            break;
-        }
-        case 'select_card_from_other_lanes_to_delete': {
-            const cardInfo = findCardOnBoard(prev, targetCardId);
-            if (!cardInfo) return { nextState: prev };
-
-            let cardLaneIndex = -1;
-            for (let i = 0; i < prev[cardInfo.owner].lanes.length; i++) {
-                if (prev[cardInfo.owner].lanes[i].some(c => c.id === targetCardId)) {
-                    cardLaneIndex = i;
-                    break;
-                }
-            }
-            if (cardLaneIndex === -1) return { nextState: prev };
-
-            const actor = prev.turn;
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
-            const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
-            const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
-            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-            newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
-            
-            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
-            const newPlayerState = { ...newState[actor], stats: newStats };
-            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-
-            newState.actionRequired = null;
-            requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
-                onCompleteCallback: (s, endTurnCb) => {
-                    let stateWithTriggers = checkForHate3Trigger(s, prev.turn);
-                    const currentAction = prev.actionRequired;
-                    if (currentAction?.type !== 'select_card_from_other_lanes_to_delete') return endTurnCb(stateWithTriggers);
-
-                    const remainingCount = currentAction.count - 1;
-                    if (remainingCount > 0) {
-                        return {
-                            ...stateWithTriggers,
-                            actionRequired: {
-                                ...currentAction,
-                                lanesSelected: [...currentAction.lanesSelected, cardLaneIndex],
-                                count: remainingCount
-                            }
-                        };
-                    } else {
-                        let stateWithActionCleared = { ...stateWithTriggers, actionRequired: null };
-                        
-                        // Action is done, check queue
-                        if (stateWithActionCleared.queuedActions && stateWithActionCleared.queuedActions.length > 0) {
-                            const newQueue = [...stateWithActionCleared.queuedActions];
-                            const nextAction = newQueue.shift();
-                            return { ...stateWithActionCleared, actionRequired: nextAction, queuedActions: newQueue };
-                        }
-
-                        return endTurnCb(stateWithActionCleared);
-                    }
                 }
             };
             requiresTurnEnd = false;
@@ -409,14 +438,22 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 const newPlayerState = { ...newState[actor], stats: newStats };
                 newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
+                const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+                const wasTopCard = prev[cardInfo.owner].lanes[laneIndex].length > 0 && prev[cardInfo.owner].lanes[laneIndex][prev[cardInfo.owner].lanes[laneIndex].length - 1].id === targetCardId;
+
                 newState.actionRequired = null;
                 requiresAnimation = {
                     animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                     onCompleteCallback: (s, endTurnCb) => {
+                        let stateAfterDelete = s;
+                        if (wasTopCard) {
+                            const uncoverResult = handleUncoverEffect(stateAfterDelete, cardInfo.owner, laneIndex);
+                            stateAfterDelete = uncoverResult.newState;
+                        }
                         const originalTurnPlayer = prev.turn; // The one who owns Plague-4
                         // The optional flip is for the player whose card triggered the effect.
                         return {
-                            ...s,
+                            ...stateAfterDelete,
                             actionRequired: {
                                 type: 'plague_4_player_flip_optional',
                                 sourceCardId: sourceCardId,

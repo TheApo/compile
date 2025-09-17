@@ -48,7 +48,7 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
           <span>{opponent.deck.length}</span>
         </div>
         <div className="info-line">
-          <span>Discard:</span>
+          <span>Trash:</span>
           <span>{opponent.discard.length}</span>
         </div>
       </div>
@@ -63,7 +63,7 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
           <span>{player.deck.length}</span>
         </div>
         <div className="info-line">
-          <span>Discard:</span>
+          <span>Trash:</span>
           <span>{player.discard.length}</span>
         </div>
       </div>

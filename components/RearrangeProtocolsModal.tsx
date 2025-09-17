@@ -13,9 +13,20 @@ interface RearrangeProtocolsModalProps {
 }
 
 export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: RearrangeProtocolsModalProps) {
-    const [protocols, setProtocols] = useState(gameState[targetPlayer].protocols);
+    const [initialProtocols] = useState([...gameState[targetPlayer].protocols]);
+    const [protocols, setProtocols] = useState([...gameState[targetPlayer].protocols]);
     const dragItem = useRef<number | null>(null);
     const dragOverItem = useRef<number | null>(null);
+
+    const protocolsHaveChanged = useMemo(() => {
+        if (protocols.length !== initialProtocols.length) return false; // Should not happen
+        for (let i = 0; i < protocols.length; i++) {
+            if (protocols[i] !== initialProtocols[i]) {
+                return true;
+            }
+        }
+        return false;
+    }, [protocols, initialProtocols]);
 
     const targetPlayerState = gameState[targetPlayer];
     const otherPlayer = targetPlayer === 'player' ? 'opponent' : 'player';
@@ -71,10 +82,13 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
         <div className={`protocol-bar ${isPlayerTarget ? 'player-bar' : 'opponent-bar'}`} onDragOver={handleDragOver}>
             {protocols.map((protocol, index) => {
                 const data = originalProtocolData[protocol];
+                const hasChanged = protocol !== initialProtocols[index];
+                const classList = getProtocolClass('protocol-display rearrange-item', data.compiled);
+
                 return (
                     <div
                         key={protocol}
-                        className={getProtocolClass('protocol-display rearrange-item', data.compiled)}
+                        className={`${classList} ${hasChanged ? 'changed' : ''}`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, index)}
                         onDragEnter={(e) => handleDragEnter(e, index)}
@@ -104,7 +118,7 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
         <div className="modal-overlay">
             <div className="modal-content rearrange-modal-content" onClick={(e) => e.stopPropagation()}>
                 <h2>{title}</h2>
-                <p>Drag and drop the protocols to reorder them.</p>
+                <p>Drag and drop the protocols to reorder them. You must change the order to continue.</p>
 
                 <div className="rearrange-board-view">
                     <div className="protocol-bars-container">
@@ -114,7 +128,9 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                 </div>
 
                 <div className="rearrange-actions">
-                    <button className="btn" onClick={() => onConfirm(protocols)}>Confirm Rearrangement</button>
+                    <button className="btn" onClick={() => onConfirm(protocols)} disabled={!protocolsHaveChanged}>
+                        Confirm Rearrangement
+                    </button>
                 </div>
             </div>
         </div>

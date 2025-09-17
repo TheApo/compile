@@ -1644,6 +1644,11 @@ p {
   background-color: var(--primary-color);
 }
 
+.rearrange-item.changed {
+  border: 1px solid #FFD700;
+  box-shadow: 0 0 8px hsla(51, 100%, 50%, 0.5);
+}
+
 .rearrange-item.selected .protocol-name,
 .rearrange-item.selected .protocol-value {
   color: var(--background-color);

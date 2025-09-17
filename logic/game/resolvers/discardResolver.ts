@@ -6,7 +6,7 @@
 import { GameState, Player } from '../../../types';
 import { log } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
-import { handleChainedEffectsOnDiscard } from '../helpers/actionUtils';
+import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
 
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {
@@ -202,13 +202,22 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
     
     let newState = discardCards(prevState, cardIds, player);
 
-    newState.actionRequired = {
-        type: 'select_cards_to_delete',
-        count: 2,
-        sourceCardId,
-        disallowedIds: [sourceCardId],
-        actor: player,
-    };
+    const disallowedIds = [sourceCardId];
+    const availableTargets = countValidDeleteTargets(newState, disallowedIds);
+    const deleteCount = Math.min(2, availableTargets);
+
+    if (deleteCount > 0) {
+        newState.actionRequired = {
+            type: 'select_cards_to_delete',
+            count: deleteCount,
+            sourceCardId,
+            disallowedIds: [sourceCardId],
+            actor: player,
+        };
+    } else {
+        newState = log(newState, player, `Hate-1: No valid targets to delete.`);
+        newState.actionRequired = null;
+    }
 
     return newState;
 };
