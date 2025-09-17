@@ -13,10 +13,10 @@ interface LaneProps {
     isShiftTarget: boolean;
     isEffectTarget: boolean;
     isMatching?: boolean;
-    onLaneMouseDown: () => void;
-    onCardMouseDown: (card: PlayedCard) => void;
-    onCardMouseEnter: (card: PlayedCard) => void;
-    onCardMouseLeave: (card: PlayedCard) => void;
+    onLanePointerDown: () => void;
+    onCardPointerDown: (card: PlayedCard) => void;
+    onCardPointerEnter: (card: PlayedCard) => void;
+    onCardPointerLeave: (card: PlayedCard) => void;
     owner: 'player' | 'opponent';
     animationState: GameState['animationState'];
     isCardTargetable: (card: PlayedCard) => boolean;
@@ -24,7 +24,7 @@ interface LaneProps {
     sourceCardId: string | null;
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLaneMouseDown, onCardMouseDown, onCardMouseEnter, onCardMouseLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId }) => {
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId }) => {
     
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
@@ -36,7 +36,7 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
     return (
         <div 
             className={laneClasses.join(' ')}
-            onMouseDown={onLaneMouseDown}
+            onPointerDown={onLanePointerDown}
         >
             <div className="lane-stack">
                 {cards.map((card, index) => (
@@ -45,15 +45,15 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                         card={card}
                         isFaceUp={card.isFaceUp}
                         style={{ '--i': index } as React.CSSProperties}
-                        onMouseDown={(e) => {
-                            // Stop the event from bubbling up to the lane's onMouseDown handler.
+                        onPointerDown={(e) => {
+                            // Stop the event from bubbling up to the lane's onPointerDown handler.
                             // This prevents a single click from being interpreted as both a card
                             // selection and a lane selection, which causes bugs with multi-step actions.
                             e.stopPropagation();
-                            onCardMouseDown(card);
+                            onCardPointerDown(card);
                         }}
-                        onMouseEnter={() => onCardMouseEnter(card)}
-                        onMouseLeave={() => onCardMouseLeave(card)}
+                        onPointerEnter={() => onCardPointerEnter(card)}
+                        onPointerLeave={() => onCardPointerLeave(card)}
                         animationState={animationState}
                         isTargetable={isCardTargetable(card)}
                         isSourceOfEffect={card.id === sourceCardId}

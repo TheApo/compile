@@ -85,7 +85,7 @@ export function App() {
           />
         );
       case 'ResultsScreen':
-        return <ResultsScreen onPlayAgain={handleBackToMenu} winner={winner} finalState={finalGameState} />;
+        return <ResultsScreen onPlayAgain={handleBackToMenu} winner={winner} finalState={finalGameState} difficulty={difficulty} />;
       case 'CardLibrary':
         return <CardLibraryScreen onBack={handleBackToMenu} />;
       default:

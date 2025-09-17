@@ -152,7 +152,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     };
   }, [gameState, onEndGame]);
 
-  const handleLaneMouseDown = (laneIndex: number) => {
+  const handleLanePointerDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
     if (currentState.animationState) return;
 
@@ -204,7 +204,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   };
 
 
-  const handleHandCardMouseDown = (card: PlayedCard) => {
+  const handleHandCardPointerDown = (card: PlayedCard) => {
     const currentState = gameStateRef.current;
     if (currentState.animationState) return;
 
@@ -244,7 +244,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     }
   };
 
-  const handleBoardCardMouseDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
+  const handleBoardCardPointerDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
       const currentState = gameStateRef.current;
       if (currentState.animationState) return;
 
@@ -252,13 +252,13 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
       
       // Proxy click to lane if in compile phase
       if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
-          handleLaneMouseDown(laneIndex);
+          handleLanePointerDown(laneIndex);
           return;
       }
       
       // Proxy click to lane if playing a card from hand
       if (turn === 'player' && !actionRequired && selectedCard && phase === 'action') {
-          handleLaneMouseDown(laneIndex);
+          handleLanePointerDown(laneIndex);
           return;
       }
 
@@ -278,32 +278,32 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
       }
   };
   
-  const handleHandCardMouseEnter = (card: PlayedCard) => {
+  const handleHandCardPointerEnter = (card: PlayedCard) => {
     if (!selectedCard) {
       setHoveredCard({ card, showContents: true });
     }
   };
   
-  const handleHandCardMouseLeave = () => {
+  const handleHandCardPointerLeave = () => {
     if (!selectedCard) {
       setHoveredCard(null);
     }
   };
 
-  const handleBoardCardMouseEnter = (card: PlayedCard, owner: Player) => {
+  const handleBoardCardPointerEnter = (card: PlayedCard, owner: Player) => {
     if (!selectedCard) {
         const showContents = owner === 'player' || card.isFaceUp;
         setHoveredCard({ card, showContents });
     }
   };
 
-  const handleBoardCardMouseLeave = () => {
+  const handleBoardCardPointerLeave = () => {
       if (!selectedCard) {
           setHoveredCard(null);
       }
   };
 
-  const handleOpponentHandCardMouseEnter = (card: PlayedCard) => {
+  const handleOpponentHandCardPointerEnter = (card: PlayedCard) => {
     if (!selectedCard && !gameState.actionRequired) {
       setHoveredCard({ card, showContents: card.isRevealed || false });
     }
@@ -402,13 +402,13 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 )}
                 <GameBoard 
                   gameState={gameState}
-                  onLaneMouseDown={handleLaneMouseDown}
+                  onLanePointerDown={handleLanePointerDown}
                   selectedCardId={selectedCard}
-                  onCardMouseDown={handleBoardCardMouseDown}
-                  onCardMouseEnter={handleBoardCardMouseEnter}
-                  onCardMouseLeave={handleBoardCardMouseLeave}
-                  onOpponentHandCardMouseEnter={handleOpponentHandCardMouseEnter}
-                  onOpponentHandCardMouseLeave={handleBoardCardMouseLeave}
+                  onCardPointerDown={handleBoardCardPointerDown}
+                  onCardPointerEnter={handleBoardCardPointerEnter}
+                  onCardPointerLeave={handleBoardCardPointerLeave}
+                  onOpponentHandCardPointerEnter={handleOpponentHandCardPointerEnter}
+                  onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
                   sourceCardId={sourceCardId}
                 />
                 
@@ -439,9 +439,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                         key={card.id} 
                         card={card}
                         isFaceUp={true}
-                        onMouseDown={() => handleHandCardMouseDown(card)}
-                        onMouseEnter={() => handleHandCardMouseEnter(card)}
-                        onMouseLeave={handleHandCardMouseLeave}
+                        onPointerDown={() => handleHandCardPointerDown(card)}
+                        onPointerEnter={() => handleHandCardPointerEnter(card)}
+                        onPointerLeave={handleHandCardPointerLeave}
                         isSelected={card.id === selectedCard}
                         isMultiSelected={multiSelectedCardIds.includes(card.id)}
                         animationState={gameState.animationState}

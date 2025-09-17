@@ -101,9 +101,9 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
         return newState;
     }
 
-    // Trigger Hate-3 for all deleted cards
+    // Trigger Hate-3 once for the entire compile action if any cards were deleted.
     const totalDeleted = compilerDeletedCards.length + nonCompilerDeletedCards.length;
-    for (let i = 0; i < totalDeleted; i++) {
+    if (totalDeleted > 0) {
         newState = checkForHate3Trigger(newState, compiler);
     }
 

@@ -73,8 +73,8 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
                       card={cardForComponent}
                       isFaceUp={true}
                       additionalClassName="in-hand"
-                      onMouseEnter={() => handleCardInteraction(card)}
-                      onMouseDown={() => handleCardInteraction(card)}
+                      onPointerEnter={() => handleCardInteraction(card)}
+                      onPointerDown={() => handleCardInteraction(card)}
                     />
                   );
                 })}

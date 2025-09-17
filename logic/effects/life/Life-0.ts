@@ -7,7 +7,7 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { v4 as uuidv4 } from 'uuid';
-import { effectRegistryOnCover } from "../effectRegistryOnCover";
+import { executeOnCoverEffect } from "../../effectExecutor";
 
 /**
  * Life-0: Play the top card of your deck face-down in each line where you have a card.
@@ -60,10 +60,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let finalResult: EffectResult = { newState };
 
     for (const { card: coveredCard, laneIndex: coveredLaneIndex } of cardsToBeCovered) {
-        const effectKey = `${coveredCard.protocol}-${coveredCard.value}`;
-        const onCoverExecute = effectRegistryOnCover[effectKey];
-        if (onCoverExecute) {
-            const onCoverResult = onCoverExecute(coveredCard, coveredLaneIndex, finalResult.newState, actor);
+        const onCoverResult = executeOnCoverEffect(coveredCard, coveredLaneIndex, finalResult.newState);
+        if (onCoverResult.newState !== finalResult.newState || onCoverResult.animationRequests) {
             finalResult.newState = onCoverResult.newState;
             if (onCoverResult.animationRequests) {
                 finalResult.animationRequests = [

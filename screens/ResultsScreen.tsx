@@ -5,15 +5,16 @@
 
 import React from 'react';
 import { Player } from '../App';
-import { GameState } from '../types';
+import { Difficulty, GameState } from '../types';
 
 interface ResultsScreenProps {
   onPlayAgain: () => void;
   winner: Player | null;
   finalState: GameState | null;
+  difficulty: Difficulty;
 }
 
-export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreenProps) {
+export function ResultsScreen({ onPlayAgain, winner, finalState, difficulty }: ResultsScreenProps) {
   if (!finalState) {
     return (
       <div className="screen">
@@ -43,7 +44,7 @@ export function ResultsScreen({ onPlayAgain, winner, finalState }: ResultsScreen
         <div className="results-body">
             <div className="final-score-section">
                 <h3>Final Score</h3>
-                <h4 className="results-label results-opponent-label">Opponent (AI)</h4>
+                <h4 className="results-label results-opponent-label">Opponent ({difficulty.charAt(0).toUpperCase() + difficulty.slice(1)})</h4>
                 <div className="protocol-bars-container">
                     <div className="protocol-bar opponent-bar">
                         {finalState.opponent.protocols.map((p, i) => 

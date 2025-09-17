@@ -17,12 +17,12 @@ interface DebugModalProps {
 export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
   const playerName = player.charAt(0).toUpperCase() + player.slice(1);
 
-  const renderCardGrid = (cards: CardData[], title: string) => {
+  const renderCardGrid = (cards: CardData[], title: string, showFaceUp: boolean) => {
     // Adapt CardData to PlayedCard for the component
     const playedCards: PlayedCard[] = cards.map((card, index) => ({
       ...card,
       id: `${title}-${card.protocol}-${card.value}-${index}`,
-      isFaceUp: true,
+      isFaceUp: showFaceUp,
     }));
 
     return (
@@ -34,7 +34,7 @@ export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
               <CardComponent
                 key={card.id}
                 card={card}
-                isFaceUp={true}
+                isFaceUp={showFaceUp}
                 additionalClassName="in-hand"
               />
             ))
@@ -52,8 +52,8 @@ export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
         <button className="btn btn-back modal-close-btn" onClick={onClose}>X</button>
         <h2>{playerName}'s Info</h2>
         
-        {renderCardGrid(playerState.deck, 'Deck')}
-        {renderCardGrid(playerState.discard, 'Discard Pile')}
+        {renderCardGrid(playerState.deck, 'Deck', false)}
+        {renderCardGrid(playerState.discard, 'Discard Pile', true)}
       </div>
     </div>
   );

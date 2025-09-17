@@ -76,7 +76,10 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     let newState = { 
         ...prevState, 
         [player]: newPlayerState, 
-        stats: { ...prevState.stats, [player]: newPlayerState, },
+        stats: { 
+            ...prevState.stats, 
+            [player]: newStats,
+        },
         actionRequired: null 
     };
 

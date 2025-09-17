@@ -4,13 +4,25 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { log } from "../../utils/log";
 
 /**
  * Death-3: Delete 1 face-down card.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    const faceDownCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => !c.isFaceUp);
-    if (faceDownCards.length > 0) {
+    const validTargets: PlayedCard[] = [];
+    for (const p of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[p].lanes) {
+            if (lane.length > 0) {
+                const topCard = lane[lane.length - 1]; // Only check uncovered card
+                if (!topCard.isFaceUp) {
+                    validTargets.push(topCard);
+                }
+            }
+        }
+    }
+    
+    if (validTargets.length > 0) {
         return {
             newState: {
                 ...state,
@@ -18,5 +30,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         };
     }
-    return { newState: state };
-}
+    
+    const newState = log(state, actor, "Death-3: No valid targets (uncovered face-down cards) found.");
+    return { newState };
+};

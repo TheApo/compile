@@ -94,7 +94,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
         </div>
       </div>
       
-      <div className="card-ticker-container" onMouseLeave={() => setPreviewCard(initialPreviewCard)}>
+      <div className="card-ticker-container" onPointerLeave={() => setPreviewCard(initialPreviewCard)}>
         <div className="card-ticker-track">
             {/* Render the list twice for a seamless loop */}
             {shuffledTickerCards.map((card, index) => (
@@ -103,7 +103,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
                     card={{...card, id: `ticker-1-${index}`, isFaceUp: true}} 
                     isFaceUp={true}
                     additionalClassName="in-hand"
-                    onMouseEnter={() => setPreviewCard(card)}
+                    onPointerEnter={() => setPreviewCard(card)}
                 />
             ))}
             {shuffledTickerCards.map((card, index) => (
@@ -112,7 +112,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
                     card={{...card, id: `ticker-2-${index}`, isFaceUp: true}} 
                     isFaceUp={true}
                     additionalClassName="in-hand"
-                    onMouseEnter={() => setPreviewCard(card)}
+                    onPointerEnter={() => setPreviewCard(card)}
                 />
             ))}
         </div>

@@ -4,14 +4,26 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { log } from "../../utils/log";
 
 /**
  * Speed-4: Shift 1 of your opponent's face-down cards.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     const opponent = actor === 'player' ? 'opponent' : 'player';
-    const opponentFaceDownCards = state[opponent].lanes.flat().filter(c => !c.isFaceUp);
-    if (opponentFaceDownCards.length > 0) {
+    
+    // According to default targeting rules, we can only target uncovered cards.
+    const validTargets: PlayedCard[] = [];
+    for (const lane of state[opponent].lanes) {
+        if (lane.length > 0) {
+            const topCard = lane[lane.length - 1];
+            if (!topCard.isFaceUp) {
+                validTargets.push(topCard);
+            }
+        }
+    }
+
+    if (validTargets.length > 0) {
         return {
             newState: {
                 ...state,
@@ -23,5 +35,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         };
     }
-    return { newState: state };
+    
+    const newState = log(state, actor, "Speed-4: Opponent has no valid (uncovered) face-down cards to shift.");
+    return { newState };
 }

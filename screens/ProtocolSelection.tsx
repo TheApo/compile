@@ -238,8 +238,10 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
                   card={{ ...card, id: `selection-${card.protocol}-${card.value}`, isFaceUp: true }}
                   isFaceUp={true}
                   additionalClassName="in-hand"
-                  onMouseEnter={() => setPreviewCard(card)}
-                  onMouseLeave={() => setPreviewCard(null)}
+                  // FIX: Changed onMouseEnter to onPointerEnter to match CardComponent props.
+                  onPointerEnter={() => setPreviewCard(card)}
+                  // FIX: Changed onMouseLeave to onPointerLeave to match CardComponent props.
+                  onPointerLeave={() => setPreviewCard(null)}
                 />
               ))}
             </div>

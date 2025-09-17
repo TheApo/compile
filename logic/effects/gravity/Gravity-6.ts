@@ -7,7 +7,7 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 import { drawCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { v4 as uuidv4 } from 'uuid';
-import { effectRegistryOnCover } from "../effectRegistryOnCover";
+import { executeOnCoverEffect } from "../../effectExecutor";
 
 /**
  * Gravity-6: Your opponent plays the top card of their deck face-down in this line.
@@ -41,10 +41,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         let finalResult: EffectResult = { newState };
 
         if (cardToBeCovered) {
-            const effectKey = `${cardToBeCovered.protocol}-${cardToBeCovered.value}`;
-            const onCoverExecute = effectRegistryOnCover[effectKey];
-            if (onCoverExecute) {
-                const onCoverResult = onCoverExecute(cardToBeCovered, laneIndex, finalResult.newState, opponent);
+            const onCoverResult = executeOnCoverEffect(cardToBeCovered, laneIndex, finalResult.newState);
+            if (onCoverResult.newState !== finalResult.newState || onCoverResult.animationRequests) {
                 finalResult.newState = onCoverResult.newState;
                 if (onCoverResult.animationRequests) {
                     finalResult.animationRequests = [

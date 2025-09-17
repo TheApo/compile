@@ -196,8 +196,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const disallowedIds = action.type === 'select_cards_to_delete'
                 ? action.disallowedIds
                 : (action.type === 'select_card_to_delete_for_death_1' ? [action.sourceCardId] : []);
+            
+            // FIX: Only target uncovered cards
+            const getUncoveredCards = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
             // Delete the player's most threatening card on board.
-            const allowedPlayerCards = player.lanes.flat().filter(c => !disallowedIds.includes(c.id));
+            const allowedPlayerCards = getUncoveredCards('player').filter(c => !disallowedIds.includes(c.id));
             if (allowedPlayerCards.length > 0) {
                 const bestTarget = allowedPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
                 return { type: 'deleteCard', cardId: bestTarget.id };
@@ -236,7 +242,54 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_opponent_face_up_card_to_flip':
+        case 'select_face_down_card_to_reveal_for_light_2': {
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
+            const potentialTargets: { card: PlayedCard; score: number }[] = [];
+
+            // Score player's face-down cards based on lane threat. Revealing a card in a high-threat lane is valuable.
+            getUncovered('player').forEach(c => {
+                if (!c.isFaceUp) {
+                    const laneIndex = state.player.lanes.findIndex(lane => lane.some(card => card.id === c.id));
+                    const score = state.player.laneValues[laneIndex];
+                    potentialTargets.push({ card: c, score });
+                }
+            });
+
+            // Score own face-down cards (low priority, only if no player targets)
+            getUncovered('opponent').forEach(c => {
+                if (!c.isFaceUp) {
+                    const score = -10; // Avoid revealing own cards if possible.
+                    potentialTargets.push({ card: c, score });
+                }
+            });
+
+            if (potentialTargets.length > 0) {
+                potentialTargets.sort((a, b) => b.score - a.score);
+                return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+            }
+
+            return { type: 'skip' };
+        }
+
+        case 'select_opponent_face_up_card_to_flip': {
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+        
+            const validTargets = getUncovered('player').filter(c => c.isFaceUp);
+        
+            if (validTargets.length > 0) {
+                // Hard AI: Flip the player's most threatening card.
+                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'flipCard', cardId: validTargets[0].id };
+            }
+            
+            return { type: 'skip' };
+        }
+
         case 'select_opponent_card_to_flip':
         case 'select_any_card_to_flip_optional':
         case 'select_any_card_to_flip':
@@ -250,25 +303,45 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const isOptional = 'optional' in action && action.optional;
             const sourceCardId = action.sourceCardId;
 
-            // 1. Score flipping opponent's face-up cards (high threat = high score)
-            player.lanes.flat().forEach(c => {
-                if (c.isFaceUp) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
-            });
-            // 2. Score flipping own face-down cards (value gain + reveal)
-            opponent.lanes.flat().forEach(c => {
-                if (!c.isFaceUp) {
-                    const valueGain = getCardThreat({ ...c, isFaceUp: true }, 'opponent', state) - getCardThreat(c, 'opponent', state);
-                    potentialTargets.push({ cardId: c.id, score: valueGain + 3 });
-                }
-            });
-            // 3. Score flipping opponent's face-down cards (info gain)
-            player.lanes.flat().forEach(c => {
-                if (!c.isFaceUp) potentialTargets.push({ cardId: c.id, score: 2 });
-            });
-            // 4. Score flipping own face-up cards (usually bad, negative score)
-            opponent.lanes.flat().forEach(c => {
-                if (c.isFaceUp && c.id !== sourceCardId) potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
-            });
+            // Special case for effects targeting covered cards
+            if (action.type === 'select_covered_card_in_line_to_flip_optional') {
+                const { laneIndex } = action;
+                const playerCovered = player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                playerCovered.forEach(c => potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) }));
+                const opponentCovered = opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                opponentCovered.forEach(c => potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'opponent', state) / 2 }));
+            } else {
+                 // FIX: Only target uncovered cards for standard flip effects.
+                const getUncovered = (p: Player): PlayedCard[] => {
+                    return state[p].lanes
+                        .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                        .filter((c): c is PlayedCard => c !== null);
+                };
+
+                const allUncoveredPlayer = getUncovered('player');
+                const allUncoveredOpponent = getUncovered('opponent');
+
+                // 1. Score flipping opponent's face-up cards (high threat = high score)
+                allUncoveredPlayer.forEach(c => {
+                    if (c.isFaceUp) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                });
+                // 2. Score flipping own face-down cards (value gain + reveal)
+                allUncoveredOpponent.forEach(c => {
+                    if (!c.isFaceUp) {
+                        const valueGain = getCardThreat({ ...c, isFaceUp: true }, 'opponent', state) - getCardThreat(c, 'opponent', state);
+                        potentialTargets.push({ cardId: c.id, score: valueGain + 3 });
+                    }
+                });
+                // 3. Score flipping opponent's face-down cards (info gain)
+                allUncoveredPlayer.forEach(c => {
+                    if (!c.isFaceUp) potentialTargets.push({ cardId: c.id, score: 2 });
+                });
+                // 4. Score flipping own face-up cards (usually bad, negative score)
+                allUncoveredOpponent.forEach(c => {
+                    if (c.isFaceUp && c.id !== sourceCardId) potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
+                });
+            }
+
 
             if (potentialTargets.length === 0) {
                 return { type: 'skip' };
@@ -291,7 +364,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (i === disallowedLaneIndex || lanesSelected.includes(i)) continue;
                  // Get all valid player cards from valid lanes
                 const playerLane = state.player.lanes[i];
-                validTargets.push(...playerLane);
+                // FIX: Only target uncovered cards
+                if (playerLane.length > 0) {
+                    validTargets.push(playerLane[playerLane.length-1]);
+                }
             }
              if (validTargets.length > 0) {
                 // Target highest threat card among valid targets
@@ -302,18 +378,26 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
             
         case 'select_low_value_card_to_delete': {
-            const validTargets = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
-                .filter(c => c.isFaceUp && (c.value === 0 || c.value === 1));
+            const uncoveredCards: { card: PlayedCard, owner: Player }[] = [];
+            for (const p of ['player', 'opponent'] as Player[]) {
+                for (const lane of state[p].lanes) {
+                    if (lane.length > 0) {
+                        uncoveredCards.push({ card: lane[lane.length - 1], owner: p });
+                    }
+                }
+            }
+            const validTargets = uncoveredCards.filter(({ card }) => card.isFaceUp && (card.value === 0 || card.value === 1));
+
             if (validTargets.length > 0) {
                 // Prioritize deleting player's cards with highest threat (e.g., a value 0/1 card with a strong static effect).
                 validTargets.sort((a, b) => {
-                    const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
-                    const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
+                    const aIsPlayer = a.owner === 'player';
+                    const bIsPlayer = b.owner === 'player';
                     if (aIsPlayer && !bIsPlayer) return -1;
                     if (!aIsPlayer && bIsPlayer) return 1;
-                    return getCardThreat(b, aIsPlayer ? 'player' : 'opponent', state) - getCardThreat(a, bIsPlayer ? 'player' : 'opponent', state);
+                    return getCardThreat(b.card, b.owner, state) - getCardThreat(a.card, a.owner, state);
                 });
-                return { type: 'deleteCard', cardId: validTargets[0].id };
+                return { type: 'deleteCard', cardId: validTargets[0].card.id };
             }
             return { type: 'skip' };
         }
@@ -348,6 +432,49 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'returnCard', cardId: scoredCards[0].card.id };
             }
             return { type: 'skip' };
+        }
+
+        case 'shift_flipped_card_optional': {
+            // Hard AI: calculate the best lane to shift the player's card to, to cause maximum disruption
+            // or minimal benefit to the player.
+            const cardInfo = findCardOnBoard(state, action.cardId);
+            if (!cardInfo || cardInfo.owner !== 'player') return { type: 'skip' }; // Should only target player cards
+
+            const { card: cardToShift } = cardInfo;
+
+            let originalLaneIndex = -1;
+            for (let i = 0; i < state.player.lanes.length; i++) {
+                if (state.player.lanes[i].some(c => c.id === action.cardId)) {
+                    originalLaneIndex = i;
+                    break;
+                }
+            }
+            if (originalLaneIndex === -1) return { type: 'skip' };
+
+            const possibleLanes = [0, 1, 2].filter(l => l !== originalLaneIndex);
+            
+            if (possibleLanes.length === 0) return { type: 'skip' };
+
+            // Score each possible shift. A good shift for the AI minimizes the player's score advantage.
+            const scoredLanes = possibleLanes.map(laneIndex => {
+                const valueToAdd = getEffectiveCardValue(cardToShift, state.player.lanes[laneIndex]);
+                const futurePlayerLaneValue = state.player.laneValues[laneIndex] + valueToAdd;
+                const futurePlayerLead = futurePlayerLaneValue - state.opponent.laneValues[laneIndex];
+                // AI wants to MINIMIZE the player's future lead. A negative score is better.
+                let score = -futurePlayerLead; 
+
+                // Heavily penalize shifting a card to a lane that could help the player compile.
+                if (futurePlayerLaneValue >= 10 && futurePlayerLaneValue > state.opponent.laneValues[laneIndex]) {
+                    score -= 200;
+                }
+
+                return { laneIndex, score };
+            });
+
+             scoredLanes.sort((a, b) => b.score - a.score); // Highest score is the best move for the AI.
+
+            // Hard AI will always shift if it's an option.
+            return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
         }
 
         case 'select_lane_for_shift': {
@@ -502,29 +629,28 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_face_down_card_to_shift_for_darkness_4': {
-            // Score each face-down card based on its disruptive potential.
-            // Higher score for shifting a player's card from a high-value lane.
-            // Lower score for shifting own card.
             const potentialTargets: { cardId: string; score: number }[] = [];
 
-            // Player's face-down cards
+            // Player's uncovered face-down cards
             state.player.lanes.forEach((lane, i) => {
-                lane.forEach(c => {
-                    if (!c.isFaceUp) {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
                         const score = state.player.laneValues[i]; // Score is the value of the lane it's in
-                        potentialTargets.push({ cardId: c.id, score });
+                        potentialTargets.push({ cardId: topCard.id, score });
                     }
-                });
+                }
             });
 
-            // Opponent's (AI's) face-down cards. Negative score to avoid unless necessary.
+            // Opponent's (AI's) uncovered face-down cards. Negative score to avoid unless necessary.
             state.opponent.lanes.forEach((lane, i) => {
-                lane.forEach(c => {
-                    if (!c.isFaceUp) {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
                         const score = -5 - state.opponent.laneValues[i]; // Avoid shifting own cards from high-value lanes.
-                        potentialTargets.push({ cardId: c.id, score });
+                        potentialTargets.push({ cardId: topCard.id, score });
                     }
-                });
+                }
             });
 
             if (potentialTargets.length > 0) {
@@ -534,8 +660,30 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
         
+        case 'select_opponent_face_down_card_to_shift': { // Speed-4
+            const validTargets: { card: PlayedCard; laneIndex: number }[] = [];
+            state.player.lanes.forEach((lane, index) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
+                        validTargets.push({ card: topCard, laneIndex: index });
+                    }
+                }
+            });
+
+            if (validTargets.length > 0) {
+                // Target the card in the player's highest threat lane.
+                // Threat is measured by lane value.
+                validTargets.sort((a, b) => state.player.laneValues[b.laneIndex] - state.player.laneValues[a.laneIndex]);
+                return { type: 'deleteCard', cardId: validTargets[0].card.id };
+            }
+
+            return { type: 'skip' };
+        }
+        
         case 'select_any_opponent_card_to_shift': {
-            const validTargets = state.player.lanes.flat();
+            // FIX: Only target uncovered cards.
+            const validTargets = state.player.lanes.map(lane => lane.length > 0 ? lane[lane.length - 1] : null).filter((c): c is PlayedCard => c !== null);
             if (validTargets.length > 0) {
                 // Target player's highest threat card
                 validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));

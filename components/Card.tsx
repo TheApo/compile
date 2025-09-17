@@ -8,9 +8,9 @@ import { GameState, PlayedCard, Player } from '../types';
 
 interface CardProps {
   card: PlayedCard;
-  onMouseDown?: (event: React.MouseEvent) => void;
-  onMouseEnter?: (event: React.MouseEvent) => void;
-  onMouseLeave?: (event: React.MouseEvent) => void;
+  onPointerDown?: (event: React.PointerEvent) => void;
+  onPointerEnter?: (event: React.PointerEvent) => void;
+  onPointerLeave?: (event: React.PointerEvent) => void;
   isFaceUp: boolean;
   faceDownValue?: number;
   isSelected?: boolean;
@@ -22,7 +22,7 @@ interface CardProps {
   animationState?: GameState['animationState'];
 }
 
-export function CardComponent({ card, onMouseDown, onMouseEnter, onMouseLeave, isFaceUp, faceDownValue = 2, isSelected, isMultiSelected, isTargetable, isSourceOfEffect, style, additionalClassName, animationState }: CardProps) {
+export function CardComponent({ card, onPointerDown, onPointerEnter, onPointerLeave, isFaceUp, faceDownValue = 2, isSelected, isMultiSelected, isTargetable, isSourceOfEffect, style, additionalClassName, animationState }: CardProps) {
   
   const RuleBox = ({ content, className }: { content: string, className?: string }) => {
     return <div className={`card-rule-box ${className || ''}`} dangerouslySetInnerHTML={{ __html: content }} />;
@@ -55,11 +55,11 @@ export function CardComponent({ card, onMouseDown, onMouseEnter, onMouseLeave, i
   return (
     <div 
       className={classNames.join(' ')} 
-      onMouseDown={onMouseDown} 
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onPointerDown={onPointerDown} 
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       role="button" 
-      tabIndex={onMouseDown ? 0 : -1}
+      tabIndex={onPointerDown ? 0 : -1}
       style={style}
     >
       <div className={`card-inner ${!isFaceUp ? 'is-flipped' : ''}`}>

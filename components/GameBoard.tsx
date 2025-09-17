@@ -11,17 +11,17 @@ import { isCardTargetable } from '../utils/targeting';
 
 interface GameBoardProps {
     gameState: GameState;
-    onLaneMouseDown: (laneIndex: number) => void;
-    onCardMouseDown: (card: PlayedCard, owner: Player, laneIndex: number) => void;
-    onCardMouseEnter: (card: PlayedCard, owner: Player) => void;
-    onCardMouseLeave: () => void;
-    onOpponentHandCardMouseEnter: (card: PlayedCard) => void;
-    onOpponentHandCardMouseLeave: () => void;
+    onLanePointerDown: (laneIndex: number) => void;
+    onCardPointerDown: (card: PlayedCard, owner: Player, laneIndex: number) => void;
+    onCardPointerEnter: (card: PlayedCard, owner: Player) => void;
+    onCardPointerLeave: () => void;
+    onOpponentHandCardPointerEnter: (card: PlayedCard) => void;
+    onOpponentHandCardPointerLeave: () => void;
     selectedCardId: string | null;
     sourceCardId: string | null;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLaneMouseDown, onCardMouseDown, onCardMouseEnter, onCardMouseLeave, onOpponentHandCardMouseEnter, onOpponentHandCardMouseLeave, selectedCardId, sourceCardId }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
@@ -146,8 +146,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLaneMouseDown
                         card={card}
                         isFaceUp={card.isRevealed || false}
                         additionalClassName="in-hand"
-                        onMouseEnter={() => onOpponentHandCardMouseEnter(card)}
-                        onMouseLeave={onOpponentHandCardMouseLeave}
+                        onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
+                        onPointerLeave={onOpponentHandCardPointerLeave}
                     />
                 ))}
             </div>
@@ -164,10 +164,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLaneMouseDown
                             isCompilable={false} 
                             isShiftTarget={getLaneShiftTargetability(i, 'opponent')}
                             isEffectTarget={getLaneEffectTargetability(i)}
-                            onLaneMouseDown={() => onLaneMouseDown(i)}
-                            onCardMouseDown={(card) => onCardMouseDown(card, 'opponent', i)} 
-                            onCardMouseEnter={(card) => onCardMouseEnter(card, 'opponent')} 
-                            onCardMouseLeave={() => onCardMouseLeave()} 
+                            onLanePointerDown={() => onLanePointerDown(i)}
+                            onCardPointerDown={(card) => onCardPointerDown(card, 'opponent', i)} 
+                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')} 
+                            onCardPointerLeave={() => onCardPointerLeave()} 
                             owner="opponent" 
                             animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
@@ -212,10 +212,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLaneMouseDown
                             isCompilable={isCompilable} 
                             isShiftTarget={getLaneShiftTargetability(i, 'player')}
                             isEffectTarget={getLaneEffectTargetability(i)}
-                            onLaneMouseDown={() => onLaneMouseDown(i)} 
-                            onCardMouseDown={(card) => onCardMouseDown(card, 'player', i)} 
-                            onCardMouseEnter={(card) => onCardMouseEnter(card, 'player')} 
-                            onCardMouseLeave={() => onCardMouseLeave()} 
+                            onLanePointerDown={() => onLanePointerDown(i)} 
+                            onCardPointerDown={(card) => onCardPointerDown(card, 'player', i)} 
+                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')} 
+                            onCardPointerLeave={() => onCardPointerLeave()} 
                             owner="player" 
                             animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
