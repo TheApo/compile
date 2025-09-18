@@ -61,6 +61,25 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const cardsToDiscard = sortedHand.slice(0, action.count).map(c => c.id);
             return { type: 'discardCards', cardIds: cardsToDiscard };
 
+        case 'select_opponent_card_to_flip': { // Darkness-1
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
+            const opponentUncovered = getUncovered('player');
+            if (opponentUncovered.length === 0) return { type: 'skip' };
+
+            // Priority 1: Flip a face-down card to reveal it.
+            const faceDownTargets = opponentUncovered.filter(c => !c.isFaceUp);
+            if (faceDownTargets.length > 0) {
+                return { type: 'flipCard', cardId: faceDownTargets[0].id };
+            }
+
+            // Priority 2: Flip the highest-value face-up card.
+            const faceUpTargets = opponentUncovered.filter(c => c.isFaceUp).sort((a, b) => b.value - a.value);
+            return { type: 'flipCard', cardId: faceUpTargets[0].id };
+        }
+
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
         case 'select_card_to_delete_for_death_1':
@@ -165,7 +184,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_opponent_card_to_flip':
         case 'select_any_other_card_to_flip':
         case 'select_any_card_to_flip':
         case 'select_any_card_to_flip_optional':

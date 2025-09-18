@@ -191,6 +191,32 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const sortedHand = [...opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
             return { type: 'discardCards', cardIds: sortedHand.slice(0, action.count).map(c => c.id) };
 
+        case 'select_opponent_card_to_flip': { // Darkness-1
+            const getUncovered = (p: Player): PlayedCard[] => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
+            const opponentUncovered = getUncovered('player');
+            if (opponentUncovered.length === 0) return { type: 'skip' };
+
+            const potentialTargets: { cardId: string; score: number }[] = [];
+
+            opponentUncovered.forEach(c => {
+                if (c.isFaceUp) {
+                    // Score is based on the threat we are hiding.
+                    potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                } else {
+                    // Score is based on gaining information about a high-threat lane.
+                    const laneIndex = state.player.lanes.findIndex(lane => lane.some(card => card.id === c.id));
+                    const score = 5 + state.player.laneValues[laneIndex];
+                    potentialTargets.push({ cardId: c.id, score });
+                }
+            });
+
+            potentialTargets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: potentialTargets[0].cardId };
+        }
+
         case 'select_cards_to_delete':
         case 'select_card_to_delete_for_death_1': {
             const disallowedIds = action.type === 'select_cards_to_delete'
@@ -290,7 +316,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_opponent_card_to_flip':
         case 'select_any_card_to_flip_optional':
         case 'select_any_card_to_flip':
         case 'select_card_to_flip_for_fire_3':
