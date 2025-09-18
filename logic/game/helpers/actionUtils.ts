@@ -73,7 +73,7 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const faceDirection = card.isFaceUp ? "face-down" : "face-up";
-    const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : `a face-down card`;
+    const cardName = `${card.protocol}-${card.value}`; // Always show card name
 
     let newState = log(state, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
     

@@ -197,10 +197,9 @@ export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): Ga
 export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): GameState => {
     if (prevState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_hate_1') return prevState;
 
-    const player = prevState.turn;
-    const { sourceCardId } = prevState.actionRequired;
+    const { sourceCardId, actor } = prevState.actionRequired;
     
-    let newState = discardCards(prevState, cardIds, player);
+    let newState = discardCards(prevState, cardIds, actor);
 
     const disallowedIds = [sourceCardId];
     const availableTargets = countValidDeleteTargets(newState, disallowedIds);
@@ -212,10 +211,10 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
             count: deleteCount,
             sourceCardId,
             disallowedIds: [sourceCardId],
-            actor: player,
+            actor: actor,
         };
     } else {
-        newState = log(newState, player, `Hate-1: No valid targets to delete.`);
+        newState = log(newState, actor, `Hate-1: No valid targets to delete.`);
         newState.actionRequired = null;
     }
 

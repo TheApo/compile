@@ -90,6 +90,13 @@ export const resolveRequiredOpponentAction = (
             return phaseManager.processEndOfAction(newState);
         }
 
+        if (aiDecision.type === 'resolveHate1Discard' && action.type === 'select_cards_from_hand_to_discard_for_hate_1') {
+            const newState = actions.resolveHate1Discard(state, aiDecision.cardIds);
+            // The Hate-1 discard action chains into a delete action, which is still for the opponent.
+            // So we return the new state, and the AI manager will loop on the new action.
+            return newState;
+        }
+
         if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
             const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
             return phaseManager.processEndOfAction(newState);
