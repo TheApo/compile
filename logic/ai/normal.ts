@@ -45,7 +45,7 @@ const getBestMove = (state: GameState): AIAction => {
             if (opponent.compiled[i]) continue; // Don't play in compiled lanes
 
             // --- Evaluate playing face-up ---
-            const canPlayFaceUp = card.protocol === opponent.protocols[i] && !playerHasPsychic1;
+            const canPlayFaceUp = (card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1;
             if (canPlayFaceUp) {
                 let score = 0;
                 const valueToAdd = card.value;
@@ -249,6 +249,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const potentialTargets: { cardId: string; score: number }[] = [];
             const isOptional = 'optional' in action && action.optional;
             const sourceCardId = action.sourceCardId;
+            const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
+            const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
+            const requiresFaceDown = action.type === 'select_any_face_down_card_to_flip_optional';
 
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -264,13 +267,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                         .filter((c): c is PlayedCard => c !== null);
                 };
-
+                
                 const allUncoveredPlayer = getUncovered('player');
                 const allUncoveredOpponent = getUncovered('opponent');
 
                 // Score flipping opponent face-up cards (to disrupt)
                 allUncoveredPlayer.forEach(c => {
-                    if (c.isFaceUp) potentialTargets.push({ cardId: c.id, score: c.value + 2 });
+                    if (c.isFaceUp && !requiresFaceDown) potentialTargets.push({ cardId: c.id, score: c.value + 2 });
                 });
                 // Score flipping opponent face-down cards (to reveal info, low priority)
                 allUncoveredPlayer.forEach(c => {
@@ -282,7 +285,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 });
                 // Score flipping own face-up cards (bad move, negative score, unless it's the source card)
                 allUncoveredOpponent.forEach(c => {
-                    if (c.isFaceUp && c.id !== sourceCardId) potentialTargets.push({ cardId: c.id, score: -c.value });
+                    if (c.isFaceUp && !requiresFaceDown) {
+                        if (!canTargetSelf && c.id === sourceCardId) return;
+                        potentialTargets.push({ cardId: c.id, score: -c.value });
+                    }
                 });
             }
 
@@ -441,15 +447,59 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             
             return { type: 'skip' };
         }
+        case 'select_lane_for_water_3': {
+            const getWater3TargetsInLane = (state: GameState, laneIndex: number): { playerTargets: number, opponentTargets: number } => {
+                let playerTargets = 0;
+                let opponentTargets = 0;
+                for (const p of ['player', 'opponent'] as Player[]) {
+                    const lane = state[p].lanes[laneIndex];
+                    const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
+                    const faceDownValue = hasDarkness2 ? 4 : 2;
+                    
+                    for (const card of lane) {
+                        const value = card.isFaceUp ? card.value : faceDownValue;
+                        if (value === 2) {
+                            if (p === 'player') playerTargets++;
+                            else opponentTargets++;
+                        }
+                    }
+                }
+                return { playerTargets, opponentTargets };
+            };
 
-        case 'prompt_rearrange_protocols':
-            // Simple rearrangement: put highest value lane first. Not smart, but better than random.
-            const laneData = state[action.target].protocols.map((p, i) => ({
+            const scoredLanes = [0, 1, 2].map(i => {
+                const { playerTargets, opponentTargets } = getWater3TargetsInLane(state, i);
+                // Score is high for returning player cards, negative for returning own cards
+                const score = (playerTargets * 10) - (opponentTargets * 5);
+                return { laneIndex: i, score };
+            });
+
+            if (scoredLanes.some(l => l.score > 0)) {
+                scoredLanes.sort((a, b) => b.score - a.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+
+            // If no beneficial targets, the action is mandatory, so just pick lane 0.
+            return { type: 'selectLane', laneIndex: 0 };
+        }
+
+        case 'prompt_rearrange_protocols': {
+            const originalOrder = state[action.target].protocols;
+            if (originalOrder.length <= 1) {
+                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
+            }
+            const laneData = originalOrder.map((p, i) => ({
                 protocol: p,
                 value: state[action.target].laneValues[i]
             })).sort((a, b) => b.value - a.value);
-            const newOrder = laneData.map(d => d.protocol);
+            let newOrder = laneData.map(d => d.protocol);
+
+            if (JSON.stringify(newOrder) === JSON.stringify(originalOrder)) {
+                // If sorting doesn't change order (e.g., already sorted), swap the first two.
+                [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
+            }
             return { type: 'rearrangeProtocols', newOrder };
+        }
         
         case 'prompt_swap_protocols': {
             const { opponent, player } = state;

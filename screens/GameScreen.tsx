@@ -74,6 +74,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSwapProtocols,
     resolveSpeed3Prompt,
     resolvePsychic4Prompt,
+    setupTestScenario,
   } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
@@ -128,9 +129,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   }, [gameState.actionRequired]);
 
   useEffect(() => {
-    setShowRearrangeModal(gameState.actionRequired?.type === 'prompt_rearrange_protocols' && gameState.turn === 'player');
-    setShowSwapModal(gameState.actionRequired?.type === 'prompt_swap_protocols' && gameState.turn === 'player');
-  }, [gameState.actionRequired, gameState.turn]);
+    setShowRearrangeModal(gameState.actionRequired?.type === 'prompt_rearrange_protocols' && gameState.actionRequired.actor === 'player');
+    setShowSwapModal(gameState.actionRequired?.type === 'prompt_swap_protocols' && gameState.actionRequired.actor === 'player');
+  }, [gameState.actionRequired]);
 
   useEffect(() => {
     const handleDebugKeyDown = (event: KeyboardEvent) => {
@@ -142,6 +143,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             } else if (event.key.toLowerCase() === 'l') {
                 console.log('Debug: Forcing opponent win.');
                 onEndGame('opponent', gameState);
+            } else if (event.key.toLowerCase() === 'p') {
+                console.log('Debug: Setting up Psychic-2 uncover scenario.');
+                setupTestScenario('psychic-2-uncover');
             }
         }
     };
@@ -150,7 +154,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     return () => {
         window.removeEventListener('keydown', handleDebugKeyDown);
     };
-  }, [gameState, onEndGame]);
+  }, [gameState, onEndGame, setupTestScenario]);
 
   const handleLanePointerDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
@@ -190,7 +194,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     if (isPlayTarget) {
         const cardInHand = player.hand.find(c => c.id === selectedCard)!;
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-        const canPlayFaceUp = (playerHasSpiritOne || cardInHand.protocol === player.protocols[laneIndex]) && !opponentHasPsychic1;
+        const canPlayFaceUp = (
+            playerHasSpiritOne || 
+            cardInHand.protocol === player.protocols[laneIndex] ||
+            cardInHand.protocol === opponent.protocols[laneIndex]
+        ) && !opponentHasPsychic1;
         playSelectedCard(laneIndex, canPlayFaceUp);
         setHoveredCard(null);
         return;
@@ -201,6 +209,17 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         setSelectedCard(null);
         setHoveredCard(null);
     }
+  };
+
+  const handlePlayFaceDown = (laneIndex: number) => {
+    const currentState = gameStateRef.current;
+    if (currentState.animationState || !selectedCard) return;
+
+    const { phase, actionRequired, player } = currentState;
+    if (phase !== 'action' || actionRequired || !player.hand.some(c => c.id === selectedCard)) return;
+
+    playSelectedCard(laneIndex, false);
+    setHoveredCard(null);
   };
 
 
@@ -403,6 +422,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 <GameBoard 
                   gameState={gameState}
                   onLanePointerDown={handleLanePointerDown}
+                  onPlayFaceDown={handlePlayFaceDown}
                   selectedCardId={selectedCard}
                   onCardPointerDown={handleBoardCardPointerDown}
                   onCardPointerEnter={handleBoardCardPointerEnter}

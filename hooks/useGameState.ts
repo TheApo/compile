@@ -11,6 +11,9 @@ import * as resolvers from '../logic/game/resolvers';
 import * as aiManager from '../logic/game/aiManager';
 import { deleteCardFromBoard } from '../logic/utils/boardModifiers';
 import { handleChainedEffectsOnDiscard } from '../logic/game/helpers/actionUtils';
+import { cards } from '../data/cards';
+import { v4 as uuidv4 } from 'uuid';
+import { log } from '../logic/utils/log';
 
 export const useGameState = (
     playerProtocols: string[], 
@@ -391,6 +394,46 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
+    const setupTestScenario = useCallback((scenario: string) => {
+        setGameState(currentState => {
+            if (scenario === 'psychic-2-uncover') {
+                // Re-initialize state to have a clean board, but with the correct protocols.
+                let newState = stateManager.createInitialState(playerProtocols, opponentProtocols);
+                
+                const psychic2Card = cards.find(c => c.protocol === 'Psychic' && c.value === 2);
+                const hate0Card = cards.find(c => c.protocol === 'Hate' && c.value === 0);
+                const apathy5Card = cards.find(c => c.protocol === 'Apathy' && c.value === 5); // Just some card
+    
+                if (!psychic2Card || !hate0Card || !apathy5Card) return currentState;
+    
+                // Opponent board setup
+                newState.opponent.lanes = [[], [], []];
+                newState.opponent.lanes[0] = [
+                    { ...psychic2Card, id: uuidv4(), isFaceUp: true },
+                    { ...apathy5Card, id: uuidv4(), isFaceUp: false } // face-down on top
+                ];
+    
+                // Player hand setup
+                newState.player.hand = [
+                    { ...hate0Card, id: uuidv4(), isFaceUp: true }
+                ];
+                newState.player.deck = []; // empty deck to avoid drawing/milling
+                newState.player.lanes = [[], [], []];
+    
+                // Set turn and phase
+                newState.turn = 'player';
+                newState.phase = 'action';
+                newState.actionRequired = null;
+                newState.queuedActions = [];
+                
+                newState = stateManager.recalculateAllLaneValues(newState);
+                newState = log(newState, 'player', 'DEBUG: Psychic-2 uncover scenario set up.');
+                return newState;
+            }
+            return currentState;
+        });
+    }, [playerProtocols, opponentProtocols]);
+
     useEffect(() => {
         const animState = gameState.animationState;
         if (!animState) return;
@@ -498,12 +541,7 @@ export const useGameState = (
         const isOpponentActionDuringPlayerTurn = 
             gameState.turn === 'player' &&
             !gameState.animationState &&
-            action && (
-                (action.type === 'discard' && action.actor === 'opponent') ||
-                (action.type === 'select_lane_for_shift' && action.actor === 'opponent') ||
-                action.type === 'plague_4_opponent_delete' ||
-                action.type === 'reveal_opponent_hand'
-            );
+            action && 'actor' in action && action.actor === 'opponent';
 
         if (isOpponentActionDuringPlayerTurn) {
             const timer = setTimeout(() => {
@@ -523,9 +561,12 @@ export const useGameState = (
                         resolveLove1Prompt: resolvers.resolveLove1Prompt,
                         resolveHate1Discard: resolvers.resolveHate1Discard,
                         revealOpponentHand: resolvers.revealOpponentHand,
+                        resolveRearrangeProtocols: resolvers.resolveRearrangeProtocols,
                     }, 
                     phaseManager, 
-                    processAnimationQueue
+                    processAnimationQueue,
+                    resolvers.resolveActionWithCard,
+                    resolvers.resolveActionWithLane
                 );
             }, 1500); // AI "thinking" time
             return () => clearTimeout(timer);
@@ -548,5 +589,6 @@ export const useGameState = (
         resolvePlague4Flip, resolveFire3Prompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
         resolveRearrangeProtocols, resolveSpeed3Prompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
+        setupTestScenario,
     };
 };

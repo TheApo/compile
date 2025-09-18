@@ -49,6 +49,14 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
       
       <h1>COMPILE: MAIN 1</h1>
+      <div className="main-menu-attribution">
+        <p>
+          based on the card game <a href="https://boardgamegeek.com/boardgame/406652/compile-main-1" target="_blank" rel="noopener noreferrer">Compile: Main 1</a> designed by <a href="https://justgravyllc.com/" target="_blank" rel="noopener noreferrer">Michael Yang</a>
+        </p>
+        <p>
+          developed by <a href="https://apo-games.de/" target="_blank" rel="noopener noreferrer">Dirk Aporius</a>
+        </p>
+      </div>
       
       <div className="main-menu-layout">
         <div className="main-menu-preview decorative-card">
@@ -81,6 +89,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
             <button className="btn" onClick={() => setShowRules(true)}>
               Rules
             </button>
+            <p className="version-info">Version 0.1</p>
           </div>
         </div>
         

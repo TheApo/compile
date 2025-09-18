@@ -174,8 +174,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_other_card_to_flip_for_water_0':
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_covered_card_in_line_to_flip_optional': {
-            // Easy AI: Find any valid target and flip it, with a simple priority order.
             const isOptional = 'optional' in action && action.optional;
+            const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
+            const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
+            const requiresFaceDown = action.type === 'select_any_face_down_card_to_flip_optional';
 
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -198,8 +200,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const allUncoveredOpponent = getUncovered('opponent');
 
             // Priority 1: Flip opponent's highest-value face-up card.
-            const opponentFaceUp = allUncoveredPlayer.filter(c => c.isFaceUp).sort((a,b) => b.value - a.value);
-            if (opponentFaceUp.length > 0) return { type: 'flipCard', cardId: opponentFaceUp[0].id };
+            if (!requiresFaceDown) {
+                const opponentFaceUp = allUncoveredPlayer.filter(c => c.isFaceUp).sort((a,b) => b.value - a.value);
+                if (opponentFaceUp.length > 0) return { type: 'flipCard', cardId: opponentFaceUp[0].id };
+            }
             
             // Priority 2: Flip own face-down card to get points on the board.
             const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
@@ -210,9 +214,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (opponentFaceDown.length > 0) return { type: 'flipCard', cardId: opponentFaceDown[0].id };
             
             // Priority 4: Flip own face-up card (bad move, but mandatory actions must be resolved).
-            const ownFaceUp = allUncoveredOpponent.filter(c => c.isFaceUp && c.id !== action.sourceCardId);
-            if (ownFaceUp.length > 0) {
-                if (!isOptional) return { type: 'flipCard', cardId: ownFaceUp[0].id };
+            if (!requiresFaceDown) {
+                const ownFaceUp = allUncoveredOpponent.filter(c => {
+                    if (!c.isFaceUp) return false;
+                    if (!canTargetSelf && c.id === action.sourceCardId) return false;
+                    return true;
+                });
+                if (ownFaceUp.length > 0) {
+                    if (!isOptional) return { type: 'flipCard', cardId: ownFaceUp[0].id };
+                }
             }
 
             // If we reach here, no valid targets were found or it was an optional bad move.
@@ -333,8 +343,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_lane_for_life_3_play':
         case 'select_lane_to_shift_revealed_card_for_light_2':
         case 'select_lane_to_shift_cards_for_light_3':
-        case 'select_lane_for_metal_3_delete':
-        case 'select_lane_for_water_3': {
+        case 'select_lane_for_metal_3_delete': {
             let possibleLanes = [0, 1, 2];
             if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
                 possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
@@ -348,6 +357,41 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             if ('optional' in action && action.optional) return { type: 'skip' };
             return { type: 'skip' };
+        }
+        case 'select_lane_for_water_3': {
+            const getWater3TargetLanes = (state: GameState): number[] => {
+                const targetLanes: number[] = [];
+                for (let i = 0; i < 3; i++) {
+                    let hasTarget = false;
+                    for (const p of ['player', 'opponent'] as Player[]) {
+                        const lane = state[p].lanes[i];
+                        const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
+                        const faceDownValue = hasDarkness2 ? 4 : 2;
+                        
+                        for (const card of lane) {
+                            const value = card.isFaceUp ? card.value : faceDownValue;
+                            if (value === 2) {
+                                hasTarget = true;
+                                break;
+                            }
+                        }
+                        if (hasTarget) break;
+                    }
+                    if (hasTarget) {
+                        targetLanes.push(i);
+                    }
+                }
+                return targetLanes;
+            };
+
+            const targetLanes = getWater3TargetLanes(state);
+            if (targetLanes.length > 0) {
+                // Easy AI: Pick a random valid lane.
+                const randomLane = targetLanes[Math.floor(Math.random() * targetLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            // If no valid targets, the action is mandatory, so just pick lane 0.
+            return { type: 'selectLane', laneIndex: 0 };
         }
         
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: Math.random() > 0.7 }; // Rarely accepts
@@ -384,9 +428,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (state.opponent.hand.length > 0) return { type: 'revealCard', cardId: state.opponent.hand[0].id };
             return { type: 'skip' };
 
-        case 'prompt_rearrange_protocols':
-            const newOrder = shuffleDeck([...state[action.target].protocols]);
+        case 'prompt_rearrange_protocols': {
+            const originalOrder = state[action.target].protocols;
+            if (originalOrder.length <= 1) {
+                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
+            }
+            let newOrder;
+            do {
+                newOrder = shuffleDeck([...originalOrder]);
+            } while (JSON.stringify(newOrder) === JSON.stringify(originalOrder));
             return { type: 'rearrangeProtocols', newOrder };
+        }
         case 'prompt_swap_protocols': {
             // Easy AI: Pick two random, distinct indices to swap.
             const index1 = Math.floor(Math.random() * 3);

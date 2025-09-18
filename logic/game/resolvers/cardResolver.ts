@@ -10,7 +10,7 @@ import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, inter
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { executeOnPlayEffect } from '../../effectExecutor';
 
-type CardActionResult = {
+export type CardActionResult = {
     nextState: GameState;
     requiresAnimation?: {
         animationRequests: AnimationRequest[];

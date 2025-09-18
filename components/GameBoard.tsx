@@ -12,6 +12,7 @@ import { isCardTargetable } from '../utils/targeting';
 interface GameBoardProps {
     gameState: GameState;
     onLanePointerDown: (laneIndex: number) => void;
+    onPlayFaceDown: (laneIndex: number) => void;
     onCardPointerDown: (card: PlayedCard, owner: Player, laneIndex: number) => void;
     onCardPointerEnter: (card: PlayedCard, owner: Player) => void;
     onCardPointerLeave: () => void;
@@ -21,7 +22,7 @@ interface GameBoardProps {
     sourceCardId: string | null;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
@@ -63,7 +64,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         const opponentHasPsychic1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
         
-        const isMatching = (playerHasSpiritOne || card.protocol === player.protocols[laneIndex]) && !opponentHasPsychic1;
+        const isMatching = (
+            playerHasSpiritOne || 
+            card.protocol === player.protocols[laneIndex] ||
+            card.protocol === opponent.protocols[laneIndex]
+        ) && !opponentHasPsychic1;
     
         const opponentHasMetalTwo = oppLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
         if (opponentHasMetalTwo && !isMatching) {
@@ -213,6 +218,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             isShiftTarget={getLaneShiftTargetability(i, 'player')}
                             isEffectTarget={getLaneEffectTargetability(i)}
                             onLanePointerDown={() => onLanePointerDown(i)} 
+                            onPlayFaceDown={() => onPlayFaceDown(i)}
                             onCardPointerDown={(card) => onCardPointerDown(card, 'player', i)} 
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')} 
                             onCardPointerLeave={() => onCardPointerLeave()} 

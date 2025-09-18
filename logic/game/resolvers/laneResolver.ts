@@ -15,7 +15,7 @@ import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
 // FIX: Import 'executeOnCoverEffect' to resolve a compilation error.
 import { executeOnCoverEffect } from '../../effectExecutor';
 
-type LaneActionResult = {
+export type LaneActionResult = {
     nextState: GameState;
     requiresAnimation?: {
         animationRequests: AnimationRequest[];

@@ -97,7 +97,7 @@ const getBestMove = (state: GameState): AIAction => {
             const baseScore = getCardPower(card);
             
             // 1. Evaluate Face-Up Play
-            if (card.protocol === opponent.protocols[i] && !playerHasPsychic1) {
+            if ((card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1) {
                 // Special strategy for Metal-6
                 if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4) {
                     // Hard AI avoids this move unless it's a game-winning compile setup.
@@ -302,6 +302,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const potentialTargets: { cardId: string; score: number }[] = [];
             const isOptional = 'optional' in action && action.optional;
             const sourceCardId = action.sourceCardId;
+            const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
+            const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
+            const requiresFaceDown = action.type === 'select_any_face_down_card_to_flip_optional';
 
             // Special case for effects targeting covered cards
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -323,7 +326,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
                 // 1. Score flipping opponent's face-up cards (high threat = high score)
                 allUncoveredPlayer.forEach(c => {
-                    if (c.isFaceUp) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                    if (c.isFaceUp && !requiresFaceDown) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
                 });
                 // 2. Score flipping own face-down cards (value gain + reveal)
                 allUncoveredOpponent.forEach(c => {
@@ -338,7 +341,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 });
                 // 4. Score flipping own face-up cards (usually bad, negative score)
                 allUncoveredOpponent.forEach(c => {
-                    if (c.isFaceUp && c.id !== sourceCardId) potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
+                    if (c.isFaceUp && !requiresFaceDown) {
+                        if (!canTargetSelf && c.id === sourceCardId) return;
+                        potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
+                    }
                 });
             }
 
@@ -517,15 +523,83 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             ownCards.sort((a, b) => getCardThreat(b, 'opponent', state) - getCardThreat(a, 'opponent', state));
             return { type: 'deleteCard', cardId: ownCards[0].id };
         }
+        case 'select_lane_for_water_3': {
+            const getWater3TargetsInLane = (state: GameState, laneIndex: number): { playerTargets: number, opponentTargets: number } => {
+                let playerTargets = 0;
+                let opponentTargets = 0;
+                for (const p of ['player', 'opponent'] as Player[]) {
+                    const lane = state[p].lanes[laneIndex];
+                    const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
+                    const faceDownValue = hasDarkness2 ? 4 : 2;
+                    
+                    for (const card of lane) {
+                        const value = card.isFaceUp ? card.value : faceDownValue;
+                        if (value === 2) {
+                            if (p === 'player') playerTargets++;
+                            else opponentTargets++;
+                        }
+                    }
+                }
+                return { playerTargets, opponentTargets };
+            };
+
+            const scoredLanes = [0, 1, 2].map(i => {
+                const { playerTargets, opponentTargets } = getWater3TargetsInLane(state, i);
+                // Score is high for returning player cards, negative for returning own cards.
+                // Hard AI also considers player hand size. Returning cards to a player with a full hand is less bad.
+                const playerHandSizeModifier = 5 - state.player.hand.length; // Max modifier is 5 (empty hand), min is 0 (full hand)
+                const score = (playerTargets * (10 + playerHandSizeModifier)) - (opponentTargets * 5);
+                return { laneIndex: i, score };
+            });
+
+            if (scoredLanes.some(l => l.score > 0)) {
+                scoredLanes.sort((a, b) => b.score - a.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+
+            // If no beneficial targets, the action is mandatory, so just pick lane 0.
+            return { type: 'selectLane', laneIndex: 0 };
+        }
         
-        case 'prompt_rearrange_protocols':
-            // Smart rearrangement: put lanes where AI is winning/strongest first.
-            const laneData = state[action.target].protocols.map((p, i) => ({
-                protocol: p,
-                valueDifference: state.opponent.laneValues[i] - state.player.laneValues[i]
-            })).sort((a, b) => b.valueDifference - a.valueDifference);
-            const newOrder = laneData.map(d => d.protocol);
+        case 'prompt_rearrange_protocols': {
+            const { target } = action;
+            const originalOrder = state[target].protocols;
+
+            if (originalOrder.length <= 1) {
+                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
+            }
+
+            const laneData = originalOrder.map((p, i) => {
+                // Calculate the target's lead in that lane.
+                const targetValue = state[target].laneValues[i];
+                const otherPlayer = target === 'player' ? 'opponent' : 'player';
+                const otherValue = state[otherPlayer].laneValues[i];
+                return {
+                    protocol: p,
+                    lead: targetValue - otherValue,
+                };
+            });
+
+            // AI strategy:
+            // If rearranging own protocols, put strongest lanes first (sort lead descending).
+            // If rearranging opponent's protocols, disrupt by putting weakest lanes first (sort lead ascending).
+            if (target === 'opponent') { // AI is rearranging its own
+                laneData.sort((a, b) => b.lead - a.lead);
+            } else { // AI is rearranging the player's
+                laneData.sort((a, b) => a.lead - b.lead);
+            }
+
+            let newOrder = laneData.map(d => d.protocol);
+
+            if (JSON.stringify(newOrder) === JSON.stringify(originalOrder)) {
+                // If sorting doesn't change order, swap the last two elements (to move the worst lane).
+                const len = originalOrder.length;
+                if (len > 1) {
+                    [newOrder[len - 2], newOrder[len - 1]] = [newOrder[len - 1], newOrder[len - 2]];
+                }
+            }
             return { type: 'rearrangeProtocols', newOrder };
+        }
 
         case 'prompt_swap_protocols': {
             const { opponent } = state;

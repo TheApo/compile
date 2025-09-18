@@ -102,11 +102,11 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         // Re-triggering the on-play effect is the main part of the mechanic.
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
         
-        // If the effect requires an action from the card's owner, but it's not their turn,
+        // If the effect requires an action from the non-turn player,
         // we need to interrupt the current turn to resolve the action.
-        if (result.newState.actionRequired && result.newState.turn !== owner) {
-            result.newState._interruptedTurn = result.newState.turn;
-            result.newState.turn = owner;
+        if (result.newState.actionRequired && result.newState.actionRequired.actor !== state.turn) {
+            result.newState._interruptedTurn = state.turn;
+            result.newState.turn = result.newState.actionRequired.actor;
         }
         
         return result;

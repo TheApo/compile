@@ -148,6 +148,28 @@ p {
   position: relative;
 }
 
+.main-menu-attribution {
+  font-size: 0.8rem;
+  color: var(--secondary-color);
+  text-align: center;
+  margin-top: -1.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  position: relative;
+  z-index: 1;
+}
+
+.main-menu-attribution a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.main-menu-attribution a:hover {
+  text-decoration: underline;
+  text-shadow: 0 0 5px var(--primary-color);
+}
+
 .main-menu h1 {
   font-size: 4rem;
   letter-spacing: 4px;
@@ -188,6 +210,14 @@ p {
 
 .main-menu-other-actions {
     gap: 1rem;
+    align-items: center;
+}
+
+.version-info {
+    font-size: 0.7rem;
+    color: var(--secondary-color);
+    opacity: 0.6;
+    margin-top: 0.5rem;
 }
 
 .main-menu-start-group .btn-start {
@@ -758,6 +788,34 @@ p {
     justify-content: center;
     align-items: flex-start;
 }
+
+.btn-play-facedown {
+    position: absolute;
+    top: -44px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    padding: 0.9rem 0.7rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    background-color: var(--surface-color);
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.9;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.btn-play-facedown:hover {
+    background-color: var(--secondary-color);
+    color: var(--background-color);
+    border-color: var(--secondary-color);
+    opacity: 1;
+    transform: translateX(-50%) scale(1.05);
+}
+
 
 .lane-stack .card-component {
     position: absolute;

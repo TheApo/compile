@@ -14,6 +14,7 @@ interface LaneProps {
     isEffectTarget: boolean;
     isMatching?: boolean;
     onLanePointerDown: () => void;
+    onPlayFaceDown?: () => void;
     onCardPointerDown: (card: PlayedCard) => void;
     onCardPointerEnter: (card: PlayedCard) => void;
     onCardPointerLeave: (card: PlayedCard) => void;
@@ -24,7 +25,7 @@ interface LaneProps {
     sourceCardId: string | null;
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId }) => {
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId }) => {
     
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
@@ -38,6 +39,17 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
             className={laneClasses.join(' ')}
             onPointerDown={onLanePointerDown}
         >
+            {isPlayable && isMatching && owner === 'player' && onPlayFaceDown && (
+                <button
+                    className="btn btn-play-facedown"
+                    onPointerDown={(e) => {
+                        e.stopPropagation();
+                        onPlayFaceDown();
+                    }}
+                >
+                    Play Face-Down
+                </button>
+            )}
             <div className="lane-stack">
                 {cards.map((card, index) => (
                     <CardComponent
