@@ -12,6 +12,7 @@ import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
 import { CardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
+import { log } from '../utils/log';
 
 type ActionDispatchers = {
     compileLane: (s: GameState, l: number) => GameState,
@@ -188,6 +189,46 @@ const handleRequiredAction = (
     if (aiDecision.type === 'skip') {
         const newState = actions.skipAction(state);
         return state.phase === 'start' ? phaseManager.continueTurnAfterStartPhaseAction(newState) : phaseManager.processEndOfAction(newState);
+    }
+
+    if (aiDecision.type === 'resolveControlMechanicPrompt' && action.type === 'prompt_use_control_mechanic') {
+        const { choice } = aiDecision;
+        const { originalAction, actor } = action;
+
+        if (choice === 'skip') {
+            let stateAfterSkip = log(state, actor, "Opponent skips rearranging protocols.");
+            stateAfterSkip.actionRequired = null;
+            
+            if (originalAction.type === 'compile') {
+                const laneIndex = originalAction.laneIndex;
+                setTimeout(() => {
+                    setGameState(s => {
+                        const nextState = actions.compileLane(s, laneIndex);
+                        if (nextState.winner) return nextState;
+                        const finalState = phaseManager.processEndOfAction(nextState);
+                        return { ...finalState, animationState: null };
+                    });
+                }, 1000);
+                return { ...stateAfterSkip, animationState: { type: 'compile' as const, laneIndex }, compilableLanes: [] };
+            } else { // fill_hand
+                const stateAfterFill = actions.fillHand(stateAfterSkip, actor);
+                return phaseManager.processEndOfAction(stateAfterFill);
+            }
+        } else { // 'player' or 'opponent'
+            const target = choice;
+            const actorName = 'Opponent';
+            const targetName = target === 'opponent' ? "the player's" : "their own";
+            let stateWithChoice = log(state, actor, `${actorName} chooses to rearrange ${targetName} protocols.`);
+            
+            stateWithChoice.actionRequired = {
+                type: 'prompt_rearrange_protocols',
+                sourceCardId: 'CONTROL_MECHANIC',
+                target,
+                actor,
+                originalAction,
+            };
+            return stateWithChoice;
+        }
     }
     
     if (aiDecision.type === 'resolveDeath1Prompt' && action.type === 'prompt_death_1_effect') {

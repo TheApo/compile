@@ -10,7 +10,7 @@ import { CardComponent } from '../components/Card';
 import { useGameState } from '../hooks/useGameState';
 import { GameBoard } from '../components/GameBoard';
 import { PhaseController } from '../components/PhaseController';
-import { GameState, Player, PlayedCard, Difficulty } from '../types';
+import { GameState, Player, PlayedCard, Difficulty, ActionRequired } from '../types';
 import { GameInfoPanel } from '../components/GameInfoPanel';
 import { LogModal } from '../components/LogModal';
 import { isCardTargetable } from '../utils/targeting';
@@ -46,6 +46,17 @@ const findCardOnBoard = (state: GameState, cardId: string | undefined): { card: 
     return null;
 }
 
+const ACTIONS_REQUIRING_HAND_INTERACTION = new Set<ActionRequired['type']>([
+  'discard',
+  'select_card_from_hand_to_play',
+  'select_card_from_hand_to_give',
+  'select_card_from_hand_to_reveal',
+  'plague_2_player_discard',
+  'select_cards_from_hand_to_discard_for_fire_4',
+  'select_cards_from_hand_to_discard_for_hate_1',
+]);
+
+
 export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic }: GameScreenProps) {
   
   const {
@@ -75,6 +86,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSwapProtocols,
     resolveSpeed3Prompt,
     resolvePsychic4Prompt,
+    resolveControlMechanicPrompt,
     setupTestScenario,
     // FIX: Pass useControlMechanic to the useGameState hook.
   } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty, useControlMechanic);
@@ -359,6 +371,21 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     return '';
   }, [gameState.actionRequired]);
 
+  const handBackgroundClass = useMemo(() => {
+    const action = gameState.actionRequired;
+    if (action && action.actor === 'player') {
+      // If the action requires interacting with hand cards, DON'T put it in the background.
+      if (ACTIONS_REQUIRING_HAND_INTERACTION.has(action.type)) {
+        return '';
+      }
+      // Otherwise, it's a button-based action, so put the hand in the background.
+      return 'hand-in-background';
+    }
+    // No action, or action is for opponent, hand is normal.
+    return '';
+  }, [gameState.actionRequired]);
+
+
   return (
     <div className="screen game-screen">
         {debugModalPlayer && (
@@ -453,11 +480,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onResolvePsychic4Prompt={resolvePsychic4Prompt}
                     onResolveSpirit1Prompt={resolveSpirit1Prompt}
                     onResolveSpirit3Prompt={resolveSpirit3Prompt}
+                    onResolveControlMechanicPrompt={resolveControlMechanicPrompt}
                     selectedCardId={selectedCard}
                     multiSelectedCardIds={multiSelectedCardIds}
                     actionRequiredClass={actionRequiredClass}
                   />
-                  <div className="player-hand-area">
+                  <div className={`player-hand-area ${handBackgroundClass}`}>
                     {gameState.player.hand.map((card) => (
                       <CardComponent 
                         key={card.id} 

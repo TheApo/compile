@@ -153,15 +153,14 @@ export const compileLane = (prevState: GameState, laneIndex: number): GameState 
     const compiler = prevState.turn;
     
     if (prevState.useControlMechanic && prevState.controlCardHolder === compiler) {
-        const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
-        const newState = log(prevState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} uses Control to swap the opponent's protocols before compiling.`);
+        const newState = log(prevState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols before compiling.`);
         return {
             ...newState,
+            controlCardHolder: null, // Reset control immediately
             actionRequired: {
-                type: 'prompt_swap_protocols',
+                type: 'prompt_use_control_mechanic',
                 sourceCardId: 'CONTROL_MECHANIC',
                 actor: compiler,
-                target: nonCompiler,
                 originalAction: { type: 'compile', laneIndex },
             }
         }

@@ -144,6 +144,12 @@ const getBestMove = (state: GameState): AIAction => {
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     // Normal AI makes more sensible choices than Easy AI
     switch (action.type) {
+        case 'prompt_use_control_mechanic': {
+            // Normal AI: Rearrange player's protocols if they have a lane with value >= 8. Otherwise, skip.
+            const shouldRearrange = state.player.laneValues.some(v => v >= 8);
+            return { type: 'resolveControlMechanicPrompt', choice: shouldRearrange ? 'opponent' : 'skip' };
+        }
+
         case 'discard':
             // Discard the lowest value card(s) that don't have good effects.
             const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));

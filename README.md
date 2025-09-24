@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 🎲 Compile: Main 1 — Solo AI Implementation
 
-# Run and deploy your AI Studio app
+Welcome to the digital adaptation of the board game [**Compile: Main 1**](https://boardgamegeek.com/boardgame/406652/compile-main-1).  
+This project brings the abstract beauty of the original game into a solo-playable experience, with clear rule references, a full card overview, and three different AI difficulty levels.  
 
-This contains everything you need to run your app locally.
+Whether you’re new to *Compile: Main 1* or a seasoned strategist, this version offers a way to test your skills against smart opponents anytime.  
 
-View your app in AI Studio: https://ai.studio/apps/drive/1rkZv7HmiBOQ0twjkjQWocCknRQevCjlt
+---
 
-## Run Locally
+## ✨ Features
 
-**Prerequisites:**  Node.js
+- 🃏 **Full card overview** – All cards are digitized for easy access.  
+- 📖 **Rule reference** – Quickly learn or refresh the rules inside the app.  
+- 🤖 **Three AI strengths** – Challenge yourself against easy, medium, or hard difficulty.  
+- 🎮 **Solo play** – Enjoy the board game at your own pace, without needing a second player.  
+- 🌐 **Runs locally** – No server required, just start and play.  
 
+---
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (latest LTS recommended)  
+
+### Run Locally
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/compile-main1.git
+cd compile-main1
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+
+# Create an official build
+npm run build

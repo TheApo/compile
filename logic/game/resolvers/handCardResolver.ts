@@ -11,7 +11,8 @@ export const resolveActionWithHandCard = (prevState: GameState, cardId: string):
     if (!prevState.actionRequired) return prevState;
 
     const { actionRequired } = prevState;
-    const actor = prevState.turn;
+    // FIX: The actor is determined by the action, not whose turn it is. This is crucial for interrupts.
+    const actor = actionRequired.actor;
     const opponent = actor === 'player' ? 'opponent' : 'player';
 
     switch (actionRequired.type) {

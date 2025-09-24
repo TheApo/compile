@@ -63,6 +63,10 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     // Easy AI makes simple, often suboptimal or random choices.
     switch (action.type) {
+        case 'prompt_use_control_mechanic':
+            // Easy AI: 50% chance to skip, 50% to rearrange player's protocols.
+            return { type: 'resolveControlMechanicPrompt', choice: Math.random() < 0.5 ? 'skip' : 'opponent' };
+
         case 'discard':
             // Discard the lowest value card(s).
             const sortedHand = [...state.opponent.hand].sort((a, b) => a.value - b.value);

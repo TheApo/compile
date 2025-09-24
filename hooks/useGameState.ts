@@ -258,6 +258,61 @@ export const useGameState = (
         });
     };
 
+    const resolveControlMechanicPrompt = useCallback((choice: 'player' | 'opponent' | 'skip') => {
+        setGameState(prev => {
+            if (prev.actionRequired?.type !== 'prompt_use_control_mechanic') return prev;
+    
+            const { originalAction, actor } = prev.actionRequired;
+    
+            if (choice === 'skip') {
+                let stateAfterSkip = log(prev, actor, "Player skips rearranging protocols.");
+                stateAfterSkip.actionRequired = null;
+                
+                if (originalAction.type === 'compile') {
+                    const stateBeforeCompile = stateAfterSkip;
+                    
+                    const stateWithAnimation = { 
+                        ...stateBeforeCompile, 
+                        animationState: { type: 'compile' as const, laneIndex: originalAction.laneIndex },
+                        compilableLanes: []
+                    };
+    
+                    setTimeout(() => {
+                        setGameState(currentState => {
+                            const nextState = resolvers.performCompile(currentState, originalAction.laneIndex, onEndGame);
+                            if (nextState.winner) {
+                                return nextState;
+                            }
+                            const turnProgressionCb = getTurnProgressionCallback(nextState.phase);
+                            const finalState = turnProgressionCb(nextState);
+                            return { ...finalState, animationState: null };
+                        });
+                    }, 1000);
+    
+                    return stateWithAnimation;
+                } else { // fill_hand
+                    const stateAfterFill = resolvers.performFillHand(stateAfterSkip, actor);
+                    const turnProgressionCb = getTurnProgressionCallback(stateAfterFill.phase);
+                    return turnProgressionCb(stateAfterFill);
+                }
+            } else { // 'player' or 'opponent'
+                const target = choice;
+                const actorName = actor === 'player' ? 'Player' : 'Opponent';
+                const targetName = target === 'player' ? 'their own' : "the opponent's";
+                let stateWithChoice = log(prev, actor, `${actorName} chooses to rearrange ${targetName} protocols.`);
+                
+                stateWithChoice.actionRequired = {
+                    type: 'prompt_rearrange_protocols',
+                    sourceCardId: 'CONTROL_MECHANIC',
+                    target,
+                    actor,
+                    originalAction,
+                };
+                return stateWithChoice;
+            }
+        });
+    }, [onEndGame, getTurnProgressionCallback]);
+
     const resolveDeath1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
             const nextState = resolvers.resolveDeath1Prompt(prev, accept);
@@ -605,6 +660,7 @@ export const useGameState = (
         resolvePlague4Flip, resolveFire3Prompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
         resolveRearrangeProtocols, resolveSpeed3Prompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
+        resolveControlMechanicPrompt,
         setupTestScenario,
     };
 };

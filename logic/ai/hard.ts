@@ -203,6 +203,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
     // Hard AI makes optimal choices for required actions.
     const { player, opponent } = state;
     switch (action.type) {
+        case 'prompt_use_control_mechanic': {
+            // Hard AI: calculates if rearranging player's protocols is a high-value move.
+            // It's high value if it can disrupt a lane where player has a significant lead (>5 points)
+            // or is close to compiling (>=8 points).
+            const playerLeads = state.player.laneValues.map((v, i) => v - state.opponent.laneValues[i]);
+            const highThreat = state.player.laneValues.some((v, i) => v >= 8 || playerLeads[i] > 5);
+            if (highThreat) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
+            }
+            return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
+        }
+
         case 'discard':
             // Discard the absolute worst cards (low value, no effects)
             const sortedHand = [...opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));

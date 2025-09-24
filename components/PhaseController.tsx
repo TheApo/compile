@@ -22,6 +22,7 @@ interface PhaseControllerProps {
     onResolvePsychic4Prompt: (accept: boolean) => void;
     onResolveSpirit1Prompt: (choice: 'discard' | 'flip') => void;
     onResolveSpirit3Prompt: (accept: boolean) => void;
+    onResolveControlMechanicPrompt: (choice: 'player' | 'opponent' | 'skip') => void;
     selectedCardId: string | null;
     multiSelectedCardIds: string[];
     actionRequiredClass: string;
@@ -33,6 +34,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     onResolveSpeed3Prompt,
     onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
+    onResolveControlMechanicPrompt,
     selectedCardId, multiSelectedCardIds, actionRequiredClass
 }) => {
     const { phase, turn, actionRequired, player, compilableLanes } = gameState;
@@ -55,6 +57,16 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     const renderActions = () => {
         if (turn !== 'player') {
             return <button className="btn" disabled>Processing...</button>;
+        }
+
+        if (actionRequired?.type === 'prompt_use_control_mechanic') {
+            return (
+               <>
+                   <button className="btn" onClick={() => onResolveControlMechanicPrompt('player')}>Rearrange Own</button>
+                   <button className="btn" onClick={() => onResolveControlMechanicPrompt('opponent')}>Rearrange Opponent's</button>
+                   <button className="btn btn-back" onClick={() => onResolveControlMechanicPrompt('skip')}>Skip</button>
+               </>
+           );
         }
 
         if (actionRequired?.type === 'prompt_death_1_effect') {
@@ -207,6 +219,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     } else {
                         return 'Waiting for Opponent to discard...';
                     }
+                case 'prompt_use_control_mechanic':
+                    return 'Control Action: Rearrange protocols?';
                 case 'select_opponent_face_up_card_to_flip':
                     return 'Action: Select an opponent\'s face-up card to flip';
                 case 'select_own_face_up_covered_card_to_flip':

@@ -129,15 +129,14 @@ export const performFillHand = (prevState: GameState, player: Player): GameState
 
 export const fillHand = (prevState: GameState, player: Player): GameState => {
     if (prevState.useControlMechanic && prevState.controlCardHolder === player) {
-        const opponent = player === 'player' ? 'opponent' : 'player';
-        const newState = log(prevState, player, `${player === 'player' ? 'Player' : 'Opponent'} uses Control to swap the opponent's protocols before refreshing.`);
+        const newState = log(prevState, player, `${player === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols before refreshing.`);
         return {
             ...newState,
+            controlCardHolder: null, // Reset control immediately
             actionRequired: {
-                type: 'prompt_swap_protocols',
+                type: 'prompt_use_control_mechanic',
                 sourceCardId: 'CONTROL_MECHANIC',
                 actor: player,
-                target: opponent,
                 originalAction: { type: 'fill_hand' },
             }
         }

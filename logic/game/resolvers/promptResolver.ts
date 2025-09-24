@@ -161,12 +161,12 @@ export const resolveRearrangeProtocols = (
 ): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_rearrange_protocols') return prevState;
 
-    const { target, actor, originalAction } = prevState.actionRequired;
+    const { target, actor, originalAction, sourceCardId } = prevState.actionRequired;
     let newState = { ...prevState };
     const targetState = { ...newState[target] };
 
     // Create a map to preserve the compiled status of each protocol.
-    const compiledStatusMap: { [protocol: string]: boolean } = {};
+    const compiledStatusMap: { [key: string]: boolean } = {};
     targetState.protocols.forEach((proto, index) => {
         compiledStatusMap[proto] = targetState.compiled[index];
     });
@@ -179,14 +179,12 @@ export const resolveRearrangeProtocols = (
     targetState.compiled = newCompiled;
 
     newState[target] = targetState;
-    
-    // The control component is returned to the neutral position
-    newState.controlCardHolder = null;
     newState.actionRequired = null; // Clear the rearrange action
 
+    const sourceText = sourceCardId === 'CONTROL_MECHANIC' ? 'Control Action' : sourceCardId;
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    const targetName = target.charAt(0).toUpperCase() + target.slice(1);
-    newState = log(newState, actor, `Control Action: ${actorName} rearranges ${targetName}'s protocols.`);
+    const targetName = target === actor ? 'their own' : `the opponent's`;
+    newState = log(newState, actor, `${sourceText}: ${actorName} rearranges ${targetName} protocols.`);
 
     let stateAfterRecalc = recalculateAllLaneValues(newState);
 

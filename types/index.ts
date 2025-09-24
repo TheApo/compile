@@ -326,6 +326,11 @@ export type ActionRequired = {
     type: 'select_opponent_card_to_return';
     sourceCardId: string;
     actor: Player;
+} | {
+    type: 'prompt_use_control_mechanic';
+    sourceCardId: 'CONTROL_MECHANIC';
+    actor: Player;
+    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
 } | null;
 
 export type AnimationState = 
@@ -391,7 +396,8 @@ export type AIAction =
     | { type: 'resolveSpirit3Prompt', accept: boolean }
     | { type: 'resolveSwapProtocols', indices: [number, number] }
     | { type: 'resolveSpeed3Prompt', accept: boolean }
-    | { type: 'resolvePsychic4Prompt', accept: boolean };
+    | { type: 'resolvePsychic4Prompt', accept: boolean }
+    | { type: 'resolveControlMechanicPrompt', choice: 'player' | 'opponent' | 'skip' };
 
 
 export type AnimationRequest = {
