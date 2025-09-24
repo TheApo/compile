@@ -238,6 +238,8 @@ export type ActionRequired = {
     type: 'prompt_swap_protocols';
     sourceCardId: string;
     actor: Player;
+    target: Player;
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
 } | {
     type: 'select_lane_for_life_3_play';
     sourceCardId: string;
@@ -281,6 +283,7 @@ export type ActionRequired = {
     sourceCardId: string;
     target: Player;
     actor: Player;
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
 } | {
     type: 'select_lane_for_water_3';
     sourceCardId: string;
@@ -345,6 +348,7 @@ export interface GameState {
     turn: Player;
     phase: GamePhase;
     controlCardHolder: Player | null;
+    useControlMechanic: boolean;
     winner: Player | null;
     log: LogEntry[];
     actionRequired: ActionRequired;

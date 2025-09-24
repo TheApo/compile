@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { GameState, Player, Difficulty, PlayedCard, AnimationRequest, GamePhase, ActionRequired } from '../types';
 import * as stateManager from '../logic/game/stateManager';
 import * as phaseManager from '../logic/game/phaseManager';
 import * as resolvers from '../logic/game/resolvers';
 import * as aiManager from '../logic/game/aiManager';
 import { deleteCardFromBoard } from '../logic/utils/boardModifiers';
-import { handleChainedEffectsOnDiscard } from '../logic/game/helpers/actionUtils';
 import { cards } from '../data/cards';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../logic/utils/log';
@@ -19,10 +18,11 @@ export const useGameState = (
     playerProtocols: string[], 
     opponentProtocols: string[],
     onEndGame: (winner: Player, finalState: GameState) => void,
-    difficulty: Difficulty
+    difficulty: Difficulty,
+    useControlMechanic: boolean
 ) => {
     const [gameState, setGameState] = useState<GameState>(() => {
-        const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols);
+        const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic);
         return stateManager.recalculateAllLaneValues(initialState);
     });
     
@@ -114,6 +114,10 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const newState = resolvers.fillHand(prev, 'player');
+            // If fillHand triggers the Control mechanic, an action will be set. Don't progress turn yet.
+            if (newState.actionRequired) {
+                return newState;
+            }
             return turnProgressionCb(newState);
         });
     };
@@ -133,16 +137,23 @@ export const useGameState = (
             if (prev.winner || prev.phase !== 'compile') return prev;
             
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const stateBeforeCompile = resolvers.compileLane(prev, laneIndex);
+
+            // If compileLane triggers the Control mechanic, an action will be set.
+            // We just return that state and wait for the user to resolve it.
+            if (stateBeforeCompile.actionRequired) {
+                return stateBeforeCompile;
+            }
 
             const stateWithAnimation = { 
-                ...prev, 
+                ...stateBeforeCompile, 
                 animationState: { type: 'compile' as const, laneIndex },
                 compilableLanes: []
             };
 
             setTimeout(() => {
                 setGameState(currentState => {
-                    const nextState = resolvers.compileLane(currentState, laneIndex, onEndGame);
+                    const nextState = resolvers.performCompile(currentState, laneIndex, onEndGame);
                     if (nextState.winner) {
                         return nextState; // Stop progression if game is over
                     }
@@ -249,7 +260,6 @@ export const useGameState = (
 
     const resolveDeath1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveDeath1Prompt(prev, accept);
             // If the player skips, the action is cleared, and we can continue the turn.
             if (!nextState.actionRequired) {
@@ -259,7 +269,7 @@ export const useGameState = (
             // If the player accepts, a new action is set, so we just update the state.
             return nextState;
         });
-    }, [getTurnProgressionCallback]);
+    }, []);
 
     const resolveLove1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -348,10 +358,17 @@ export const useGameState = (
     const resolveRearrangeProtocols = useCallback((newOrder: string[]) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder);
+            const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
+            
+            // If the original action was a compile, it might have ended the game.
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            // The resolver handles executing the original action, so we just progress the turn from there.
             return turnProgressionCb(nextState);
         });
-    }, [getTurnProgressionCallback]);
+    }, [getTurnProgressionCallback, onEndGame]);
     
     const resolvePsychic4Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -366,14 +383,13 @@ export const useGameState = (
 
     const resolveSpirit1Prompt = useCallback((choice: 'discard' | 'flip') => {
         setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveSpirit1Prompt(prev, choice);
             if (nextState.actionRequired) {
                 return nextState; // new discard action
             }
             return phaseManager.continueTurnAfterStartPhaseAction(nextState); // continue turn from start phase
         });
-    }, [getTurnProgressionCallback]);
+    }, []);
 
     const resolveSpirit3Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -389,38 +405,39 @@ export const useGameState = (
     const resolveSwapProtocols = useCallback((indices: [number, number]) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveSwapProtocols(prev, indices);
+            const nextState = resolvers.resolveSwapProtocols(prev, indices, onEndGame);
+            
+            if (nextState.winner) {
+                return nextState;
+            }
+
             return turnProgressionCb(nextState);
         });
-    }, [getTurnProgressionCallback]);
+    }, [getTurnProgressionCallback, onEndGame]);
 
     const setupTestScenario = useCallback((scenario: string) => {
         setGameState(currentState => {
             if (scenario === 'psychic-2-uncover') {
-                // Re-initialize state to have a clean board, but with the correct protocols.
-                let newState = stateManager.createInitialState(playerProtocols, opponentProtocols);
+                let newState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic);
                 
                 const psychic2Card = cards.find(c => c.protocol === 'Psychic' && c.value === 2);
                 const hate0Card = cards.find(c => c.protocol === 'Hate' && c.value === 0);
-                const apathy5Card = cards.find(c => c.protocol === 'Apathy' && c.value === 5); // Just some card
+                const apathy5Card = cards.find(c => c.protocol === 'Apathy' && c.value === 5);
     
                 if (!psychic2Card || !hate0Card || !apathy5Card) return currentState;
     
-                // Opponent board setup
                 newState.opponent.lanes = [[], [], []];
                 newState.opponent.lanes[0] = [
                     { ...psychic2Card, id: uuidv4(), isFaceUp: true },
-                    { ...apathy5Card, id: uuidv4(), isFaceUp: false } // face-down on top
+                    { ...apathy5Card, id: uuidv4(), isFaceUp: false }
                 ];
     
-                // Player hand setup
                 newState.player.hand = [
                     { ...hate0Card, id: uuidv4(), isFaceUp: true }
                 ];
-                newState.player.deck = []; // empty deck to avoid drawing/milling
+                newState.player.deck = [];
                 newState.player.lanes = [[], [], []];
     
-                // Set turn and phase
                 newState.turn = 'player';
                 newState.phase = 'action';
                 newState.actionRequired = null;
@@ -432,7 +449,7 @@ export const useGameState = (
             }
             return currentState;
         });
-    }, [playerProtocols, opponentProtocols]);
+    }, [playerProtocols, opponentProtocols, useControlMechanic]);
 
     useEffect(() => {
         const animState = gameState.animationState;
@@ -479,7 +496,6 @@ export const useGameState = (
                     } else if (originalAction.type === 'select_cards_from_hand_to_discard_for_hate_1') {
                         stateAfterDiscard = resolvers.resolveHate1Discard(s, cardIds);
                     } else {
-                        // Pass the full state `s` so the resolver can see the originalAction in the animationState
                         stateAfterDiscard = resolvers.discardCards(s, cardIds, 'player');
                     }
     
@@ -501,9 +517,9 @@ export const useGameState = (
         if (gameState.turn === 'opponent' && !gameState.winner && !gameState.animationState) {
             const timer = setTimeout(() => {
                 aiManager.runOpponentTurn(gameState, setGameState, difficulty, {
-                    compileLane: (s, l) => resolvers.compileLane(s, l, onEndGame),
+                    compileLane: (s, l) => resolvers.performCompile(s, l, onEndGame),
                     playCard: resolvers.playCard,
-                    fillHand: resolvers.fillHand,
+                    fillHand: resolvers.performFillHand,
                     discardCards: resolvers.discardCards,
                     flipCard: resolvers.flipCard,
                     deleteCard: (s, c) => {
@@ -523,12 +539,12 @@ export const useGameState = (
                     resolveFire4Discard: resolvers.resolveFire4Discard,
                     resolveHate1Discard: resolvers.resolveHate1Discard,
                     resolveLight2Prompt: resolvers.resolveLight2Prompt,
-                    resolveRearrangeProtocols: resolvers.resolveRearrangeProtocols,
+                    resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
                     resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
                     resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
                     resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
                     resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
-                    resolveSwapProtocols: resolvers.resolveSwapProtocols,
+                    resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
                     revealOpponentHand: resolvers.revealOpponentHand,
                 }, processAnimationQueue, phaseManager);
             }, 1500);
@@ -561,7 +577,7 @@ export const useGameState = (
                         resolveLove1Prompt: resolvers.resolveLove1Prompt,
                         resolveHate1Discard: resolvers.resolveHate1Discard,
                         revealOpponentHand: resolvers.revealOpponentHand,
-                        resolveRearrangeProtocols: resolvers.resolveRearrangeProtocols,
+                        resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
                     }, 
                     phaseManager, 
                     processAnimationQueue,
@@ -571,7 +587,7 @@ export const useGameState = (
             }, 1500); // AI "thinking" time
             return () => clearTimeout(timer);
         }
-    }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue]);
+    }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue, onEndGame]);
 
     useEffect(() => {
         setGameState(currentState => {

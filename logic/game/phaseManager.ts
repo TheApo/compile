@@ -24,6 +24,43 @@ const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     return state;
 };
 
+const checkControlPhase = (state: GameState): GameState => {
+    if (!state.useControlMechanic) {
+        return state;
+    }
+
+    const player = state.turn;
+    const opponent = player === 'player' ? 'opponent' : 'player';
+    
+    const playerState = state[player];
+    const opponentState = state[opponent];
+
+    let playerWins = 0;
+
+    const playerValue0 = playerState.laneValues[0];
+    const playerValue1 = playerState.laneValues[1];
+    const playerValue2 = playerState.laneValues[2];
+
+    // A "line" is a direct vertical comparison of protocols and their lanes.
+    const opponentValue0 = opponentState.laneValues[0];
+    const opponentValue1 = opponentState.laneValues[1];
+    const opponentValue2 = opponentState.laneValues[2];
+
+    if (playerValue0 > opponentValue0) playerWins++;
+    if (playerValue1 > opponentValue1) playerWins++;
+    if (playerValue2 > opponentValue2) playerWins++;
+
+    if (playerWins >= 2) {
+        if (state.controlCardHolder !== player) {
+            const playerName = player === 'player' ? 'Player' : 'Opponent';
+            const newState = log(state, player, `${playerName} gains the Control Component.`);
+            return { ...newState, controlCardHolder: player };
+        }
+    }
+    
+    return state;
+}
+
 export const advancePhase = (state: GameState): GameState => {
     if (state.winner) return state;
 
@@ -38,7 +75,7 @@ export const advancePhase = (state: GameState): GameState => {
             return { ...nextState, phase: 'control' };
 
         case 'control':
-            // Future logic for control card
+            nextState = checkControlPhase(nextState);
             return { ...nextState, phase: 'compile' };
 
         case 'compile': {
@@ -136,6 +173,23 @@ export const processEndOfAction = (state: GameState): GameState => {
         // interrupted is now considered complete. Continue processing the rest
         // of their turn from this restored state, without returning early.
         state = restoredState;
+    }
+    
+    // If the original action that caused the control prompt is stored, execute it now.
+    if (state.actionRequired?.type === 'prompt_rearrange_protocols' && state.actionRequired.originalAction) {
+        const originalAction = state.actionRequired.originalAction;
+        let stateAfterRearrange = { ...state, actionRequired: null, controlCardHolder: null }; // Reset control
+        
+        if (originalAction.type === 'compile') {
+            // Re-trigger the compile logic
+            // Note: This part might need the compile function from useGameState, which isn't available here.
+            // A potential refactor would be to handle this in useGameState. For now, we assume it continues the turn.
+            return continueTurnProgression(stateAfterRearrange); // Simplified for now
+        } else if (originalAction.type === 'fill_hand') {
+            // Re-trigger the fill hand logic
+            const stateAfterFill = drawForPlayer(stateAfterRearrange, stateAfterRearrange.turn, 5 - stateAfterRearrange[stateAfterRearrange.turn].hand.length);
+            return continueTurnProgression(stateAfterFill);
+        }
     }
 
     // Check for a queued ACTION first.
@@ -293,7 +347,11 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     // If there are no more start-phase actions, manually advance to the next interactive phase.
     // This prevents skipping the main Action phase.
     let nextState = stateAfterRecheck;
-    nextState = advancePhase({ ...nextState, phase: 'control' }); // -> compile
+    if (nextState.phase !== 'control') {
+        nextState = { ...nextState, phase: 'control' };
+    }
+    
+    nextState = advancePhase(nextState); // -> compile
     if(nextState.actionRequired) return nextState;
 
     nextState = advancePhase(nextState); // -> action OR stays in compile if compilableLanes > 0

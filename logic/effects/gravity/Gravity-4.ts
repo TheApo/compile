@@ -14,27 +14,21 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
 
     const validTargets: PlayedCard[] = [];
     
-    // Check player's lanes for valid targets
-    newState.player.lanes.forEach((lane, i) => {
-        if (i !== laneIndex) { // Card must be from another line
-            lane.forEach(c => {
-                if (!c.isFaceUp) {
-                    validTargets.push(c);
+    // According to default targeting rules, only "uncovered" cards can be targeted unless specified otherwise.
+    // Therefore, we only check the top card of each other lane.
+    const players: Player[] = ['player', 'opponent'];
+    for (const p of players) {
+        newState[p].lanes.forEach((lane, i) => {
+            if (i !== laneIndex) { // Card must be from another line.
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
+                        validTargets.push(topCard);
+                    }
                 }
-            });
-        }
-    });
-
-    // Check opponent's lanes for valid targets
-    newState.opponent.lanes.forEach((lane, i) => {
-        if (i !== laneIndex) { // Card must be from another line
-            lane.forEach(c => {
-                if (!c.isFaceUp) {
-                    validTargets.push(c);
-                }
-            });
-        }
-    });
+            }
+        });
+    }
 
     if (validTargets.length > 0) {
         newState.actionRequired = {

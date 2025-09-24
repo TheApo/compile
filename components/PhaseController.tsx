@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { GameState, PlayedCard } from '../types';
+import { GameState, PlayedCard, Player } from '../types';
 
 interface PhaseControllerProps {
     gameState: GameState;
@@ -47,6 +47,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
         return null;
     };
 
+    // FIX: Safely access sourceCardId as it's not present on all action types.
     const sourceCardId = actionRequired?.sourceCardId;
     const sourceCard = sourceCardId ? findCardById(sourceCardId) : null;
     const turnText = turn.charAt(0).toUpperCase() + turn.slice(1);
@@ -180,7 +181,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             const mustFillHand = player.hand.length === 0;
 
             if (mustFillHand) {
-                 return <button className="btn" onClick={onFillHand}>Fill Hand (Required)</button>;
+                 return <button className="btn" onClick={onFillHand}>Refresh (Required)</button>;
             }
 
             return (
@@ -189,7 +190,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     onClick={onFillHand}
                     disabled={!canFillHand || !!selectedCardId}
                 >
-                    Fill Hand
+                    Refresh
                 </button>
             );
         }
@@ -274,7 +275,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 case 'prompt_shift_for_spirit_3':
                     return 'Triggered: You may shift your Spirit-3. Select a lane or skip.';
                 case 'prompt_swap_protocols':
-                    return 'Action: Swap two of your protocols.';
+                    return 'Action: Swap two protocols.';
                 case 'select_cards_from_hand_to_discard_for_fire_4':
                     return 'Action: Select 1 or more cards to discard';
                 case 'select_cards_from_hand_to_discard_for_hate_1':
@@ -328,6 +329,9 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 <span>{turnText}'s Turn</span>
                 {actionRequired && sourceCard && (
                     <> | Effect from: <span>{sourceCard.protocol}-{sourceCard.value}</span></>
+                )}
+                {actionRequired?.sourceCardId === 'CONTROL_MECHANIC' && (
+                    <> | Effect from: <span>Control Component</span></>
                 )}
             </div>
             <div className="phase-controller-main">

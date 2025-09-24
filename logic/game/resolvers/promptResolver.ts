@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, PlayedCard } from '../../../types';
+import { GameState, Player } from '../../../types';
 import { log } from '../../utils/log';
 import { findAndFlipCards, drawForPlayer } from '../../../utils/gameStateModifiers';
-import { findCardOnBoard } from '../helpers/actionUtils';
+import { findCardOnBoard, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
+import { performCompile } from './miscResolver';
+import { performFillHand } from './playResolver';
 
 export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
@@ -129,12 +131,21 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
                 actor,
             };
             break;
-        case 'flip':
-            newState = log(newState, actor, "Light-2: Player chooses to flip the card back face-down.");
-            newState = findAndFlipCards(new Set([revealedCardId]), newState);
-            newState.animationState = { type: 'flipCard', cardId: revealedCardId };
-            newState.actionRequired = null;
+        case 'flip': {
+            newState = log(newState, actor, "Light-2: Player chooses to flip the revealed card face-up.");
+            // FIX: Clear the current action *before* flipping and triggering the next effect.
+            // This prevents the Light-2 prompt from persisting and causing an infinite loop.
+            const stateWithoutPrompt = { ...newState, actionRequired: null };
+            let stateAfterFlip = findAndFlipCards(new Set([revealedCardId]), stateWithoutPrompt);
+            stateAfterFlip.animationState = { type: 'flipCard', cardId: revealedCardId };
+            
+            // Now trigger the on-play effect since it's officially flipped
+            const result = handleOnFlipToFaceUp(stateAfterFlip, revealedCardId);
+            newState = result.newState;
+    
+            // The on-play effect might create a new action, which is fine. The old one is gone.
             break;
+        }
         case 'skip':
             newState = log(newState, actor, "Light-2: Player chooses to do nothing with the revealed card.");
             newState.actionRequired = null;
@@ -143,10 +154,14 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
     return newState;
 };
 
-export const resolveRearrangeProtocols = (prevState: GameState, newOrder: string[]): GameState => {
+export const resolveRearrangeProtocols = (
+    prevState: GameState, 
+    newOrder: string[],
+    onEndGame: (winner: Player, finalState: GameState) => void
+): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_rearrange_protocols') return prevState;
 
-    const { target, actor } = prevState.actionRequired;
+    const { target, actor, originalAction } = prevState.actionRequired;
     let newState = { ...prevState };
     const targetState = { ...newState[target] };
 
@@ -164,14 +179,28 @@ export const resolveRearrangeProtocols = (prevState: GameState, newOrder: string
     targetState.compiled = newCompiled;
 
     newState[target] = targetState;
-    newState.actionRequired = null;
+    
+    // The control component is returned to the neutral position
+    newState.controlCardHolder = null;
+    newState.actionRequired = null; // Clear the rearrange action
 
-    const actorName = actor === 'player' ? 'Player' : 'Opponent';
-    const targetName = target === 'player' ? 'Player' : 'Opponent';
-    newState = log(newState, actor, `${actorName} rearranges ${targetName}'s protocols.`);
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    const targetName = target.charAt(0).toUpperCase() + target.slice(1);
+    newState = log(newState, actor, `Control Action: ${actorName} rearranges ${targetName}'s protocols.`);
 
-    // Recalculating all values will correctly update laneValues based on the new protocol-to-lane mapping.
-    return recalculateAllLaneValues(newState);
+    let stateAfterRecalc = recalculateAllLaneValues(newState);
+
+    if (originalAction) {
+        if (originalAction.type === 'compile') {
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Compile action...`);
+            return performCompile(stateAfterRecalc, originalAction.laneIndex, onEndGame);
+        } else if (originalAction.type === 'fill_hand') {
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
+            return performFillHand(stateAfterRecalc, actor);
+        }
+    }
+
+    return stateAfterRecalc;
 };
 
 
@@ -256,11 +285,11 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
     return newState;
 };
 
-export const resolveSwapProtocols = (prevState: GameState, indices: [number, number]): GameState => {
+export const resolveSwapProtocols = (prevState: GameState, indices: [number, number], onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_swap_protocols') return prevState;
     
-    const { actor } = prevState.actionRequired;
-    const playerState = { ...prevState[actor] };
+    const { actor, target, originalAction, sourceCardId } = prevState.actionRequired;
+    const playerState = { ...prevState[target] };
     const [index1, index2] = indices.sort((a,b) => a-b);
 
     const newProtocols = [...playerState.protocols];
@@ -273,8 +302,28 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
     playerState.protocols = newProtocols;
     playerState.compiled = newCompiled;
     
-    let newState = { ...prevState, [actor]: playerState, actionRequired: null };
-    newState = log(newState, actor, `${actor === 'player' ? 'Player' : 'Opponent'} swaps protocols ${newProtocols[index2]} and ${newProtocols[index1]}.`);
+    let newState = { ...prevState, [target]: playerState, actionRequired: null };
+    
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    const targetName = target.charAt(0).toUpperCase() + target.slice(1);
+    const sourceText = sourceCardId === 'CONTROL_MECHANIC' ? 'Control' : 'Spirit-4';
+    newState = log(newState, actor, `${sourceText}: ${actorName} swaps ${targetName}'s protocols ${newProtocols[index2]} and ${newProtocols[index1]}.`);
 
-    return recalculateAllLaneValues(newState);
+    if (sourceCardId === 'CONTROL_MECHANIC') {
+        newState.controlCardHolder = null;
+    }
+    
+    let stateAfterRecalc = recalculateAllLaneValues(newState);
+
+    if (originalAction) {
+        if (originalAction.type === 'compile') {
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Compile action...`);
+            return performCompile(stateAfterRecalc, originalAction.laneIndex, onEndGame);
+        } else if (originalAction.type === 'fill_hand') {
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
+            return performFillHand(stateAfterRecalc, actor);
+        }
+    }
+
+    return stateAfterRecalc;
 };

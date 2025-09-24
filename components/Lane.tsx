@@ -23,9 +23,10 @@ interface LaneProps {
     isCardTargetable: (card: PlayedCard) => boolean;
     faceDownValue: number;
     sourceCardId: string | null;
+    gameState: GameState;
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId }) => {
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId, gameState }) => {
     
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
@@ -51,27 +52,30 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                 </button>
             )}
             <div className="lane-stack">
-                {cards.map((card, index) => (
-                    <CardComponent
-                        key={card.id}
-                        card={card}
-                        isFaceUp={card.isFaceUp}
-                        style={{ '--i': index } as React.CSSProperties}
-                        onPointerDown={(e) => {
-                            // Stop the event from bubbling up to the lane's onPointerDown handler.
-                            // This prevents a single click from being interpreted as both a card
-                            // selection and a lane selection, which causes bugs with multi-step actions.
-                            e.stopPropagation();
-                            onCardPointerDown(card);
-                        }}
-                        onPointerEnter={() => onCardPointerEnter(card)}
-                        onPointerLeave={() => onCardPointerLeave(card)}
-                        animationState={animationState}
-                        isTargetable={isCardTargetable(card)}
-                        isSourceOfEffect={card.id === sourceCardId}
-                        faceDownValue={faceDownValue}
-                    />
-                ))}
+                {cards.map((card, index) => {
+                    const isRevealed = gameState.actionRequired?.type === 'prompt_shift_or_flip_for_light_2' && gameState.actionRequired.revealedCardId === card.id;
+                    return (
+                        <CardComponent
+                            key={card.id}
+                            card={card}
+                            isFaceUp={card.isFaceUp || isRevealed}
+                            style={{ '--i': index } as React.CSSProperties}
+                            onPointerDown={(e) => {
+                                // Stop the event from bubbling up to the lane's onPointerDown handler.
+                                // This prevents a single click from being interpreted as both a card
+                                // selection and a lane selection, which causes bugs with multi-step actions.
+                                e.stopPropagation();
+                                onCardPointerDown(card);
+                            }}
+                            onPointerEnter={() => onCardPointerEnter(card)}
+                            onPointerLeave={() => onCardPointerLeave(card)}
+                            animationState={animationState}
+                            isTargetable={isCardTargetable(card)}
+                            isSourceOfEffect={card.id === sourceCardId}
+                            faceDownValue={faceDownValue}
+                        />
+                    );
+                })}
             </div>
         </div>
     );

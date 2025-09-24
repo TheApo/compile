@@ -93,21 +93,12 @@ const getBestMove = (state: GameState): AIAction => {
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue;
-
+            
+            const canPlayerCompileThisLane = player.laneValues[i] >= 10 && player.laneValues[i] > opponent.laneValues[i];
             const baseScore = getCardPower(card);
             
             // 1. Evaluate Face-Up Play
             if ((card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1) {
-                // Special strategy for Metal-6
-                if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4) {
-                    // Hard AI avoids this move unless it's a game-winning compile setup.
-                    const valueToAdd = card.value;
-                    const resultingValue = opponent.laneValues[i] + valueToAdd;
-                    if (!(resultingValue >= 10 && resultingValue > player.laneValues[i])) {
-                        continue; // Skip this bad move
-                    }
-                }
-
                 let score = baseScore;
                 let description = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
                 const valueToAdd = card.value;
@@ -115,47 +106,73 @@ const getBestMove = (state: GameState): AIAction => {
 
                 // OFFENSIVE SCORING
                 score += valueToAdd; // Points are good
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) score += 200; // Compile setup!
+                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                     if (opponent.laneValues[i] >= 8) {
+                        score += 350; // High priority: Secure a win
+                        description += ` [HIGH PRIORITY: Secures compile from ${opponent.laneValues[i]}]`;
+                    } else {
+                        score += 200; // Standard compile setup
+                        description += ` [Sets up compile]`;
+                    }
+                }
                 else if (resultingValue >= 8) score += 100; // Strong setup
                 score += (resultingValue - player.laneValues[i]); // Reward gaining a lead
 
                 // DEFENSIVE SCORING
                 const hasDisruption = DISRUPTION_KEYWORDS.some(kw => card.keywords[kw]);
                 if (hasDisruption) {
-                    // Prioritize disrupting high-threat lanes
                     if (playerThreatLevels[i] > 0) {
                         score += 150 * playerThreatLevels[i];
                         description += ` [DEFENSIVE: Disrupts player threat level ${playerThreatLevels[i]}]`;
                     }
-                    // Prioritize disrupting player's strongest card
                     if (playerStrongestFaceUpCard && (card.keywords['flip'] || card.keywords['delete'])) {
                         score += getCardThreat(playerStrongestFaceUpCard, 'player', state) * 2;
                         description += ` [PROACTIVE: Targets strongest card ${playerStrongestFaceUpCard.protocol}-${playerStrongestFaceUpCard.value}]`;
                     }
                 }
+                
+                // FINAL ADJUSTMENT: Penalize wasted moves.
+                if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
+                    score -= 500; // Overriding penalty for a wasted card.
+                    description += ` [WASTED: Player can still compile]`;
+                }
+                
+                // Special strategy for Metal-6
+                if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4 && score > 0) {
+                    // Avoid playing this early unless it's a game-winning compile setup.
+                     if (!(resultingValue >= 10 && resultingValue > player.laneValues[i])) {
+                        score -= 50;
+                     }
+                }
                 possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score, description });
             }
 
             // 2. Evaluate Face-Down Play
-             // Special strategy for Metal-6
-            if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4) {
-                // Playing face down is never a good idea with Metal-6 early on.
-                continue; // Skip this bad move
-            }
-            let score = 0; // Face-down plays are purely positional
+            let score = 0;
             let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
             const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
             const resultingValue = opponent.laneValues[i] + valueToAdd;
-
-            if (resultingValue >= 10 && resultingValue > player.laneValues[i] && opponent.laneValues[i] >= 8) {
-                score += 250; // WINNING MOVE, HIGHEST PRIORITY
-                description += ` [WINNING MOVE: Sets up compile]`;
-            } else if (opponent.laneValues[i] >= 6) {
-                // If the lane is already strong, adding a face-down card is a good way to secure it
-                score += (20 * opponent.laneValues[i]);
-                description += ` [Secures strong lane]`;
+            
+             // FINAL ADJUSTMENT: Penalize wasted moves.
+            if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
+                score -= 500; // Overriding penalty for a wasted card.
+                description += ` [WASTED: Player can still compile]`;
             } else {
-                score += 1; // It's a valid move, but not a great one.
+                 if (resultingValue >= 10 && resultingValue > player.laneValues[i] && opponent.laneValues[i] >= 8) {
+                    score += 250; // WINNING MOVE, HIGHEST PRIORITY
+                    description += ` [WINNING MOVE: Sets up compile]`;
+                } else if (opponent.laneValues[i] >= 6) {
+                    score += (20 * opponent.laneValues[i]);
+                    description += ` [Secures strong lane]`;
+                } else {
+                    score += 1; // It's a valid move, but not a great one.
+                }
+            }
+             
+            // Special strategy for Metal-6
+            if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4 && score > 0) {
+                // Playing face down is never a good idea with Metal-6 early on.
+                score -= 50;
             }
             possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, description });
         }
@@ -294,7 +311,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (potentialTargets.length > 0) {
                 potentialTargets.sort((a, b) => b.score - a.score);
-                return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+                return { type: 'deleteCard', cardId: potentialTargets[0].card.id };
             }
 
             return { type: 'skip' };
@@ -800,7 +817,65 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
-        case 'prompt_shift_or_flip_for_light_2': return { type: 'resolveLight2Prompt', choice: 'shift' };
+        
+        case 'prompt_shift_or_flip_for_light_2': {
+            const { revealedCardId } = action;
+            const cardInfo = findCardOnBoard(state, revealedCardId);
+            if (!cardInfo) return { type: 'skip' };
+            const { card, owner } = cardInfo;
+
+            // --- Score flipping ---
+            let flipScore = 0;
+            if (owner === 'opponent') { // AI's card
+                flipScore = getCardPower(card) + card.value; // Value + effect power
+            } else { // Player's card
+                flipScore = -getCardThreat(card, 'player', state); // Flipping a player card is generally bad
+            }
+
+            // --- Score shifting ---
+            let shiftScore = 0;
+            let bestShiftLane = -1;
+
+            let originalLaneIndex = -1;
+            for (let i = 0; i < state[owner].lanes.length; i++) {
+                if (state[owner].lanes[i].some(c => c.id === revealedCardId)) {
+                    originalLaneIndex = i;
+                    break;
+                }
+            }
+            if (originalLaneIndex !== -1) {
+                const possibleLanes = [0, 1, 2].filter(l => l !== originalLaneIndex);
+                if (possibleLanes.length > 0) {
+                    let bestLaneScore = -Infinity;
+                    for (const targetLane of possibleLanes) {
+                        let currentLaneScore = 0;
+                        if (owner === 'opponent') { // Shift own card
+                            const newLead = (state.opponent.laneValues[targetLane] + getEffectiveCardValue(card, [])) - state.player.laneValues[targetLane];
+                            const oldLead = state.opponent.laneValues[originalLaneIndex] - state.player.laneValues[originalLaneIndex];
+                            currentLaneScore = newLead - oldLead;
+                        } else { // Shift player's card
+                            const newPlayerLead = (state.player.laneValues[targetLane] + getEffectiveCardValue(card, [])) - state.opponent.laneValues[targetLane];
+                            const oldPlayerLead = state.player.laneValues[originalLaneIndex] - state.opponent.laneValues[originalLaneIndex];
+                            currentLaneScore = oldPlayerLead - newPlayerLead; // AI wants to reduce player lead
+                        }
+                        if (currentLaneScore > bestLaneScore) {
+                            bestLaneScore = currentLaneScore;
+                            bestShiftLane = targetLane;
+                        }
+                    }
+                    shiftScore = bestLaneScore;
+                }
+            }
+
+            // --- Decision ---
+            if (flipScore > shiftScore && flipScore > 0) {
+                return { type: 'resolveLight2Prompt', choice: 'flip' };
+            }
+            if (shiftScore > 0) {
+                return { type: 'resolveLight2Prompt', choice: 'shift' };
+            }
+            return { type: 'resolveLight2Prompt', choice: 'skip' };
+        }
         
         case 'select_opponent_covered_card_to_shift': {
             const validTargets: { card: PlayedCard; laneIndex: number }[] = [];

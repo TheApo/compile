@@ -4,18 +4,21 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { GameState } from '../types';
+import { GameState, Player } from '../types';
 
 interface SwapProtocolsModalProps {
   gameState: GameState;
+  targetPlayer: Player;
   onConfirm: (indices: [number, number]) => void;
   onCancel: () => void;
 }
 
-export function SwapProtocolsModal({ gameState, onConfirm, onCancel }: SwapProtocolsModalProps) {
+export function SwapProtocolsModal({ gameState, targetPlayer, onConfirm, onCancel }: SwapProtocolsModalProps) {
     const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
     
-    const playerState = gameState.player;
+    const targetPlayerState = gameState[targetPlayer];
+    const isPlayerTarget = targetPlayer === 'player';
+    const title = isPlayerTarget ? "Swap Your Protocols" : "Swap Opponent's Protocols";
 
     const handleSelect = (index: number) => {
         if (selectedIndices.includes(index)) {
@@ -33,7 +36,7 @@ export function SwapProtocolsModal({ gameState, onConfirm, onCancel }: SwapProto
 
     const getProtocolClass = (index: number) => {
         let classes = ['protocol-display', 'rearrange-item'];
-        if (playerState.compiled[index]) classes.push('compiled');
+        if (targetPlayerState.compiled[index]) classes.push('compiled');
         if (selectedIndices.includes(index)) classes.push('selected');
         return classes.join(' ');
     }
@@ -42,20 +45,20 @@ export function SwapProtocolsModal({ gameState, onConfirm, onCancel }: SwapProto
     return (
         <div className="modal-overlay">
             <div className="modal-content rearrange-modal-content" onClick={(e) => e.stopPropagation()}>
-                <h2>Swap Protocols</h2>
-                <p>Select two of your protocols to swap their positions.</p>
+                <h2>{title}</h2>
+                <p>Select two protocols to swap their positions.</p>
 
                 <div className="rearrange-board-view">
                     <div className="protocol-bars-container">
-                        <div className="protocol-bar player-bar">
-                            {playerState.protocols.map((protocol, index) => (
+                        <div className={`protocol-bar ${isPlayerTarget ? 'player-bar' : 'opponent-bar'}`}>
+                            {targetPlayerState.protocols.map((protocol, index) => (
                                 <div
                                     key={protocol}
                                     className={getProtocolClass(index)}
                                     onClick={() => handleSelect(index)}
                                 >
                                     <span className="protocol-name">{protocol}</span>
-                                    <span className="protocol-value">{playerState.laneValues[index]}</span>
+                                    <span className="protocol-value">{targetPlayerState.laneValues[index]}</span>
                                 </div>
                             ))}
                         </div>

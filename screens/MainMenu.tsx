@@ -14,9 +14,11 @@ interface MainMenuProps {
   onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary') => void;
   difficulty: Difficulty;
   setDifficulty: (difficulty: Difficulty) => void;
+  useControl: boolean;
+  onUseControlChange: (enabled: boolean) => void;
 }
 
-export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProps) {
+export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, onUseControlChange }: MainMenuProps) {
   const [showRules, setShowRules] = useState(false);
   const [decorativeCardRight, setDecorativeCardRight] = useState<CardData | null>(null);
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
@@ -77,6 +79,15 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty }: MainMenuProp
                 <button className={`btn ${difficulty === 'normal' ? 'active' : ''}`} onClick={() => setDifficulty('normal')}>Normal</button>
                 <button className={`btn ${difficulty === 'hard' ? 'active' : ''}`} onClick={() => setDifficulty('hard')}>Hard</button>
               </div>
+            </div>
+            <div className="control-mechanic-selector">
+                <input
+                    type="checkbox"
+                    id="control-mechanic"
+                    checked={useControl}
+                    onChange={(e) => onUseControlChange(e.target.checked)}
+                />
+                <label htmlFor="control-mechanic">Use Control Mechanic</label>
             </div>
             <button className="btn btn-start" onClick={() => onNavigate('ProtocolSelection')}>
               Start Game

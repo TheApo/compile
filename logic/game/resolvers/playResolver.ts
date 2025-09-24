@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import { GameState, PlayedCard, Player, EffectResult } from '../../../types';
-import { drawCards, checkForSpirit3Trigger } from '../../../utils/gameStateModifiers';
+import { refreshHandForPlayer } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 import { recalculateAllLaneValues } from '../stateManager';
 import { log } from '../../utils/log';
@@ -124,54 +123,24 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     }
 };
 
+export const performFillHand = (prevState: GameState, player: Player): GameState => {
+    return refreshHandForPlayer(prevState, player);
+}
 
 export const fillHand = (prevState: GameState, player: Player): GameState => {
-    const playerState = prevState[player];
-    if (playerState.hand.length >= 5) return prevState;
-    
-    const cardsToDraw = 5 - playerState.hand.length;
-    if (cardsToDraw <= 0) return prevState;
-
-    // Explicitly handle drawing and state updates to ensure triggers are not missed.
-    const { drawnCards, remainingDeck, newDiscard, reshuffled } = drawCards(playerState.deck, playerState.discard, cardsToDraw);
-    if (drawnCards.length === 0) return prevState;
-
-    const newHandCards = drawnCards.map(c => ({...c, id: uuidv4(), isFaceUp: true}));
-    const drawnCardIds = newHandCards.map(c => c.id);
-
-    const newStats = {
-        ...playerState.stats,
-        cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
-    };
-
-    const newPlayerState = {
-        ...playerState,
-        deck: remainingDeck,
-        discard: newDiscard,
-        hand: [...playerState.hand, ...newHandCards],
-        stats: newStats,
-    };
-
-    let newState: GameState = { 
-        ...prevState, 
-        [player]: newPlayerState,
-        stats: {
-            ...prevState.stats,
-            [player]: newStats
-        },
-        animationState: { type: 'drawCard', owner: player, cardIds: drawnCardIds }
-    };
-
-    if (reshuffled) {
-        const playerName = player === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, player, `${playerName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
+    if (prevState.useControlMechanic && prevState.controlCardHolder === player) {
+        const opponent = player === 'player' ? 'opponent' : 'player';
+        const newState = log(prevState, player, `${player === 'player' ? 'Player' : 'Opponent'} uses Control to swap the opponent's protocols before refreshing.`);
+        return {
+            ...newState,
+            actionRequired: {
+                type: 'prompt_swap_protocols',
+                sourceCardId: 'CONTROL_MECHANIC',
+                actor: player,
+                target: opponent,
+                originalAction: { type: 'fill_hand' },
+            }
+        }
     }
-
-    const playerName = player === 'player' ? 'Player' : 'Opponent';
-    newState = log(newState, player, `${playerName} fills their hand, drawing ${cardsToDraw} card(s).`);
-
-    // Explicitly check for the Spirit-3 trigger AFTER all state changes from drawing are applied.
-    newState = checkForSpirit3Trigger(newState, player);
-
-    return newState;
+    return performFillHand(prevState, player);
 };

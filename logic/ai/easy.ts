@@ -18,11 +18,17 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
         return topCard.isFaceUp && topCard.protocol === 'Plague' && topCard.value === 0;
     };
 
+    const canPlayerCompileLane = (laneIndex: number): boolean => {
+        return state.player.laneValues[laneIndex] >= 10 && state.player.laneValues[laneIndex] > state.opponent.laneValues[laneIndex];
+    };
+
     const playerHasPsychic1 = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
 
     // 1. Super Simple Offensive Logic: If a lane is at 8 or 9, play any card face down to compile.
     for (let i = 0; i < 3; i++) {
         if (isLaneBlockedByPlague0(i)) continue;
+        // Don't play in a lane the player will compile anyway, it's a waste
+        if (canPlayerCompileLane(i)) continue;
         if (!opponent.compiled[i] && (opponent.laneValues[i] === 8 || opponent.laneValues[i] === 9)) {
             // Found a compile setup opportunity. Play the first available card face-down.
             return { cardId: opponent.hand[0].id, laneIndex: i, isFaceUp: false };
@@ -37,6 +43,8 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     if (!playerHasPsychic1) {
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
+            // Avoid playing in a lane the player is guaranteed to compile.
+            if (canPlayerCompileLane(i)) continue;
             if (cardToPlay.protocol === opponent.protocols[i]) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
@@ -44,9 +52,9 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     }
 
     // If not, just play it face down in a random playable lane.
-    const playableLanes = [0, 1, 2].filter(i => !isLaneBlockedByPlague0(i));
+    const playableLanes = [0, 1, 2].filter(i => !isLaneBlockedByPlague0(i) && !canPlayerCompileLane(i));
     if (playableLanes.length === 0) {
-        return null; // No valid lanes to play in
+        return null; // No valid lanes to play in, will cause AI to fill hand.
     }
     const randomLane = playableLanes[Math.floor(Math.random() * playableLanes.length)];
     return { cardId: cardToPlay.id, laneIndex: randomLane, isFaceUp: false };
@@ -158,11 +166,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const opponentFaceDown = allUncoveredPlayer.filter(c => !c.isFaceUp);
             if (opponentFaceDown.length > 0) {
                 // Easy AI: just pick the first one it finds.
-                return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+                return { type: 'deleteCard', cardId: opponentFaceDown[0].id };
             }
             const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
             if (ownFaceDown.length > 0) {
-                return { type: 'flipCard', cardId: ownFaceDown[0].id };
+                return { type: 'deleteCard', cardId: ownFaceDown[0].id };
             }
             return { type: 'skip' }; // Should not happen if effect generation is correct.
         }
@@ -420,7 +428,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: false };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: false };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
-        case 'prompt_shift_or_flip_for_light_2': return { type: 'resolveLight2Prompt', choice: 'skip' };
+        
+        case 'prompt_shift_or_flip_for_light_2': {
+            const { revealedCardId } = action;
+            const cardInfo = findCardOnBoard(state, revealedCardId);
+            if (!cardInfo) return { type: 'skip' };
+            
+            // Easy AI: flip its own cards, skip player's cards.
+            if (cardInfo.owner === 'opponent') {
+                return { type: 'resolveLight2Prompt', choice: 'flip' };
+            }
+            return { type: 'resolveLight2Prompt', choice: 'skip' };
+        }
 
         case 'plague_2_opponent_discard':
             if (state.opponent.hand.length > 0) return { type: 'resolvePlague2Discard', cardIds: [state.opponent.hand[0].id] };

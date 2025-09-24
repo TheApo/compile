@@ -8,6 +8,7 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
+import { ControlDisplay } from './ControlDisplay';
 
 interface GameBoardProps {
     gameState: GameState;
@@ -23,7 +24,7 @@ interface GameBoardProps {
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
-    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired } = gameState;
+    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, useControlMechanic, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
         const isCompilable = phase === 'compile' && !actionRequired && compilableLanes.includes(laneIndex);
@@ -178,6 +179,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             faceDownValue={faceDownValue}
                             sourceCardId={sourceCardId}
+                            gameState={gameState}
                         />
                     })}
                 </div>
@@ -202,6 +204,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                     )}
                 </div>
             </div>
+            
+            {useControlMechanic && <ControlDisplay holder={controlCardHolder} />}
 
             {/* Player's Side */}
             <div className={`player-side ${turn === 'player' ? 'active-turn' : ''}`}>
@@ -227,6 +231,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             faceDownValue={faceDownValue}
                             sourceCardId={sourceCardId}
+                            gameState={gameState}
                         />
                     })}
                 </div>

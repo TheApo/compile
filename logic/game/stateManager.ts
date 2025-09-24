@@ -35,7 +35,7 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
     };
 };
 
-export const createInitialState = (playerProtocols: string[], opponentProtocols: string[]): GameState => {
+export const createInitialState = (playerProtocols: string[], opponentProtocols: string[], useControlMechanic: boolean): GameState => {
     const playerState = createInitialPlayerState(playerProtocols);
     const opponentState = createInitialPlayerState(opponentProtocols);
     const initialState: GameState = {
@@ -44,6 +44,7 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
         turn: 'player',
         phase: 'start',
         controlCardHolder: null,
+        useControlMechanic,
         winner: null,
         log: [],
         actionRequired: null,

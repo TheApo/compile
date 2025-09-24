@@ -22,7 +22,8 @@ interface CardProps {
   animationState?: GameState['animationState'];
 }
 
-export function CardComponent({ card, onPointerDown, onPointerEnter, onPointerLeave, isFaceUp, faceDownValue = 2, isSelected, isMultiSelected, isTargetable, isSourceOfEffect, style, additionalClassName, animationState }: CardProps) {
+// FIX: Changed component to React.FC to correctly handle React-specific props like 'key'.
+export const CardComponent: React.FC<CardProps> = ({ card, onPointerDown, onPointerEnter, onPointerLeave, isFaceUp, faceDownValue = 2, isSelected, isMultiSelected, isTargetable, isSourceOfEffect, style, additionalClassName, animationState }) => {
   
   const RuleBox = ({ content, className }: { content: string, className?: string }) => {
     return <div className={`card-rule-box ${className || ''}`} dangerouslySetInnerHTML={{ __html: content }} />;

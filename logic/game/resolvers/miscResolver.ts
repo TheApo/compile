@@ -3,15 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import { GameState, Player, PlayedCard } from '../../../types';
-import { drawForPlayer, drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
+import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
-import { findCardOnBoard } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
+import { findCardOnBoard } from '../helpers/actionUtils';
 
-export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
+export const performCompile = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     const compiler = prevState.turn;
     const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
     
@@ -148,6 +147,26 @@ export const compileLane = (prevState: GameState, laneIndex: number, onEndGame: 
     newState.queuedActions = queuedActions;
 
     return newState;
+}
+
+export const compileLane = (prevState: GameState, laneIndex: number): GameState => {
+    const compiler = prevState.turn;
+    
+    if (prevState.useControlMechanic && prevState.controlCardHolder === compiler) {
+        const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
+        const newState = log(prevState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} uses Control to swap the opponent's protocols before compiling.`);
+        return {
+            ...newState,
+            actionRequired: {
+                type: 'prompt_swap_protocols',
+                sourceCardId: 'CONTROL_MECHANIC',
+                actor: compiler,
+                target: nonCompiler,
+                originalAction: { type: 'compile', laneIndex },
+            }
+        }
+    }
+    return prevState;
 };
 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {

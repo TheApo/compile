@@ -252,3 +252,20 @@ export const countValidDeleteTargets = (state: GameState, disallowedIds: string[
     }
     return count;
 };
+
+// FIX: Moved 'handleOnFlipToFaceUp' to this shared utility file and exported it.
+/**
+ * Handles the logic for triggering a card's on-play effect when it's flipped from face-down to face-up.
+ * This respects the rule that middle-box effects only trigger if the card is uncovered.
+ */
+export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectResult => {
+    const cardInfo = findCardOnBoard(state, cardId);
+    if (!cardInfo) return { newState: state };
+
+    const { card, owner } = cardInfo;
+    const laneIndex = state[owner].lanes.findIndex(l => l.some(c => c.id === card.id));
+    if (laneIndex === -1) return { newState: state };
+
+    // executeOnPlayEffect internally handles the "uncovered" check
+    return executeOnPlayEffect(card, laneIndex, state, owner);
+};

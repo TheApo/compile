@@ -205,7 +205,7 @@ p {
 
 .main-menu-start-group {
     align-items: center;
-    gap: 2.5rem;
+    gap: 1rem;
 }
 
 .main-menu-other-actions {
@@ -227,6 +227,7 @@ p {
   font-size: 1.2rem;
   box-shadow: 0 0 10px hsla(188, 100%, 69%, 0.2);
   width: 100%;
+  margin-top: 1rem;
 }
 
 .main-menu-start-group .btn-start:hover {
@@ -242,6 +243,7 @@ p {
   flex-direction: column;
   gap: 0.75rem;
   align-items: center;
+  width: 100%;
 }
 
 .difficulty-title {
@@ -280,6 +282,46 @@ p {
   background-color: transparent;
 }
 
+.control-mechanic-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--secondary-color);
+    margin: 1rem 0;
+}
+
+.control-mechanic-selector label {
+    cursor: pointer;
+}
+
+.control-mechanic-selector input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.25em;
+    height: 1.25em;
+    border: 2px solid var(--secondary-color);
+    border-radius: 3px;
+    background-color: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.control-mechanic-selector input[type="checkbox"]:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.control-mechanic-selector input[type="checkbox"]:checked::before {
+    content: '✓';
+    font-size: 1.2em;
+    color: var(--background-color);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: bold;
+}
 
 .decorative-card {
   pointer-events: none;
@@ -1413,6 +1455,40 @@ p {
     
     margin-bottom: -3.5rem;
 }
+
+/* --- Control Component --- */
+.control-component-container {
+    padding: 0.5rem 0;
+}
+.control-component {
+    width: 50%;
+    margin: 0 auto;
+    padding: 0.25rem;
+    text-align: center;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid;
+    transition: all 0.4s ease-in-out;
+}
+.control-component.neutral {
+    border-color: var(--surface-hover);
+    color: var(--secondary-color);
+}
+.control-component.player-controlled {
+    border-color: var(--primary-color);
+    background-color: hsla(188, 100%, 69%, 0.1);
+    color: var(--primary-color);
+    box-shadow: 0 0 10px hsla(188, 100%, 69%, 0.3);
+}
+.control-component.opponent-controlled {
+    border-color: var(--danger-color);
+    background-color: hsla(360, 100%, 67%, 0.1);
+    color: var(--danger-color);
+    box-shadow: 0 0 10px hsla(360, 100%, 67%, 0.3);
+}
+
 
 /* --- Phase Controller --- */
 .phase-controller {

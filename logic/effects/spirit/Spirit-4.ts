@@ -15,6 +15,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         type: 'prompt_swap_protocols',
         sourceCardId: card.id,
         actor,
+        target: actor,
     };
     return { newState };
 }

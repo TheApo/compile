@@ -11,7 +11,8 @@ interface ToasterProps {
   player: Player;
 }
 
-export function Toaster({ message, player }: ToasterProps) {
+// FIX: Changed component to React.FC to correctly handle React-specific props like 'key'.
+export const Toaster: React.FC<ToasterProps> = ({ message, player }) => {
   return (
     <div className={`toaster toaster-${player}`}>
       {message}

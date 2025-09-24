@@ -21,6 +21,7 @@ export function App() {
   const [winner, setWinner] = useState<Player | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [finalGameState, setFinalGameState] = useState<GameState | null>(null);
+  const [useControl, setUseControl] = useState(true);
 
   const handleBackToMenu = useCallback(() => {
     setScreen('MainMenu');
@@ -65,6 +66,8 @@ export function App() {
             onNavigate={(target) => setScreen(target)}
             difficulty={difficulty}
             setDifficulty={setDifficulty}
+            useControl={useControl}
+            onUseControlChange={setUseControl}
           />
         );
       case 'ProtocolSelection':
@@ -82,6 +85,7 @@ export function App() {
             playerProtocols={playerProtocols}
             opponentProtocols={opponentProtocols}
             difficulty={difficulty}
+            useControlMechanic={useControl}
           />
         );
       case 'ResultsScreen':
@@ -89,7 +93,7 @@ export function App() {
       case 'CardLibrary':
         return <CardLibraryScreen onBack={handleBackToMenu} />;
       default:
-        return <MainMenu onNavigate={(target) => setScreen(target)} difficulty={difficulty} setDifficulty={setDifficulty} />;
+        return <MainMenu onNavigate={(target) => setScreen(target)} difficulty={difficulty} setDifficulty={setDifficulty} useControl={useControl} onUseControlChange={setUseControl} />;
     }
   };
 

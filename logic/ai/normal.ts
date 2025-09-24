@@ -24,6 +24,37 @@ const getCardPower = (card: PlayedCard): number => {
     return power;
 }
 
+// Evaluates the threat of a card already on the board. Used for targeting.
+const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): number => {
+    // Find the lane the card is in to get context
+    let lane: PlayedCard[] | undefined;
+    for (const l of state[owner].lanes) {
+        if (l.some(c => c.id === card.id)) {
+            lane = l;
+            break;
+        }
+    }
+    if (!lane) return 0; // Should not happen
+
+    if (!card.isFaceUp) {
+        const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
+        return hasDarkness2 ? 4 : 2;
+    }
+    
+    let threat = card.value; // Base threat is its point value.
+
+    // Add threat for powerful static effects (TOP box)
+    if (card.top.length > 0) {
+        threat += 3;
+    }
+    // Add threat for recurring effects (START/END in BOTTOM box)
+    if (card.bottom.includes("Start:") || card.bottom.includes("End:")) {
+        threat += 4;
+    }
+
+    return threat;
+}
+
 // Evaluates all possible moves and returns the best one
 const getBestMove = (state: GameState): AIAction => {
     const { opponent, player } = state;
@@ -43,6 +74,8 @@ const getBestMove = (state: GameState): AIAction => {
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue; // Don't play in compiled lanes
+            
+            const canPlayerCompileThisLane = player.laneValues[i] >= 10 && player.laneValues[i] > opponent.laneValues[i];
 
             // --- Evaluate playing face-up ---
             const canPlayFaceUp = (card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1;
@@ -51,26 +84,20 @@ const getBestMove = (state: GameState): AIAction => {
                 const valueToAdd = card.value;
                 const resultingValue = opponent.laneValues[i] + valueToAdd;
 
-                // A: HUGE priority on setting up a compile
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) score += 200;
-                else if (resultingValue >= 8) score += 100;
-                
-                // B: HUGE priority on preventing player compile
-                if (player.laneValues[i] >= 8) {
-                    const hasDisruption = DISRUPTION_KEYWORDS.some(kw => card.keywords[kw]);
-                    if (hasDisruption) score += 150; // Massively incentivize playing this card here
-                }
-
-                // C: General value, effects are good
-                score += getCardPower(card);
-                 // D: Reward gaining/extending a lead
-                score += (resultingValue - player.laneValues[i]);
-
-                // E: Special strategy for Metal-6
-                if (card.protocol === 'Metal' && card.value === 6) {
-                    if (opponent.lanes[i].length < 4) {
-                        score -= 50; // Penalize playing Metal-6 too early
+                // If player can compile anyway, only play here if we can STOP them. Otherwise, it's a bad move.
+                if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
+                    score -= 200; // Penalize wasted card
+                } else {
+                     // A: HUGE priority on setting up a compile, especially if we are close.
+                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                        score += opponent.laneValues[i] >= 8 ? 250 : 200; // Bonus for securing a win
+                    } else if (resultingValue >= 8) {
+                        score += 100;
                     }
+                    // B: General value, effects are good
+                    score += getCardPower(card);
+                    // C: Reward gaining/extending a lead
+                    score += (resultingValue - player.laneValues[i]);
                 }
 
                 possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score });
@@ -81,19 +108,16 @@ const getBestMove = (state: GameState): AIAction => {
             const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
             const resultingValue = opponent.laneValues[i] + valueToAdd;
 
-            // A: HUGE priority on setting up a compile for a win
-            if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                score += 250;
-            }
-
-            // B: Still good to build up points, especially to contest a lane
-            score += valueToAdd + (resultingValue - player.laneValues[i]);
-
-            // C: Special strategy for Metal-6
-            if (card.protocol === 'Metal' && card.value === 6) {
-                if (opponent.lanes[i].length < 4) {
-                    score -= 50; // Also penalize playing it face-down early
+            if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
+                score -= 200; // Penalize wasted card
+            } else {
+                // A: HUGE priority on setting up a compile for a win
+                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                    score += 250;
                 }
+    
+                // B: Still good to build up points, especially to contest a lane
+                score += valueToAdd + (resultingValue - player.laneValues[i]);
             }
 
             possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score });
@@ -242,7 +266,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (potentialTargets.length > 0) {
                 potentialTargets.sort((a, b) => b.score - a.score);
-                return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+                return { type: 'deleteCard', cardId: potentialTargets[0].card.id };
             }
 
             return { type: 'skip' };
@@ -688,7 +712,65 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
-        case 'prompt_shift_or_flip_for_light_2': return { type: 'resolveLight2Prompt', choice: 'shift' };
+        
+        case 'prompt_shift_or_flip_for_light_2': {
+            const { revealedCardId } = action;
+            const cardInfo = findCardOnBoard(state, revealedCardId);
+            if (!cardInfo) return { type: 'skip' };
+            const { card, owner } = cardInfo;
+
+            // --- Score flipping ---
+            let flipScore = 0;
+            if (owner === 'opponent') { // AI's card
+                flipScore = getCardPower(card) + card.value; // Value + effect power
+            } else { // Player's card
+                flipScore = -getCardThreat(card, 'player', state); // Flipping a player card is generally bad
+            }
+
+            // --- Score shifting ---
+            let shiftScore = 0;
+            let bestShiftLane = -1;
+
+            let originalLaneIndex = -1;
+            for (let i = 0; i < state[owner].lanes.length; i++) {
+                if (state[owner].lanes[i].some(c => c.id === revealedCardId)) {
+                    originalLaneIndex = i;
+                    break;
+                }
+            }
+            if (originalLaneIndex !== -1) {
+                const possibleLanes = [0, 1, 2].filter(l => l !== originalLaneIndex);
+                if (possibleLanes.length > 0) {
+                    let bestLaneScore = -Infinity;
+                    for (const targetLane of possibleLanes) {
+                        let currentLaneScore = 0;
+                        if (owner === 'opponent') { // Shift own card
+                            const newLead = (state.opponent.laneValues[targetLane] + getEffectiveCardValue(card, [])) - state.player.laneValues[targetLane];
+                            const oldLead = state.opponent.laneValues[originalLaneIndex] - state.player.laneValues[originalLaneIndex];
+                            currentLaneScore = newLead - oldLead;
+                        } else { // Shift player's card
+                            const newPlayerLead = (state.player.laneValues[targetLane] + getEffectiveCardValue(card, [])) - state.opponent.laneValues[targetLane];
+                            const oldPlayerLead = state.player.laneValues[originalLaneIndex] - state.opponent.laneValues[originalLaneIndex];
+                            currentLaneScore = oldPlayerLead - newPlayerLead; // AI wants to reduce player lead
+                        }
+                        if (currentLaneScore > bestLaneScore) {
+                            bestLaneScore = currentLaneScore;
+                            bestShiftLane = targetLane;
+                        }
+                    }
+                    shiftScore = bestLaneScore;
+                }
+            }
+
+            // --- Decision ---
+            if (flipScore > shiftScore && flipScore > 0) {
+                return { type: 'resolveLight2Prompt', choice: 'flip' };
+            }
+            if (shiftScore > 0) {
+                return { type: 'resolveLight2Prompt', choice: 'shift' };
+            }
+            return { type: 'resolveLight2Prompt', choice: 'skip' };
+        }
         
         case 'select_opponent_covered_card_to_shift': {
             const validTargets: { card: PlayedCard; laneIndex: number }[] = [];

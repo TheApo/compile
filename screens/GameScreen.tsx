@@ -27,6 +27,7 @@ interface GameScreenProps {
   playerProtocols: string[];
   opponentProtocols: string[];
   difficulty: Difficulty;
+  useControlMechanic: boolean;
 }
 
 type PreviewState = {
@@ -45,7 +46,7 @@ const findCardOnBoard = (state: GameState, cardId: string | undefined): { card: 
     return null;
 }
 
-export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty }: GameScreenProps) {
+export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic }: GameScreenProps) {
   
   const {
     gameState,
@@ -75,7 +76,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSpeed3Prompt,
     resolvePsychic4Prompt,
     setupTestScenario,
-  } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty);
+    // FIX: Pass useControlMechanic to the useGameState hook.
+  } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty, useControlMechanic);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
   const [multiSelectedCardIds, setMultiSelectedCardIds] = useState<string[]>([]);
@@ -345,6 +347,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                                gameState.phase === 'compile' && 
                                gameState.compilableLanes.length > 0;
 
+  // FIX: Safely access sourceCardId, as not all actions have it (e.g., control mechanic).
   const sourceCardId = gameState.actionRequired?.sourceCardId ?? null;
 
   const actionRequiredClass = useMemo(() => {
@@ -376,8 +379,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             />
         )}
         {showSwapModal && gameState.actionRequired?.type === 'prompt_swap_protocols' && (
-            <SwapProtocolsModal 
+            <SwapProtocolsModal
                 gameState={gameState}
+                targetPlayer={gameState.actionRequired.target}
                 onConfirm={(indices) => {
                     resolveSwapProtocols(indices);
                     setShowSwapModal(false);

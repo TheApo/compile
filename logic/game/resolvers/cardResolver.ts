@@ -6,7 +6,8 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
-import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets } from '../helpers/actionUtils';
+// FIX: Import 'handleOnFlipToFaceUp' from the shared utility file.
+import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { executeOnPlayEffect } from '../../effectExecutor';
 
@@ -19,21 +20,7 @@ export type CardActionResult = {
     requiresTurnEnd?: boolean;
 };
 
-/**
- * Handles the logic for triggering a card's on-play effect when it's flipped from face-down to face-up.
- * This respects the rule that middle-box effects only trigger if the card is uncovered.
- */
-const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectResult => {
-    const cardInfo = findCardOnBoard(state, cardId);
-    if (!cardInfo) return { newState: state };
-
-    const { card, owner } = cardInfo;
-    const laneIndex = state[owner].lanes.findIndex(l => l.some(c => c.id === card.id));
-    if (laneIndex === -1) return { newState: state };
-
-    // executeOnPlayEffect internally handles the "uncovered" check
-    return executeOnPlayEffect(card, laneIndex, state, owner);
-};
+// FIX: Removed local definition of 'handleOnFlipToFaceUp' as it has been moved to 'actionUtils.ts'.
 
 function handleMetal6Flip(state: GameState, targetCardId: string, action: ActionRequired): CardActionResult | null {
     const cardInfo = findCardOnBoard(state, targetCardId);
@@ -77,6 +64,8 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
 
 export const resolveActionWithCard = (prev: GameState, targetCardId: string): CardActionResult => {
     if (!prev.actionRequired) return { nextState: prev };
+
+    const isInterrupt = !!prev._interruptedTurn && prev.turn !== prev._interruptedTurn;
 
     let newState: GameState = { ...prev };
     let requiresTurnEnd = true;
@@ -683,28 +672,25 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_face_down_card_to_reveal_for_light_2': {
-            const { actor } = prev.actionRequired;
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            const nextAction: ActionRequired = {
+            const { actor, sourceCardId } = prev.actionRequired;
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (!cardInfo) return { nextState: prev };
+        
+            const { card, owner } = cardInfo;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const ownerName = owner === 'player' ? "Player's" : "Opponent's";
+            const cardName = `${card.protocol}-${card.value}`;
+        
+            newState = log(prev, actor, `Light-2: ${actorName} reveals ${ownerName} ${cardName}.`);
+        
+            newState.actionRequired = {
                 type: 'prompt_shift_or_flip_for_light_2',
-                sourceCardId: prev.actionRequired.sourceCardId,
+                sourceCardId: sourceCardId,
                 revealedCardId: targetCardId,
                 optional: true,
                 actor,
             };
-
-            newState = internalResolveTargetedFlip(prev, targetCardId, nextAction);
-        
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(newState, targetCardId);
-                newState = result.newState;
-                if (result.animationRequests) {
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s) => s
-                    };
-                }
-            }
+            
             requiresTurnEnd = false;
             break;
         }
@@ -749,6 +735,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     // If an action was just resolved and it resulted in a new action or a queued action, don't end the turn.
     if (!requiresAnimation && (newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0))) {
         requiresTurnEnd = false;
+    }
+
+    // FIX: If this was an interrupt action that is now fully resolved, we must trigger the turn progression logic.
+    if (isInterrupt && !newState.actionRequired) {
+        requiresTurnEnd = true;
     }
 
     return { nextState: newState, requiresAnimation, requiresTurnEnd };
