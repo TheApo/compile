@@ -273,7 +273,7 @@ export const cards: Card[] = [
         protocol: "Hate",
         value: 2,
         top: "",
-        middle: "Delete your highest value card. Delete your opponent's highest value card.",
+        middle: "Delete your highest value uncovered card. Delete your opponent's highest value uncovered card.",
         bottom: "",
         keywords: { delete: true }
     },

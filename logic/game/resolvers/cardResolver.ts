@@ -6,7 +6,6 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
-// FIX: Import 'handleOnFlipToFaceUp' from the shared utility file.
 import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { executeOnPlayEffect } from '../../effectExecutor';
@@ -19,8 +18,6 @@ export type CardActionResult = {
     } | null;
     requiresTurnEnd?: boolean;
 };
-
-// FIX: Removed local definition of 'handleOnFlipToFaceUp' as it has been moved to 'actionUtils.ts'.
 
 function handleMetal6Flip(state: GameState, targetCardId: string, action: ActionRequired): CardActionResult | null {
     const cardInfo = findCardOnBoard(state, targetCardId);
@@ -298,7 +295,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
-            const actor = prev.turn;
+            const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
@@ -318,7 +315,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
-                    const deletingPlayer = prev.turn;
+                    const deletingPlayer = prev.actionRequired.actor;
                     let stateWithTriggers = checkForHate3Trigger(s, deletingPlayer);
                     let uncoverResult: EffectResult | null = null;
         
@@ -456,34 +453,77 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = false; // Turn doesn't end here, it goes to the flip prompt.
             break;
         }
-        case 'select_any_other_card_to_flip': {
-            const { draws, sourceCardId } = prev.actionRequired;
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            newState = internalResolveTargetedFlip(prev, targetCardId);
+        case 'select_any_other_card_to_flip':
+        case 'select_any_card_to_flip':
+        case 'select_card_to_flip_for_light_0':
+        case 'select_any_other_card_to_flip_for_water_0': {
+            let nextAction: ActionRequired = null;
+            let draws = 0;
+            const currentAction = prev.actionRequired;
 
+            // Determine what the next step of the original action is.
+            if (currentAction.type === 'select_any_card_to_flip') {
+                const remainingFlips = currentAction.count - 1;
+                if (remainingFlips > 0) {
+                    nextAction = { ...currentAction, count: remainingFlips };
+                }
+            } else if (currentAction.type === 'select_any_other_card_to_flip') {
+                draws = currentAction.draws;
+            } else if (currentAction.type === 'select_any_other_card_to_flip_for_water_0') {
+                nextAction = {
+                    // This is a placeholder for the "flip this card" step
+                    type: 'flip_self_for_water_0',
+                    sourceCardId: currentAction.sourceCardId,
+                } as any;
+            }
+            // Light-0's draw is handled specially below.
+
+            // 1. Apply the flip, but clear the actionRequired for now.
+            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
+            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, null);
+
+            // 2. See if the flip triggered a secondary effect.
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(newState, targetCardId);
+                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
                 newState = result.newState;
-                if (result.animationRequests) {
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
-                    };
+                // TODO: Handle animations from secondary effects
+            } else {
+                newState = stateAfterFlip;
+            }
+
+            // 3. Determine the final action state based on the result of the secondary effect.
+            const onPlayAction = newState.actionRequired;
+            if (onPlayAction) {
+                // The secondary effect created an interruption.
+                newState.actionRequired = onPlayAction;
+                if (nextAction) {
+                    newState.queuedActions = [...(newState.queuedActions || []), nextAction];
+                }
+            } else {
+                // No interruption. Proceed with the original action's next step.
+                if (currentAction.type === 'select_card_to_flip_for_light_0') {
+                    // Special case: draw based on the flipped card's value.
+                    const cardAfterFlip = findCardOnBoard(newState, targetCardId)!.card;
+                    const valueToDraw = cardAfterFlip.isFaceUp ? cardAfterFlip.value : 2;
+                    newState = drawForPlayer(newState, prev.turn, valueToDraw);
+                    newState = log(newState, prev.turn, `Light-0: Drawing ${valueToDraw} card(s).`);
+                } else if (currentAction.type === 'select_any_other_card_to_flip_for_water_0') {
+                    // Special case: now flip the source card.
+                    const water0CardId = currentAction.sourceCardId;
+                    newState = internalResolveTargetedFlip(newState, water0CardId, null);
+                    newState = log(newState, prev.turn, `Water-0: Flips itself.`);
+                } else if (draws > 0) {
+                    newState = drawForPlayer(newState, prev.turn, draws);
+                } else {
+                    newState.actionRequired = nextAction;
                 }
             }
-
-            if (draws > 0) {
-                const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
-                const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-                newState = log(newState, newState.turn, `${sourceCardName}: Draw ${draws} card(s).`);
-                newState = drawForPlayer(newState, newState.turn, draws);
-            }
-
-            if(newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
+            
+            // 4. Determine if the turn should end.
+            if (newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
                 requiresTurnEnd = false;
+            } else {
+                requiresTurnEnd = true;
             }
             break;
         }
@@ -590,87 +630,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
             break;
         }
-        case 'select_any_card_to_flip': {
-            const remainingFlips = prev.actionRequired.count - 1;
-            let nextAction: ActionRequired = null;
-            if (remainingFlips > 0) {
-                nextAction = { ...prev.actionRequired, count: remainingFlips };
-            }
-
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            newState = internalResolveTargetedFlip(prev, targetCardId, nextAction);
-        
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(newState, targetCardId);
-                const onPlayAction = result.newState.actionRequired;
-                
-                // If the on-flip effect created a new action, we must prioritize it
-                // and queue the remaining flips.
-                if (onPlayAction && onPlayAction !== nextAction) {
-                    result.newState.actionRequired = onPlayAction;
-                    if (nextAction) {
-                        result.newState.queuedActions = [...(result.newState.queuedActions || []), nextAction];
-                    }
-                }
-                newState = result.newState;
-
-                if (result.animationRequests) {
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
-                    };
-                }
-            }
-
-            if (newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
-                requiresTurnEnd = false;
-            } else {
-                requiresTurnEnd = remainingFlips <= 0;
-            }
-            break;
-        }
-        case 'select_card_to_flip_for_light_0': {
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            if (!cardInfoBeforeFlip) return { nextState: prev };
-        
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId);
-        
-            if (!cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
-                stateAfterFlip = result.newState;
-                if (result.animationRequests) {
-                    // Light-0's draw needs to happen *after* any potential on-flip animation.
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            const cardAfterAnims = findCardOnBoard(s, targetCardId)!.card;
-                            const valueToDraw = cardAfterAnims.isFaceUp ? cardAfterAnims.value : 2;
-                            const stateAfterDraw = drawForPlayer(s, s.turn, valueToDraw);
-                            const stateWithLog = log(stateAfterDraw, s.turn, `Light-0: Drawing ${valueToDraw} card(s).`);
-                            return endTurnCb(stateWithLog);
-                        }
-                    };
-                }
-            }
-
-            // If there were animations, the draw happens in the callback. If not, do it now.
-            if (!requiresAnimation) {
-                const cardAfterFlip = findCardOnBoard(stateAfterFlip, targetCardId)!.card;
-                const valueToDraw = cardAfterFlip.isFaceUp ? cardAfterFlip.value : 2;
-                newState = drawForPlayer(stateAfterFlip, prev.turn, valueToDraw);
-                newState = log(newState, prev.turn, `Light-0: Drawing ${valueToDraw} card(s).`);
-            } else {
-                newState = stateAfterFlip;
-            }
-
-            if(newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
-                requiresTurnEnd = false;
-            }
-            break;
-        }
         case 'select_face_down_card_to_reveal_for_light_2': {
             const { actor, sourceCardId } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, targetCardId);
@@ -692,27 +651,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             };
             
             requiresTurnEnd = false;
-            break;
-        }
-        case 'select_any_other_card_to_flip_for_water_0': {
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            let stateAfterFirstFlip = internalResolveTargetedFlip(prev, targetCardId);
-
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(stateAfterFirstFlip, targetCardId);
-                stateAfterFirstFlip = result.newState;
-                if (result.animationRequests) {
-                    // This case gets complex. For now, we assume no animations from on-flip.
-                }
-            }
-
-            const water0CardId = prev.actionRequired.sourceCardId;
-            newState = internalResolveTargetedFlip(stateAfterFirstFlip, water0CardId);
-            newState = log(newState, prev.turn, `Water-0: Flips itself.`);
-            
-            if(newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
-                requiresTurnEnd = false;
-            }
             break;
         }
         case 'select_own_card_to_return_for_water_4': {

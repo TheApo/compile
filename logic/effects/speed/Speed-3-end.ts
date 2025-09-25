@@ -10,9 +10,17 @@ import { GameState, PlayedCard, EffectResult } from "../../../types";
  */
 export const execute = (card: PlayedCard, state: GameState): EffectResult => {
     const player = state.turn;
-    const allPlayerCards = state[player].lanes.flat();
+    
+    // Check for valid targets: any of the player's uncovered cards.
+    const validTargets: PlayedCard[] = [];
+    for (const lane of state[player].lanes) {
+        if (lane.length > 0) {
+            const topCard = lane[lane.length - 1]; // This is the uncovered card.
+            validTargets.push(topCard);
+        }
+    }
 
-    if (allPlayerCards.length > 0) {
+    if (validTargets.length > 0) {
         return {
             newState: {
                 ...state,
@@ -27,4 +35,4 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
     }
     
     return { newState: state };
-}
+};

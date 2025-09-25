@@ -35,8 +35,21 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
         }
     }
 
+    // Filter out unplayable cards like Water-4 on an empty board
+    const playableHand = opponent.hand.filter(card => {
+        if (card.protocol === 'Water' && card.value === 4) {
+            // Water-4 is only playable if the AI has other cards on the board to return.
+            return opponent.lanes.flat().length > 0;
+        }
+        return true;
+    });
+
+    if (playableHand.length === 0) {
+        return null; // No valid cards to play, AI must fill hand.
+    }
+
     // 2. Default Dumb Logic: Play the highest value card face up if possible, otherwise face down.
-    const sortedHand = [...opponent.hand].sort((a, b) => b.value - a.value);
+    const sortedHand = [...playableHand].sort((a, b) => b.value - a.value);
     const cardToPlay = sortedHand[0];
 
     // Try to find a lane where it can be played face up.

@@ -102,11 +102,28 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         // Re-triggering the on-play effect is the main part of the mechanic.
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
         
-        // If the effect requires an action from the non-turn player,
-        // we need to interrupt the current turn to resolve the action.
-        if (result.newState.actionRequired && result.newState.actionRequired.actor !== state.turn) {
-            result.newState._interruptedTurn = state.turn;
-            result.newState.turn = result.newState.actionRequired.actor;
+        if (result.newState.actionRequired) {
+            const newActionActor = result.newState.actionRequired.actor;
+            // If an interrupt is already in progress...
+            if (state._interruptedTurn) {
+                // ...and the new action is for the ORIGINAL turn player...
+                if (newActionActor === state._interruptedTurn) {
+                    // ...queue the action instead of creating a nested interrupt.
+                    result.newState.queuedActions = [
+                        ...(result.newState.queuedActions || []),
+                        result.newState.actionRequired
+                    ];
+                    result.newState.actionRequired = null; // Clear the immediate action
+                    return result;
+                }
+            }
+            
+            // Standard interrupt logic if no interrupt is in progress, or if the new action
+            // is for the currently interrupting player.
+            if (newActionActor !== state.turn) {
+                result.newState._interruptedTurn = state.turn;
+                result.newState.turn = newActionActor;
+            }
         }
         
         return result;
@@ -253,7 +270,6 @@ export const countValidDeleteTargets = (state: GameState, disallowedIds: string[
     return count;
 };
 
-// FIX: Moved 'handleOnFlipToFaceUp' to this shared utility file and exported it.
 /**
  * Handles the logic for triggering a card's on-play effect when it's flipped from face-down to face-up.
  * This respects the rule that middle-box effects only trigger if the card is uncovered.
@@ -267,5 +283,30 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
     if (laneIndex === -1) return { newState: state };
 
     // executeOnPlayEffect internally handles the "uncovered" check
-    return executeOnPlayEffect(card, laneIndex, state, owner);
+    const result = executeOnPlayEffect(card, laneIndex, state, owner);
+    
+    if (result.newState.actionRequired) {
+        const newActionActor = result.newState.actionRequired.actor;
+        // If an interrupt is already in progress...
+        if (state._interruptedTurn) {
+            // ...and the new action is for the ORIGINAL turn player...
+            if (newActionActor === state._interruptedTurn) {
+                // ...queue the action instead of creating a nested interrupt.
+                result.newState.queuedActions = [
+                    ...(result.newState.queuedActions || []),
+                    result.newState.actionRequired
+                ];
+                result.newState.actionRequired = null; 
+                return result;
+            }
+        }
+        
+        // Standard interrupt logic if no interrupt is in progress, or if the new action
+        // is for the currently interrupting player.
+        if (newActionActor !== state.turn) {
+            result.newState._interruptedTurn = state.turn;
+            result.newState.turn = newActionActor;
+        }
+    }
+    return result;
 };

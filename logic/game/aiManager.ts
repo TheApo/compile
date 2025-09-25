@@ -484,19 +484,24 @@ export const runOpponentTurn = (
             const compileAction = getAIAction(state, null, difficulty);
             if (compileAction.type === 'compile') {
                 const laneIndex = compileAction.laneIndex;
+                const stateBeforeCompile = resolvers.compileLane(state, laneIndex);
+
+                if (stateBeforeCompile.actionRequired) {
+                    return stateBeforeCompile;
+                }
+
                 setTimeout(() => {
                     setGameState(s => {
                         const nextState = actions.compileLane(s, laneIndex);
                         if (nextState.winner) {
-                            return nextState; // Stop processing if game is over
+                            return nextState;
                         }
                         const finalState = phaseManager.processEndOfAction(nextState);
-                        // Clear the animation state after the compile logic has run and the turn has processed.
                         return { ...finalState, animationState: null };
                     });
                 }, 1000);
                 return { 
-                    ...state, 
+                    ...stateBeforeCompile, 
                     animationState: { type: 'compile' as const, laneIndex },
                     compilableLanes: []
                 };
@@ -508,7 +513,10 @@ export const runOpponentTurn = (
             const mainAction = getAIAction(state, null, difficulty);
     
             if (mainAction.type === 'fillHand') {
-                const stateAfterAction = actions.fillHand(state, 'opponent');
+                const stateAfterAction = resolvers.fillHand(state, 'opponent');
+                if (stateAfterAction.actionRequired) {
+                    return stateAfterAction;
+                }
                 return phaseManager.processEndOfAction(stateAfterAction);
             }
             

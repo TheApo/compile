@@ -90,6 +90,11 @@ const getBestMove = (state: GameState): AIAction => {
 
     // --- Evaluate Playing Cards ---
     for (const card of opponent.hand) {
+        // Prevent playing Water-4 on an empty board
+        if (card.protocol === 'Water' && card.value === 4 && opponent.lanes.flat().length === 0) {
+            continue;
+        }
+        
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue;

@@ -4,15 +4,27 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { log } from "../../utils/log";
 
 /**
  * Hate-0: Delete 1 card.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    const allCardsOnBoard = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-    const otherCardsOnBoard = allCardsOnBoard.filter(c => c.id !== card.id);
+    // According to default targeting rules, "delete" can only target uncovered cards.
+    // Let's find all uncovered cards that are not the source card itself.
+    const targetableCards: PlayedCard[] = [];
+    for (const p of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[p].lanes) {
+            if (lane.length > 0) {
+                const topCard = lane[lane.length - 1]; // This is the uncovered card
+                if (topCard.id !== card.id) {
+                    targetableCards.push(topCard);
+                }
+            }
+        }
+    }
 
-    if (otherCardsOnBoard.length > 0) {
+    if (targetableCards.length > 0) {
         return {
             newState: {
                 ...state,
@@ -26,5 +38,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         };
     }
-    return { newState: state };
+    
+    const newState = log(state, actor, "Hate-0: No valid (uncovered) cards to delete.");
+    return { newState };
 }
