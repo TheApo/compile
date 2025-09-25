@@ -14,6 +14,7 @@ import { cards } from '../data/cards';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../logic/utils/log';
 import { buildDeck, shuffleDeck } from '../utils/gameLogic';
+import { handleUncoverEffect } from '../logic/game/helpers/actionUtils';
 
 export const useGameState = (
     playerProtocols: string[], 
@@ -55,28 +56,41 @@ export const useGameState = (
             onComplete();
             return;
         }
-
+    
         const [nextRequest, ...rest] = queue;
         
         setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
-
+    
         setTimeout(() => {
             setGameState(s => {
-                const stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
-                const stateWithNewValues = stateManager.recalculateAllLaneValues(stateAfterDelete);
-                return { ...stateWithNewValues, animationState: null };
+                // Find context from state 's' right before deletion.
+                const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
+                const wasTopCard = laneIndex !== -1 && 
+                                   s[nextRequest.owner].lanes[laneIndex].length > 0 && 
+                                   s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
+    
+                let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
+                let stateWithNewValues = stateManager.recalculateAllLaneValues(stateAfterDelete);
+                
+                let finalState = { ...stateWithNewValues, animationState: null };
+    
+                if (wasTopCard) {
+                    const uncoverResult = handleUncoverEffect(finalState, nextRequest.owner, laneIndex);
+                    // Important: Ignore any animation requests from the uncover effect to prevent nesting.
+                    // We take the resulting state, which may have a new actionRequired.
+                    finalState = uncoverResult.newState;
+                }
+                
+                return finalState;
             });
-
-            // Recurse AFTER the timeout completes to ensure state updates are somewhat sequential.
+    
             if (rest.length > 0) {
-                // This recursive call is problematic in hooks, but for this specific game loop it works.
-                // A more robust solution might use a queue managed in a ref.
                 processAnimationQueue(rest, onComplete);
             } else {
-                onComplete(); // This is the final animation
+                onComplete();
             }
         }, 500);
-    }, []); // Note: leaving dependency array empty for intended recursive behavior without re-creation.
+    }, []);
 
     const playSelectedCard = (laneIndex: number, isFaceUp: boolean) => {
         if (!selectedCard || gameState.turn !== 'player' || gameState.phase !== 'action') return;

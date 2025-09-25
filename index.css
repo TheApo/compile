@@ -952,6 +952,7 @@ p {
     border-right: none;
     margin: 0.5rem 0;
     height: auto;
+    position: relative; /* For centering the coin */
 }
 .protocol-bar {
     display: flex;
@@ -1017,6 +1018,93 @@ p {
 
 .protocol-display.is-compiling {
     animation: compile-glow 1s ease-in-out;
+}
+
+/* --- Control Coin --- */
+.control-coin-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.control-coin {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  background-color: var(--surface-color);
+  transition: all 0.4s ease-in-out;
+  animation-duration: 2.5s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  pointer-events: auto; /* Allow hover */
+  cursor: help;
+}
+
+.control-coin.neutral {
+  border: 2px solid var(--secondary-color);
+  color: var(--secondary-color);
+  animation-name: control-pulse-neutral;
+}
+
+.control-coin.player-controlled {
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  animation-name: control-pulse-player;
+}
+
+.control-coin.opponent-controlled {
+  border: 2px solid var(--danger-color);
+  color: var(--danger-color);
+  animation-name: control-pulse-opponent;
+}
+
+@keyframes control-pulse-neutral {
+  0% { box-shadow: 0 0 10px var(--secondary-color); }
+  50% { box-shadow: 0 0 20px var(--secondary-color); }
+  100% { box-shadow: 0 0 10px var(--secondary-color); }
+}
+@keyframes control-pulse-player {
+  0% { box-shadow: 0 0 15px var(--primary-color); }
+  50% { box-shadow: 0 0 25px var(--primary-color); }
+  100% { box-shadow: 0 0 15px var(--primary-color); }
+}
+@keyframes control-pulse-opponent {
+  0% { box-shadow: 0 0 15px var(--danger-color); }
+  50% { box-shadow: 0 0 25px var(--danger-color); }
+  100% { box-shadow: 0 0 15px var(--danger-color); }
+}
+
+.control-coin-label {
+  font-size: 0.7rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  font-weight: 600;
+  transition: color 0.4s ease-in-out;
+}
+
+.control-coin-label.neutral {
+  color: var(--secondary-color);
+}
+
+.control-coin-label.player-controlled {
+  color: var(--primary-color);
+}
+
+.control-coin-label.opponent-controlled {
+  color: var(--danger-color);
 }
 
 
@@ -1463,40 +1551,6 @@ p {
     margin-bottom: -3.5rem;
 }
 
-/* --- Control Component --- */
-.control-component-container {
-    padding: 0.5rem 0;
-}
-.control-component {
-    width: 50%;
-    margin: 0 auto;
-    padding: 0.25rem;
-    text-align: center;
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
-    font-size: 0.8rem;
-    border-radius: 4px;
-    border: 1px solid;
-    transition: all 0.4s ease-in-out;
-}
-.control-component.neutral {
-    border-color: var(--surface-hover);
-    color: var(--secondary-color);
-}
-.control-component.player-controlled {
-    border-color: var(--primary-color);
-    background-color: hsla(188, 100%, 69%, 0.1);
-    color: var(--primary-color);
-    box-shadow: 0 0 10px hsla(188, 100%, 69%, 0.3);
-}
-.control-component.opponent-controlled {
-    border-color: var(--danger-color);
-    background-color: hsla(360, 100%, 67%, 0.1);
-    color: var(--danger-color);
-    box-shadow: 0 0 10px hsla(360, 100%, 67%, 0.3);
-}
-
-
 /* --- Phase Controller --- */
 .phase-controller {
     display: flex;
@@ -1559,11 +1613,13 @@ p {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    padding: 1rem;
     border: none;
     background: transparent;
 }
 .info-section {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
     border: 1px solid transparent;
     border-radius: 4px;
     cursor: pointer;
@@ -1605,16 +1661,21 @@ p {
     font-size: 1rem;
     text-transform: uppercase;
     font-family: 'Orbitron', sans-serif;
-    padding-left: 0.5rem;
 }
 .player-info h3 {
     color: var(--primary-color);
 }
+
+.info-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
 .info-line {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
-    padding: 0 0.5rem;
 }
 .info-line span:last-child {
   font-weight: 600;

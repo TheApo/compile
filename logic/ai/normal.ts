@@ -618,19 +618,26 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
         
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const faceUpPlayerCards = state.player.lanes.flat().filter(c => c.isFaceUp);
-            if (faceUpPlayerCards.length > 0) {
-                // Target highest value face-up card
-                faceUpPlayerCards.sort((a,b) => b.value - a.value);
-                return { type: 'deleteCard', cardId: faceUpPlayerCards[0].id };
-            }
-            const faceDownPlayerCards = state.player.lanes.flat().filter(c => !c.isFaceUp);
-            if (faceDownPlayerCards.length > 0) {
-                 // Target a random face-down card
-                const randomCard = faceDownPlayerCards[Math.floor(Math.random() * faceDownPlayerCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
+            const allUncovered = [...getUncovered('player'), ...getUncovered('opponent')];
+            if (allUncovered.length === 0) return { type: 'skip' };
+            
+            // Prioritize flipping player's face-up cards (to disrupt), then own face-down (to gain value)
+            const sortedTargets = allUncovered.sort((a, b) => {
+                const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
+                const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
+                
+                // Player's face-up > Own face-down > Player's face-down > Own face-up
+                const scoreA = (aIsPlayer && a.isFaceUp) ? 100 + a.value : (!aIsPlayer && !a.isFaceUp) ? 50 + a.value : (aIsPlayer && !a.isFaceUp) ? 10 : 1;
+                const scoreB = (bIsPlayer && b.isFaceUp) ? 100 + b.value : (!bIsPlayer && !b.isFaceUp) ? 50 + b.value : (bIsPlayer && !b.isFaceUp) ? 10 : 1;
+                
+                return scoreB - scoreA;
+            });
+
+            return { type: 'deleteCard', cardId: sortedTargets[0].id };
         }
 
         case 'select_face_down_card_to_shift_for_gravity_4': {

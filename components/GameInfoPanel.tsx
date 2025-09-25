@@ -35,38 +35,36 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
     return classes.join(' ');
   };
 
+  const renderInfoSection = (p: Player) => {
+    const playerState = p === 'player' ? player : opponent;
+    const clickHandler = p === 'player' ? onPlayerClick : onOpponentClick;
+    const title = p === 'player' ? 'Player' : 'Opponent';
+
+    return (
+      <div className={getSectionClasses(p)} onClick={clickHandler}>
+        <div className="info-section-body">
+          <h3>{title}</h3>
+          <div className="info-line">
+            <span>Hand:</span>
+            <span>{playerState.hand.length}</span>
+          </div>
+          <div className="info-line">
+            <span>Deck:</span>
+            <span>{playerState.deck.length}</span>
+          </div>
+          <div className="info-line">
+            <span>Trash:</span>
+            <span>{playerState.discard.length}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="game-info-panel">
-      <div className={getSectionClasses('opponent')} onClick={onOpponentClick}>
-        <h3>Opponent</h3>
-        <div className="info-line">
-          <span>Hand:</span>
-          <span>{opponent.hand.length}</span>
-        </div>
-        <div className="info-line">
-          <span>Deck:</span>
-          <span>{opponent.deck.length}</span>
-        </div>
-        <div className="info-line">
-          <span>Trash:</span>
-          <span>{opponent.discard.length}</span>
-        </div>
-      </div>
-      <div className={getSectionClasses('player')} onClick={onPlayerClick}>
-        <h3>Player</h3>
-        <div className="info-line">
-          <span>Hand:</span>
-          <span>{player.hand.length}</span>
-        </div>
-        <div className="info-line">
-          <span>Deck:</span>
-          <span>{player.deck.length}</span>
-        </div>
-        <div className="info-line">
-          <span>Trash:</span>
-          <span>{player.discard.length}</span>
-        </div>
-      </div>
+      {renderInfoSection('opponent')}
+      {renderInfoSection('player')}
     </div>
   );
 };

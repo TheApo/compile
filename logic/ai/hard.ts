@@ -694,19 +694,32 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
         
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) {
-                // Target the most threatening card on the board, prioritizing player cards
-                allCards.sort((a, b) => {
-                    const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
-                    const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
-                    if (aIsPlayer && !bIsPlayer) return -1;
-                    if (!aIsPlayer && bIsPlayer) return 1;
-                    return getCardThreat(b, aIsPlayer ? 'player' : 'opponent', state) - getCardThreat(a, bIsPlayer ? 'player' : 'opponent', state);
-                });
-                return { type: 'deleteCard', cardId: allCards[0].id };
-            }
-            return { type: 'skip' };
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+
+            const allUncovered = [...getUncovered('player'), ...getUncovered('opponent')];
+            if (allUncovered.length === 0) return { type: 'skip' };
+            
+            const sortedTargets = allUncovered.sort((a, b) => {
+                const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
+                const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
+                
+                // Prioritize flipping player's most threatening face-up card
+                if (aIsPlayer && a.isFaceUp && (!bIsPlayer || !b.isFaceUp)) return -1;
+                if (bIsPlayer && b.isFaceUp && (!aIsPlayer || !a.isFaceUp)) return 1;
+                if (aIsPlayer && a.isFaceUp && bIsPlayer && b.isFaceUp) {
+                    return getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state);
+                }
+
+                // Otherwise, flip own most valuable face-down card
+                const aScore = !aIsPlayer && !a.isFaceUp ? 50 + a.value : 1;
+                const bScore = !bIsPlayer && !b.isFaceUp ? 50 + b.value : 1;
+
+                return bScore - aScore;
+            });
+
+            return { type: 'deleteCard', cardId: sortedTargets[0].id };
         }
 
         case 'select_face_down_card_to_shift_for_gravity_4': {

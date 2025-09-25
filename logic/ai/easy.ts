@@ -313,9 +313,19 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const playerCards = state.player.lanes.flat();
+            const getUncovered = (p: Player) => state[p].lanes
+                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
+                .filter((c): c is PlayedCard => c !== null);
+            
+            const playerCards = getUncovered('player');
             if (playerCards.length > 0) {
                 const randomCard = playerCards[Math.floor(Math.random() * playerCards.length)];
+                return { type: 'deleteCard', cardId: randomCard.id };
+            }
+            
+            const opponentCards = getUncovered('opponent');
+            if (opponentCards.length > 0) {
+                const randomCard = opponentCards[Math.floor(Math.random() * opponentCards.length)];
                 return { type: 'deleteCard', cardId: randomCard.id };
             }
             return { type: 'skip' };

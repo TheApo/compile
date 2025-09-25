@@ -8,7 +8,6 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
-import { ControlDisplay } from './ControlDisplay';
 
 interface GameBoardProps {
     gameState: GameState;
@@ -24,7 +23,7 @@ interface GameBoardProps {
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
-    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, useControlMechanic, controlCardHolder } = gameState;
+    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
         const isCompilable = phase === 'compile' && !actionRequired && compilableLanes.includes(laneIndex);
@@ -143,6 +142,24 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         return hasDarkness2 ? 4 : 2;
     };
 
+    const getControlCoinClass = () => {
+        if (controlCardHolder === 'player') return 'player-controlled';
+        if (controlCardHolder === 'opponent') return 'opponent-controlled';
+        return 'neutral';
+    };
+
+    const getControlCoinTitle = () => {
+        if (controlCardHolder === 'player') return 'Player has control.';
+        if (controlCardHolder === 'opponent') return 'Opponent has control.';
+        return 'Control is neutral.';
+    };
+
+    const getControlCoinLabel = () => {
+        if (controlCardHolder === 'player') return 'Control Player';
+        if (controlCardHolder === 'opponent') return 'Control Opponent';
+        return 'Control Neutral';
+    };
+
     return (
         <div className="game-board">
             <div className="opponent-hand-area">
@@ -187,6 +204,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
 
             {/* Central Protocol Bars */}
             <div className="protocol-bars-container">
+                {gameState.useControlMechanic && (
+                    <div className="control-coin-container">
+                        <div
+                            className={`control-coin ${getControlCoinClass()}`}
+                            title={getControlCoinTitle()}
+                        >
+                            C
+                        </div>
+                        <div className={`control-coin-label ${getControlCoinClass()}`}>
+                            {getControlCoinLabel()}
+                        </div>
+                    </div>
+                )}
                 <div className="protocol-bar opponent-bar">
                     {opponent.protocols.map((p, i) => 
                         <div key={`opp-proto-${p}-${i}`} className={getProtocolClass('protocol-display', opponent.compiled[i], i)}>
@@ -204,8 +234,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                     )}
                 </div>
             </div>
-            
-            {useControlMechanic && <ControlDisplay holder={controlCardHolder} />}
 
             {/* Player's Side */}
             <div className={`player-side ${turn === 'player' ? 'active-turn' : ''}`}>
