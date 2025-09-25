@@ -92,7 +92,6 @@ export const advancePhase = (state: GameState): GameState => {
                 return { ...stateWithLog, phase: 'end' };
             }
 
-            // Step 1: Enforce the hand limit. If player has more than 5 cards, require discard and stop.
             if (playerState.hand.length > 5) {
                 return {
                     ...nextState,
@@ -100,8 +99,7 @@ export const advancePhase = (state: GameState): GameState => {
                 };
             }
             
-            // Step 2: If we reach here, the hand limit is satisfied. The "after clear cache" trigger
-            // for Speed-1 is handled within the discard resolver itself, so we just move on.
+            // Hand limit is fine, move to end phase.
             return { ...nextState, phase: 'end' };
         }
 
@@ -130,6 +128,8 @@ export const advancePhase = (state: GameState): GameState => {
                 phase: 'start',
                 processedStartEffectIds: [],
                 processedEndEffectIds: [],
+                processedSpeed1TriggerThisTurn: false,
+                processedUncoverEventIds: [],
             };
         }
     }
@@ -258,7 +258,11 @@ export const processEndOfAction = (state: GameState): GameState => {
         state = { ...mutableState, queuedActions: [], actionRequired: null };
     }
     
-    let nextState = { ...state, phase: 'hand_limit' as GamePhase, compilableLanes: [] };
+    // If a resolver has already advanced the phase (e.g., Speed-1 trigger), respect it.
+    // Otherwise, start the end-of-turn sequence from the hand_limit phase.
+    const startingPhase = state.phase === 'action' ? 'hand_limit' : state.phase;
+    // FIX: Explicitly type `nextState` to prevent a type inference mismatch.
+    let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [] };
     
     const originalTurn = state.turn;
 

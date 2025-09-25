@@ -98,7 +98,17 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     
     // The effect only triggers if the newly uncovered card is FACE UP.
     if (uncoveredCard.isFaceUp) {
-        const newState = log(state, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
+        // Create a unique ID for this specific uncover event to prevent double-triggering.
+        const eventId = `${uncoveredCard.id}-${laneIndex}`;
+        if (state.processedUncoverEventIds?.includes(eventId)) {
+            return { newState: state }; // This specific event has already been processed in this action chain.
+        }
+
+        let newState = log(state, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
+        
+        // Mark this event as processed before executing the effect.
+        newState.processedUncoverEventIds = [...(newState.processedUncoverEventIds || []), eventId];
+
         // Re-triggering the on-play effect is the main part of the mechanic.
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
         
@@ -113,7 +123,7 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
                         ...(result.newState.queuedActions || []),
                         result.newState.actionRequired
                     ];
-                    result.newState.actionRequired = null; // Clear the immediate action
+                    result.newState.actionRequired = null;
                     return result;
                 }
             }

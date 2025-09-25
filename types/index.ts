@@ -369,6 +369,8 @@ export interface GameState {
     compilableLanes: number[];
     processedStartEffectIds?: string[];
     processedEndEffectIds?: string[];
+    processedSpeed1TriggerThisTurn?: boolean;
+    processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
     _interruptedTurn?: Player;
     stats: {

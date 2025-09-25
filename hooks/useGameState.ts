@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { log } from '../logic/utils/log';
 import { buildDeck, shuffleDeck } from '../utils/gameLogic';
 import { handleUncoverEffect } from '../logic/game/helpers/actionUtils';
+import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
 
 export const useGameState = (
     playerProtocols: string[], 
@@ -553,6 +554,53 @@ export const useGameState = (
                 
                 newState = stateManager.recalculateAllLaneValues(newState);
                 newState = log(newState, 'player', 'DEBUG: Dynamic Speed-0 interrupt scenario set up. AI will play Metal-0.');
+                return newState;
+            } else if (scenario === 'speed-1-trigger') {
+                const debugPlayerProtocols = ['Speed', 'Life', 'Water'];
+                const debugOpponentProtocols = ['Metal', 'Death', 'Hate'];
+
+                let playerDeck = shuffleDeck(buildDeck(debugPlayerProtocols));
+                const opponentDeck = shuffleDeck(buildDeck(debugOpponentProtocols));
+
+                const removeCardFromDeck = (deck: Card[], protocol: string, value: number): Card => {
+                    const index = deck.findIndex(c => c.protocol === protocol && c.value === value);
+                    if (index > -1) {
+                        return deck.splice(index, 1)[0];
+                    }
+                    return cards.find(c => c.protocol === protocol && c.value === value)!;
+                };
+
+                const speed1Card = removeCardFromDeck(playerDeck, 'Speed', 1);
+
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
+
+                // Player setup
+                newState.player.lanes = [[], [], []];
+                newState.player.lanes[0] = [{ ...speed1Card, id: uuidv4(), isFaceUp: true }];
+
+                const { drawnCards, remainingDeck } = drawCardsUtil(playerDeck, [], 6);
+                newState.player.hand = drawnCards.map(c => ({...c, id: uuidv4(), isFaceUp: true}));
+                newState.player.deck = remainingDeck;
+                newState.player.discard = [];
+
+                // Opponent setup
+                newState.opponent.lanes = [[], [], []];
+                newState.opponent.hand = [];
+                newState.opponent.deck = opponentDeck;
+                newState.opponent.discard = [];
+
+                // Game state setup
+                newState.turn = 'player';
+                newState.phase = 'hand_limit';
+                newState.actionRequired = {
+                    type: 'discard',
+                    actor: 'player',
+                    count: 1, // 6 cards in hand - 5 limit = 1
+                };
+                newState.queuedActions = [];
+                
+                newState = stateManager.recalculateAllLaneValues(newState);
+                newState = log(newState, 'player', 'DEBUG: Speed-1 discard trigger scenario set up.');
                 return newState;
             }
             return currentState;

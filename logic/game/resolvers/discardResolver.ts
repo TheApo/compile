@@ -10,6 +10,9 @@ import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpe
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
 
 const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
+    if (state.processedSpeed1TriggerThisTurn) {
+        return state;
+    }
     const playerState = state[player];
     // Speed-1's effect is in the TOP box, so it doesn't need to be uncovered.
     const hasSpeed1 = playerState.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Speed' && c.value === 1);
@@ -18,6 +21,11 @@ const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
         let newState = { ...state };
         newState = log(newState, player, "Speed-1 triggers after clearing cache: Draw 1 card.");
         newState = drawForPlayer(newState, player, 1);
+        newState.processedSpeed1TriggerThisTurn = true;
+        
+        // After drawing, the hand limit check for this turn is definitively over.
+        // Forcibly advance to the 'end' phase to prevent a loop.
+        newState.phase = 'end';
         return newState;
     }
     

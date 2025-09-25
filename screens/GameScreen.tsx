@@ -154,12 +154,15 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             if (event.key.toLowerCase() === 'w') {
                 console.log('Debug: Forcing player win.');
                 onEndGame('player', gameState);
-            } else if (event.key.toLowerCase() === 'l') {
+            } else if (event.key.toLowerCase() === 'o') {
                 console.log('Debug: Forcing opponent win.');
                 onEndGame('opponent', gameState);
             } else if (event.key.toLowerCase() === 'p') {
                 console.log('Debug: Setting up Speed-0 interrupt scenario.');
                 setupTestScenario('speed-0-interrupt');
+            } else if (event.key.toLowerCase() === 'l') {
+                console.log('Debug: Setting up Speed-1 discard trigger scenario.');
+                setupTestScenario('speed-1-trigger');
             }
         }
     };
