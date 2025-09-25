@@ -438,11 +438,24 @@ export const useGameState = (
 
     const resolveSpirit1Prompt = useCallback((choice: 'discard' | 'flip') => {
         setGameState(prev => {
+            const wasInterrupt = !!prev._interruptedTurn;
             const nextState = resolvers.resolveSpirit1Prompt(prev, choice);
-            if (nextState.actionRequired) {
-                return nextState; // new discard action
+
+            // If the action is now resolved (e.g. flip was chosen), check if it was an interrupt.
+            if (!nextState.actionRequired && wasInterrupt) {
+                // If it was an interrupt, we must use processEndOfAction to correctly
+                // restore the original turn and process any queued actions.
+                return phaseManager.processEndOfAction(nextState);
             }
-            return phaseManager.continueTurnAfterStartPhaseAction(nextState); // continue turn from start phase
+
+            // If the action requires another step (e.g. discard was chosen), just update state.
+            // The next loop will handle this new action.
+            if (nextState.actionRequired) {
+                return nextState;
+            }
+
+            // If it was a normal start phase action (not an interrupt), continue the turn as normal.
+            return phaseManager.continueTurnAfterStartPhaseAction(nextState);
         });
     }, []);
 
