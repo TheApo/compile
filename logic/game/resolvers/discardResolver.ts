@@ -9,6 +9,21 @@ import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
 
+const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
+    const playerState = state[player];
+    // Speed-1's effect is in the TOP box, so it doesn't need to be uncovered.
+    const hasSpeed1 = playerState.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Speed' && c.value === 1);
+    
+    if (hasSpeed1) {
+        let newState = { ...state };
+        newState = log(newState, player, "Speed-1 triggers after clearing cache: Draw 1 card.");
+        newState = drawForPlayer(newState, player, 1);
+        return newState;
+    }
+    
+    return state;
+};
+
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {
     if (!prevState.actionRequired || prevState.actionRequired.type !== 'discard' || prevState.actionRequired.actor !== 'player') return prevState;
 
@@ -34,12 +49,12 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
     newState = log(newState, 'player', `Player discards ${cardName}.`);
 
     if (remainingDiscards <= 0) {
-        // Check if this was a discard for the hand limit.
-        const isHandLimitDiscard = prevState.phase === 'hand_limit' && !currentAction.sourceCardId;
+        const isHandLimitDiscard = (prevState.phase === 'hand_limit' && !currentAction.sourceCardId);
         
         let stateAfterDiscard = newState;
         
         if (isHandLimitDiscard) {
+            stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, 'player');
             stateAfterDiscard.actionRequired = null;
             return stateAfterDiscard;
         } else {
@@ -65,7 +80,6 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const newHand = playerState.hand.filter(c => !cardsToDiscardSet.has(c.id));
     const newDiscard = [...playerState.discard, ...discardedCards.map(({ id, isFaceUp, ...card }) => card)];
     
-    // Check for the original action in either the animation state (for player actions) or the direct state (for AI actions)
     const originalAction = (prevState.animationState?.type === 'discardCard' && prevState.animationState.originalAction?.type === 'discard')
         ? prevState.animationState.originalAction
         : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
@@ -94,22 +108,26 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     }
     newState = log(newState, player, logMessage);
 
-    // This is primarily for player-driven discards which are handled one by one.
+    const handleDiscardCompletion = (state: GameState, action: typeof originalAction) => {
+        const isHandLimitDiscard = (prevState.phase === 'hand_limit' && !action?.sourceCardId);
+        let stateAfterDiscard = state;
+        if (isHandLimitDiscard) {
+            stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, player);
+        }
+        const stateAfterPlagueTrigger = checkForPlague1Trigger(stateAfterDiscard, player);
+        return handleChainedEffectsOnDiscard(stateAfterPlagueTrigger, player, action?.sourceEffect, action?.sourceCardId);
+    };
+
     if (originalAction && originalAction.actor === player) {
         const remainingDiscards = originalAction.count - cardIds.length;
         if (remainingDiscards > 0) {
             newState.actionRequired = { ...originalAction, count: remainingDiscards };
-            return newState; // Return early, action is not finished.
+            return newState;
         } else {
-            // Discard is complete, check for trigger BEFORE handling chains.
-            const stateAfterTriggerCheck = checkForPlague1Trigger(newState, player);
-            // Discard is complete, handle chains
-            return handleChainedEffectsOnDiscard(stateAfterTriggerCheck, player, originalAction.sourceEffect, originalAction.sourceCardId);
+            return handleDiscardCompletion(newState, originalAction);
         }
     }
 
-    // Fallback for AI or other logic that discards without an animation state
-    // For example, the hand limit check.
     const directAction = prevState.actionRequired;
     if (directAction && directAction.type === 'discard' && directAction.actor === player) {
         const remainingDiscards = directAction.count - cardIds.length;
@@ -117,16 +135,16 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             newState.actionRequired = { ...directAction, count: remainingDiscards };
             return newState;
         } else {
-            // Discard is complete, check for trigger BEFORE handling chains.
-            const stateAfterTriggerCheck = checkForPlague1Trigger(newState, player);
-            return handleChainedEffectsOnDiscard(stateAfterTriggerCheck, player, directAction.sourceEffect, directAction.sourceCardId);
+            return handleDiscardCompletion(newState, directAction);
         }
     }
     
-    // If no specific discard action was being resolved (e.g. from a direct AI call without actionRequired),
-    // we assume the discard is complete and check the trigger.
-    const finalState = checkForPlague1Trigger(newState, player);
-
+    const isHandLimitDiscard = (prevState.phase === 'hand_limit');
+    let finalState = checkForPlague1Trigger(newState, player);
+    if (isHandLimitDiscard) {
+        finalState = checkForSpeed1Trigger(finalState, player);
+    }
+    
     return finalState;
 };
 

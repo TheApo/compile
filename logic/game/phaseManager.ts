@@ -3,26 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, GamePhase, PlayedCard } from '../../types';
+import { GameState, Player, GamePhase, PlayedCard, ActionRequired } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
 import { findCardOnBoard } from './helpers/actionUtils';
-import { drawForPlayer } from '../../utils/gameStateModifiers';
+import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log } from '../utils/log';
-
-const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
-    const playerState = state[player];
-    const hasSpeed1 = playerState.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Speed' && c.value === 1);
-    
-    if (hasSpeed1) {
-        let newState = { ...state };
-        newState = log(newState, player, "Speed-1 triggers after clearing cache: Draw 1 card.");
-        newState = drawForPlayer(newState, player, 1);
-        return newState;
-    }
-    
-    return state;
-};
 
 const checkControlPhase = (state: GameState): GameState => {
     if (!state.useControlMechanic) {
@@ -114,11 +100,9 @@ export const advancePhase = (state: GameState): GameState => {
                 };
             }
             
-            // Step 2: If we reach here, the hand limit is satisfied. Now, trigger "after clear cache" effects.
-            const stateAfterTriggerCheck = checkForSpeed1Trigger(nextState, turnPlayer);
-            
-            // Step 3: Move to the end phase. The card drawn from Speed-1 is safe from this turn's hand limit check.
-            return { ...stateAfterTriggerCheck, phase: 'end' };
+            // Step 2: If we reach here, the hand limit is satisfied. The "after clear cache" trigger
+            // for Speed-1 is handled within the discard resolver itself, so we just move on.
+            return { ...nextState, phase: 'end' };
         }
 
         case 'end': {
@@ -192,6 +176,32 @@ export const processEndOfAction = (state: GameState): GameState => {
         }
     }
 
+    // Check for a queued effect before advancing phase.
+    if (state.queuedEffect) {
+        const { card, laneIndex } = state.queuedEffect;
+        const stateWithoutQueue = { ...state, queuedEffect: undefined };
+        const cardLocation = findCardOnBoard(stateWithoutQueue, card.id);
+
+        if (cardLocation) {
+            const { card: cardOnBoard, owner: cardOwner } = cardLocation;
+            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateWithoutQueue, cardOwner);
+            if (newState.actionRequired) {
+                // The queued effect produced an action. Return this new state and wait.
+                return newState;
+            }
+            // If no action, continue with the rest of the turn logic from this new state.
+            state = newState;
+        } else {
+            // Card was removed from board before its on-play effect could trigger.
+            // This is valid (e.g. on-cover effect returns the card). Just log and continue.
+            console.warn(`Skipping queued effect for ${card.protocol}-${card.value} as it is no longer on the board.`);
+            state = log(state, state.turn, `Skipping queued effect for ${card.protocol}-${card.value} as it is no longer on the board.`);
+            // The state to continue from is the one without the queued effect.
+            state = stateWithoutQueue;
+        }
+    }
+
+
     // Check for a queued ACTION first.
     if (state.queuedActions && state.queuedActions.length > 0) {
         let mutableState = { ...state };
@@ -201,6 +211,14 @@ export const processEndOfAction = (state: GameState): GameState => {
             const nextAction = queuedActions.shift()!;
 
             // --- Auto-resolving actions ---
+            if (nextAction.type === 'flip_self_for_water_0') {
+                const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
+                mutableState = log(mutableState, actor, `Water-0: Flips itself.`);
+                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+                continue; // Action resolved, move to next in queue
+            }
+            
             if (nextAction.type === 'reveal_opponent_hand') {
                 const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
                 const opponentState = { ...mutableState[opponentId] };
@@ -239,27 +257,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         // All queued actions were auto-resolved or impossible.
         state = { ...mutableState, queuedActions: [], actionRequired: null };
     }
-
-    // Check for a queued effect before advancing phase.
-    if (state.queuedEffect) {
-        const { card, laneIndex } = state.queuedEffect;
-        const stateWithoutQueue = { ...state, queuedEffect: undefined };
-        const cardLocation = findCardOnBoard(stateWithoutQueue, card.id);
-
-        if (cardLocation) {
-            const { card: cardOnBoard, owner: cardOwner } = cardLocation;
-            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateWithoutQueue, cardOwner);
-            if (newState.actionRequired) {
-                // The queued effect produced an action. Return this new state and wait.
-                return newState;
-            }
-            // If no action, continue with the rest of the turn logic from this new state.
-            state = newState;
-        } else {
-            console.error("Queued effect card not found on board!");
-        }
-    }
-
+    
     let nextState = { ...state, phase: 'hand_limit' as GamePhase, compilableLanes: [] };
     
     const originalTurn = state.turn;

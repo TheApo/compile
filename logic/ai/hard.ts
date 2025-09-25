@@ -98,6 +98,11 @@ const getBestMove = (state: GameState): AIAction => {
             if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue;
             
+            // FIX: Prevent AI from playing Metal-6 on a lane with less than 4 points.
+            if (card.protocol === 'Metal' && card.value === 6 && opponent.laneValues[i] < 4) {
+                continue;
+            }
+            
             const canPlayerCompileThisLane = player.laneValues[i] >= 10 && player.laneValues[i] > opponent.laneValues[i];
             const baseScore = getCardPower(card);
             
@@ -248,7 +253,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 ? action.disallowedIds
                 : (action.type === 'select_card_to_delete_for_death_1' ? [action.sourceCardId] : []);
             
-            // FIX: Only target uncovered cards
             const getUncoveredCards = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                 .filter((c): c is PlayedCard => c !== null);
@@ -259,6 +263,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const bestTarget = allowedPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
                 return { type: 'deleteCard', cardId: bestTarget.id };
             }
+            
+            // If player has no cards, must delete own. Pick lowest threat to minimize self-harm.
+            const allowedOpponentCards = getUncoveredCards('opponent').filter(c => !disallowedIds.includes(c.id));
+            if (allowedOpponentCards.length > 0) {
+                const worstCard = allowedOpponentCards.sort((a, b) => getCardThreat(a, 'opponent', state) - getCardThreat(b, 'opponent', state))[0];
+                return { type: 'deleteCard', cardId: worstCard.id };
+            }
+
             return { type: 'skip' };
         }
 
@@ -415,21 +427,35 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_card_from_other_lanes_to_delete': {
             const { disallowedLaneIndex, lanesSelected } = action;
-            const validTargets: PlayedCard[] = [];
-             for (let i = 0; i < 3; i++) {
+            const playerTargets: PlayedCard[] = [];
+            const opponentTargets: PlayedCard[] = [];
+
+            for (let i = 0; i < 3; i++) {
                 if (i === disallowedLaneIndex || lanesSelected.includes(i)) continue;
-                 // Get all valid player cards from valid lanes
+
                 const playerLane = state.player.lanes[i];
-                // FIX: Only target uncovered cards
                 if (playerLane.length > 0) {
-                    validTargets.push(playerLane[playerLane.length-1]);
+                    playerTargets.push(playerLane[playerLane.length - 1]);
+                }
+                
+                const opponentLane = state.opponent.lanes[i];
+                if (opponentLane.length > 0) {
+                    opponentTargets.push(opponentLane[opponentLane.length - 1]);
                 }
             }
-             if (validTargets.length > 0) {
-                // Target highest threat card among valid targets
-                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'deleteCard', cardId: validTargets[0].id };
+
+            if (playerTargets.length > 0) {
+                // Target player's highest threat card
+                playerTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'deleteCard', cardId: playerTargets[0].id };
             }
+
+            if (opponentTargets.length > 0) {
+                // Must delete own card, pick lowest threat card to minimize self-harm
+                opponentTargets.sort((a, b) => getCardThreat(a, 'opponent', state) - getCardThreat(b, 'opponent', state));
+                return { type: 'deleteCard', cardId: opponentTargets[0].id };
+            }
+
             return { type: 'skip' };
         }
             

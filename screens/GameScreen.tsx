@@ -158,8 +158,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 console.log('Debug: Forcing opponent win.');
                 onEndGame('opponent', gameState);
             } else if (event.key.toLowerCase() === 'p') {
-                console.log('Debug: Setting up Psychic-2 uncover scenario.');
-                setupTestScenario('psychic-2-uncover');
+                console.log('Debug: Setting up Speed-0 interrupt scenario.');
+                setupTestScenario('speed-0-interrupt');
             }
         }
     };

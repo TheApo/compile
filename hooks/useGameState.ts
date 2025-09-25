@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { GameState, Player, Difficulty, PlayedCard, AnimationRequest, GamePhase, ActionRequired } from '../types';
+import { GameState, Player, Difficulty, PlayedCard, AnimationRequest, GamePhase, ActionRequired, Card } from '../types';
 import * as stateManager from '../logic/game/stateManager';
 import * as phaseManager from '../logic/game/phaseManager';
 import * as resolvers from '../logic/game/resolvers';
@@ -13,6 +13,7 @@ import { deleteCardFromBoard } from '../logic/utils/boardModifiers';
 import { cards } from '../data/cards';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../logic/utils/log';
+import { buildDeck, shuffleDeck } from '../utils/gameLogic';
 
 export const useGameState = (
     playerProtocols: string[], 
@@ -204,7 +205,7 @@ export const useGameState = (
             if (requiresAnimation) {
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
-                        const finalState = requiresAnimation.onCompleteCallback(s, s2 => s2);
+                        const finalState = requiresAnimation.onCompleteCallback(s, turnProgressionCb);
                         if (finalState.actionRequired) {
                             return finalState;
                         }
@@ -485,39 +486,64 @@ export const useGameState = (
 
     const setupTestScenario = useCallback((scenario: string) => {
         setGameState(currentState => {
-            if (scenario === 'psychic-2-uncover') {
-                let newState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic);
-                
-                const psychic2Card = cards.find(c => c.protocol === 'Psychic' && c.value === 2);
-                const hate0Card = cards.find(c => c.protocol === 'Hate' && c.value === 0);
-                const apathy5Card = cards.find(c => c.protocol === 'Apathy' && c.value === 5);
+            if (scenario === 'speed-0-interrupt') {
+                const debugPlayerProtocols = ['Speed', 'Life', 'Water'];
+                const debugOpponentProtocols = ['Metal', 'Death', 'Hate'];
     
-                if (!psychic2Card || !hate0Card || !apathy5Card) return currentState;
+                let playerDeck = shuffleDeck(buildDeck(debugPlayerProtocols));
+                let opponentDeck = shuffleDeck(buildDeck(debugOpponentProtocols));
     
-                newState.opponent.lanes = [[], [], []];
-                newState.opponent.lanes[0] = [
-                    { ...psychic2Card, id: uuidv4(), isFaceUp: true },
-                    { ...apathy5Card, id: uuidv4(), isFaceUp: false }
-                ];
+                const removeCardFromDeck = (deck: Card[], protocol: string, value: number): Card => {
+                    const index = deck.findIndex(c => c.protocol === protocol && c.value === value);
+                    if (index > -1) {
+                        return deck.splice(index, 1)[0];
+                    }
+                    // Fallback to global list if not found (shouldn't happen with correct setup)
+                    return cards.find(c => c.protocol === protocol && c.value === value)!;
+                };
     
-                newState.player.hand = [
-                    { ...hate0Card, id: uuidv4(), isFaceUp: true }
-                ];
-                newState.player.deck = [];
+                // Define and remove cards from decks
+                const speed0Card = removeCardFromDeck(playerDeck, 'Speed', 0);
+                const metal0Card = removeCardFromDeck(opponentDeck, 'Metal', 0);
+                // Player hand cards matching protocols
+                const speed1Card = removeCardFromDeck(playerDeck, 'Speed', 1);
+                const life1Card = removeCardFromDeck(playerDeck, 'Life', 1);
+                const water1Card = removeCardFromDeck(playerDeck, 'Water', 1);
+                const speed3Card = removeCardFromDeck(playerDeck, 'Speed', 3);
+    
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
+    
+                // Player setup
                 newState.player.lanes = [[], [], []];
+                newState.player.lanes[0] = [{ ...speed0Card, id: uuidv4(), isFaceUp: false }]; // Face-down Speed-0
+                newState.player.hand = [
+                    { ...speed1Card, id: uuidv4(), isFaceUp: true },
+                    { ...life1Card, id: uuidv4(), isFaceUp: true },
+                    { ...water1Card, id: uuidv4(), isFaceUp: true },
+                    { ...speed3Card, id: uuidv4(), isFaceUp: true },
+                ];
+                newState.player.deck = playerDeck;
+                newState.player.discard = [];
     
-                newState.turn = 'player';
-                newState.phase = 'action';
+                // Opponent setup
+                newState.opponent.lanes = [[], [], []];
+                newState.opponent.hand = [{ ...metal0Card, id: uuidv4(), isFaceUp: true }]; // Only has Metal-0
+                newState.opponent.deck = opponentDeck;
+                newState.opponent.discard = [];
+    
+                // Game state setup
+                newState.turn = 'opponent';
+                newState.phase = 'start';
                 newState.actionRequired = null;
                 newState.queuedActions = [];
                 
                 newState = stateManager.recalculateAllLaneValues(newState);
-                newState = log(newState, 'player', 'DEBUG: Psychic-2 uncover scenario set up.');
+                newState = log(newState, 'player', 'DEBUG: Dynamic Speed-0 interrupt scenario set up. AI will play Metal-0.');
                 return newState;
             }
             return currentState;
         });
-    }, [playerProtocols, opponentProtocols, useControlMechanic]);
+    }, [useControlMechanic]);
 
     useEffect(() => {
         const animState = gameState.animationState;

@@ -65,26 +65,51 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         case 'select_lane_for_play': {
             const { cardInHandId, isFaceDown, actor } = prev.actionRequired;
             const cardInHand = prev[actor].hand.find(c => c.id === cardInHandId);
-            
+
             if (!cardInHand) {
                 console.error("Card for play not found in hand");
-                newState.actionRequired = null;
+                newState = { ...prev, actionRequired: null };
                 break;
             }
-            
+
+            // Create a version of the state where the current action is cleared.
+            // This is the base state for the playCard function to operate on.
+            const stateBeforePlay = { ...prev, actionRequired: null };
+
             let canPlayFaceUp: boolean;
             if (typeof isFaceDown === 'boolean') {
-                // Effect forces face-up/down (e.g., Darkness-3)
                 canPlayFaceUp = !isFaceDown;
             } else {
-                // Game rules decide
                 const playerHasSpiritOne = prev[actor].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-                canPlayFaceUp = playerHasSpiritOne || cardInHand.protocol === prev[actor].protocols[targetLaneIndex];
+                const opponentId = actor === 'player' ? 'opponent' : 'player';
+                const opponentHasPsychic1 = prev[opponentId].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+                canPlayFaceUp = (playerHasSpiritOne || cardInHand.protocol === prev[actor].protocols[targetLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[targetLaneIndex]) && !opponentHasPsychic1;
             }
-            
-            const { newState: stateAfterPlay } = playCard(prev, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);
+
+            const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);
             newState = stateAfterPlay;
-            newState.actionRequired = null;
+
+            if (animationRequests) {
+                requiresAnimation = {
+                    animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        // After animation, the state 's' has the updated board but potentially stale action state.
+                        // The state 'stateAfterPlay' has the correct action state from the effect.
+                        // We combine them to get the true final state.
+                        const finalState = {
+                            ...s,
+                            actionRequired: stateAfterPlay.actionRequired,
+                            queuedActions: stateAfterPlay.queuedActions,
+                            queuedEffect: stateAfterPlay.queuedEffect,
+                        };
+
+                        if (finalState.actionRequired || (finalState.queuedActions && finalState.queuedActions.length > 0)) {
+                            return finalState;
+                        }
+                        return endTurnCb(finalState);
+                    }
+                };
+            }
             break;
         }
         case 'select_lane_for_death_2': {

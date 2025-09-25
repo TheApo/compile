@@ -100,7 +100,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
             <button className="btn" onClick={() => setShowRules(true)}>
               Rules
             </button>
-            <p className="version-info">Version 0.12</p>
+            <p className="version-info">Version 0.13</p>
           </div>
         </div>
         

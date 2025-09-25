@@ -2,7 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Card } from "../data/cards";
+import type { Card } from "../data/cards";
+// FIX: Export the Card type so it can be imported by other modules.
+export type { Card };
 
 export type Player = 'player' | 'opponent';
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -331,6 +333,10 @@ export type ActionRequired = {
     sourceCardId: 'CONTROL_MECHANIC';
     actor: Player;
     originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
+} | {
+    type: 'flip_self_for_water_0';
+    sourceCardId: string;
+    actor: Player;
 } | null;
 
 export type AnimationState = 

@@ -32,6 +32,21 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             let stateAfterTriggers = checkForHate3Trigger(s, s.turn);
 
+            if (action.type === 'select_any_other_card_to_flip_for_water_0') {
+                const water0CardId = action.sourceCardId;
+                const flipSelfAction = {
+                    type: 'flip_self_for_water_0',
+                    sourceCardId: water0CardId,
+                    actor: action.actor,
+                };
+                stateAfterTriggers.queuedActions = [
+                    ...(stateAfterTriggers.queuedActions || []),
+                    flipSelfAction as ActionRequired,
+                ];
+                stateAfterTriggers.actionRequired = null;
+                return endTurnCb(stateAfterTriggers);
+            }
+            
             if (action && 'count' in action && (action as any).count > 1) {
                 const remainingCount = (action as any).count - 1;
                 stateAfterTriggers.actionRequired = { ...(action as any), count: remainingCount };
@@ -474,6 +489,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // This is a placeholder for the "flip this card" step
                     type: 'flip_self_for_water_0',
                     sourceCardId: currentAction.sourceCardId,
+                    actor: currentAction.actor,
                 } as any;
             }
             // Light-0's draw is handled specially below.
