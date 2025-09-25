@@ -6,6 +6,7 @@
 import { GameState, ActionRequired, AIAction, Player, PlayedCard } from '../../types';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { shuffleDeck } from '../../utils/gameLogic';
+import { handleControlRearrange } from './controlMechanicLogic';
 
 const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: number, isFaceUp: boolean } | null => {
     const { opponent, player } = state;
@@ -76,9 +77,19 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     // Easy AI makes simple, often suboptimal or random choices.
     switch (action.type) {
-        case 'prompt_use_control_mechanic':
-            // Easy AI: 50% chance to skip, 50% to rearrange player's protocols.
-            return { type: 'resolveControlMechanicPrompt', choice: Math.random() < 0.5 ? 'skip' : 'opponent' };
+        case 'prompt_use_control_mechanic': {
+            const { player } = state; // human player
+            const playerHasCompiled = player.compiled.some(c => c);
+            const uncompiledLaneCount = player.compiled.filter(c => !c).length;
+
+            // Condition for strategic swap: player has at least one compiled and one uncompiled protocol.
+            if (playerHasCompiled && uncompiledLaneCount > 0) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'player' };
+            } else {
+                // No strategic swap available, so skip.
+                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
+            }
+        }
 
         case 'discard':
             // Discard the lowest value card(s).
@@ -482,17 +493,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (state.opponent.hand.length > 0) return { type: 'revealCard', cardId: state.opponent.hand[0].id };
             return { type: 'skip' };
 
-        case 'prompt_rearrange_protocols': {
-            const originalOrder = state[action.target].protocols;
-            if (originalOrder.length <= 1) {
-                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
-            }
-            let newOrder;
-            do {
-                newOrder = shuffleDeck([...originalOrder]);
-            } while (JSON.stringify(newOrder) === JSON.stringify(originalOrder));
-            return { type: 'rearrangeProtocols', newOrder };
-        }
+        case 'prompt_rearrange_protocols':
+            return handleControlRearrange(state, action);
         case 'prompt_swap_protocols': {
             // Easy AI: Pick two random, distinct indices to swap.
             const index1 = Math.floor(Math.random() * 3);

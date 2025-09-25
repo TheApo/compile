@@ -8,6 +8,7 @@ import { shuffleDeck } from '../../utils/gameLogic';
 import { easyAI } from './easy';
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
+import { handleControlRearrange } from './controlMechanicLogic';
 
 type ScoredMove = {
     move: AIAction;
@@ -24,6 +25,7 @@ const getCardPower = (card: PlayedCard): number => {
     return power;
 }
 
+// FIX: Added getCardThreat helper function from hard.ts to resolve compilation error.
 // Evaluates the threat of a card already on the board. Used for targeting.
 const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): number => {
     // Find the lane the card is in to get context
@@ -41,19 +43,24 @@ const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): numbe
         return hasDarkness2 ? 4 : 2;
     }
     
-    let threat = card.value; // Base threat is its point value.
+    let threat = card.value * 2; // Base threat is its point value, weighted heavily.
 
     // Add threat for powerful static effects (TOP box)
     if (card.top.length > 0) {
-        threat += 3;
+        threat += 5;
     }
     // Add threat for recurring effects (START/END in BOTTOM box)
     if (card.bottom.includes("Start:") || card.bottom.includes("End:")) {
+        threat += 6;
+    }
+    // Add threat for powerful on-cover effects (BOTTOM box)
+    if (card.bottom.includes("covered:")) {
         threat += 4;
     }
 
     return threat;
 }
+
 
 // Evaluates all possible moves and returns the best one
 const getBestMove = (state: GameState): AIAction => {
@@ -85,46 +92,53 @@ const getBestMove = (state: GameState): AIAction => {
             // --- Evaluate playing face-up ---
             const canPlayFaceUp = (card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1;
             if (canPlayFaceUp) {
-                let score = 0;
                 const valueToAdd = card.value;
                 const resultingValue = opponent.laneValues[i] + valueToAdd;
+                let score = 0;
 
-                // If player can compile anyway, only play here if we can STOP them. Otherwise, it's a bad move.
-                if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
-                    score -= 200; // Penalize wasted card
-                } else {
-                     // A: HUGE priority on setting up a compile, especially if we are close.
-                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                        score += opponent.laneValues[i] >= 8 ? 250 : 200; // Bonus for securing a win
-                    } else if (resultingValue >= 8) {
-                        score += 100;
+                if (canPlayerCompileThisLane) {
+                    // This is a critical defensive situation.
+                    if (resultingValue > player.laneValues[i]) {
+                        score = 200 + resultingValue; // High score for blocking the compile.
+                    } else {
+                        score = -200; // High penalty for playing a card but failing to block.
                     }
-                    // B: General value, effects are good
+                } else {
+                    // Non-critical situation, score normally.
+                    // A: Set up a compile.
+                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                        score += 150; 
+                    }
+                    // B: General value from card effects and points.
                     score += getCardPower(card);
-                    // C: Reward gaining/extending a lead
-                    score += (resultingValue - player.laneValues[i]);
+                    score += (resultingValue - player.laneValues[i]); // Reward gaining a lead.
                 }
 
                 possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score });
             }
 
             // --- Evaluate playing face-down ---
-            let score = 0;
             const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
             const resultingValue = opponent.laneValues[i] + valueToAdd;
+            let score = 0;
 
-            if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
-                score -= 200; // Penalize wasted card
-            } else {
-                // A: HUGE priority on setting up a compile for a win
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                    score += 250;
+            if (canPlayerCompileThisLane) {
+                // Critical defensive situation.
+                if (resultingValue > player.laneValues[i]) {
+                    score = 200 + resultingValue; // High score for blocking.
+                } else {
+                    score = -200; // High penalty for failing to block.
                 }
-    
-                // B: Still good to build up points, especially to contest a lane
-                score += valueToAdd + (resultingValue - player.laneValues[i]);
+            } else {
+                // Non-critical situation.
+                // A: Set up a compile.
+                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                    score += 150;
+                }
+                // B: General value from points.
+                score += valueToAdd;
+                score += (resultingValue - player.laneValues[i]);
             }
-
             possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score });
         }
     }
@@ -150,9 +164,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
     // Normal AI makes more sensible choices than Easy AI
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // Normal AI: Rearrange player's protocols if they have a lane with value >= 8. Otherwise, skip.
-            const shouldRearrange = state.player.laneValues.some(v => v >= 8);
-            return { type: 'resolveControlMechanicPrompt', choice: shouldRearrange ? 'opponent' : 'skip' };
+            const { player } = state; // human player
+            const playerHasCompiled = player.compiled.some(c => c);
+            const uncompiledLaneCount = player.compiled.filter(c => !c).length;
+
+            // Condition for strategic swap: player has at least one compiled and one uncompiled protocol.
+            if (playerHasCompiled && uncompiledLaneCount > 0) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'player' };
+            } else {
+                // No strategic swap available, so skip.
+                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
+            }
         }
 
         case 'discard':
@@ -376,9 +398,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (i === disallowedLaneIndex || lanesSelected.includes(i)) continue;
                 // Get all valid player cards from valid lanes
                 const playerLane = state.player.lanes[i];
+                // FIX: Only target the uncovered card.
                 if (playerLane.length > 0) {
-                    // FIX: Only target the uncovered card.
-                    validTargets.push(playerLane[playerLane.length - 1]);
+                    validTargets.push(playerLane[playerLane.length-1]);
                 }
             }
              if (validTargets.length > 0) {
@@ -543,23 +565,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: 0 };
         }
 
-        case 'prompt_rearrange_protocols': {
-            const originalOrder = state[action.target].protocols;
-            if (originalOrder.length <= 1) {
-                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
-            }
-            const laneData = originalOrder.map((p, i) => ({
-                protocol: p,
-                value: state[action.target].laneValues[i]
-            })).sort((a, b) => b.value - a.value);
-            let newOrder = laneData.map(d => d.protocol);
-
-            if (JSON.stringify(newOrder) === JSON.stringify(originalOrder)) {
-                // If sorting doesn't change order (e.g., already sorted), swap the first two.
-                [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-            }
-            return { type: 'rearrangeProtocols', newOrder };
-        }
+        case 'prompt_rearrange_protocols':
+            return handleControlRearrange(state, action);
         
         case 'prompt_swap_protocols': {
             const { opponent, player } = state;

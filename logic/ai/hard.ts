@@ -8,6 +8,7 @@ import { shuffleDeck } from '../../utils/gameLogic';
 import { normalAI } from './normal';
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
+import { handleControlRearrange } from './controlMechanicLogic';
 
 type ScoredMove = {
     move: AIAction;
@@ -74,7 +75,6 @@ const getBestMove = (state: GameState): AIAction => {
         return 0;
     });
 
-    // Find player's most powerful face-up card to target proactively
     const playerStrongestFaceUpCard = player.lanes.flat()
         .filter(c => c.isFaceUp)
         .sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state))[0];
@@ -90,7 +90,6 @@ const getBestMove = (state: GameState): AIAction => {
 
     // --- Evaluate Playing Cards ---
     for (const card of opponent.hand) {
-        // Prevent playing Water-4 on an empty board
         if (card.protocol === 'Water' && card.value === 4 && opponent.lanes.flat().length === 0) {
             continue;
         }
@@ -104,81 +103,71 @@ const getBestMove = (state: GameState): AIAction => {
             
             // 1. Evaluate Face-Up Play
             if ((card.protocol === opponent.protocols[i] || card.protocol === player.protocols[i]) && !playerHasPsychic1) {
-                let score = baseScore;
+                let score = 0;
                 let description = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
                 const valueToAdd = card.value;
                 const resultingValue = opponent.laneValues[i] + valueToAdd;
 
-                // OFFENSIVE SCORING
-                score += valueToAdd; // Points are good
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                     if (opponent.laneValues[i] >= 8) {
-                        score += 350; // High priority: Secure a win
-                        description += ` [HIGH PRIORITY: Secures compile from ${opponent.laneValues[i]}]`;
+                if (canPlayerCompileThisLane) {
+                    if (resultingValue > player.laneValues[i]) {
+                        score = 1000 + resultingValue; // BLOCKING MOVE - HIGHEST PRIORITY
+                        description += ` [BLOCKS COMPILE]`;
                     } else {
-                        score += 200; // Standard compile setup
-                        description += ` [Sets up compile]`;
+                        score = -1000; // WASTED MOVE - HIGHEST PENALTY
+                        description += ` [FAILS TO BLOCK COMPILE]`;
                     }
-                }
-                else if (resultingValue >= 8) score += 100; // Strong setup
-                score += (resultingValue - player.laneValues[i]); // Reward gaining a lead
+                } else {
+                    // OFFENSIVE & STRATEGIC SCORING
+                    score += baseScore;
+                    score += valueToAdd;
 
-                // DEFENSIVE SCORING
-                const hasDisruption = DISRUPTION_KEYWORDS.some(kw => card.keywords[kw]);
-                if (hasDisruption) {
-                    if (playerThreatLevels[i] > 0) {
-                        score += 150 * playerThreatLevels[i];
-                        description += ` [DEFENSIVE: Disrupts player threat level ${playerThreatLevels[i]}]`;
+                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                        score += 500; 
+                        description += ` [SETS UP WINNING COMPILE]`;
+                    } else {
+                        score += (resultingValue - player.laneValues[i]) * 2;
                     }
-                    if (playerStrongestFaceUpCard && (card.keywords['flip'] || card.keywords['delete'])) {
-                        score += getCardThreat(playerStrongestFaceUpCard, 'player', state) * 2;
-                        description += ` [PROACTIVE: Targets strongest card ${playerStrongestFaceUpCard.protocol}-${playerStrongestFaceUpCard.value}]`;
+
+                    const hasDisruption = DISRUPTION_KEYWORDS.some(kw => card.keywords[kw]);
+                    if (hasDisruption) {
+                        if (playerThreatLevels[i] > 0) {
+                            score += 50 * playerThreatLevels[i];
+                            description += ` [Disrupts player threat L${playerThreatLevels[i]}]`;
+                        }
+                        if (playerStrongestFaceUpCard && (card.keywords['flip'] || card.keywords['delete'])) {
+                            score += getCardThreat(playerStrongestFaceUpCard, 'player', state);
+                            description += ` [Targets strongest card ${playerStrongestFaceUpCard.protocol}-${playerStrongestFaceUpCard.value}]`;
+                        }
                     }
                 }
                 
-                // FINAL ADJUSTMENT: Penalize wasted moves.
-                if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
-                    score -= 500; // Overriding penalty for a wasted card.
-                    description += ` [WASTED: Player can still compile]`;
-                }
-                
-                // Special strategy for Metal-6
-                if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4 && score > 0) {
-                    // Avoid playing this early unless it's a game-winning compile setup.
-                     if (!(resultingValue >= 10 && resultingValue > player.laneValues[i])) {
-                        score -= 50;
-                     }
-                }
                 possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score, description });
             }
 
             // 2. Evaluate Face-Down Play
-            let score = 0;
-            let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
             const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
             const resultingValue = opponent.laneValues[i] + valueToAdd;
-            
-             // FINAL ADJUSTMENT: Penalize wasted moves.
-            if (canPlayerCompileThisLane && player.laneValues[i] > resultingValue) {
-                score -= 500; // Overriding penalty for a wasted card.
-                description += ` [WASTED: Player can still compile]`;
-            } else {
-                 if (resultingValue >= 10 && resultingValue > player.laneValues[i] && opponent.laneValues[i] >= 8) {
-                    score += 250; // WINNING MOVE, HIGHEST PRIORITY
-                    description += ` [WINNING MOVE: Sets up compile]`;
-                } else if (opponent.laneValues[i] >= 6) {
-                    score += (20 * opponent.laneValues[i]);
-                    description += ` [Secures strong lane]`;
+            let score = 0;
+            let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
+
+            if (canPlayerCompileThisLane) {
+                if (resultingValue > player.laneValues[i]) {
+                    score = 1000 + resultingValue; // BLOCKING MOVE - HIGHEST PRIORITY
+                    description += ` [BLOCKS COMPILE]`;
                 } else {
-                    score += 1; // It's a valid move, but not a great one.
+                    score = -1000; // WASTED MOVE - HIGHEST PENALTY
+                    description += ` [FAILS TO BLOCK COMPILE]`;
+                }
+            } else {
+                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                    score += 500; 
+                    description += ` [SETS UP WINNING COMPILE]`;
+                } else {
+                    score += valueToAdd;
+                    score += (resultingValue - player.laneValues[i]) * 2;
                 }
             }
              
-            // Special strategy for Metal-6
-            if (card.protocol === 'Metal' && card.value === 6 && opponent.lanes[i].length < 4 && score > 0) {
-                // Playing face down is never a good idea with Metal-6 early on.
-                score -= 50;
-            }
             possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, description });
         }
     }
@@ -209,15 +198,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
     const { player, opponent } = state;
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // Hard AI: calculates if rearranging player's protocols is a high-value move.
-            // It's high value if it can disrupt a lane where player has a significant lead (>5 points)
-            // or is close to compiling (>=8 points).
-            const playerLeads = state.player.laneValues.map((v, i) => v - state.opponent.laneValues[i]);
-            const highThreat = state.player.laneValues.some((v, i) => v >= 8 || playerLeads[i] > 5);
-            if (highThreat) {
-                return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
+            const { player } = state; // human player
+            const playerHasCompiled = player.compiled.some(c => c);
+            const uncompiledLaneCount = player.compiled.filter(c => !c).length;
+
+            // Condition for strategic swap: player has at least one compiled and one uncompiled protocol.
+            if (playerHasCompiled && uncompiledLaneCount > 0) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'player' };
+            } else {
+                // No strategic swap available, so skip.
+                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
             }
-            return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
         }
 
         case 'discard':
@@ -620,45 +611,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: 0 };
         }
         
-        case 'prompt_rearrange_protocols': {
-            const { target } = action;
-            const originalOrder = state[target].protocols;
-
-            if (originalOrder.length <= 1) {
-                return { type: 'rearrangeProtocols', newOrder: [...originalOrder] };
-            }
-
-            const laneData = originalOrder.map((p, i) => {
-                // Calculate the target's lead in that lane.
-                const targetValue = state[target].laneValues[i];
-                const otherPlayer = target === 'player' ? 'opponent' : 'player';
-                const otherValue = state[otherPlayer].laneValues[i];
-                return {
-                    protocol: p,
-                    lead: targetValue - otherValue,
-                };
-            });
-
-            // AI strategy:
-            // If rearranging own protocols, put strongest lanes first (sort lead descending).
-            // If rearranging opponent's protocols, disrupt by putting weakest lanes first (sort lead ascending).
-            if (target === 'opponent') { // AI is rearranging its own
-                laneData.sort((a, b) => b.lead - a.lead);
-            } else { // AI is rearranging the player's
-                laneData.sort((a, b) => a.lead - b.lead);
-            }
-
-            let newOrder = laneData.map(d => d.protocol);
-
-            if (JSON.stringify(newOrder) === JSON.stringify(originalOrder)) {
-                // If sorting doesn't change order, swap the last two elements (to move the worst lane).
-                const len = originalOrder.length;
-                if (len > 1) {
-                    [newOrder[len - 2], newOrder[len - 1]] = [newOrder[len - 1], newOrder[len - 2]];
-                }
-            }
-            return { type: 'rearrangeProtocols', newOrder };
-        }
+        case 'prompt_rearrange_protocols':
+            return handleControlRearrange(state, action);
 
         case 'prompt_swap_protocols': {
             const { opponent } = state;
