@@ -16,10 +16,11 @@ export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): Game
     if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
 
     const { sourceCardId, actor } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, "Death-1: Player chooses to draw and delete.");
+        newState = log(newState, actor, `Death-1: ${actorName} chooses to draw and delete.`);
         // The actor draws one card.
         newState = drawForPlayer(newState, actor, 1);
         newState.actionRequired = {
@@ -28,7 +29,7 @@ export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): Game
             actor,
         };
     } else {
-        newState = log(newState, actor, "Death-1: Player skips the effect.");
+        newState = log(newState, actor, `Death-1: ${actorName} skips the effect.`);
         newState.actionRequired = null;
     }
     return newState;
@@ -38,10 +39,11 @@ export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameS
     if (prevState.actionRequired?.type !== 'prompt_give_card_for_love_1') return prevState;
 
     const { actor } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, "Love-1 End: Player chooses to give 1 card to draw 2.");
+        newState = log(newState, actor, `Love-1 End: ${actorName} chooses to give 1 card to draw 2.`);
         newState.actionRequired = {
             type: 'select_card_from_hand_to_give',
             sourceCardId: prevState.actionRequired.sourceCardId,
@@ -49,7 +51,7 @@ export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameS
             actor,
         };
     } else {
-        newState = log(newState, actor, "Love-1 End: Player skips the effect.");
+        newState = log(newState, actor, `Love-1 End: ${actorName} skips the effect.`);
         newState.actionRequired = null;
     }
     return newState;
@@ -78,10 +80,11 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
     if (prevState.actionRequired?.type !== 'prompt_fire_3_discard') return prevState;
     
     const { actor } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, "Fire-3 End: Player chooses to discard 1 to flip 1.");
+        newState = log(newState, actor, `Fire-3 End: ${actorName} chooses to discard 1 to flip 1.`);
         newState.actionRequired = {
             type: 'discard',
             actor: actor,
@@ -90,7 +93,7 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
             sourceEffect: 'fire_3',
         };
     } else {
-        newState = log(newState, actor, "Fire-3 End: Player skips the effect.");
+        newState = log(newState, actor, `Fire-3 End: ${actorName} skips the effect.`);
         newState.actionRequired = null;
     }
     return newState;
@@ -100,17 +103,18 @@ export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): Game
     if (prevState.actionRequired?.type !== 'prompt_shift_for_speed_3') return prevState;
 
     const { actor } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, "Speed-3 End: Player chooses to shift a card.");
+        newState = log(newState, actor, `Speed-3 End: ${actorName} chooses to shift a card.`);
         newState.actionRequired = {
             type: 'select_own_card_to_shift_for_speed_3',
             sourceCardId: prevState.actionRequired.sourceCardId,
             actor,
         };
     } else {
-        newState = log(newState, actor, "Speed-3 End: Player skips the shift.");
+        newState = log(newState, actor, `Speed-3 End: ${actorName} skips the shift.`);
         newState.actionRequired = null;
     }
     return newState;
@@ -120,11 +124,12 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
     if (prevState.actionRequired?.type !== 'prompt_shift_or_flip_for_light_2') return prevState;
 
     const { actor, sourceCardId, revealedCardId } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     switch (choice) {
         case 'shift':
-            newState = log(newState, actor, "Light-2: Player chooses to shift the revealed card.");
+            newState = log(newState, actor, `Light-2: ${actorName} chooses to shift the revealed card.`);
             newState.actionRequired = {
                 type: 'select_lane_to_shift_revealed_card_for_light_2',
                 sourceCardId,
@@ -133,7 +138,7 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
             };
             break;
         case 'flip': {
-            newState = log(newState, actor, "Light-2: Player chooses to flip the revealed card face-up.");
+            newState = log(newState, actor, `Light-2: ${actorName} chooses to flip the revealed card face-up.`);
             // FIX: Clear the current action *before* flipping and triggering the next effect.
             // This prevents the Light-2 prompt from persisting and causing an infinite loop.
             const stateWithoutPrompt = { ...newState, actionRequired: null };
@@ -148,7 +153,7 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
             break;
         }
         case 'skip':
-            newState = log(newState, actor, "Light-2: Player chooses to do nothing with the revealed card.");
+            newState = log(newState, actor, `Light-2: ${actorName} chooses to do nothing with the revealed card.`);
             newState.actionRequired = null;
             break;
     }
@@ -215,17 +220,18 @@ export const resolvePsychic4Prompt = (prevState: GameState, accept: boolean): Ga
     if (prevState.actionRequired?.type !== 'prompt_return_for_psychic_4') return prevState;
     
     const { actor } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, "Psychic-4 End: Player chooses to return an opponent's card.");
+        newState = log(newState, actor, `Psychic-4 End: ${actorName} chooses to return an opponent's card.`);
         newState.actionRequired = {
             type: 'select_opponent_card_to_return',
             sourceCardId: prevState.actionRequired.sourceCardId,
             actor,
         };
     } else {
-        newState = log(newState, actor, "Psychic-4 End: Player skips the effect.");
+        newState = log(newState, actor, `Psychic-4 End: ${actorName} skips the effect.`);
         newState.actionRequired = null;
     }
     return newState;
@@ -235,10 +241,11 @@ export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | '
     if (prevState.actionRequired?.type !== 'prompt_spirit_1_start') return prevState;
 
     const { actor, sourceCardId } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (choice === 'discard') {
-        newState = log(newState, actor, "Spirit-1 Start: Player chooses to discard 1 card.");
+        newState = log(newState, actor, `Spirit-1 Start: ${actorName} chooses to discard 1 card.`);
         newState.actionRequired = {
             type: 'discard',
             actor: actor,
@@ -247,7 +254,7 @@ export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | '
             sourceEffect: 'spirit_1_start',
         };
     } else { // flip
-        newState = log(newState, actor, "Spirit-1 Start: Player chooses to flip the card.");
+        newState = log(newState, actor, `Spirit-1 Start: ${actorName} chooses to flip the card.`);
         newState = findAndFlipCards(new Set([sourceCardId]), newState);
         newState.animationState = { type: 'flipCard', cardId: sourceCardId };
         newState.actionRequired = null;
@@ -259,6 +266,7 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
     if (prevState.actionRequired?.type !== 'prompt_shift_for_spirit_3') return prevState;
 
     const { actor, sourceCardId } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
@@ -273,7 +281,7 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
                 }
             }
             if (originalLaneIndex !== -1) {
-                newState = log(newState, actor, "Spirit-3 Trigger: Player chooses to shift the card.");
+                newState = log(newState, actor, `Spirit-3 Trigger: ${actorName} chooses to shift the card.`);
                 newState.actionRequired = {
                     type: 'select_lane_for_shift',
                     cardToShiftId: sourceCardId,
@@ -286,7 +294,7 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
             }
         }
     } else {
-        newState = log(newState, actor, "Spirit-3 Trigger: Player skips the shift.");
+        newState = log(newState, actor, `Spirit-3 Trigger: ${actorName} skips the shift.`);
         newState.actionRequired = null;
     }
     return newState;

@@ -174,6 +174,28 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = false; // This action has a follow-up
             break;
         }
+        case 'select_face_down_card_to_shift_for_gravity_4': {
+            const { targetLaneIndex, actor } = prev.actionRequired;
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (!cardInfo) return { nextState: prev, requiresTurnEnd: true };
+
+            const shiftResult = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+
+            if (shiftResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: shiftResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        if (s.actionRequired) return s; // Handle potential interrupts from uncover
+                        return endTurnCb(s);
+                    }
+                };
+                requiresTurnEnd = false;
+            } else {
+                requiresTurnEnd = true;
+            }
+            break;
+        }
         case 'select_own_other_card_to_shift': {
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (cardInfo) {
@@ -395,16 +417,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     stateAfterTriggers.actionRequired = nextStepOfDeleteAction;
                 
                     if (stateAfterTriggers.actionRequired) {
-                        return stateAfterTriggers;
-                    }
-                    
-                    // No next step and no interrupt. The action chain is finished.
-                    // Check for any other queued actions that might have been there before.
-                    if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
-                        const newQueue = [...stateAfterTriggers.queuedActions];
-                        const nextQueuedAction = newQueue.shift()!;
-                        stateAfterTriggers.actionRequired = nextQueuedAction;
-                        stateAfterTriggers.queuedActions = newQueue;
                         return stateAfterTriggers;
                     }
                 
