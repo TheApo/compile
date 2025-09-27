@@ -8,8 +8,6 @@ import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifie
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
-import { executeOnPlayEffect } from '../../effectExecutor';
-// FIX: Import getEffectiveCardValue from stateManager to resolve compilation error.
 import { getEffectiveCardValue } from '../stateManager';
 
 export type CardActionResult = {
@@ -87,6 +85,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     if (metal6Result) return metal6Result;
 
     switch (prev.actionRequired.type) {
+        case 'select_any_other_card_to_flip':
         case 'select_opponent_face_up_card_to_flip':
         case 'select_own_face_up_covered_card_to_flip':
         case 'select_covered_card_in_line_to_flip_optional':
@@ -94,7 +93,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_card_to_flip_for_fire_3': {
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
+            const draws = 'draws' in prev.actionRequired ? prev.actionRequired.draws : 0;
+
             newState = internalResolveTargetedFlip(prev, targetCardId);
+
+            if (draws && draws > 0) {
+                const { actor, sourceCardId } = prev.actionRequired as { actor: Player, sourceCardId: string };
+                const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
+                const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'A card effect';
+                newState = log(newState, actor, `${sourceCardName}: Drawing ${draws} card(s).`);
+                newState = drawForPlayer(newState, actor, draws);
+            }
         
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const result = handleOnFlipToFaceUp(newState, targetCardId);
@@ -135,6 +144,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = false; // This action has a follow-up
             break;
         }
+        case 'select_card_to_shift_for_gravity_1':
         case 'shift_flipped_card_optional':
         case 'select_opponent_covered_card_to_shift':
         case 'select_face_down_card_to_shift_for_darkness_4':
@@ -410,7 +420,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (!cardInfo) return { nextState: prev };
 
             const actor = prev.actionRequired.actor; // The opponent is the one deleting
-            const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             
             newState = log(newState, actor, `Plague-4: Opponent deletes one of their face-down cards.`);
             
@@ -562,12 +571,20 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = true;
             break;
         }
-        case 'select_card_to_shift_for_gravity_1':
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const cardInfo = findCardOnBoard(prev, targetCardId);
-            if(cardInfo) {
-                // ... logic to shift will be here ...
+            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
+            const { sourceCardId, targetLaneIndex, actor } = prev.actionRequired;
+
+            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, null);
+
+            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
+                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
+                stateAfterFlip = result.newState;
             }
+
+            const shiftResult = internalShiftCard(stateAfterFlip, targetCardId, cardInfoBeforeFlip!.owner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+            
             requiresTurnEnd = true;
             break;
         }
@@ -590,6 +607,18 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
         default: return { nextState: prev, requiresTurnEnd: true };
     }
+    
+    // Fallback check: if an action was supposed to be chained but isn't, end the turn.
+    if (!requiresAnimation && newState.actionRequired === null) {
+        if (newState.queuedActions && newState.queuedActions.length > 0) {
+            const newQueue = [...newState.queuedActions];
+            const nextAction = newQueue.shift();
+            return { nextState: { ...newState, actionRequired: nextAction, queuedActions: newQueue }, requiresTurnEnd: false };
+        }
+    } else if (!requiresAnimation && newState.actionRequired !== null) {
+        requiresTurnEnd = false;
+    }
+
 
     return { nextState: newState, requiresAnimation, requiresTurnEnd };
 };

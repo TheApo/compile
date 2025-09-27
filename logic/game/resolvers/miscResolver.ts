@@ -17,8 +17,8 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
     
     let newState = { ...prevState };
-    const compilerState = { ...newState[compiler] };
-    const nonCompilerState = { ...newState[nonCompiler] };
+    let compilerState = { ...newState[compiler] };
+    let nonCompilerState = { ...newState[nonCompiler] };
 
     const wasAlreadyCompiled = compilerState.compiled[laneIndex];
 
@@ -41,24 +41,15 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         return true;
     });
 
-    // Create new stats objects immutably
-    const newCompilerStats = {
-        ...compilerState.stats,
-        cardsDeleted: compilerState.stats.cardsDeleted + compilerDeletedCards.length,
-    };
-    const newNonCompilerStats = {
-        ...nonCompilerState.stats,
-        cardsDeleted: nonCompilerState.stats.cardsDeleted + nonCompilerDeletedCards.length,
-    };
+    const newCompilerStats = { ...compilerState.stats, cardsDeleted: compilerState.stats.cardsDeleted + compilerDeletedCards.length };
+    const newNonCompilerStats = { ...nonCompilerState.stats, cardsDeleted: nonCompilerState.stats.cardsDeleted + nonCompilerDeletedCards.length };
 
     compilerState.stats = newCompilerStats;
     nonCompilerState.stats = newNonCompilerStats;
 
-    // Move the remaining cards to discard.
     compilerState.discard = [...compilerState.discard, ...compilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
     nonCompilerState.discard = [...nonCompilerState.discard, ...nonCompilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
 
-    // Clear lanes, but leave the Speed-2 cards for now (they will be shifted from here).
     const newCompilerLanes = [...compilerState.lanes];
     newCompilerLanes[laneIndex] = compilerSpeed2sToShift;
     compilerState.lanes = newCompilerLanes;
@@ -67,7 +58,6 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     newNonCompilerLanes[laneIndex] = nonCompilerSpeed2sToShift;
     nonCompilerState.lanes = newNonCompilerLanes;
 
-    // Mark protocol as compiled
     const newCompiled = [...compilerState.compiled];
     newCompiled[laneIndex] = true;
     compilerState.compiled = newCompiled;
@@ -76,18 +66,13 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         ...newState, 
         [compiler]: compilerState, 
         [nonCompiler]: nonCompilerState,
-        stats: {
-            ...newState.stats,
-            [compiler]: newCompilerStats,
-            [nonCompiler]: newNonCompilerStats,
-        }
+        stats: { ...newState.stats, [compiler]: newCompilerStats, [nonCompiler]: newNonCompilerStats }
     };
 
     const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
     const protocolName = compilerState.protocols[laneIndex];
     newState = log(newState, compiler, `${compilerName} compiles Protocol ${protocolName}!`);
 
-    // Handle re-compile reward
     if (wasAlreadyCompiled) {
         newState = log(newState, compiler, `${compilerName} draws 1 card from the opponent's deck as a re-compile reward.`);
         newState = drawFromOpponentDeck(newState, compiler, 1);
@@ -95,7 +80,6 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     
     newState = recalculateAllLaneValues(newState);
 
-    // Check for win condition
     const win = compilerState.compiled.every(c => c === true);
     if (win) {
         newState.winner = compiler;
@@ -103,53 +87,57 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         return newState;
     }
 
-    // Trigger Hate-3 once for the entire compile action if any cards were deleted.
     const totalDeleted = compilerDeletedCards.length + nonCompilerDeletedCards.length;
     if (totalDeleted > 0) {
         newState = checkForHate3Trigger(newState, compiler);
     }
-
-    // Queue actions for shifting Speed-2 cards
-    const queuedActions = [...newState.queuedActions];
-
-    for (const card of compilerSpeed2sToShift) {
-        newState = log(newState, compiler, `Speed-2 survives compilation and must be shifted.`);
-        queuedActions.push({
-            type: 'select_lane_for_shift',
+    
+    // --- Centralized Post-Compile Logic ---
+    const allSpeed2s = [...compilerSpeed2sToShift, ...nonCompilerSpeed2sToShift];
+    const queuedSpeed2Actions = allSpeed2s.map(card => {
+        const owner = findCardOnBoard(newState, card.id)!.owner;
+        newState = log(newState, owner, `Speed-2 survives compilation and must be shifted.`);
+        return {
+            // FIX: Explicitly cast 'type' to a literal type to match the ActionRequired discriminated union.
+            type: 'select_lane_for_shift' as const,
             cardToShiftId: card.id,
-            cardOwner: compiler,
+            cardOwner: owner,
             originalLaneIndex: laneIndex,
             sourceCardId: card.id,
-            actor: compiler
-        });
-    }
+            actor: owner
+        };
+    });
 
-    for (const card of nonCompilerSpeed2sToShift) {
-        newState = log(newState, nonCompiler, `Speed-2 survives compilation and must be shifted.`);
-        queuedActions.push({
-            type: 'select_lane_for_shift',
-            cardToShiftId: card.id,
-            cardOwner: nonCompiler,
-            originalLaneIndex: laneIndex,
-            sourceCardId: card.id,
-            actor: nonCompiler
-        });
+    const compilerHadControl = newState.useControlMechanic && newState.controlCardHolder === compiler;
+
+    if (compilerHadControl) {
+        newState = log(newState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols after compiling.`);
+        
+        newState.actionRequired = {
+            type: 'prompt_use_control_mechanic',
+            sourceCardId: 'CONTROL_MECHANIC',
+            actor: compiler,
+            originalAction: { type: 'continue_turn', queuedSpeed2Actions: queuedSpeed2Actions },
+        };
+        newState.controlCardHolder = null;
+        newState.queuedActions = [];
+    } else if (queuedSpeed2Actions.length > 0) {
+        const firstAction = queuedSpeed2Actions.shift()!;
+        newState.actionRequired = firstAction;
+        newState.queuedActions = queuedSpeed2Actions;
+        
+        if (firstAction.actor !== compiler) {
+            newState._interruptedTurn = compiler;
+            newState.turn = firstAction.actor;
+        }
+    } else {
+        newState.actionRequired = null;
+        newState.queuedActions = [];
     }
     
-    // Handle turn interruption if the non-compiling player has a Speed-2
-    if (nonCompilerSpeed2sToShift.length > 0) {
-        newState._interruptedTurn = compiler;
-        newState.turn = nonCompiler;
-        newState.actionRequired = queuedActions.shift()!;
-    } else if (queuedActions.length > 0) {
-        // No interruption, but the compiler might have their own Speed-2 to shift
-        newState.actionRequired = queuedActions.shift()!;
-    }
-    
-    newState.queuedActions = queuedActions;
-
     return newState;
-}
+};
+
 
 export const compileLane = (prevState: GameState, laneIndex: number): GameState => {
     // The check for the control mechanic has been moved to the useGameState hook,
