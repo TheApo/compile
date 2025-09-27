@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.claude/
+
+COMP-MN01_Rulesheet_Updated.pdf

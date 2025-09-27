@@ -171,6 +171,7 @@ export const processEndOfAction = (state: GameState): GameState => {
             return continueTurnProgression(stateAfterRearrange); // Simplified for now
         } else if (originalAction.type === 'fill_hand') {
             // Re-trigger the fill hand logic
+            // FIX: Access hand.length to get the number of cards, not length on the PlayerState object.
             const stateAfterFill = drawForPlayer(stateAfterRearrange, stateAfterRearrange.turn, 5 - stateAfterRearrange[stateAfterRearrange.turn].hand.length);
             return continueTurnProgression(stateAfterFill);
         }
@@ -209,22 +210,23 @@ export const processEndOfAction = (state: GameState): GameState => {
         
         while (queuedActions.length > 0) {
             const nextAction = queuedActions.shift()!;
-
-            if (nextAction.sourceCardId && nextAction.sourceCardId !== 'CONTROL_MECHANIC') {
+            
+            // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
+            if (nextAction.sourceCardId) {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
-                
-                // A queued action from a card is cancelled if the card is no longer face-up.
-                // Being covered is okay, as some effects (top/bottom box) still work while covered.
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                     mutableState = log(mutableState, mutableState.turn, `A queued action was cancelled because its source card is no longer visible.`);
-                     continue; // Skip this action and check the next one in the queue.
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
+                    mutableState = log(mutableState, nextAction.actor, `Queued effect from ${cardName} was cancelled because the source is no longer active.`);
+                    continue; // Skip this action
                 }
             }
 
             // --- Auto-resolving actions ---
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
-                mutableState = log(mutableState, actor, `Water-0: Flips itself.`);
+                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Itself';
+                mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 continue; // Action resolved, move to next in queue

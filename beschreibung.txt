@@ -1,13 +1,324 @@
-Selecting / Targeting Cards for Effects
+Rules Explanations
+The Draft
+A game of Compile starts with a draft. The youngest player drafts first, or the players may
+agree on another way to determine who drafts first. Then, drafting proceeds as follows:
+● The first player chooses one protocol from the available protocols, placing it in their left
+protocol space.
+● The second player chooses two protocols from the available protocols, placing them in
+their left and middle protocol spaces in the order they were drafted.
+● The first player chooses two protocols from the available protocols, placing them in their
+middle and right protocol spaces in the order they were drafted.
+● The second player chooses one protocol from the available protocols, placing it in their
+right protocol space.
+Playing a Card
+When playing a card, the player chooses the line in which the card is played and the
+orientation of that card. If the orientation of that card is face-up, the only line that card may
+be played into is the line with the protocol that matches that card. If the orientation of that
+card is face-down, it may be played into any line. Note that you can play stolen cards
+face-up on your side as long as the line has the matching protocol.
+Some card effects allow you to play a card from an alternative source (i.e. playing the top of
+your deck). When doing so, follow all instructions on how and where to play those cards.
+Card Text
+All card text is treated as an effect, not a cost. If you cannot complete the text of a card (i.e.
+“You discard 1 card.” when you have no cards in hand) the card is still played. If there is an
+“if” clause associated with a text you cannot complete (i.e. Fire 2 “Discard 1 card. If you do,
+return 1 card.”) you do not gain the benefit without having completed the instruction.
+Treat each sentence separately on a card. In the case of Fire 4 “Discard 1 or more cards.
+Draw the amount discarded plus 1.” if you have no cards in hand and thus discard no cards,
+you still draw 1 card for the second sentence.
+Unless the word “may” is used, all text must be resolved as much as possible (i.e. Water 4
+“Return 1 of your cards” and Water 4 is the only valid selection, thus it returns itself). If the
+game state can be changed by a played or triggered effect, the game state must be
+changed.
+2
+Text Entering Play
+When a card’s text enters play by being played, flipped, or uncovered, the owner of that card
+decides how that text resolves.
+Committed Cards
+When cards move between zones (e.g. hand/deck to the field for a play, moving from one
+line to another for a shift, or field to the trash from a delete), they first leave their current
+zone and get “committed” to the new zone. When the consequences of them leaving their
+current zone are done (e.g. uncovering a card and triggering its middle command), the
+committed card lands in the new zone.
+While a card is committed (i.e. moving between zones), it maintains its orientation, target
+zone that it’s moving to, and cannot be manipulated in any way by another game effect.
+Nothing can prevent a committed card from entering the field in the zone that it was
+committed to.
+If the committed card will cover a card with a “When this card would be covered: first…”
+text, the soon-to-be-covered card resolves its triggered effect and any other resulting
+triggers before the committed card enters the line. If, through the triggering of that “When
+this card would be covered: first…” effect, either player gains the ability to manipulate a
+card, the committed card IS NOT a valid selection.
+More than one card can be committed to a line at a time. They will enter the line in the order
+they were committed, one at a time.
+Selecting and Targeting Cards for Effects
 By default, only uncovered cards on either player's side of the field can be selected as the
 target of a flip, delete, return, shift, or reveal (e.g. "Flip 1 card." can be understood as "Flip 1
 uncovered card.").
-Unless otherwise specified, your cards or your opponent's card can both be selected (e.g.
-"Flip 1 card." can target your uncovered cards or your opponent's uncovered cards but "Flip
-1 of your cards." can only target yours).
-Covered cards can be chosen by text that uses "covered" or "all" (e.g. "Flip 1 covered card."
-or "Delete all cards in a line").
-If text uses "this card" or "that card", then no selection is necessary and the card referred
-to, regardless of being covered or uncovered, can be manipulated (e.g. "Flip 1 card. Shift
-that card to this line." The flip would follow the normal targeting rules. Then the shift can
-manipulate the card regardless of whether it has been covered since.)
+Unless otherwise specified, your cards or your opponent's cards can both be selected (e.g.
+For "Flip 1 card." you can select your uncovered cards or your opponent's uncovered cards
+as targets but "Flip 1 of your cards." can only target yours).
+Covered cards can be selected by text that uses "covered" (e.g. "Flip 1 covered card.").
+“All cards” refers to covered and uncovered cards (e.g. “Return all cards with a value of 2 in
+1 line.” returns all covered and uncovered cards with a value of 2 in a selected line.)
+If text uses "this card" or "that card", then the target is implied and no selection is
+necessary. The card referred to, regardless of being covered or uncovered, can be
+manipulated (e.g. "Flip 1 card. Shift that card to this line." The flip would follow the normal
+selection rules. Then the shift can manipulate the card regardless of whether it has been
+covered since.)
+3
+Invalid Effects
+Cards not in a stack can’t be flipped, deleted, or shifted.
+Rearranging Protocols
+When rearranging protocols, the end state of that rearrangement must be different from the
+start state.
+Shifting a Card
+When a card is shifted, it is moved to a different line on the same side of the field. The card
+immediately under the shifting card is made the uncovered card, resolving any text that was
+activated as a result, and the shifting card is considered “committed”. The shifting card
+cannot be selected for any effects until its shift is resolved. If there’s already a stack in the
+line it moves to, the shifted card is made the uncovered card of that stack.
+Changing Ownership
+Cards may change ownership throughout the game. Recompiling a protocol is the most
+common way for this to happen. Cards can be played face-up into the line with the matching
+protocol, even if that protocol is your opponent’s. Cards that have changed ownership retain
+their new ownership, even when they are put into the trash or shuffled into a deck.
+Processing Multiple Cards Triggering Simultaneously
+When there are multiple cards that trigger at the same time (e.g. Two cards in play each
+have a command with “After a card is discarded:” and a card is discarded), the current
+player decides the order in which the cards are processed.
+Start and End Effects During Those Phases
+When entering the Start phase on your turn, note all visible commands in your stacks that
+have a “Start:” trigger. Perform the commands you noted, one at a time, in the order of your
+choice. If a command leaves play, it doesn’t happen. If a “Start:” command is added to the
+field after the beginning of the Start phase when commands were noted, it doesn’t do
+anything.
+All of the above is the same for the End phase and “End:” commands.
+Running Out of Cards
+If a player cannot Compile, draw cards, or play cards on their turn, they skip their Action
+step.
+4
+Public and Private Information
+Players’ decks are randomized at the start of the game and after any reshuffle, and the
+order and contents of each player’s deck is secret. Players’ hands are private information,
+only known by that player. All face-up cards in the field and in either player’s trash are public
+information. Any player may look at the text of any public information at any time, as long as
+they preserve the card’s placement and orientation. Any player may ask their opponent at
+any time the number of cards in their hand or deck, but not the contents of either.
+Face-down cards in the field are all private information. When playing a card from the top of
+a deck face-down, you may not look at the face of that card before committing it to a line. A
+player may only look at face-down cards on their side of the field after they are in the field.
+Clear Cache
+Each turn, during the Check Cache phase, the active player checks to see if they have more
+than 5 cards in their hand. If they do, they discard down to 5 cards in hand. This discard
+action is called Clear Cache.
+Compiling
+When a player reaches the Check Compile phase of their turn, they check to see if they
+have 10 or more value in a stack, and more value than their opponent in that line. If they do,
+they meet the requirements for compiling in that line. If they meet the requirements for
+compiling in more than one line, they choose which line they want to compile. If a player can
+compile, they must compile.
+When compiling, first, if the compiling player has the control component, they return it to its
+neutral state and may rearrange one player’s protocols — either theirs or their opponent’s.
+Second, the compiling player deletes all cards in the compiling line. This is an “all” effect,
+so those deletions happen simultaneously, not sequentially — no middle command enters
+play or triggers.
+Finally, flip that player’s protocol in that line to its “Compiled” side. If the protocol is already
+on its “Compiled” side, that player instead draws the top card of their opponent’s deck.
+Once compiling has begun, if, through card effects, the value in the compiling stack is
+reduced to less than 10, or less than the opponent’s value, the compiling still resolves.
+Control Component
+During the Control Phase, the active player checks to see if they have a higher value than
+their opponent in at least 2 lines. If they do, they gain the control component, either from the
+neutral position or from the other player. When the player with the control component
+5
+compiles or refreshes, first the control component is returned to its neutral position and that
+player may rearrange one players’ protocols — either theirs or their opponent’s — then they
+complete their compile or refresh. Even if they choose not to rearrange protocols, the control
+component is still returned to its neutral position.
+Effects happening “after” something else
+If a card has a command that triggers “after” something else happens (e.g. “After you
+discard cards:” or “After your opponent compiles:”), it is performed when the triggering effect
+and all of its consequences are completely resolved. So, if a card’s command triggers “After
+your opponent compiles:”, the compile and all of its steps — use control, delete, protocol flip
+— would complete before the “after” command finally happens.
+Exceptions
+The rules of Compile may have exceptions based on the state of play and the text of cards
+in the field. If a card gives you permission to do a thing that is “against the rules”, the card
+may break the rules.
+FAQ
+What do the “draw” and “discard” keywords mean?
+“Draw X card(s)” makes the owner of the command take the top X card(s) from their deck
+and add them to their hand. If their deck does not have enough cards to fulfill the draw, the
+player shuffles their trash to make a new deck, then draws cards to complete their draw. The
+effect “draw 3 cards”, is not the same as “draw 1 card, draw 1 card, draw 1 card” — you
+draw all three cards, then any effects that trigger off the drawing of cards activate. “Discard X
+card(s)” makes the owner of the command choose X cards from their hand and put them in
+their trash. The effect “discard 2 cards”, is not the same as “discard 1 card, discard 1 card”
+— you discard 2 cards, then any effects that trigger off the discarding of cards activate.
+What does the keyword “reveal” mean?
+Reveal means to show both players in the game whatever information is being revealed,
+then return it to its previous state. Revealing a card temporarily makes that card’s face
+public information. (i.e. Light 2 “...Reveal 1 face-down card. You may shift or flip that card.”
+chooses an uncovered face-down card in play, shows both players the face of that card,
+then returns it to its face-down orientation. THEN, you may flip it in its current position,
+allowing its text to enter play, shift it to another line in its face-down orientation, or do
+neither.)
+6
+Can a card with a top command delete itself if it is covered?
+Top command text is in play as long as the card is face-up. If a card with a top command
+would shift or delete itself, it does so even if it is covered. (i.e. Death 1 “...then delete this
+card” still deletes itself, even if it is covered.)
+Am I allowed to look at cards I’m playing from the top of my deck
+face-down before I play them?
+When playing the top card of your deck face-down, you cannot look at it until after it is in the
+field. You will not know what card it is until it is fully in play, but then you may look at it as
+normal.
+If an effect discards a card from somewhere other than my
+hand, does it trigger Plague 1 or cards like it?
+If an effect happens when someone discards cards, that includes both discarding from hand
+and discarding from the top of a deck, unless it says otherwise. If it uses the word “discard”,
+it is a discard effect.
+When I compile, do I trigger effects as cards are deleted from the
+stack?
+No. The compiling effect deletes all cards in that line, then flips your protocol in that line to
+the “Compiled” side. When deleting “all” cards in a line, the cards are deleted simultaneously
+and they do not trigger as each one is deleted.
+When do I refill my deck?
+Unless a card's text specifies, the only way a player refills their deck is when it is empty and
+they would draw a card from it. When this happens, the player shuffles their trash
+face-down, makes it their deck, and then completes the draw. Effects that discard, play, or
+reveal the top card of the deck do nothing if there are no cards in the deck.
+Is zero an even number?
+0 is an even number.
+What is the difference between “Line” and “Stack"?
+A line is an area of play that is 1/3rd of the field, composed of 2 protocols that dictate which
+cards may be played face-up into that line. A stack is one player’s portion of a line where
+they have cards. A line has space for one stack per player.
+7
+Do I have to use the control component when I compile or
+refresh?
+When you compile or refresh while having the control component, it resets to the neutral
+position, even if you choose not to rearrange any protocols.
+What is the difference between “All” and “Each”?
+“All” means that the text affects cards matching its criteria simultaneously, regardless of their
+covered/uncovered status, all happening at once.
+For “Each”, you note the valid objects referenced by the “each” (e.g. “Flip each other face-up
+card.” you note each of the face-up uncovered cards that are not this card. For “Delete 1
+card in each other line.” you note each line that this card isn’t in.) After noting the relevant
+objects, you process each of them one at a time, performing the necessary action on each.
+The owner of the card decides the order in which the noted objects get addressed. “Each”
+doesn’t let you interact with covered cards unless otherwise stated.
+If I can compile, do I have to?
+Yes. If you meet the requirements for compiling you must use your action to compile. All
+other phases of your turn happen as normal.
+If I can compile more than one line, do I compile more than one?
+No. You choose one line that meets the requirements for compiling and compile that line
+only this turn. If you still have met the requirements to compile another line on your next
+turn, you compile that line then.
+Can I refresh when I have 5 or more cards in hand?
+No. You must have fewer than 5 cards in hand to refresh.
+Can I use End triggers that are revealed during the End phase?
+No. Only End effects that are visible at the beginning of the End phase activate.
+Can a covered card be uncovered while in a stack?
+No. A covered card is only uncovered if it becomes the card with no other cards on top of it.
+The uncovered card in a stack is covering all cards in a stack. A stack only has one
+uncovered card at time.
+8
+Does a card’s middle command happen if it’s flipped face-up while
+covered?
+No. Because the card is always considered to be covered, its middle text never comes
+into play.
+Card Clarifications, Rulings, and Errata
+Main 1
+Death 0
+● CLARIFICATION: When Death 0's middle command triggers, the owner notes the lines
+that need to be acted in. Then, they choose which line to process, one at a time. For
+each line, they select an uncovered card to delete, processing the consequences of that
+delete before addressing the next line.
+Death 1
+● ERRATA(10/2024): The top command should be: “Start: You may draw 1 card. If you do,
+delete 1 other card. Then, delete this card.”
+Fire 0
+● ERRATA(12/2024): The bottom command should be: “When this card would be covered:
+First, draw 1 card. Then, flip 1 other card.”
+Gravity 2
+● CLARIFICATION: Gravity 2 will still shift the flipped card if it’s covered. “That card”
+references a specific card that supersedes the covered manipulation rule.
+Life 0
+● ERRATA(10/2024): The top command should be: “End: If this card is covered, delete
+this card.” This card should have no bottom command.
+● CLARIFICATION: When Life 0's middle command triggers, the owner notes the lines that
+need to be acted in. Then, they choose which line to process, one at a time. For each
+line, they play the top card of their deck face-down, processing the consequences of that
+9
+card play before addressing the next line. If Life 0 gets covered during this process, its
+middle command stops.
+● CLARIFICATION: Playing cards from the top of a deck does not force a shuffle if that
+deck is empty.
+Light 0
+● CLARIFICATION: The middle command reads ”Flip 1 card. Draw cards equal to that
+card’s value.” When played, the card owner chooses one uncovered card, flips that card,
+and then resolves any triggered text. Then, they draw cards equal to the current value of
+the chosen card (e.g. Light 0 selects Fire 5. First, Fire 5 is flipped face-down. Then, Light
+0 checks the current value of the card, which is now 2. As a result, the active player
+draws 2 cards.)
+● RULING: If the chosen card is removed from play, it is still referred to directly by the "that
+card" text on Light 0. (e.g. Light 0 selects Metal 6. First, Metal 6's top command triggers:
+because it is about to be flipped, it deletes itself. Then, Light 0 checks the value of Metal
+6, and, if it’s in the trash, its current value is 6 since all cards in the trash are face-up.
+The active player draws 6 cards. If the Metal 6 is private information (i.e. it was shuffled
+into your deck) it has a value of 2.)
+Light 3
+● CLARIFICATION: The face-down cards shifted by Light 3 maintain the same relative
+positioning in their stacks and are all moved to the same line.
+Metal 1
+● ERRATA(12/2024): The middle command should be: “Draw 2 cards. Your opponent
+cannot compile on their next turn.”
+● CLARIFICATION: Metal 1 prevents your opponent from taking the compile action on
+their next turn, provided the text is visible. Since a player gets 1 action on their turn
+(compile, play, or refresh), they must either play or refresh on their next turn since they
+cannot compile.
+Metal 6
+● CLARIFICATION: When Metal 6 deletes itself because of its top command, if it is
+covering a card with text that would trigger, that text triggers before the committed card
+enters the field.
+● CLARIFICATION: When Metal 6 deletes itself as a result of being flipped, the “flip”
+command is used up and cannot be used on another card, nor can it be used on Metal 6
+in the trash, as cards in the trash can’t be flipped.
+10
+Plague 3
+● ERRATA(9/2025): The middle command should be “Flip each other uncovered face-up
+card.” Note that this doesn’t change the card’s functionality but makes its intended use
+case more clear.
+● CLARIFICATION: The middle command reads “Flip each other face-up card.” This only
+affects uncovered cards, since it does not say “all”.
+● CLARIFICATION: When Plague 3's middle command triggers, the owner notes each
+uncovered face-up card. Then, they choose which card to process, one at a time. For
+each card, they flip it and process any consequences before addressing the next card.
+Speed 2
+● CLARIFICATION: When compiling, all cards in the line are deleted at the same time.
+When Speed 2 would be deleted this way, instead, you shift it to another line, preventing
+the delete of Speed 2 only, and not altering the compile.
+Spirit 0
+● CLARIFICATION: When you refresh as instructed, it is a normal refresh action, including
+spending the control component, if applicable.
+Spirit 1
+● ERRATA(10/2024): The top command should be: “When you play cards face-up, they
+may be played without matching protocols.”
+Water 1
+● CLARIFICATION: When Water 1's middle command triggers, the owner notes the lines
+that need to be acted in. Then, they choose which line to process, one at a time. For
+each line, they play the top card of their deck face-down, processing the consequences
+of that card play before addressing the next line.
+● CLARIFICATION: Playing cards from the top of a deck does not force a shuffle if that
+deck is empty.
+Aux 1
+Hate 2
+● ERRATA(10/2024): The middle command should be: “Delete your highest value
+uncovered card. Delete your opponent's highest value uncovered card.”
+● CLARIFICATION: Multiple cards can be tied for the highest value. The player would
+choose one of the tied cards.
+11
+● CLARIFICATION: If Hate 2 is the highest value card you own it deletes itself as a result
+of the first clause. Thus, the second clause no longer exists and does not trigger.
