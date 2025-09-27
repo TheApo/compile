@@ -37,7 +37,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (shiftResult.animationRequests) {
                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    onCompleteCallback: (s, endTurnCb) => {
+                        // After the animation (e.g., a card deletion from on-cover),
+                        // check if the original shift's uncover effect created a new action.
+                        if (s.actionRequired) {
+                            return s; // A new action is pending, so don't end the turn.
+                        }
+                        // No new action, so the turn can proceed.
+                        return endTurnCb(s);
+                    }
                 };
             }
 
@@ -57,7 +65,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (shiftResult.animationRequests) {
                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    onCompleteCallback: (s, endTurnCb) => {
+                        if (s.actionRequired) return s;
+                        return endTurnCb(s);
+                    }
                 };
             }
             break;
@@ -258,7 +269,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 if (shiftResult.animationRequests) {
                     requiresAnimation = {
                         animationRequests: shiftResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                        onCompleteCallback: (s, endTurnCb) => {
+                            if (s.actionRequired) return s;
+                            return endTurnCb(s);
+                        }
                     };
                 }
             }

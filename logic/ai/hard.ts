@@ -150,30 +150,32 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // 2. Evaluate Face-Down Play
-            const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
-            const resultingValue = opponent.laneValues[i] + valueToAdd;
-            let score = 0;
-            let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
+            const playerHasMetalTwo = player.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+            if (!playerHasMetalTwo) {
+                const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
+                const resultingValue = opponent.laneValues[i] + valueToAdd;
+                let score = 0;
+                let description = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
 
-            if (canPlayerCompileThisLane) {
-                if (resultingValue > player.laneValues[i]) {
-                    score = 1000 + resultingValue; // BLOCKING MOVE - HIGHEST PRIORITY
-                    description += ` [BLOCKS COMPILE]`;
+                if (canPlayerCompileThisLane) {
+                    if (resultingValue > player.laneValues[i]) {
+                        score = 1000 + resultingValue; // BLOCKING MOVE - HIGHEST PRIORITY
+                        description += ` [BLOCKS COMPILE]`;
+                    } else {
+                        score = -1000; // WASTED MOVE - HIGHEST PENALTY
+                        description += ` [FAILS TO BLOCK COMPILE]`;
+                    }
                 } else {
-                    score = -1000; // WASTED MOVE - HIGHEST PENALTY
-                    description += ` [FAILS TO BLOCK COMPILE]`;
+                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                        score += 500; 
+                        description += ` [SETS UP WINNING COMPILE]`;
+                    } else {
+                        score += valueToAdd;
+                        score += (resultingValue - player.laneValues[i]) * 2;
+                    }
                 }
-            } else {
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                    score += 500; 
-                    description += ` [SETS UP WINNING COMPILE]`;
-                } else {
-                    score += valueToAdd;
-                    score += (resultingValue - player.laneValues[i]) * 2;
-                }
+                possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, description });
             }
-             
-            possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, description });
         }
     }
     

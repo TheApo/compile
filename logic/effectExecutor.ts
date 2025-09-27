@@ -55,6 +55,9 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 // --- TRIGGERED EFFECTS (BOTTOM BOX) ---
 
 export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number, state: GameState): EffectResult {
+    // Rule: Bottom box effects only trigger if the card is face-up AND uncovered.
+    // This function is only called for cards that are about to be covered, so they are by definition uncovered.
+    // We just need to check if it's face-up.
     if (!coveredCard.isFaceUp) {
         return { newState: state };
     }
@@ -62,8 +65,6 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     const players: Player[] = ['player', 'opponent'];
     let owner: Player | null = null;
     for (const p of players) {
-        // An on-cover effect can only trigger on a card owned by the player whose turn it is,
-        // or on a card owned by the opponent. The card must be in the correct lane.
         if (state[p].lanes[laneIndex].some(c => c.id === coveredCard.id)) {
             owner = p;
             break;
@@ -90,30 +91,60 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     return { newState: state };
 }
 
-export function executeStartPhaseEffects(state: GameState): EffectResult {
+function processTriggeredEffects(
+    state: GameState,
+    effectKeyword: 'Start' | 'End',
+    effectRegistry: Record<string, (card: PlayedCard, state: GameState) => EffectResult>
+): EffectResult {
     const player = state.turn;
     let newState = { ...state };
-    const processedIds = newState.processedStartEffectIds || [];
+    const processedIds = effectKeyword === 'Start'
+        ? newState.processedStartEffectIds || []
+        : newState.processedEndEffectIds || [];
 
-    const startPhaseCards = newState[player].lanes
-        .map(lane => lane.length > 0 ? lane[lane.length - 1] : null) // Get the top (uncovered) card of each lane
-        .filter((card): card is PlayedCard =>
-            card !== null &&
-            card.isFaceUp &&
-            (card.top.includes(`'emphasis'>Start:`) || card.bottom.includes(`'emphasis'>Start:`)) &&
-            !processedIds.includes(card.id)
-        );
+    const effectCardsToProcess: { card: PlayedCard, box: 'top' | 'bottom' }[] = [];
+    const effectCardIds = new Set<string>();
 
-    for (const card of startPhaseCards) {
+    // Rule: Top box effects are active if the card is face-up, even if covered.
+    newState[player].lanes.flat().forEach(card => {
+        if (card.isFaceUp && card.top.includes(`'emphasis'>${effectKeyword}:`) && !processedIds.includes(card.id) && !effectCardIds.has(card.id)) {
+            effectCardsToProcess.push({ card, box: 'top' });
+            effectCardIds.add(card.id);
+        }
+    });
+
+    // Rule: Bottom box effects are only active if the card is face-up AND uncovered.
+    newState[player].lanes.forEach(lane => {
+        if (lane.length > 0) {
+            const uncoveredCard = lane[lane.length - 1];
+            if (uncoveredCard.isFaceUp && uncoveredCard.bottom.includes(`'emphasis'>${effectKeyword}:`) && !processedIds.includes(uncoveredCard.id) && !effectCardIds.has(uncoveredCard.id)) {
+                effectCardsToProcess.push({ card: uncoveredCard, box: 'bottom' });
+                effectCardIds.add(uncoveredCard.id);
+            }
+        }
+    });
+
+    for (const { card, box } of effectCardsToProcess) {
+        // Re-validate the card's state at the moment of execution.
+        const currentLane = newState[player].lanes.find(l => l.some(c => c.id === card.id));
+        if (!currentLane) continue; // Card was removed by a previous effect in the chain.
+
+        const isStillFaceUp = currentLane.some(c => c.id === card.id && c.isFaceUp);
+        if (!isStillFaceUp) continue; // Card was flipped by a previous effect.
+
+        if (box === 'bottom') {
+            const isStillUncovered = currentLane[currentLane.length - 1].id === card.id;
+            if (!isStillUncovered) continue; // Card was covered by a previous effect.
+        }
+
         const effectKey = `${card.protocol}-${card.value}`;
-        const execute = effectRegistryStart[effectKey];
+        const execute = effectRegistry[effectKey];
         if (execute) {
-            // Execute the effect on the current state.
             const result = execute(card, newState);
-            // After the effect resolves, mark this card's ID as processed on the *resulting* state.
-            // This prevents the state with the processed ID from being overwritten.
             newState = recalculateAllLaneValues(result.newState);
-            newState.processedStartEffectIds = [...(newState.processedStartEffectIds || []), card.id];
+
+            const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
+            newState[processedKey] = [...(newState[processedKey] || []), card.id];
 
             if (newState.actionRequired) {
                 return { newState }; // Stop processing if an action is required
@@ -123,34 +154,11 @@ export function executeStartPhaseEffects(state: GameState): EffectResult {
     return { newState };
 }
 
+
+export function executeStartPhaseEffects(state: GameState): EffectResult {
+    return processTriggeredEffects(state, 'Start', effectRegistryStart);
+}
+
 export function executeEndPhaseEffects(state: GameState): EffectResult {
-    const player = state.turn;
-    let newState = { ...state };
-    const processedIds = newState.processedEndEffectIds || [];
-
-    const endPhaseCards = newState[player].lanes
-        .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-        .filter((card): card is PlayedCard => 
-            card !== null && 
-            card.isFaceUp && 
-            card.bottom.includes(`'emphasis'>End:`) &&
-            !processedIds.includes(card.id)
-        );
-
-    for (const card of endPhaseCards) {
-        const effectKey = `${card.protocol}-${card.value}`;
-        const execute = effectRegistryEnd[effectKey];
-        if (execute) {
-            // Execute the effect on the current state.
-            const result = execute(card, newState);
-            // After the effect resolves, mark this card's ID as processed on the *resulting* state.
-            newState = recalculateAllLaneValues(result.newState);
-            newState.processedEndEffectIds = [...(newState.processedEndEffectIds || []), card.id];
-            
-            if (newState.actionRequired) {
-                return { newState }; // Stop processing if an action is required
-            }
-        }
-    }
-    return { newState };
+    return processTriggeredEffects(state, 'End', effectRegistryEnd);
 }

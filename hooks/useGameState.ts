@@ -154,31 +154,42 @@ export const useGameState = (
             
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const stateBeforeCompile = resolvers.compileLane(prev, laneIndex);
-
-            // If compileLane triggers the Control mechanic, an action will be set.
-            // We just return that state and wait for the user to resolve it.
-            if (stateBeforeCompile.actionRequired) {
-                return stateBeforeCompile;
-            }
-
+    
             const stateWithAnimation = { 
                 ...stateBeforeCompile, 
                 animationState: { type: 'compile' as const, laneIndex },
                 compilableLanes: []
             };
-
+    
             setTimeout(() => {
                 setGameState(currentState => {
-                    const nextState = resolvers.performCompile(currentState, laneIndex, onEndGame);
-                    if (nextState.winner) {
-                        return nextState; // Stop progression if game is over
+                    const stateAfterCompile = resolvers.performCompile(currentState, laneIndex, onEndGame);
+                    if (stateAfterCompile.winner) {
+                        return stateAfterCompile;
                     }
-                    const finalState = turnProgressionCb(nextState);
-                    // Clear the animation state as we transition to the next turn/action.
+    
+                    const compiler = currentState.turn;
+                    if (currentState.useControlMechanic && currentState.controlCardHolder === compiler) {
+                        let stateWithPrompt = log(stateAfterCompile, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols after compiling.`);
+                        
+                        const speed2Actions = stateAfterCompile.queuedActions;
+                        stateWithPrompt.queuedActions = [];
+                        
+                        stateWithPrompt.actionRequired = {
+                            type: 'prompt_use_control_mechanic',
+                            sourceCardId: 'CONTROL_MECHANIC',
+                            actor: compiler,
+                            originalAction: { type: 'continue_turn', queuedSpeed2Actions: speed2Actions },
+                        };
+                        stateWithPrompt.controlCardHolder = null;
+                        return { ...stateWithPrompt, animationState: null };
+                    }
+                    
+                    const finalState = turnProgressionCb(stateAfterCompile);
                     return { ...finalState, animationState: null };
                 });
             }, 1000);
-
+    
             return stateWithAnimation;
         });
     }, [onEndGame, getTurnProgressionCallback]);
@@ -306,6 +317,16 @@ export const useGameState = (
                     }, 1000);
     
                     return stateWithAnimation;
+                } else if (originalAction.type === 'continue_turn') {
+                    let stateWithQueuedActions = { ...stateAfterSkip };
+                    if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
+                        stateWithQueuedActions.queuedActions = [
+                            ...originalAction.queuedSpeed2Actions,
+                            ...(stateWithQueuedActions.queuedActions || [])
+                        ];
+                    }
+                    const turnProgressionCb = getTurnProgressionCallback(stateWithQueuedActions.phase);
+                    return turnProgressionCb(stateWithQueuedActions);
                 } else { // fill_hand
                     const stateAfterFill = resolvers.performFillHand(stateAfterSkip, actor);
                     const turnProgressionCb = getTurnProgressionCallback(stateAfterFill.phase);
@@ -331,16 +352,14 @@ export const useGameState = (
 
     const resolveDeath1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveDeath1Prompt(prev, accept);
-            // If the player skips, the action is cleared, and we can continue the turn.
             if (!nextState.actionRequired) {
-                // Since this happens in the start phase, we need a special continuation.
-                return phaseManager.continueTurnAfterStartPhaseAction(nextState);
+                return turnProgressionCb(nextState);
             }
-            // If the player accepts, a new action is set, so we just update the state.
             return nextState;
         });
-    }, []);
+    }, [getTurnProgressionCallback]);
 
     const resolveLove1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -431,12 +450,10 @@ export const useGameState = (
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
             
-            // If the original action was a compile, it might have ended the game.
             if (nextState.winner) {
                 return nextState;
             }
 
-            // The resolver handles executing the original action, so we just progress the turn from there.
             return turnProgressionCb(nextState);
         });
     }, [getTurnProgressionCallback, onEndGame]);
@@ -454,33 +471,21 @@ export const useGameState = (
 
     const resolveSpirit1Prompt = useCallback((choice: 'discard' | 'flip') => {
         setGameState(prev => {
-            const wasInterrupt = !!prev._interruptedTurn;
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveSpirit1Prompt(prev, choice);
-
-            // If the action is now resolved (e.g. flip was chosen), check if it was an interrupt.
-            if (!nextState.actionRequired && wasInterrupt) {
-                // If it was an interrupt, we must use processEndOfAction to correctly
-                // restore the original turn and process any queued actions.
-                return phaseManager.processEndOfAction(nextState);
-            }
-
-            // If the action requires another step (e.g. discard was chosen), just update state.
-            // The next loop will handle this new action.
             if (nextState.actionRequired) {
                 return nextState;
             }
-
-            // If it was a normal start phase action (not an interrupt), continue the turn as normal.
-            return phaseManager.continueTurnAfterStartPhaseAction(nextState);
+            return turnProgressionCb(nextState);
         });
-    }, []);
+    }, [getTurnProgressionCallback]);
 
     const resolveSpirit3Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveSpirit3Prompt(prev, accept);
-            if (nextState.actionRequired) {
-                return nextState; // new shift action
+            if (nextState.actionRequired) { // new shift action
+                return nextState;
             }
             return turnProgressionCb(nextState);
         });

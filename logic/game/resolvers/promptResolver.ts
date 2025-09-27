@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player } from '../../../types';
+import { GameState, Player, GamePhase } from '../../../types';
 import { log } from '../../utils/log';
 import { findAndFlipCards, drawForPlayer } from '../../../utils/gameStateModifiers';
 import { findCardOnBoard, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
 import { performCompile } from './miscResolver';
 import { performFillHand } from './playResolver';
+import * as phaseManager from '../phaseManager';
 
 export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
@@ -195,6 +196,14 @@ export const resolveRearrangeProtocols = (
         } else if (originalAction.type === 'fill_hand') {
             stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
             return performFillHand(stateAfterRecalc, actor);
+        } else if (originalAction.type === 'continue_turn') {
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming turn...`);
+            if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
+                stateAfterRecalc.queuedActions = [
+                    ...originalAction.queuedSpeed2Actions,
+                    ...(stateAfterRecalc.queuedActions || [])
+                ];
+            }
         }
     }
 

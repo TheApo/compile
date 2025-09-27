@@ -66,7 +66,12 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     }
 
     // If not, just play it face down in a random playable lane.
-    const playableLanes = [0, 1, 2].filter(i => !isLaneBlockedByPlague0(i) && !canPlayerCompileLane(i));
+    const playableLanes = [0, 1, 2].filter(i => {
+        // Rule: Can't play face-down against an opponent's face-up Metal-2
+        const playerHasMetalTwo = state.player.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+        if (playerHasMetalTwo) return false;
+        return !isLaneBlockedByPlague0(i) && !canPlayerCompileLane(i);
+    });
     if (playableLanes.length === 0) {
         return null; // No valid lanes to play in, will cause AI to fill hand.
     }

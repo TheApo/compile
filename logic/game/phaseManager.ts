@@ -210,6 +210,17 @@ export const processEndOfAction = (state: GameState): GameState => {
         while (queuedActions.length > 0) {
             const nextAction = queuedActions.shift()!;
 
+            if (nextAction.sourceCardId && nextAction.sourceCardId !== 'CONTROL_MECHANIC') {
+                const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                
+                // A queued action from a card is cancelled if the card is no longer face-up.
+                // Being covered is okay, as some effects (top/bottom box) still work while covered.
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                     mutableState = log(mutableState, mutableState.turn, `A queued action was cancelled because its source card is no longer visible.`);
+                     continue; // Skip this action and check the next one in the queue.
+                }
+            }
+
             // --- Auto-resolving actions ---
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };

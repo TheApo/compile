@@ -108,24 +108,6 @@ export const resolveRequiredOpponentAction = (
             return phaseManager.processEndOfAction(newState);
         }
 
-        if (aiDecision.type === 'deleteCard' && action.type === 'plague_4_opponent_delete' && state.actionRequired) {
-            const sourceCardId = state.actionRequired.sourceCardId; // Save before clearing
-            const stateWithoutAction = { ...state, actionRequired: null };
-            processAnimationQueue(
-                [{ type: 'delete', cardId: aiDecision.cardId, owner: 'opponent' }],
-                () => setGameState(s => ({
-                    ...s,
-                    actionRequired: {
-                        type: 'plague_4_player_flip_optional',
-                        sourceCardId: sourceCardId,
-                        optional: true,
-                        actor: 'player', // The human player gets the option to flip their card.
-                    }
-                }))
-            );
-            return stateWithoutAction;
-        }
-
         // --- Generic Lane Selection Handler ---
         if (aiDecision.type === 'selectLane') {
             const { nextState, requiresAnimation } = resolveActionWithLane(state, aiDecision.laneIndex);

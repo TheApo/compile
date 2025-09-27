@@ -123,28 +123,31 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // --- Evaluate playing face-down ---
-            const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
-            const resultingValue = opponent.laneValues[i] + valueToAdd;
-            let score = 0;
+            const playerHasMetalTwo = player.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+            if (!playerHasMetalTwo) {
+                const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, opponent.lanes[i]);
+                const resultingValue = opponent.laneValues[i] + valueToAdd;
+                let score = 0;
 
-            if (canPlayerCompileThisLane) {
-                // Critical defensive situation.
-                if (resultingValue > player.laneValues[i]) {
-                    score = 200 + resultingValue; // High score for blocking.
+                if (canPlayerCompileThisLane) {
+                    // Critical defensive situation.
+                    if (resultingValue > player.laneValues[i]) {
+                        score = 200 + resultingValue; // High score for blocking.
+                    } else {
+                        score = -200; // High penalty for failing to block.
+                    }
                 } else {
-                    score = -200; // High penalty for failing to block.
+                    // Non-critical situation.
+                    // A: Set up a compile.
+                    if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
+                        score += 150;
+                    }
+                    // B: General value from points.
+                    score += valueToAdd;
+                    score += (resultingValue - player.laneValues[i]);
                 }
-            } else {
-                // Non-critical situation.
-                // A: Set up a compile.
-                if (resultingValue >= 10 && resultingValue > player.laneValues[i]) {
-                    score += 150;
-                }
-                // B: General value from points.
-                score += valueToAdd;
-                score += (resultingValue - player.laneValues[i]);
+                possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score });
             }
-            possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score });
         }
     }
 

@@ -8,7 +8,9 @@ import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
-import { findCardOnBoard } from '../helpers/actionUtils';
+// FIX: Import internal helpers to be used by new functions.
+import { findCardOnBoard, internalReturnCard, internalResolveTargetedFlip } from '../helpers/actionUtils';
+import { performFillHand } from './playResolver';
 
 export const performCompile = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     const compiler = prevState.turn;
@@ -150,21 +152,9 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
 }
 
 export const compileLane = (prevState: GameState, laneIndex: number): GameState => {
-    const compiler = prevState.turn;
-    
-    if (prevState.useControlMechanic && prevState.controlCardHolder === compiler) {
-        const newState = log(prevState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols before compiling.`);
-        return {
-            ...newState,
-            controlCardHolder: null, // Reset control immediately
-            actionRequired: {
-                type: 'prompt_use_control_mechanic',
-                sourceCardId: 'CONTROL_MECHANIC',
-                actor: compiler,
-                originalAction: { type: 'compile', laneIndex },
-            }
-        }
-    }
+    // The check for the control mechanic has been moved to the useGameState hook,
+    // to be executed *after* the compile action is fully resolved. This function
+    // now simply returns the state to allow the compile animation to proceed.
     return prevState;
 };
 
@@ -211,4 +201,17 @@ export const revealOpponentHand = (prevState: GameState): GameState => {
 
     newState.actionRequired = null;
     return newState;
+};
+
+export const flipCard = (prevState: GameState, targetCardId: string): GameState => {
+    // This is a simplified flip that doesn't handle on-flip effects,
+    // because it's only used by the AI for simple, direct actions.
+    // The main resolver `resolveActionWithCard` handles complex flips.
+    return internalResolveTargetedFlip(prevState, targetCardId);
+};
+
+export const returnCard = (prevState: GameState, targetCardId: string): GameState => {
+    // This is a simplified return that doesn't handle complex on-cover/uncover effects.
+    // Used by AI. The main resolver handles the full logic.
+    return internalReturnCard(prevState, targetCardId).newState;
 };

@@ -285,7 +285,7 @@ export type ActionRequired = {
     sourceCardId: string;
     target: Player;
     actor: Player;
-    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] };
 } | {
     type: 'select_lane_for_water_3';
     sourceCardId: string;
@@ -332,7 +332,7 @@ export type ActionRequired = {
     type: 'prompt_use_control_mechanic';
     sourceCardId: 'CONTROL_MECHANIC';
     actor: Player;
-    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
+    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] };
 } | {
     type: 'flip_self_for_water_0';
     sourceCardId: string;

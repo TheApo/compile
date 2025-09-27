@@ -23,6 +23,17 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         return { newState: prevState };
     }
 
+    // RULE: An opponent's face-up Metal-2 blocks playing face-down.
+    if (!isFaceUp) {
+        const opponentHasMetalTwo = opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+        if (opponentHasMetalTwo) {
+            // This move is illegal. In a real game, this would be an error.
+            // For the AI, this means its logic was flawed. We should just return the state unchanged.
+            console.error(`Illegal Move: ${player} tried to play face-down against Metal-2 in lane ${laneIndex}`);
+            return { newState: prevState };
+        }
+    }
+
     // 1. Check for onCover effect on the state BEFORE the card is played.
     let onCoverResult: EffectResult = { newState: prevState };
     const targetLaneBeforePlay = prevState[player].lanes[laneIndex];
