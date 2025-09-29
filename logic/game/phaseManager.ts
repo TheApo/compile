@@ -225,11 +225,19 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Itself';
-                mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
-                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
-                continue; // Action resolved, move to next in queue
+                
+                // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                    mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                    mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+                } else {
+                    // If the card was removed or flipped by an intermediate effect, cancel this part of the action.
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                }
+                continue; // Action resolved (or cancelled), move to next in queue
             }
             
             if (nextAction.type === 'reveal_opponent_hand') {

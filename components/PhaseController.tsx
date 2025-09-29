@@ -55,7 +55,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     const turnText = turn.charAt(0).toUpperCase() + turn.slice(1);
 
     const renderActions = () => {
-        if (turn !== 'player') {
+        if (turn !== 'player' && (!actionRequired || actionRequired.actor !== 'player')) {
             return <button className="btn" disabled>Processing...</button>;
         }
 

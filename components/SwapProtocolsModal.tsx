@@ -10,10 +10,9 @@ interface SwapProtocolsModalProps {
   gameState: GameState;
   targetPlayer: Player;
   onConfirm: (indices: [number, number]) => void;
-  onCancel: () => void;
 }
 
-export function SwapProtocolsModal({ gameState, targetPlayer, onConfirm, onCancel }: SwapProtocolsModalProps) {
+export function SwapProtocolsModal({ gameState, targetPlayer, onConfirm }: SwapProtocolsModalProps) {
     const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
     
     const targetPlayerState = gameState[targetPlayer];
@@ -46,7 +45,7 @@ export function SwapProtocolsModal({ gameState, targetPlayer, onConfirm, onCance
         <div className="modal-overlay">
             <div className="modal-content rearrange-modal-content" onClick={(e) => e.stopPropagation()}>
                 <h2>{title}</h2>
-                <p>Select two protocols to swap their positions.</p>
+                <p>Select two protocols to swap their positions. This action is mandatory.</p>
 
                 <div className="rearrange-board-view">
                     <div className="protocol-bars-container">
@@ -67,7 +66,6 @@ export function SwapProtocolsModal({ gameState, targetPlayer, onConfirm, onCance
 
                 <div className="rearrange-actions">
                     <button className="btn" onClick={handleConfirm} disabled={selectedIndices.length !== 2}>Confirm Swap</button>
-                    <button className="btn btn-back" onClick={onCancel}>Cancel</button>
                 </div>
             </div>
         </div>

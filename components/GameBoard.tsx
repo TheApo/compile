@@ -79,7 +79,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     }
 
     const getLaneEffectTargetability = (targetLaneIndex: number): boolean => {
-        if (!actionRequired || turn !== 'player') return false;
+        if (!actionRequired || actionRequired.actor !== 'player') return false;
         switch (actionRequired.type) {
             case 'select_lane_for_death_2':
             case 'select_lane_for_water_3':
@@ -95,7 +95,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     };
 
     const getLaneShiftTargetability = (targetLaneIndex: number, targetOwner: Player): boolean => {
-        if (!actionRequired || turn !== 'player') return false;
+        if (!actionRequired || actionRequired.actor !== 'player') return false;
     
         switch (actionRequired.type) {
             case 'select_lane_for_shift':

@@ -16,7 +16,11 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     
     newState = drawForPlayer(newState, actor, 2);
     newState = log(newState, actor, "Metal-1: Draw 2 cards.");
-    newState[opponent].cannotCompile = true;
+    
+    // Immutable update for the opponent's state
+    const opponentState = { ...newState[opponent], cannotCompile: true };
+    newState = { ...newState, [opponent]: opponentState };
+
     newState = log(newState, actor, "Metal-1: Opponent cannot compile next turn.");
 
     return { newState };

@@ -416,10 +416,6 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     resolveSwapProtocols(indices);
                     setShowSwapModal(false);
                 }}
-                onCancel={() => {
-                    skipAction();
-                    setShowSwapModal(false);
-                }}
             />
         )}
         <div className="toaster-container">

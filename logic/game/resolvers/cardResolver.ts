@@ -632,37 +632,59 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_any_other_card_to_flip_for_water_0': {
             const { sourceCardId, actor } = prev.actionRequired;
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-        
+
+            // Step 1: Flip the target card and clear the current action.
             let stateAfterTargetFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-        
-            // Handle on-flip effects for the TARGETED card, which might interrupt.
+
+            // Step 2: Handle any on-flip effects from the just-flipped card.
+            let onFlipResult: EffectResult = { newState: stateAfterTargetFlip };
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(stateAfterTargetFlip, targetCardId);
-                stateAfterTargetFlip = result.newState;
-                if (stateAfterTargetFlip.actionRequired) {
-                    // An interrupt happened. The 'flip_self' action is still in the queue.
-                    newState = stateAfterTargetFlip;
-                    requiresTurnEnd = false; // The interrupt action needs to be resolved.
-                    break;
-                }
+                onFlipResult = handleOnFlipToFaceUp(stateAfterTargetFlip, targetCardId);
             }
-        
-            // No interrupt. Manually process the self-flip.
-            const sourceCardInfo = findCardOnBoard(stateAfterTargetFlip, sourceCardId);
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
-                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                stateAfterTargetFlip = log(stateAfterTargetFlip, actor, `${cardName}: Flips itself.`);
-                stateAfterTargetFlip = findAndFlipCards(new Set([sourceCardId]), stateAfterTargetFlip);
-                stateAfterTargetFlip.animationState = { type: 'flipCard', cardId: sourceCardId };
-            }
-        
-            // The queued action has been manually handled, so we must clear it from the queue.
-            stateAfterTargetFlip.queuedActions = stateAfterTargetFlip.queuedActions?.filter(
-                a => a.type !== 'flip_self_for_water_0' || a.sourceCardId !== sourceCardId
-            ) || [];
+            let stateAfterOnFlip = onFlipResult.newState;
+
+            // Step 3: Check if an interrupt occurred and handle the self-flip logic.
+            const interruptOccurred = !!stateAfterOnFlip.actionRequired;
             
-            newState = stateAfterTargetFlip;
-            requiresTurnEnd = true;
+            if (interruptOccurred) {
+                // An interrupt happened (like Water-4). Queue the self-flip to run after the interrupt is resolved.
+                const flipSelfAction: ActionRequired = {
+                    type: 'flip_self_for_water_0',
+                    sourceCardId,
+                    actor,
+                };
+                stateAfterOnFlip.queuedActions = [...(stateAfterOnFlip.queuedActions || []), flipSelfAction];
+                newState = stateAfterOnFlip;
+                requiresTurnEnd = false; // Wait for the interrupt.
+            } else {
+                // No interrupt. Perform the self-flip directly if possible.
+                const sourceCardInfo = findCardOnBoard(stateAfterOnFlip, sourceCardId);
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                    let stateAfterSelfFlip = log(stateAfterOnFlip, actor, `${cardName}: Flips itself.`);
+                    stateAfterSelfFlip = findAndFlipCards(new Set([sourceCardId]), stateAfterSelfFlip);
+                    stateAfterSelfFlip.animationState = { type: 'flipCard', cardId: sourceCardId };
+                    newState = stateAfterSelfFlip;
+                } else {
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
+                    newState = log(stateAfterOnFlip, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                }
+                requiresTurnEnd = !newState.actionRequired;
+            }
+
+            // Handle animations from the on-flip effect (e.g., Metal-6 deleting itself)
+            if (onFlipResult.animationRequests) {
+                requiresAnimation = {
+                    animationRequests: onFlipResult.animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        const finalState = { ...s, actionRequired: newState.actionRequired, queuedActions: newState.queuedActions };
+                        if (finalState.actionRequired || (finalState.queuedActions && finalState.queuedActions.length > 0)) {
+                            return finalState;
+                        }
+                        return endTurnCb(finalState);
+                    }
+                };
+            }
             break;
         }
         case 'select_card_to_flip_and_shift_for_gravity_2': {
