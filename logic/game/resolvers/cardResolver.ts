@@ -32,6 +32,15 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             let stateAfterTriggers = checkForHate3Trigger(s, s.turn);
 
+            if (action?.type === 'select_card_to_flip_for_light_0') {
+                const cardValue = 6; // Metal-6 value in trash is always its face-up value
+                stateAfterTriggers = log(stateAfterTriggers, action.actor, `Light-0: Drawing ${cardValue} card(s) after Metal-6 was deleted.`);
+                stateAfterTriggers = drawForPlayer(stateAfterTriggers, action.actor, cardValue);
+                stateAfterTriggers.actionRequired = null; // Light-0 action is complete.
+                if (stateAfterTriggers.actionRequired) return stateAfterTriggers; // Check for triggers from drawing
+                return endTurnCb(stateAfterTriggers);
+            }
+
             if (action?.type === 'select_any_other_card_to_flip_for_water_0') {
                 const water0CardId = action.sourceCardId;
                 const flipSelfAction: ActionRequired = {
@@ -592,17 +601,29 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const { sourceCardId, actor } = prev.actionRequired;
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
             
-            newState = internalResolveTargetedFlip(prev, targetCardId, null);
+            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, null);
             
-            const cardValue = cardInfoBeforeFlip ? getEffectiveCardValue(cardInfoBeforeFlip.card, []) : 0;
-            if (cardValue > 0) {
-                newState = log(newState, actor, `Light-0: Drawing ${cardValue} card(s).`);
-                newState = drawForPlayer(newState, actor, cardValue);
+            // Get the card's info from the NEW state to check its current value
+            const cardInfoAfterFlip = findCardOnBoard(stateAfterFlip, targetCardId);
+            
+            let cardValue = 0;
+            if (cardInfoAfterFlip) {
+                const owner = cardInfoAfterFlip.owner;
+                const laneContext = stateAfterFlip[owner].lanes.find(l => l.some(c => c.id === targetCardId)) || [];
+                cardValue = getEffectiveCardValue(cardInfoAfterFlip.card, laneContext);
             }
 
+            if (cardValue > 0) {
+                stateAfterFlip = log(stateAfterFlip, actor, `Light-0: Drawing ${cardValue} card(s).`);
+                stateAfterFlip = drawForPlayer(stateAfterFlip, actor, cardValue);
+            }
+
+            // Handle on-flip-to-face-up trigger. This is only necessary if the card was flipped from face-down to face-up.
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(newState, targetCardId);
+                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
                 newState = result.newState;
+            } else {
+                newState = stateAfterFlip;
             }
             
             requiresTurnEnd = !newState.actionRequired;
