@@ -220,11 +220,11 @@ export const useGameState = (
                 return nextState;
             }
     
-            if (requiresTurnEnd) {
-                return turnProgressionCb(nextState);
-            }
-            
-            return nextState;
+            // If the current action was resolved (actionRequired is null),
+            // we must always call the turn progression callback. It will handle
+            // processing any queued actions (like Water-0's self-flip) or
+            // advancing the game phase.
+            return turnProgressionCb(nextState);
         });
     };
     

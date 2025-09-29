@@ -7,8 +7,6 @@ import { GameState, PlayedCard, EffectResult, Player, ActionRequired } from "../
 
 /**
  * Water-0: Flip 1 other card. Flip this card.
- * This effect now only sets up the first part of the action. The second part (self-flip)
- * is handled contextually by the cardResolver to prevent soft-locks from interrupts.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     const allOtherCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].filter(c => c.id !== card.id);

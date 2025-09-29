@@ -42,16 +42,8 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             }
 
             if (action?.type === 'select_any_other_card_to_flip_for_water_0') {
-                const water0CardId = action.sourceCardId;
-                const flipSelfAction: ActionRequired = {
-                    type: 'flip_self_for_water_0',
-                    sourceCardId: water0CardId,
-                    actor: action.actor,
-                };
-                stateAfterTriggers.queuedActions = [
-                    ...(stateAfterTriggers.queuedActions || []),
-                    flipSelfAction,
-                ];
+                // The self-flip is already in the queue, so we don't need to add it again.
+                // We just need to ensure the turn proceeds correctly after this animation.
                 stateAfterTriggers.actionRequired = null;
                 return endTurnCb(stateAfterTriggers);
             }
@@ -639,56 +631,46 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_any_other_card_to_flip_for_water_0': {
             const { sourceCardId, actor } = prev.actionRequired;
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-
-            // Step 1: Flip the target card and clear the current action.
+        
+            // 1. Flip the target card.
             let stateAfterTargetFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-
-            // Step 2: Handle any on-flip effects from the just-flipped card.
+        
+            // 2. Handle any on-flip effects from the just-flipped card. This might set a new actionRequired.
             let onFlipResult: EffectResult = { newState: stateAfterTargetFlip };
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 onFlipResult = handleOnFlipToFaceUp(stateAfterTargetFlip, targetCardId);
             }
-            let stateAfterOnFlip = onFlipResult.newState;
-
-            // Step 3: Check if an interrupt occurred and handle the self-flip logic.
-            const interruptOccurred = !!stateAfterOnFlip.actionRequired;
-            
-            if (interruptOccurred) {
-                // An interrupt happened (like Water-4). Queue the self-flip to run after the interrupt is resolved.
-                const flipSelfAction: ActionRequired = {
-                    type: 'flip_self_for_water_0',
-                    sourceCardId,
-                    actor,
-                };
-                stateAfterOnFlip.queuedActions = [...(stateAfterOnFlip.queuedActions || []), flipSelfAction];
-                newState = stateAfterOnFlip;
-                requiresTurnEnd = false; // Wait for the interrupt.
-            } else {
-                // No interrupt. Perform the self-flip directly if possible.
-                const sourceCardInfo = findCardOnBoard(stateAfterOnFlip, sourceCardId);
+            let stateAfterInterrupt = onFlipResult.newState;
+        
+            // 3. Perform the self-flip, but only if the on-flip effect didn't interrupt.
+            // And only if Water-0 is still active.
+            if (!stateAfterInterrupt.actionRequired) {
+                const sourceCardInfo = findCardOnBoard(stateAfterInterrupt, sourceCardId);
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                    let stateAfterSelfFlip = log(stateAfterOnFlip, actor, `${cardName}: Flips itself.`);
-                    stateAfterSelfFlip = findAndFlipCards(new Set([sourceCardId]), stateAfterSelfFlip);
-                    stateAfterSelfFlip.animationState = { type: 'flipCard', cardId: sourceCardId };
-                    newState = stateAfterSelfFlip;
+                    stateAfterInterrupt = log(stateAfterInterrupt, actor, `${cardName}: Flips itself.`);
+                    stateAfterInterrupt = findAndFlipCards(new Set([sourceCardId]), stateAfterInterrupt);
+                    // Overwrite animation state to show the second flip
+                    stateAfterInterrupt.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                    newState = log(stateAfterOnFlip, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                    stateAfterInterrupt = log(stateAfterInterrupt, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
                 }
-                requiresTurnEnd = !newState.actionRequired;
             }
-
-            // Handle animations from the on-flip effect (e.g., Metal-6 deleting itself)
+        
+            newState = stateAfterInterrupt;
+        
+            // If the interrupt created a new action, we stop and wait for it. Otherwise, the turn ends.
+            requiresTurnEnd = !newState.actionRequired;
+        
+            // Pass on any animation requests from the interrupt.
             if (onFlipResult.animationRequests) {
                 requiresAnimation = {
                     animationRequests: onFlipResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        const finalState = { ...s, actionRequired: newState.actionRequired, queuedActions: newState.queuedActions };
-                        if (finalState.actionRequired || (finalState.queuedActions && finalState.queuedActions.length > 0)) {
-                            return finalState;
-                        }
-                        return endTurnCb(finalState);
+                        // After animations, if there's no action, end the turn.
+                        if (s.actionRequired) return s;
+                        return endTurnCb(s);
                     }
                 };
             }
