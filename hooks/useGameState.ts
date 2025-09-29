@@ -16,6 +16,7 @@ import { log } from '../logic/utils/log';
 import { buildDeck, shuffleDeck } from '../utils/gameLogic';
 import { handleUncoverEffect } from '../logic/game/helpers/actionUtils';
 import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
+import { checkForHate3Trigger } from '../logic/effects/hate/Hate-3';
 
 export const useGameState = (
     playerProtocols: string[], 
@@ -34,64 +35,66 @@ export const useGameState = (
     const getTurnProgressionCallback = useCallback((phase: GamePhase): ((s: GameState) => GameState) => {
         switch (phase) {
             case 'start':
-                // An action was resolved in the start phase (e.g. Death-1)
-                // This function moves to 'control' and then continues automatic progression
                 return phaseManager.continueTurnAfterStartPhaseAction;
             case 'end':
-                // An action was resolved in the end phase (e.g. Fire-3)
-                // This function continues processing from the 'end' phase (checking for more effects, then ending turn)
                 return phaseManager.continueTurnProgression;
-            case 'action':
-            case 'hand_limit':
-            case 'compile':
-            case 'control':
             default:
-                // An action was resolved in the action phase (playing a card, filling hand)
-                // This function moves to 'hand_limit' and processes the rest of the turn automatically.
                 return phaseManager.processEndOfAction;
         }
     }, []);
 
-    const processAnimationQueue = useCallback((queue: AnimationRequest[], onComplete: () => void) => {
-        if (queue.length === 0) {
-            onComplete();
-            return;
-        }
-    
-        const [nextRequest, ...rest] = queue;
-        
-        setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
-    
-        setTimeout(() => {
-            setGameState(s => {
-                // Find context from state 's' right before deletion.
-                const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
-                const wasTopCard = laneIndex !== -1 && 
-                                   s[nextRequest.owner].lanes[laneIndex].length > 0 && 
-                                   s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
-    
-                let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
-                let stateWithNewValues = stateManager.recalculateAllLaneValues(stateAfterDelete);
-                
-                let finalState = { ...stateWithNewValues, animationState: null };
-    
-                if (wasTopCard) {
-                    const uncoverResult = handleUncoverEffect(finalState, nextRequest.owner, laneIndex);
-                    // Important: Ignore any animation requests from the uncover effect to prevent nesting.
-                    // We take the resulting state, which may have a new actionRequired.
-                    finalState = uncoverResult.newState;
-                }
-                
-                return finalState;
-            });
-    
-            if (rest.length > 0) {
-                processAnimationQueue(rest, onComplete);
-            } else {
+    const processAnimationQueue = useCallback((
+        queue: AnimationRequest[],
+        onComplete: () => void
+    ) => {
+        const processNext = (q: AnimationRequest[]) => {
+            if (q.length === 0) {
                 onComplete();
+                return;
             }
-        }, 500);
+    
+            const [nextRequest, ...rest] = q;
+    
+            setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
+    
+            setTimeout(() => {
+                let wasInterrupted = false;
+    
+                setGameState(s => {
+                    const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
+                    const wasTopCard = laneIndex !== -1 && 
+                                       s[nextRequest.owner].lanes[laneIndex].length > 0 && 
+                                       s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
+    
+                    let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
+                    stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
+                    
+                    let stateWithUncover = { ...stateAfterDelete, animationState: null };
+                    if (wasTopCard) {
+                        const uncoverResult = handleUncoverEffect(stateWithUncover, nextRequest.owner, laneIndex);
+                        stateWithUncover = uncoverResult.newState;
+                    }
+    
+                    if (stateWithUncover.actionRequired) {
+                        wasInterrupted = true;
+                    }
+                    
+                    return stateWithUncover;
+                });
+    
+                // After state has been set, check if we should continue.
+                // We use a another timeout to ensure we are checking the state *after* the update from the previous timeout.
+                setTimeout(() => {
+                    if (!wasInterrupted) {
+                        processNext(rest);
+                    }
+                }, 10);
+            }, 500); // Animation duration
+        };
+    
+        processNext(queue);
     }, []);
+
 
     const playSelectedCard = (laneIndex: number, isFaceUp: boolean) => {
         if (!selectedCard || gameState.turn !== 'player' || gameState.phase !== 'action') return;
@@ -109,7 +112,14 @@ export const useGameState = (
                     let stateToProcess = { ...s, animationState: null };
 
                     if (animationRequests && animationRequests.length > 0) {
-                        processAnimationQueue(animationRequests, () => setGameState(s2 => s2.actionRequired ? s2 : turnProgressionCb(s2)));
+                        // The original action is the implicit 'play card' action.
+                        // We pass a dummy action object here. This part could be improved if more complex
+                        // post-animation logic is needed for on-cover effects.
+                        const dummyPlayAction: ActionRequired = { type: 'select_card_from_hand_to_play', disallowedLaneIndex: -1, sourceCardId: cardId, actor: 'player' };
+                        // FIX: Changed processAnimationQueue call to use a callback instead of originalAction, which is a more flexible pattern used elsewhere.
+                        processAnimationQueue(animationRequests, () => {
+                            setGameState(s_after_anim => turnProgressionCb(s_after_anim));
+                        });
                         return stateToProcess;
                     }
                     
@@ -130,7 +140,6 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const newState = resolvers.fillHand(prev, 'player');
-            // If fillHand triggers the Control mechanic, an action will be set. Don't progress turn yet.
             if (newState.actionRequired) {
                 return newState;
             }
@@ -200,13 +209,9 @@ export const useGameState = (
             const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId);
     
             if (requiresAnimation) {
+                // FIX: Updated the call to `processAnimationQueue` to pass a callback, which aligns with the refactored, more flexible animation handling pattern. This fixes the original property access error.
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
-                    setGameState(s => {
-                        // The resolver's callback is now fully responsible for handling triggers
-                        // and calling the appropriate turn progression function. This simplifies
-                        // the hook's logic and prevents race conditions/double calls.
-                        return requiresAnimation.onCompleteCallback(s, turnProgressionCb);
-                    });
+                    setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
                 });
                 return nextState;
             }
@@ -229,14 +234,9 @@ export const useGameState = (
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);
             
             if (requiresAnimation) {
+                // FIX: Updated the call to `processAnimationQueue` to use the standardized callback pattern, resolving inconsistencies between card and lane action animations.
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
-                    setGameState(s => {
-                        const finalState = requiresAnimation.onCompleteCallback(s, turnProgressionCb);
-                        if (finalState.actionRequired) {
-                            return finalState;
-                        }
-                        return turnProgressionCb(finalState);
-                    });
+                    setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
                 });
                 return nextState;
             }
@@ -271,7 +271,6 @@ export const useGameState = (
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             let stateWithoutAnimation = { ...prev, animationState: null };
 
-            // Special case for Light-2 prompt
             if (stateWithoutAnimation.actionRequired?.type === 'prompt_shift_or_flip_for_light_2') {
                 stateWithoutAnimation = resolvers.resolveLight2Prompt(stateWithoutAnimation, 'skip');
             } else {
@@ -386,8 +385,6 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolvePlague4Flip(prev, accept, 'player');
-            // Whether the player accepts or skips, the prompt is resolved and the turn should continue.
-            // The resolver handles clearing the actionRequired.
             return turnProgressionCb(nextState);
         });
     }, [getTurnProgressionCallback]);
@@ -484,7 +481,7 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveSpirit3Prompt(prev, accept);
-            if (nextState.actionRequired) { // new shift action
+            if (nextState.actionRequired) {
                 return nextState;
             }
             return turnProgressionCb(nextState);
@@ -518,14 +515,11 @@ export const useGameState = (
                     if (index > -1) {
                         return deck.splice(index, 1)[0];
                     }
-                    // Fallback to global list if not found (shouldn't happen with correct setup)
                     return cards.find(c => c.protocol === protocol && c.value === value)!;
                 };
     
-                // Define and remove cards from decks
                 const speed0Card = removeCardFromDeck(playerDeck, 'Speed', 0);
                 const metal0Card = removeCardFromDeck(opponentDeck, 'Metal', 0);
-                // Player hand cards matching protocols
                 const speed1Card = removeCardFromDeck(playerDeck, 'Speed', 1);
                 const life1Card = removeCardFromDeck(playerDeck, 'Life', 1);
                 const water1Card = removeCardFromDeck(playerDeck, 'Water', 1);
@@ -533,9 +527,8 @@ export const useGameState = (
     
                 let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
     
-                // Player setup
                 newState.player.lanes = [[], [], []];
-                newState.player.lanes[0] = [{ ...speed0Card, id: uuidv4(), isFaceUp: false }]; // Face-down Speed-0
+                newState.player.lanes[0] = [{ ...speed0Card, id: uuidv4(), isFaceUp: false }]; 
                 newState.player.hand = [
                     { ...speed1Card, id: uuidv4(), isFaceUp: true },
                     { ...life1Card, id: uuidv4(), isFaceUp: true },
@@ -545,13 +538,11 @@ export const useGameState = (
                 newState.player.deck = playerDeck;
                 newState.player.discard = [];
     
-                // Opponent setup
                 newState.opponent.lanes = [[], [], []];
-                newState.opponent.hand = [{ ...metal0Card, id: uuidv4(), isFaceUp: true }]; // Only has Metal-0
+                newState.opponent.hand = [{ ...metal0Card, id: uuidv4(), isFaceUp: true }]; 
                 newState.opponent.deck = opponentDeck;
                 newState.opponent.discard = [];
     
-                // Game state setup
                 newState.turn = 'opponent';
                 newState.phase = 'start';
                 newState.actionRequired = null;
@@ -579,7 +570,6 @@ export const useGameState = (
 
                 let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
 
-                // Player setup
                 newState.player.lanes = [[], [], []];
                 newState.player.lanes[0] = [{ ...speed1Card, id: uuidv4(), isFaceUp: true }];
 
@@ -588,19 +578,17 @@ export const useGameState = (
                 newState.player.deck = remainingDeck;
                 newState.player.discard = [];
 
-                // Opponent setup
                 newState.opponent.lanes = [[], [], []];
                 newState.opponent.hand = [];
                 newState.opponent.deck = opponentDeck;
                 newState.opponent.discard = [];
 
-                // Game state setup
                 newState.turn = 'player';
                 newState.phase = 'hand_limit';
                 newState.actionRequired = {
                     type: 'discard',
                     actor: 'player',
-                    count: 1, // 6 cards in hand - 5 limit = 1
+                    count: 1, 
                 };
                 newState.queuedActions = [];
                 

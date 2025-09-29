@@ -387,10 +387,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 
                     // 1. Apply post-animation triggers
                     let stateAfterTriggers = checkForHate3Trigger(s, deletingPlayer);
-                    let uncoverResult: EffectResult | null = null;
                     if (wasTopCard) {
-                        uncoverResult = handleUncoverEffect(stateAfterTriggers, cardInfo.owner, laneIndex);
-                        stateAfterTriggers = uncoverResult.newState;
+                        const stateBeforeUncover = stateAfterTriggers;
+                        const uncoverResult = handleUncoverEffect(stateBeforeUncover, cardInfo.owner, laneIndex);
+                        // Explicitly merge queues to prevent the interrupt state from overwriting the main action queue.
+                        stateAfterTriggers = {
+                            ...uncoverResult.newState,
+                            queuedActions: [
+                                ...(stateBeforeUncover.queuedActions || []),
+                                ...(uncoverResult.newState.queuedActions || [])
+                            ]
+                        };
                     }
                 
                     // 2. Determine the next step of the ORIGINAL multi-step delete action

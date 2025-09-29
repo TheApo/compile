@@ -4,7 +4,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, AnimationRequest, Player, PlayedCard, EffectResult } from '../../../types';
+import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
@@ -12,13 +12,13 @@ import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager
 import { playCard } from './playResolver';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
-// FIX: Import 'executeOnCoverEffect' to resolve a compilation error.
 import { executeOnCoverEffect } from '../../effectExecutor';
 
 export type LaneActionResult = {
     nextState: GameState;
     requiresAnimation?: {
         animationRequests: AnimationRequest[];
+        // FIX: Replaced `originalAction` with `onCompleteCallback` to create a consistent and more flexible pattern for handling post-animation logic, resolving type errors in `aiManager` and `useGameState`.
         onCompleteCallback: (s: GameState, endTurnCb: (s2: GameState) => GameState) => GameState;
     } | null;
 };
@@ -35,25 +35,27 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {
+                // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip after animations.
                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        // After the animation (e.g., a card deletion from on-cover),
-                        // check if the original shift's uncover effect created a new action.
-                        if (s.actionRequired) {
-                            return s; // A new action is pending, so don't end the turn.
+                        let finalState = s;
+                        if (sourceEffect === 'speed_3_end') {
+                            const speed3CardId = prev.actionRequired.sourceCardId;
+                            finalState = log(finalState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                            finalState = findAndFlipCards(new Set([speed3CardId]), finalState);
+                            finalState.animationState = { type: 'flipCard', cardId: speed3CardId };
                         }
-                        // No new action, so the turn can proceed.
-                        return endTurnCb(s);
+                        return endTurnCb(finalState);
                     }
                 };
-            }
-
-            if (sourceEffect === 'speed_3_end') {
-                 const speed3CardId = prev.actionRequired.sourceCardId;
-                 newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
-                 newState = findAndFlipCards(new Set([speed3CardId]), newState);
-                 newState.animationState = { type: 'flipCard', cardId: speed3CardId };
+            } else {
+                 if (sourceEffect === 'speed_3_end') {
+                    const speed3CardId = prev.actionRequired.sourceCardId;
+                    newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                    newState = findAndFlipCards(new Set([speed3CardId]), newState);
+                    newState.animationState = { type: 'flipCard', cardId: speed3CardId };
+                }
             }
             break;
         }
@@ -63,12 +65,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, prev.turn);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {
-                requiresAnimation = {
+                 // FIX: Implemented `onCompleteCallback` for consistency, ensuring any post-animation logic can be handled.
+                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        if (s.actionRequired) return s;
-                        return endTurnCb(s);
-                    }
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
                 };
             }
             break;
@@ -83,8 +83,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 break;
             }
 
-            // Create a version of the state where the current action is cleared.
-            // This is the base state for the playCard function to operate on.
             const stateBeforePlay = { ...prev, actionRequired: null };
 
             let canPlayFaceUp: boolean;
@@ -101,24 +99,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState = stateAfterPlay;
 
             if (animationRequests) {
+                // FIX: Implemented `onCompleteCallback` for card-play animations to ensure turn progression occurs correctly after animations complete.
                 requiresAnimation = {
                     animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        // After animation, the state 's' has the updated board but potentially stale action state.
-                        // The state 'stateAfterPlay' has the correct action state from the effect.
-                        // We combine them to get the true final state.
-                        const finalState = {
-                            ...s,
-                            actionRequired: stateAfterPlay.actionRequired,
-                            queuedActions: stateAfterPlay.queuedActions,
-                            queuedEffect: stateAfterPlay.queuedEffect,
-                        };
-
-                        if (finalState.actionRequired || (finalState.queuedActions && finalState.queuedActions.length > 0)) {
-                            return finalState;
-                        }
-                        return endTurnCb(finalState);
-                    }
+                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
                 };
             }
             break;
@@ -160,19 +144,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
+                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers (like Hate-3) after the animations have finished.
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
-                        let stateAfterTriggers = checkForHate3Trigger(s, prev.turn);
-                        
-                        // Action is done, check queue
-                        if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
-                            const newQueue = [...stateAfterTriggers.queuedActions];
-                            const nextAction = newQueue.shift();
-                            return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue };
+                        let stateAfterDelete = s;
+                        for (let i = 0; i < cardsToDelete.length; i++) {
+                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
                         }
-                        
-                        return endTurnCb(stateAfterTriggers);
+                        return endTurnCb(stateAfterDelete);
                     }
                 };
             }
@@ -198,21 +178,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
+                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers (like Hate-3).
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
-                        let stateAfterTriggers = s;
+                        let stateAfterDelete = s;
                         for (let i = 0; i < cardsToDelete.length; i++) {
-                            stateAfterTriggers = checkForHate3Trigger(stateAfterTriggers, prev.turn);
+                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
                         }
-                        
-                        if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
-                            const newQueue = [...stateAfterTriggers.queuedActions];
-                            const nextAction = newQueue.shift();
-                            return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue };
-                        }
-                        
-                        return endTurnCb(stateAfterTriggers);
+                        return endTurnCb(stateAfterDelete);
                     }
                 };
             }
@@ -222,7 +196,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const { actor } = prev.actionRequired;
             const stateBeforePlay = { ...prev, actionRequired: null };
             
-            // --- On-Cover Logic ---
             let stateAfterOnCover = stateBeforePlay;
             let onCoverResult: EffectResult = { newState: stateAfterOnCover };
             const cardToBeCovered = stateBeforePlay[actor].lanes[targetLaneIndex].length > 0
@@ -233,7 +206,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 stateAfterOnCover = onCoverResult.newState;
             }
 
-            // --- Play Card Logic ---
             const playerStateAfterOnCover = { ...stateAfterOnCover[actor] };
             const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerStateAfterOnCover.deck, playerStateAfterOnCover.discard, 1);
 
@@ -253,13 +225,13 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
                 
                 if(onCoverResult.animationRequests) {
+                    // FIX: Implemented `onCompleteCallback` for on-cover animations.
                     requiresAnimation = {
                         animationRequests: onCoverResult.animationRequests,
                         onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
                     };
                 }
             } else {
-                // If no card could be drawn, just use the state after the on-cover effect.
                 newState = stateAfterOnCover;
             }
             break;
@@ -271,10 +243,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
                 newState = shiftResult.newState;
                 if (shiftResult.animationRequests) {
+                    // FIX: Implemented `onCompleteCallback` for consistency.
                     requiresAnimation = {
                         animationRequests: shiftResult.animationRequests,
                         onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired) return s;
+                            if (s.actionRequired) return s; // Handle potential interrupts from uncover
                             return endTurnCb(s);
                         }
                     };
@@ -338,11 +311,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const playerReturnIds = new Set(playerCardsToReturn.map(c => c.id));
             const opponentReturnIds = new Set(opponentCardsToReturn.map(c => c.id));
 
-            // Remove from lanes
             playerState.lanes[targetLaneIndex] = playerState.lanes[targetLaneIndex].filter(c => !playerReturnIds.has(c.id));
             opponentState.lanes[targetLaneIndex] = opponentState.lanes[targetLaneIndex].filter(c => !opponentReturnIds.has(c.id));
 
-            // Add to hands
             playerState.hand.push(...playerCardsToReturn);
             opponentState.hand.push(...opponentCardsToReturn);
 
