@@ -14,46 +14,43 @@ import { executeOnCoverEffect } from "../../effectExecutor";
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     const opponent = actor === 'player' ? 'opponent' : 'player';
-    let newState = { ...state };
+    const stateBeforePlay = { ...state };
 
-    const opponentState = { ...newState[opponent] };
-    const opponentLaneBeforePlay = opponentState.lanes[laneIndex];
-    const cardToBeCovered = opponentLaneBeforePlay.length > 0 ? opponentLaneBeforePlay[opponentLaneBeforePlay.length - 1] : null;
-
+    const opponentState = { ...stateBeforePlay[opponent] };
     const { drawnCards, remainingDeck, newDiscard } = drawCards(opponentState.deck, opponentState.discard, 1);
     
-    if (drawnCards.length > 0) {
-        const newCard = { ...drawnCards[0], id: uuidv4(), isFaceUp: false };
-        
-        const newOpponentLanes = [...opponentState.lanes];
-        newOpponentLanes[laneIndex] = [...newOpponentLanes[laneIndex], newCard];
-
-        newState[opponent] = {
-            ...opponentState,
-            lanes: newOpponentLanes,
-            deck: remainingDeck,
-            discard: newDiscard,
-        };
-
-        const protocolName = newState[opponent].protocols[laneIndex];
-        newState = log(newState, actor, `Gravity-6: Opponent plays the top card of their deck face-down into Protocol ${protocolName}.`);
-        
-        let finalResult: EffectResult = { newState };
-
-        if (cardToBeCovered) {
-            const onCoverResult = executeOnCoverEffect(cardToBeCovered, laneIndex, finalResult.newState);
-            if (onCoverResult.newState !== finalResult.newState || onCoverResult.animationRequests) {
-                finalResult.newState = onCoverResult.newState;
-                if (onCoverResult.animationRequests) {
-                    finalResult.animationRequests = [
-                        ...(finalResult.animationRequests || []),
-                        ...onCoverResult.animationRequests
-                    ];
-                }
-            }
-        }
-        return finalResult;
+    if (drawnCards.length === 0) {
+        return { newState: state };
+    }
+    
+    // --- On-Cover Logic ---
+    let stateAfterOnCover = stateBeforePlay;
+    let onCoverResult: EffectResult = { newState: stateAfterOnCover };
+    const opponentLaneBeforePlay = stateBeforePlay[opponent].lanes[laneIndex];
+    if (opponentLaneBeforePlay.length > 0) {
+        const cardToBeCovered = opponentLaneBeforePlay[opponentLaneBeforePlay.length - 1];
+        onCoverResult = executeOnCoverEffect(cardToBeCovered, laneIndex, stateBeforePlay);
+        stateAfterOnCover = onCoverResult.newState;
     }
 
-    return { newState };
+    // --- Play Card Logic ---
+    const newCard = { ...drawnCards[0], id: uuidv4(), isFaceUp: false };
+    const finalOpponentState = { ...stateAfterOnCover[opponent] };
+
+    const newOpponentLanes = [...finalOpponentState.lanes];
+    newOpponentLanes[laneIndex] = [...newOpponentLanes[laneIndex], newCard];
+
+    finalOpponentState.lanes = newOpponentLanes;
+    finalOpponentState.deck = remainingDeck;
+    finalOpponentState.discard = newDiscard;
+
+    let finalState = { ...stateAfterOnCover, [opponent]: finalOpponentState };
+    
+    const protocolName = finalState[opponent].protocols[laneIndex];
+    finalState = log(finalState, actor, `Gravity-6: Opponent plays the top card of their deck face-down into Protocol ${protocolName}.`);
+    
+    return { 
+        newState: finalState, 
+        animationRequests: onCoverResult.animationRequests 
+    };
 };

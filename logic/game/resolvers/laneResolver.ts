@@ -4,7 +4,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, AnimationRequest, Player, PlayedCard } from '../../../types';
+import { GameState, AnimationRequest, Player, PlayedCard, EffectResult } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
@@ -220,43 +220,47 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         }
         case 'select_lane_for_life_3_play': {
             const { actor } = prev.actionRequired;
-            const playerState = { ...prev[actor] };
+            const stateBeforePlay = { ...prev, actionRequired: null };
             
-            const cardToBeCovered = playerState.lanes[targetLaneIndex].length > 0
-                ? playerState.lanes[targetLaneIndex][playerState.lanes[targetLaneIndex].length - 1]
+            // --- On-Cover Logic ---
+            let stateAfterOnCover = stateBeforePlay;
+            let onCoverResult: EffectResult = { newState: stateAfterOnCover };
+            const cardToBeCovered = stateBeforePlay[actor].lanes[targetLaneIndex].length > 0
+                ? stateBeforePlay[actor].lanes[targetLaneIndex][stateBeforePlay[actor].lanes[targetLaneIndex].length - 1]
                 : null;
+            if (cardToBeCovered) {
+                onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateBeforePlay);
+                stateAfterOnCover = onCoverResult.newState;
+            }
 
-            const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerState.deck, playerState.discard, 1);
+            // --- Play Card Logic ---
+            const playerStateAfterOnCover = { ...stateAfterOnCover[actor] };
+            const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerStateAfterOnCover.deck, playerStateAfterOnCover.discard, 1);
 
             if (drawnCards.length > 0) {
                 const newCard = { ...drawnCards[0], id: uuidv4(), isFaceUp: false };
-                const newLanes = [...playerState.lanes];
+                const newLanes = [...playerStateAfterOnCover.lanes];
                 newLanes[targetLaneIndex] = [...newLanes[targetLaneIndex], newCard];
 
                 const newPlayerState = {
-                    ...playerState,
+                    ...playerStateAfterOnCover,
                     lanes: newLanes,
                     deck: remainingDeck,
                     discard: newDiscard,
                 };
 
-                newState = { ...prev, [actor]: newPlayerState, actionRequired: null };
+                newState = { ...stateAfterOnCover, [actor]: newPlayerState };
                 newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
-
-                if (cardToBeCovered) {
-                    // FIX: Removed the extra 'actor' argument from the function call.
-                    const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, newState);
-                    newState = onCoverResult.newState;
-                    if (onCoverResult.animationRequests) {
-                        requiresAnimation = {
-                            animationRequests: onCoverResult.animationRequests,
-                            onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
-                        };
-                    }
+                
+                if(onCoverResult.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: onCoverResult.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    };
                 }
-
             } else {
-                newState.actionRequired = null;
+                // If no card could be drawn, just use the state after the on-cover effect.
+                newState = stateAfterOnCover;
             }
             break;
         }

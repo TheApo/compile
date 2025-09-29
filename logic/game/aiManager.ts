@@ -512,7 +512,9 @@ export const runOpponentTurn = (
                             let stateForOnPlay = { ...s_after_cover_anims };
                             let onPlayResult: EffectResult = { newState: stateForOnPlay };
                 
-                            if (stateForOnPlay.queuedEffect) {
+                            if (stateForOnPlay.actionRequired) {
+                                // An on-cover effect created an action. Do not process the on-play effect.
+                            } else if (stateForOnPlay.queuedEffect) {
                                 const { card, laneIndex } = stateForOnPlay.queuedEffect;
                                 onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, 'opponent');
                                 onPlayResult.newState.queuedEffect = undefined;

@@ -117,7 +117,7 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
         // For human player, execute immediately.
         let onPlayResult: EffectResult = { newState: stateAfterMove };
-        if (isFaceUp) {
+        if (isFaceUp && !stateAfterMove.actionRequired) {
             onPlayResult = executeOnPlayEffect(newCardOnBoard, laneIndex, stateAfterMove, player);
         }
 

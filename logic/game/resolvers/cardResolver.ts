@@ -340,10 +340,20 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_face_down_card_to_delete':
         case 'select_low_value_card_to_delete':
         case 'select_card_from_other_lanes_to_delete': {
+            // Rule: An effect is cancelled if its source card is no longer active (face-up on the board).
+            const { sourceCardId, actor } = prev.actionRequired;
+            const sourceCardInfoCheck = findCardOnBoard(prev, sourceCardId);
+            if (!sourceCardInfoCheck || !sourceCardInfoCheck.card.isFaceUp) {
+                const cardName = sourceCardInfoCheck ? `${sourceCardInfoCheck.card.protocol}-${sourceCardInfoCheck.card.value}` : 'the source card';
+                newState = log(prev, actor, `Effect from ${cardName} was cancelled because the source is no longer active.`);
+                newState.actionRequired = null;
+                requiresTurnEnd = true;
+                break;
+            }
+
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
-            const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
@@ -601,36 +611,35 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_any_other_card_to_flip_for_water_0': {
             const { sourceCardId, actor } = prev.actionRequired;
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-
+        
             let stateAfterTargetFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-
+        
             // Handle on-flip effects for the TARGETED card, which might interrupt.
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const result = handleOnFlipToFaceUp(stateAfterTargetFlip, targetCardId);
                 stateAfterTargetFlip = result.newState;
                 if (stateAfterTargetFlip.actionRequired) {
-                    // An interrupt happened. Queue the self-flip and pause.
-                    const flipSelfAction: ActionRequired = {
-                        type: 'flip_self_for_water_0',
-                        sourceCardId,
-                        actor,
-                    };
-                    stateAfterTargetFlip.queuedActions = [...(stateAfterTargetFlip.queuedActions || []), flipSelfAction];
+                    // An interrupt happened. The 'flip_self' action is still in the queue.
                     newState = stateAfterTargetFlip;
-                    requiresTurnEnd = false;
+                    requiresTurnEnd = false; // The interrupt action needs to be resolved.
                     break;
                 }
             }
-
+        
             // No interrupt. Manually process the self-flip.
             const sourceCardInfo = findCardOnBoard(stateAfterTargetFlip, sourceCardId);
-            if (sourceCardInfo) {
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 stateAfterTargetFlip = log(stateAfterTargetFlip, actor, `${cardName}: Flips itself.`);
                 stateAfterTargetFlip = findAndFlipCards(new Set([sourceCardId]), stateAfterTargetFlip);
                 stateAfterTargetFlip.animationState = { type: 'flipCard', cardId: sourceCardId };
             }
-
+        
+            // The queued action has been manually handled, so we must clear it from the queue.
+            stateAfterTargetFlip.queuedActions = stateAfterTargetFlip.queuedActions?.filter(
+                a => a.type !== 'flip_self_for_water_0' || a.sourceCardId !== sourceCardId
+            ) || [];
+            
             newState = stateAfterTargetFlip;
             requiresTurnEnd = true;
             break;
