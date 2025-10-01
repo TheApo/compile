@@ -187,7 +187,16 @@ export const resolveRearrangeProtocols = (
     newState[target] = targetState;
     newState.actionRequired = null; // Clear the rearrange action
 
-    const sourceText = sourceCardId === 'CONTROL_MECHANIC' ? 'Control Action' : sourceCardId;
+    // Convert sourceCardId to a readable name
+    let sourceText = 'Control Action';
+    if (sourceCardId !== 'CONTROL_MECHANIC') {
+        // Find the card and convert to Protocol-Value format
+        const card = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()].find(c => c.id === sourceCardId);
+        if (card) {
+            sourceText = `${card.protocol}-${card.value}`;
+        }
+    }
+
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     const targetName = target === actor ? 'their own' : `the opponent's`;
     newState = log(newState, actor, `${sourceText}: ${actorName} rearranges ${targetName} protocols.`);

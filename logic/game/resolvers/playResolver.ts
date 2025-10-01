@@ -27,9 +27,21 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     if (!isFaceUp) {
         const opponentHasMetalTwo = opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
         if (opponentHasMetalTwo) {
-            // This move is illegal. In a real game, this would be an error.
-            // For the AI, this means its logic was flawed. We should just return the state unchanged.
             console.error(`Illegal Move: ${player} tried to play face-down against Metal-2 in lane ${laneIndex}`);
+            return { newState: prevState };
+        }
+    }
+
+    // RULE: Can only play face-up if card protocol matches lane protocol (unless lane is compiled)
+    if (isFaceUp && !playerState.compiled[laneIndex]) {
+        const playerProtocol = playerState.protocols[laneIndex];
+        const opponentProtocol = prevState[opponent].protocols[laneIndex];
+        const playerHasPsychic1 = prevState[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+
+        const canPlayFaceUp = (cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol) && !playerHasPsychic1;
+
+        if (!canPlayFaceUp) {
+            console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} face-up in lane ${laneIndex} (protocols: player=${playerProtocol}, opponent=${opponentProtocol})`);
             return { newState: prevState };
         }
     }

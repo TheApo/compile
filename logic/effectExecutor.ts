@@ -140,6 +140,9 @@ function processTriggeredEffects(
         const effectKey = `${card.protocol}-${card.value}`;
         const execute = effectRegistry[effectKey];
         if (execute) {
+            // Log that the effect is triggering with Start/End marker
+            newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
+
             const result = execute(card, newState);
             newState = recalculateAllLaneValues(result.newState);
 
