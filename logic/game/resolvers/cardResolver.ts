@@ -376,29 +376,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 onCompleteCallback: (s, endTurnCb) => {
                     const deletingPlayer = prev.actionRequired.actor;
                     const originalAction = prev.actionRequired;
-                
+
                     // 1. Apply post-animation triggers
                     let stateAfterTriggers = checkForHate3Trigger(s, deletingPlayer);
-                    if (wasTopCard) {
-                        const stateBeforeUncover = stateAfterTriggers;
-                        const uncoverResult = handleUncoverEffect(stateBeforeUncover, cardInfo.owner, laneIndex);
-                        // Explicitly merge queues to prevent the interrupt state from overwriting the main action queue.
-                        stateAfterTriggers = {
-                            ...uncoverResult.newState,
-                            queuedActions: [
-                                ...(stateBeforeUncover.queuedActions || []),
-                                ...(uncoverResult.newState.queuedActions || [])
-                            ]
-                        };
-                    }
-                
-                    // 2. Determine the next step of the ORIGINAL multi-step delete action
+
+                    // 2. Determine the next step of the ORIGINAL multi-step delete action BEFORE uncovering
                     let nextStepOfDeleteAction: ActionRequired = null;
                     const sourceCardInfo = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
 
                     if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                         if (originalAction.type === 'select_cards_to_delete' && originalAction.count > 1) {
-                             nextStepOfDeleteAction = { 
+                             nextStepOfDeleteAction = {
                                 type: 'select_cards_to_delete',
                                 count: originalAction.count - 1,
                                 sourceCardId: originalAction.sourceCardId,
@@ -420,23 +408,64 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         const sourceName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                         stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Remaining deletes from ${sourceName} were cancelled because the source is no longer active.`);
                     }
-                
-                    // 3. Prioritize actions and update state
-                    const actionFromTriggers = stateAfterTriggers.actionRequired;
-                
-                    if (actionFromTriggers) {
+
+                    // 3. Handle uncovering with the pre-computed next delete action
+                    if (wasTopCard) {
+                        const stateBeforeUncover = stateAfterTriggers;
+                        const uncoverResult = handleUncoverEffect(stateBeforeUncover, cardInfo.owner, laneIndex);
+
+                        // Check if the uncover created an interrupt (turn switch)
+                        const uncoverCreatedInterrupt = uncoverResult.newState._interruptedTurn !== undefined;
+
+                        // Merge queues and preserve the next delete step
+                        const mergedQueue = [
+                            ...(stateBeforeUncover.queuedActions || []),
+                            ...(uncoverResult.newState.queuedActions || [])
+                        ];
+
+                        // If we have a next delete step, ensure it's preserved
                         if (nextStepOfDeleteAction) {
-                            stateAfterTriggers.queuedActions = [...(stateAfterTriggers.queuedActions || []), nextStepOfDeleteAction];
+                            if (uncoverCreatedInterrupt) {
+                                // The uncover interrupted - queue the next delete for AFTER the interrupt resolves
+                                mergedQueue.push(nextStepOfDeleteAction);
+                            } else {
+                                // No interrupt - the next delete should happen immediately after the uncover effect
+                                mergedQueue.unshift(nextStepOfDeleteAction);
+                            }
                         }
+
+                        stateAfterTriggers = {
+                            ...uncoverResult.newState,
+                            queuedActions: mergedQueue
+                        };
+                    } else if (nextStepOfDeleteAction) {
+                        // No uncover happened, but we have a next delete step
+                        stateAfterTriggers.queuedActions = [
+                            ...(stateAfterTriggers.queuedActions || []),
+                            nextStepOfDeleteAction
+                        ];
+                    }
+
+                    // 4. Handle action priority
+                    const actionFromTriggers = stateAfterTriggers.actionRequired;
+
+                    if (actionFromTriggers) {
+                        // Uncover created an interrupt - the next delete is already in the queue
                         return stateAfterTriggers;
                     }
-                    
-                    stateAfterTriggers.actionRequired = nextStepOfDeleteAction;
-                
-                    if (stateAfterTriggers.actionRequired) {
-                        return stateAfterTriggers;
+
+                    // No interrupt from uncover - check if we have queued actions
+                    if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
+                        // Pop the first queued action and make it the current action
+                        const queueCopy = [...stateAfterTriggers.queuedActions];
+                        const nextAction = queueCopy.shift();
+                        return {
+                            ...stateAfterTriggers,
+                            actionRequired: nextAction,
+                            queuedActions: queueCopy
+                        };
                     }
-                
+
                     return endTurnCb(stateAfterTriggers);
                 }
             };

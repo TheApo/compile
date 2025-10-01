@@ -58,35 +58,25 @@ export const useGameState = (
             setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
     
             setTimeout(() => {
-                let wasInterrupted = false;
-    
                 setGameState(s => {
                     const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
-                    const wasTopCard = laneIndex !== -1 && 
-                                       s[nextRequest.owner].lanes[laneIndex].length > 0 && 
+                    const wasTopCard = laneIndex !== -1 &&
+                                       s[nextRequest.owner].lanes[laneIndex].length > 0 &&
                                        s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
-    
+
                     let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
                     stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
-                    
-                    let stateWithUncover = { ...stateAfterDelete, animationState: null };
-                    if (wasTopCard) {
-                        const uncoverResult = handleUncoverEffect(stateWithUncover, nextRequest.owner, laneIndex);
-                        stateWithUncover = uncoverResult.newState;
-                    }
-    
-                    if (stateWithUncover.actionRequired) {
-                        wasInterrupted = true;
-                    }
-                    
-                    return stateWithUncover;
+
+                    // Just clear animation - the onComplete callback will handle uncover and next steps
+                    return { ...stateAfterDelete, animationState: null };
                 });
-    
-                // After state has been set, check if we should continue.
-                // We use a another timeout to ensure we are checking the state *after* the update from the previous timeout.
+
+                // After animation completes, immediately process next or call onComplete
                 setTimeout(() => {
-                    if (!wasInterrupted) {
+                    if (rest.length > 0) {
                         processNext(rest);
+                    } else {
+                        onComplete();
                     }
                 }, 10);
             }, 500); // Animation duration

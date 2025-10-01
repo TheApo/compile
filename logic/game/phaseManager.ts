@@ -152,7 +152,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         let restoredState = { ...state };
         delete restoredState._interruptedTurn;
         restoredState.turn = originalTurnPlayer;
-        
+
         // The interrupt is over. The original turn player's action that was
         // interrupted is now considered complete. Continue processing the rest
         // of their turn from this restored state, without returning early.
@@ -207,10 +207,10 @@ export const processEndOfAction = (state: GameState): GameState => {
     if (state.queuedActions && state.queuedActions.length > 0) {
         let mutableState = { ...state };
         let queuedActions = [...mutableState.queuedActions];
-        
+
         while (queuedActions.length > 0) {
             const nextAction = queuedActions.shift()!;
-            
+
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
             if (nextAction.sourceCardId) {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
