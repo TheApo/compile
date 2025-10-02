@@ -6,7 +6,7 @@
 import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest } from '../../types';
 import { easyAI } from '../ai/easy';
 import { normalAI } from '../ai/normal';
-import { hardAI } from '../ai/hard';
+import { hardAI } from '../ai/hardImproved';
 import { Dispatch, SetStateAction } from 'react';
 import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';

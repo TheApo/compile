@@ -95,7 +95,7 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     }
 
     const uncoveredCard = lane[lane.length - 1];
-    
+
     // The effect only triggers if the newly uncovered card is FACE UP.
     if (uncoveredCard.isFaceUp) {
         // Create a unique ID for this specific uncover event to prevent double-triggering.
@@ -105,13 +105,13 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         }
 
         let newState = log(state, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
-        
+
         // Mark this event as processed before executing the effect.
         newState.processedUncoverEventIds = [...(newState.processedUncoverEventIds || []), eventId];
 
         // Re-triggering the on-play effect is the main part of the mechanic.
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
-        
+
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
             // If an interrupt is already in progress...
@@ -127,18 +127,27 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
                     return result;
                 }
             }
-            
+
             // Standard interrupt logic if no interrupt is in progress, or if the new action
             // is for the currently interrupting player.
             if (newActionActor !== state.turn) {
                 result.newState._interruptedTurn = state.turn;
+                result.newState._interruptedPhase = state.phase;
                 result.newState.turn = newActionActor;
             }
+        } else {
+            // CRITICAL FIX: If the uncover effect didn't create an action requirement,
+            // but the turn was previously interrupted, restore the original turn holder.
+            // This prevents the current player from getting an extra turn.
+            if (result.newState._interruptedTurn) {
+                result.newState.turn = result.newState._interruptedTurn;
+                result.newState._interruptedTurn = undefined;
+            }
         }
-        
+
         return result;
     }
-    
+
     return { newState: state };
 }
 
@@ -315,6 +324,7 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
         // is for the currently interrupting player.
         if (newActionActor !== state.turn) {
             result.newState._interruptedTurn = state.turn;
+            result.newState._interruptedPhase = state.phase;
             result.newState.turn = newActionActor;
         }
     }

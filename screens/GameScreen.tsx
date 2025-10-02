@@ -4,7 +4,7 @@
  */
 
 // FIX: Import useState and useEffect from React, and fix malformed import.
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { CardComponent } from '../components/Card';
 import { useGameState } from '../hooks/useGameState';
@@ -18,6 +18,7 @@ import { Toaster } from '../components/Toaster';
 import { RearrangeProtocolsModal } from '../components/RearrangeProtocolsModal';
 import { SwapProtocolsModal } from '../components/SwapProtocolsModal';
 import { DebugModal } from '../components/DebugModal';
+import { CoinFlipModal } from '../components/CoinFlipModal';
 
 
 interface GameScreenProps {
@@ -28,6 +29,7 @@ interface GameScreenProps {
   opponentProtocols: string[];
   difficulty: Difficulty;
   useControlMechanic: boolean;
+  startingPlayer?: Player;
 }
 
 type PreviewState = {
@@ -57,8 +59,17 @@ const ACTIONS_REQUIRING_HAND_INTERACTION = new Set<ActionRequired['type']>([
 ]);
 
 
-export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic }: GameScreenProps) {
-  
+export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player' }: GameScreenProps) {
+  // Determine starting player via coin flip on first mount
+  const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
+  const [showCoinFlip, setShowCoinFlip] = useState(true);
+
+  const handleCoinFlipComplete = useCallback((starter: Player) => {
+    setActualStartingPlayer(starter);
+    setShowCoinFlip(false);
+  }, []);
+
+  // Initialize game state - will use 'player' initially, but that's ok because we don't show the game until coin flip is done
   const {
     gameState,
     selectedCard,
@@ -88,8 +99,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolvePsychic4Prompt,
     resolveControlMechanicPrompt,
     setupTestScenario,
-    // FIX: Pass useControlMechanic to the useGameState hook.
-  } = useGameState(playerProtocols, opponentProtocols, onEndGame, difficulty, useControlMechanic);
+  } = useGameState(
+    playerProtocols,
+    opponentProtocols,
+    onEndGame,
+    difficulty,
+    useControlMechanic,
+    actualStartingPlayer ?? 'player'
+  );
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
   const [multiSelectedCardIds, setMultiSelectedCardIds] = useState<string[]>([]);
@@ -163,6 +180,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             } else if (event.key.toLowerCase() === 'l') {
                 console.log('Debug: Setting up Speed-1 discard trigger scenario.');
                 setupTestScenario('speed-1-trigger');
+            } else if (event.key.toLowerCase() === 'f') {
+                console.log('Debug: Setting up Fire On-Cover test scenario.');
+                setupTestScenario('fire-oncover-test');
+            } else if (event.key.toLowerCase() === 's') {
+                console.log('Debug: Setting up Speed-2 + Control test scenario.');
+                setupTestScenario('speed-2-control-test');
             }
         }
     };
@@ -428,10 +451,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         <div className="game-screen-layout">
             <div className="game-preview-container">
                 <h2>Mainframe</h2>
-                <GameInfoPanel 
-                    gameState={gameState} 
-                    turn={gameState.turn} 
+                <GameInfoPanel
+                    gameState={gameState}
+                    turn={gameState.turn}
                     animationState={gameState.animationState}
+                    difficulty={difficulty}
                     onPlayerClick={() => setDebugModalPlayer('player')}
                     onOpponentClick={() => setDebugModalPlayer('opponent')}
                 />
@@ -503,6 +527,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 </div>
             </div>
         </div>
+        {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
     </div>
   );
 }

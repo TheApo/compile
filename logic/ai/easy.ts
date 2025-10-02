@@ -55,11 +55,12 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
 
     // Try to find a lane where it can be played face up.
     if (!playerHasPsychic1) {
+        const aiHasSpirit1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             // Avoid playing in a lane the player is guaranteed to compile.
             if (canPlayerCompileLane(i)) continue;
-            if (cardToPlay.protocol === opponent.protocols[i]) {
+            if (cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
         }
@@ -484,12 +485,19 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'resolveLight2Prompt', choice: 'skip' };
         }
 
-        case 'plague_2_opponent_discard':
+        case 'plague_2_opponent_discard': {
+            // Plague-2: Forced to discard 1 card - pick first one
             if (state.opponent.hand.length > 0) return { type: 'resolvePlague2Discard', cardIds: [state.opponent.hand[0].id] };
             return { type: 'skip' };
-        case 'select_cards_from_hand_to_discard_for_fire_4':
-            if (state.opponent.hand.length > 0) return { type: 'resolveFire4Discard', cardIds: [state.opponent.hand[0].id] };
-            return { type: 'skip' };
+        }
+
+        case 'select_cards_from_hand_to_discard_for_fire_4': {
+            // Fire-4: Discard up to 3 to draw more - just pick first cards
+            const maxDiscard = Math.min(3, state.opponent.hand.length);
+            if (maxDiscard === 0) return { type: 'skip' };
+            const toDiscard = state.opponent.hand.slice(0, maxDiscard).map(c => c.id);
+            return { type: 'resolveFire4Discard', cardIds: toDiscard };
+        }
         case 'select_cards_from_hand_to_discard_for_hate_1':
             if (state.opponent.hand.length > 0) return { type: 'resolveHate1Discard', cardIds: state.opponent.hand.slice(0, action.count).map(c => c.id) };
             return { type: 'skip' };
@@ -571,6 +579,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 return { type: 'deleteCard', cardId: randomTarget.id }; // 'deleteCard' is a proxy for selecting a card
             }
+            return { type: 'skip' };
+        }
+
+        case 'flip_self_for_water_0': {
+            // Water-0: Flip self after playing
+            if (action.sourceCardId) {
+                return { type: 'flipCard', cardId: action.sourceCardId };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'plague_2_player_discard': {
+            // Player is forced to discard - AI doesn't need to do anything
+            return { type: 'skip' };
+        }
+
+        case 'reveal_opponent_hand': {
+            // This action doesn't require a response from the AI
             return { type: 'skip' };
         }
     }

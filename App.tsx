@@ -9,6 +9,7 @@ import { ProtocolSelection } from './screens/ProtocolSelection';
 import { GameScreen } from './screens/GameScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { CardLibraryScreen } from './screens/CardLibraryScreen';
+import { CoinFlipModal } from './components/CoinFlipModal';
 import { Difficulty, GameState } from './types';
 
 type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary';
@@ -22,6 +23,7 @@ export function App() {
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [finalGameState, setFinalGameState] = useState<GameState | null>(null);
   const [useControl, setUseControl] = useState(true);
+  const [startingPlayer, setStartingPlayer] = useState<Player>('player');
 
   const handleBackToMenu = useCallback(() => {
     setScreen('MainMenu');
@@ -49,7 +51,8 @@ export function App() {
     setOpponentProtocols(opponentProtos);
     setWinner(null);
     setFinalGameState(null);
-    setScreen('GameScreen');
+    setStartingPlayer('player'); // Reset, will be set by coin flip
+    setScreen('GameScreen'); // Go directly to game, coin flip will show as overlay
   }, []);
 
   const handleEndGame = useCallback((winner: Player, finalState: GameState) => {
@@ -86,6 +89,7 @@ export function App() {
             opponentProtocols={opponentProtocols}
             difficulty={difficulty}
             useControlMechanic={useControl}
+            startingPlayer={startingPlayer}
           />
         );
       case 'ResultsScreen':

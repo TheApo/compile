@@ -497,14 +497,23 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         const uncoverResult = handleUncoverEffect(stateWithTriggers, cardInfo.owner, laneIndex);
                         stateWithTriggers = uncoverResult.newState;
                     }
-                    
+
                     const nextAction: ActionRequired = {
                         type: 'plague_4_player_flip_optional',
                         sourceCardId: prev.actionRequired.sourceCardId,
                         optional: true,
                         actor: prev.turn, // The prompt is for the turn player
                     };
-                    stateWithTriggers.actionRequired = nextAction;
+
+                    // If uncover effect created an action, queue the plague_4 flip action
+                    if (stateWithTriggers.actionRequired) {
+                        stateWithTriggers.queuedActions = [
+                            ...(stateWithTriggers.queuedActions || []),
+                            nextAction
+                        ];
+                    } else {
+                        stateWithTriggers.actionRequired = nextAction;
+                    }
                     return stateWithTriggers;
                 }
             };

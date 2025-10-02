@@ -35,13 +35,13 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
     };
 };
 
-export const createInitialState = (playerProtocols: string[], opponentProtocols: string[], useControlMechanic: boolean): GameState => {
+export const createInitialState = (playerProtocols: string[], opponentProtocols: string[], useControlMechanic: boolean, startingPlayer: Player = 'player'): GameState => {
     const playerState = createInitialPlayerState(playerProtocols);
     const opponentState = createInitialPlayerState(opponentProtocols);
     const initialState: GameState = {
         player: playerState,
         opponent: opponentState,
-        turn: 'player',
+        turn: startingPlayer,
         phase: 'start',
         controlCardHolder: null,
         useControlMechanic,
@@ -59,7 +59,8 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
             opponent: opponentState.stats,
         }
     };
-     return log(initialState, 'player', 'Game Started.');
+     const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+     return log(initialState, 'player', `Game Started. ${starterName} goes first.`);
 }
 
 export const getEffectiveCardValue = (card: PlayedCard, lane: PlayedCard[]): number => {

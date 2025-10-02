@@ -60,9 +60,10 @@ export const advancePhase = (state: GameState): GameState => {
             if (nextState.actionRequired) return nextState;
             return { ...nextState, phase: 'control' };
 
-        case 'control':
-            nextState = checkControlPhase(nextState);
-            return { ...nextState, phase: 'compile' };
+        case 'control': {
+            const stateAfterControl = checkControlPhase(nextState);
+            return { ...stateAfterControl, phase: 'compile' };
+        }
 
         case 'compile': {
             const compilableLanes = calculateCompilableLanes(nextState, turnPlayer);
@@ -149,9 +150,12 @@ export const processEndOfAction = (state: GameState): GameState => {
     // Check for a completed interrupt first.
     if (state._interruptedTurn) {
         const originalTurnPlayer = state._interruptedTurn;
+        const originalPhase = state._interruptedPhase || state.phase;
         let restoredState = { ...state };
         delete restoredState._interruptedTurn;
+        delete restoredState._interruptedPhase;
         restoredState.turn = originalTurnPlayer;
+        restoredState.phase = originalPhase;
 
         // The interrupt is over. The original turn player's action that was
         // interrupted is now considered complete. Continue processing the rest
@@ -320,6 +324,17 @@ export const continueTurnProgression = (state: GameState): GameState => {
     if (state.winner) return state;
 
     let nextState = { ...state };
+
+    // Check for a completed interrupt first.
+    if (nextState._interruptedTurn) {
+        const originalTurnPlayer = nextState._interruptedTurn;
+        const originalPhase = nextState._interruptedPhase || nextState.phase;
+        delete nextState._interruptedTurn;
+        delete nextState._interruptedPhase;
+        nextState.turn = originalTurnPlayer;
+        nextState.phase = originalPhase;
+    }
+
     const originalTurn = nextState.turn;
 
     // Process all automatic phases until an action is required or the turn ends.
