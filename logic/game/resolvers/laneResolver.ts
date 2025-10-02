@@ -162,10 +162,19 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const actor = prev.turn;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const targetProtocolName = prev.player.protocols[targetLaneIndex];
+
+            // CRITICAL VALIDATION: Only delete if the lane has 8 or more cards
+            const totalCardsInLane = prev.player.lanes[targetLaneIndex].length + prev.opponent.lanes[targetLaneIndex].length;
+            if (totalCardsInLane < 8) {
+                newState = log(newState, actor, `Metal-3: ${actorName} cannot delete Protocol ${targetProtocolName} (only ${totalCardsInLane} cards, need 8+).`);
+                newState.actionRequired = null;
+                break;
+            }
+
             newState = log(newState, actor, `Metal-3: ${actorName} targets Protocol ${targetProtocolName} for deletion.`);
 
             const cardsToDelete: AnimationRequest[] = [];
-            
+
             for (const p of ['player', 'opponent'] as Player[]) {
                 for (const card of prev[p].lanes[targetLaneIndex]) {
                     cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });

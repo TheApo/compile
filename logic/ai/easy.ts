@@ -407,13 +407,41 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'select_lane_for_play': {
+            // FIX: Filter out lanes blocked by Plague-0 or Metal-2
+            let possibleLanes = [0, 1, 2];
+            if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
+                possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
+            }
+
+            // Filter out blocked lanes
+            const opponent = 'player'; // Easy AI is always opponent
+            possibleLanes = possibleLanes.filter(laneIndex => {
+                const opponentLane = state[opponent].lanes[laneIndex];
+                const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
+
+                // Check for Plague-0 block
+                const isBlockedByPlague0 = topCard && topCard.isFaceUp &&
+                    topCard.protocol === 'Plague' && topCard.value === 0;
+
+                // Check for Metal-2 block (only if playing face-down)
+                const isBlockedByMetal2 = action.isFaceDown &&
+                    opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+
+                return !isBlockedByPlague0 && !isBlockedByMetal2;
+            });
+
+            if (possibleLanes.length > 0) {
+                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            return { type: 'skip' };
+        }
         case 'select_lane_for_shift':
-        case 'select_lane_for_play':
         case 'select_lane_for_death_2':
         case 'select_lane_for_life_3_play':
         case 'select_lane_to_shift_revealed_card_for_light_2':
-        case 'select_lane_to_shift_cards_for_light_3':
-        case 'select_lane_for_metal_3_delete': {
+        case 'select_lane_to_shift_cards_for_light_3': {
             let possibleLanes = [0, 1, 2];
             if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
                 possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
@@ -426,6 +454,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'selectLane', laneIndex: randomLane };
             }
             if ('optional' in action && action.optional) return { type: 'skip' };
+            return { type: 'skip' };
+        }
+        case 'select_lane_for_metal_3_delete': {
+            // FIX: Metal-3 can only delete lanes with 8 or more cards
+            let possibleLanes = [0, 1, 2];
+            if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
+                possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
+            }
+            // Filter to only lanes with >= 8 cards
+            possibleLanes = possibleLanes.filter(laneIndex => {
+                const totalCards = state.player.lanes[laneIndex].length + state.opponent.lanes[laneIndex].length;
+                return totalCards >= 8;
+            });
+            if (possibleLanes.length > 0) {
+                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            // If no valid lanes, skip
             return { type: 'skip' };
         }
         case 'select_lane_for_water_3': {
@@ -505,8 +551,27 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_from_hand_to_play':
              if (state.opponent.hand.length > 0) {
                 const cardToPlay = state.opponent.hand[0];
-                const playableLanes = [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
-                return { type: 'playCard', cardId: cardToPlay.id, laneIndex: playableLanes[0], isFaceUp: false };
+                // FIX: Filter out blocked lanes (same logic as select_lane_for_play)
+                let playableLanes = [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
+
+                playableLanes = playableLanes.filter(laneIndex => {
+                    const opponentLane = state.player.lanes[laneIndex];
+                    const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
+
+                    // Check for Plague-0 block
+                    const isBlockedByPlague0 = topCard && topCard.isFaceUp &&
+                        topCard.protocol === 'Plague' && topCard.value === 0;
+
+                    // Check for Metal-2 block (only if playing face-down)
+                    const isBlockedByMetal2 = action.isFaceDown &&
+                        opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+
+                    return !isBlockedByPlague0 && !isBlockedByMetal2;
+                });
+
+                if (playableLanes.length > 0) {
+                    return { type: 'playCard', cardId: cardToPlay.id, laneIndex: playableLanes[0], isFaceUp: false };
+                }
              }
              return { type: 'skip' };
         case 'select_card_from_hand_to_give':

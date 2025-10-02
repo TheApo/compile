@@ -10,7 +10,7 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     let newState = { ...state };
-    
+
     if (newState[actor].hand.length > 0) {
         newState.actionRequired = {
             type: 'select_card_from_hand_to_play',
