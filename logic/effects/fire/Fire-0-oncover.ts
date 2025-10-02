@@ -32,6 +32,7 @@ export const execute = (coveredCard: PlayedCard, laneIndex: number, state: GameS
         // This requires an interrupt if the owner is not the current turn player.
         if (state.turn !== owner) {
             newState._interruptedTurn = state.turn;
+            newState._interruptedPhase = state.phase;
             newState.turn = owner;
         }
     } else {

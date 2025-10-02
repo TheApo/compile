@@ -2031,3 +2031,179 @@ p {
 .stat-item-value.opponent {
     color: var(--danger-color);
 }
+
+/* --- Coin Flip Modal --- */
+.coin-flip-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+}
+
+.coin-flip-modal-content {
+  max-width: 600px;
+  text-align: center;
+  padding: 3rem;
+}
+
+.coin-flip-modal-content h2 {
+  margin-bottom: 1.5rem;
+  color: var(--primary-color);
+}
+
+.coin-flip-modal-content p {
+  color: var(--text-color);
+  margin-bottom: 2rem;
+}
+
+.coin-flip-choices {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.coin-flip-choice-btn {
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 3rem;
+  min-width: 150px;
+  background-color: var(--surface-hover);
+  border: 2px solid var(--secondary-color);
+}
+
+.coin-flip-choice-btn:hover {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(97, 239, 255, 0.4);
+}
+
+.coin-choice-icon {
+  font-size: 3rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.coin-flip-choice-btn:hover .coin-choice-icon {
+  color: var(--background-color);
+}
+
+.coin-choice-label {
+  font-size: 1.2rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+
+.coin-flip-choice-btn:hover .coin-choice-label {
+  color: var(--background-color);
+}
+
+.coin-flip-highlight {
+  color: var(--primary-color);
+  font-weight: 700;
+  text-shadow: 0 0 5px var(--primary-color);
+}
+
+.coin-flip-animation-container {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1000px;
+  margin: 2rem 0;
+}
+
+.coin-3d {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s;
+}
+
+.coin-3d.is-flipping {
+  animation: coin-flip 2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes coin-flip {
+  0% {
+    transform: rotateY(0deg) rotateX(0deg);
+  }
+  25% {
+    transform: rotateY(360deg) rotateX(180deg);
+  }
+  50% {
+    transform: rotateY(720deg) rotateX(360deg);
+  }
+  75% {
+    transform: rotateY(1080deg) rotateX(540deg);
+  }
+  100% {
+    transform: rotateY(1440deg) rotateX(720deg);
+  }
+}
+
+.coin-3d.result-heads {
+  transform: rotateY(1440deg);
+}
+
+.coin-3d.result-tails {
+  transform: rotateY(1620deg);
+}
+
+.coin-face {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: var(--surface-color);
+  border: 3px solid var(--primary-color);
+  box-shadow: 0 0 20px var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-shadow: 0 0 10px var(--primary-color);
+  backface-visibility: hidden;
+}
+
+.coin-heads {
+  transform: rotateY(0deg);
+}
+
+.coin-tails {
+  transform: rotateY(180deg);
+}
+
+.coin-flip-result-text {
+  font-size: 1.2rem;
+  margin: 1.5rem 0;
+}
+
+.coin-flip-winner-text {
+  color: var(--primary-color);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 1rem 0 2rem 0;
+  text-shadow: 0 0 8px var(--primary-color);
+}
+
+.coin-flip-loser-text {
+  color: var(--danger-color);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 1rem 0 2rem 0;
+  text-shadow: 0 0 8px var(--danger-color);
+}

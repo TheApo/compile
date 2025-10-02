@@ -95,7 +95,8 @@ const getBestMove = (state: GameState): AIAction => {
             const baseScore = getCardPower(card);
 
             // FACE-UP PLAY
-            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i]) && !playerHasPsychic1;
+            const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1) && !playerHasPsychic1;
             if (canPlayFaceUp) {
                 let score = 0;
                 let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}`;
@@ -367,8 +368,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             for (const card of state.opponent.hand) {
                 for (const laneIndex of playableLanes) {
+                    const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
                     const canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex]
-                        || card.protocol === state.player.protocols[laneIndex];
+                        || card.protocol === state.player.protocols[laneIndex]
+                        || aiHasSpirit1;
 
                     if (canPlayFaceUp) {
                         const valueToAdd = card.value;

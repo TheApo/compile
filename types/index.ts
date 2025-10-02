@@ -332,7 +332,7 @@ export type ActionRequired = {
     type: 'prompt_use_control_mechanic';
     sourceCardId: 'CONTROL_MECHANIC';
     actor: Player;
-    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] };
+    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
 } | {
     type: 'flip_self_for_water_0';
     sourceCardId: string;
@@ -373,6 +373,7 @@ export interface GameState {
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
     _interruptedTurn?: Player;
+    _interruptedPhase?: GamePhase;
     stats: {
         player: PlayerStats,
         opponent: PlayerStats,

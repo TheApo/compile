@@ -55,11 +55,12 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
 
     // Try to find a lane where it can be played face up.
     if (!playerHasPsychic1) {
+        const aiHasSpirit1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             // Avoid playing in a lane the player is guaranteed to compile.
             if (canPlayerCompileLane(i)) continue;
-            if (cardToPlay.protocol === opponent.protocols[i]) {
+            if (cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
         }

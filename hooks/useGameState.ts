@@ -19,18 +19,36 @@ import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
 import { checkForHate3Trigger } from '../logic/effects/hate/Hate-3';
 
 export const useGameState = (
-    playerProtocols: string[], 
+    playerProtocols: string[],
     opponentProtocols: string[],
     onEndGame: (winner: Player, finalState: GameState) => void,
     difficulty: Difficulty,
-    useControlMechanic: boolean
+    useControlMechanic: boolean,
+    startingPlayer: Player = 'player'
 ) => {
     const [gameState, setGameState] = useState<GameState>(() => {
-        const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic);
+        const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic, startingPlayer);
         return stateManager.recalculateAllLaneValues(initialState);
     });
-    
+
     const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
+    // Update turn when startingPlayer changes (from coin flip)
+    useEffect(() => {
+        if (gameState.log.length <= 1 && gameState.turn !== startingPlayer) {
+            setGameState(prev => {
+                const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+                return {
+                    ...prev,
+                    turn: startingPlayer,
+                    log: [{
+                        player: 'player',
+                        message: `Game Started. ${starterName} goes first.`
+                    }]
+                };
+            });
+        }
+    }, [startingPlayer]);
 
     const getTurnProgressionCallback = useCallback((phase: GamePhase): ((s: GameState) => GameState) => {
         switch (phase) {
@@ -52,11 +70,11 @@ export const useGameState = (
                 onComplete();
                 return;
             }
-    
+
             const [nextRequest, ...rest] = q;
-    
+
             setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
-    
+
             setTimeout(() => {
                 setGameState(s => {
                     const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
@@ -67,7 +85,13 @@ export const useGameState = (
                     let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
                     stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
 
-                    // Just clear animation - the onComplete callback will handle uncover and next steps
+                    // FIX: Trigger uncover effect if the deleted card was a top card
+                    if (wasTopCard && laneIndex !== -1) {
+                        const uncoverResult = handleUncoverEffect(stateAfterDelete, nextRequest.owner, laneIndex);
+                        stateAfterDelete = uncoverResult.newState;
+                    }
+
+                    // Clear animation and return state with potential uncover effects
                     return { ...stateAfterDelete, animationState: null };
                 });
 
@@ -81,7 +105,7 @@ export const useGameState = (
                 }, 10);
             }, 500); // Animation duration
         };
-    
+
         processNext(queue);
     }, []);
 
@@ -167,21 +191,10 @@ export const useGameState = (
                         return stateAfterCompile;
                     }
     
-                    const compiler = currentState.turn;
-                    if (currentState.useControlMechanic && currentState.controlCardHolder === compiler) {
-                        let stateWithPrompt = log(stateAfterCompile, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols after compiling.`);
-                        
-                        const speed2Actions = stateAfterCompile.queuedActions;
-                        stateWithPrompt.queuedActions = [];
-                        
-                        stateWithPrompt.actionRequired = {
-                            type: 'prompt_use_control_mechanic',
-                            sourceCardId: 'CONTROL_MECHANIC',
-                            actor: compiler,
-                            originalAction: { type: 'continue_turn', queuedSpeed2Actions: speed2Actions },
-                        };
-                        stateWithPrompt.controlCardHolder = null;
-                        return { ...stateWithPrompt, animationState: null };
+                    // REMOVED: Duplicate Control-Mechanic handling that was overwriting the originalAction from performCompile
+                    // The Control-Mechanic prompt is now fully handled inside performCompile
+                    if (stateAfterCompile.actionRequired?.type === 'prompt_use_control_mechanic') {
+                        return { ...stateAfterCompile, animationState: null };
                     }
                     
                     const finalState = turnProgressionCb(stateAfterCompile);
@@ -283,7 +296,7 @@ export const useGameState = (
             if (choice === 'skip') {
                 let stateAfterSkip = log(prev, actor, "Player skips rearranging protocols.");
                 stateAfterSkip.actionRequired = null;
-                
+
                 if (originalAction.type === 'compile') {
                     const stateBeforeCompile = stateAfterSkip;
                     
@@ -316,6 +329,21 @@ export const useGameState = (
                     }
                     const turnProgressionCb = getTurnProgressionCallback(stateWithQueuedActions.phase);
                     return turnProgressionCb(stateWithQueuedActions);
+                } else if (originalAction.type === 'resume_interrupted_turn') {
+                    // CRITICAL: Restore the interrupt after control mechanic
+                    let stateWithInterruptRestored = { ...stateAfterSkip };
+                    stateWithInterruptRestored._interruptedTurn = originalAction.interruptedTurn;
+                    stateWithInterruptRestored._interruptedPhase = originalAction.interruptedPhase;
+
+                    if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
+                        stateWithInterruptRestored.queuedActions = [
+                            ...originalAction.queuedSpeed2Actions,
+                            ...(stateWithInterruptRestored.queuedActions || [])
+                        ];
+                    }
+
+                    // Use processEndOfAction to properly restore the interrupt
+                    return phaseManager.processEndOfAction(stateWithInterruptRestored);
                 } else { // fill_hand
                     const stateAfterFill = resolvers.performFillHand(stateAfterSkip, actor);
                     const turnProgressionCb = getTurnProgressionCallback(stateAfterFill.phase);
@@ -515,7 +543,7 @@ export const useGameState = (
                 const water1Card = removeCardFromDeck(playerDeck, 'Water', 1);
                 const speed3Card = removeCardFromDeck(playerDeck, 'Speed', 3);
     
-                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic, startingPlayer);
     
                 newState.player.lanes = [[], [], []];
                 newState.player.lanes[0] = [{ ...speed0Card, id: uuidv4(), isFaceUp: false }]; 
@@ -558,7 +586,7 @@ export const useGameState = (
 
                 const speed1Card = removeCardFromDeck(playerDeck, 'Speed', 1);
 
-                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic);
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic, startingPlayer);
 
                 newState.player.lanes = [[], [], []];
                 newState.player.lanes[0] = [{ ...speed1Card, id: uuidv4(), isFaceUp: true }];
@@ -584,6 +612,113 @@ export const useGameState = (
                 
                 newState = stateManager.recalculateAllLaneValues(newState);
                 newState = log(newState, 'player', 'DEBUG: Speed-1 discard trigger scenario set up.');
+                return newState;
+            } else if (scenario === 'fire-oncover-test') {
+                // Test scenario for Fire-0 On-Cover bug
+                const debugPlayerProtocols = ['Death', 'Hate', 'Water'];
+                const debugOpponentProtocols = ['Fire', 'Plague', 'Metal'];
+
+                const playerDeck = shuffleDeck(buildDeck(debugPlayerProtocols));
+                let opponentDeck = shuffleDeck(buildDeck(debugOpponentProtocols));
+
+                const removeCardFromDeck = (deck: Card[], protocol: string, value: number): Card => {
+                    const index = deck.findIndex(c => c.protocol === protocol && c.value === value);
+                    if (index > -1) {
+                        return deck.splice(index, 1)[0];
+                    }
+                    return cards.find(c => c.protocol === protocol && c.value === value)!;
+                };
+
+                // Remove specific cards from opponent deck
+                const fire0Card = removeCardFromDeck(opponentDeck, 'Fire', 0);
+                const fire2Card = removeCardFromDeck(opponentDeck, 'Fire', 2);
+                const fire3Card = removeCardFromDeck(opponentDeck, 'Fire', 3);
+
+                // Player cards for each lane
+                const death1Card = cards.find(c => c.protocol === 'Death' && c.value === 1)!;
+                const hate2Card = cards.find(c => c.protocol === 'Hate' && c.value === 2)!;
+                const water3Card = cards.find(c => c.protocol === 'Water' && c.value === 3)!;
+
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, useControlMechanic, 'opponent');
+
+                // Player has one face-up card in each lane (so AI can flip them)
+                newState.player.lanes = [
+                    [{ ...death1Card, id: uuidv4(), isFaceUp: true }],
+                    [{ ...hate2Card, id: uuidv4(), isFaceUp: true }],
+                    [{ ...water3Card, id: uuidv4(), isFaceUp: true }]
+                ];
+                newState.player.hand = [];
+                newState.player.deck = playerDeck;
+                newState.player.discard = [];
+
+                // Opponent has Fire-0 already in play, Fire-3 and Fire-2 in hand
+                newState.opponent.lanes = [
+                    [{ ...fire0Card, id: uuidv4(), isFaceUp: true }],
+                    [],
+                    []
+                ];
+                newState.opponent.hand = [
+                    { ...fire3Card, id: uuidv4(), isFaceUp: true },
+                    { ...fire2Card, id: uuidv4(), isFaceUp: true }
+                ];
+                newState.opponent.deck = opponentDeck;
+                newState.opponent.discard = [];
+
+                newState.turn = 'opponent';
+                newState.phase = 'action';
+                newState.actionRequired = null;
+                newState.queuedActions = [];
+
+                newState = stateManager.recalculateAllLaneValues(newState);
+                newState = log(newState, 'opponent', 'DEBUG: Fire On-Cover test scenario. Opponent has Fire-0 in play, Fire-3 and Fire-2 in hand. Ready to play Fire-3.');
+                return newState;
+            } else if (scenario === 'speed-2-control-test') {
+                // Test scenario for Speed-2 + Control Mechanic bug
+                const debugPlayerProtocols = ['Speed', 'Light', 'Water'];
+                const debugOpponentProtocols = ['Fire', 'Plague', 'Metal'];
+
+                const playerDeck = shuffleDeck(buildDeck(debugPlayerProtocols));
+                const opponentDeck = shuffleDeck(buildDeck(debugOpponentProtocols));
+
+                const removeCardFromDeck = (deck: Card[], protocol: string, value: number): Card => {
+                    const index = deck.findIndex(c => c.protocol === protocol && c.value === value);
+                    if (index > -1) {
+                        return deck.splice(index, 1)[0];
+                    }
+                    return cards.find(c => c.protocol === protocol && c.value === value)!;
+                };
+
+                // Get Speed-2 card
+                const speed2Card = removeCardFromDeck(playerDeck, 'Speed', 2);
+
+                let newState = stateManager.createInitialState(debugPlayerProtocols, debugOpponentProtocols, true, 'player'); // Control enabled!
+
+                // Player has Speed-2 ready to compile
+                newState.player.lanes = [
+                    [{ ...speed2Card, id: uuidv4(), isFaceUp: true }],
+                    [],
+                    []
+                ];
+                newState.player.protocols[0] = 'Speed';
+                newState.player.laneValues[0] = 10; // Ready to compile!
+                newState.player.hand = [];
+                newState.player.deck = playerDeck;
+                newState.player.discard = [];
+                newState.controlCardHolder = 'player'; // Player has Control!
+
+                newState.opponent.lanes = [[], [], []];
+                newState.opponent.hand = [];
+                newState.opponent.deck = opponentDeck;
+                newState.opponent.discard = [];
+
+                newState.turn = 'player';
+                newState.phase = 'compile';
+                newState.compilableLanes = [0]; // Speed lane is compilable
+                newState.actionRequired = null;
+                newState.queuedActions = [];
+
+                newState = stateManager.recalculateAllLaneValues(newState);
+                newState = log(newState, 'player', 'DEBUG: Speed-2 + Control test scenario. Player has Speed-2 (value 10), Control Component active. Ready to compile Protocol Speed!');
                 return newState;
             }
             return currentState;

@@ -48,33 +48,59 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
         }
 
-        // If player has a strong lane (>= 7 points) that could compile soon, move compiled protocol there
+        // CRITICAL CHECK: Only swap if it ACTUALLY disrupts the player!
+        // Don't swap if:
+        // 1. The compiled lane already has the HIGHEST value (no benefit to swap)
+        // 2. The strongest uncompiled lane is too weak (< 7) to be a threat
+        const compiledLaneValue = playerState.laneValues[compiledIndex];
+
         if (strongestUncompiledLane !== -1 && maxValue >= 7) {
-            const newOrder = [...playerState.protocols];
-            [newOrder[compiledIndex], newOrder[strongestUncompiledLane]] =
-                [newOrder[strongestUncompiledLane], newOrder[compiledIndex]];
-            return { type: 'rearrangeProtocols', newOrder };
+            // Only swap if the strongest uncompiled lane has HIGHER value than compiled lane
+            // This forces player to waste progress
+            if (maxValue > compiledLaneValue) {
+                const newOrder = [...playerState.protocols];
+                [newOrder[compiledIndex], newOrder[strongestUncompiledLane]] =
+                    [newOrder[strongestUncompiledLane], newOrder[compiledIndex]];
+                return { type: 'rearrangeProtocols', newOrder };
+            }
         }
 
         // Alternative strategy: If no strong uncompiled lane, move to lane with most cards
-        // This reduces incentive to play more cards there
+        // BUT only if it actually disrupts (more cards than compiled lane)
         let laneWithMostCards = -1;
         let maxCards = -1;
         for (let i = 0; i < 3; i++) {
-            if (i !== compiledIndex && playerState.lanes[i].length > maxCards) {
+            if (i !== compiledIndex && !playerState.compiled[i] && playerState.lanes[i].length > maxCards) {
                 maxCards = playerState.lanes[i].length;
                 laneWithMostCards = i;
             }
         }
 
-        if (laneWithMostCards !== -1 && maxCards > 0) {
+        const compiledLaneCardCount = playerState.lanes[compiledIndex].length;
+
+        if (laneWithMostCards !== -1 && maxCards > compiledLaneCardCount) {
+            // Only swap if the lane with most cards has MORE cards than the compiled lane
+            // This wastes the player's progress on that lane
             const newOrder = [...playerState.protocols];
             [newOrder[compiledIndex], newOrder[laneWithMostCards]] =
                 [newOrder[laneWithMostCards], newOrder[compiledIndex]];
             return { type: 'rearrangeProtocols', newOrder };
         }
 
-        // No good target found, keep current order
+        // No good disruption found
+        // BUT: If this is a FORCED rearrange (e.g. Psychic-2), we MUST change something!
+        // Check if source is Psychic-2 or other forced effect (not Control Mechanic)
+        const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
+
+        if (isForcedRearrange) {
+            // FORCED rearrange - we MUST swap something even if not optimal
+            // Just swap the first two protocols to show we did something
+            const newOrder = [...playerState.protocols];
+            [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
+            return { type: 'rearrangeProtocols', newOrder };
+        }
+
+        // Control Mechanic - no good disruption found, skip
         return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
     }
 

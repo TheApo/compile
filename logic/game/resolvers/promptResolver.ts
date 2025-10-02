@@ -199,7 +199,11 @@ export const resolveRearrangeProtocols = (
 
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     const targetName = target === actor ? 'their own' : `the opponent's`;
+
+    // Log the new protocol order to make debugging easier
+    const protocolOrder = newOrder.join(' | ');
     newState = log(newState, actor, `${sourceText}: ${actorName} rearranges ${targetName} protocols.`);
+    newState = log(newState, actor, `New protocol order for ${target}: ${protocolOrder}`);
 
     let stateAfterRecalc = recalculateAllLaneValues(newState);
 
@@ -212,6 +216,18 @@ export const resolveRearrangeProtocols = (
             return performFillHand(stateAfterRecalc, actor);
         } else if (originalAction.type === 'continue_turn') {
             stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming turn...`);
+            if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
+                stateAfterRecalc.queuedActions = [
+                    ...originalAction.queuedSpeed2Actions,
+                    ...(stateAfterRecalc.queuedActions || [])
+                ];
+            }
+        } else if (originalAction.type === 'resume_interrupted_turn') {
+            // CRITICAL: Restore the interrupt after rearrange
+            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming interrupted turn...`);
+            stateAfterRecalc._interruptedTurn = originalAction.interruptedTurn;
+            stateAfterRecalc._interruptedPhase = originalAction.interruptedPhase;
+
             if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
                 stateAfterRecalc.queuedActions = [
                     ...originalAction.queuedSpeed2Actions,
