@@ -23,11 +23,12 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         };
     } else {
         // No cards to discard, proceed directly to deleting.
+        // NOTE: Hate-1 does NOT say "other cards", so it can delete itself!
         newState.actionRequired = {
             type: 'select_cards_to_delete',
             count: 2,
             sourceCardId: card.id,
-            disallowedIds: [card.id],
+            disallowedIds: [],
             actor,
         };
     }

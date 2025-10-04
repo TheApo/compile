@@ -680,9 +680,23 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
             let stateAfterInterrupt = onFlipResult.newState;
         
-            // 3. Perform the self-flip, but only if the on-flip effect didn't interrupt.
-            // And only if Water-0 is still active.
-            if (!stateAfterInterrupt.actionRequired) {
+            // 3. Perform the self-flip. If an interrupt occurred, queue it. Otherwise execute immediately.
+            if (stateAfterInterrupt.actionRequired) {
+                // Interrupt occurred - queue the self-flip
+                const sourceCardInfo = findCardOnBoard(stateAfterInterrupt, sourceCardId);
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    const selfFlipAction: ActionRequired = {
+                        type: 'flip_self_for_water_0',
+                        sourceCardId: sourceCardId,
+                        actor: actor,
+                    };
+                    stateAfterInterrupt.queuedActions = [
+                        ...(stateAfterInterrupt.queuedActions || []),
+                        selfFlipAction
+                    ];
+                }
+            } else {
+                // No interrupt - execute self-flip immediately
                 const sourceCardInfo = findCardOnBoard(stateAfterInterrupt, sourceCardId);
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;

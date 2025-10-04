@@ -224,10 +224,11 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
     if (prevState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_hate_1') return prevState;
 
     const { sourceCardId, actor } = prevState.actionRequired;
-    
+
     let newState = discardCards(prevState, cardIds, actor);
 
-    const disallowedIds = [sourceCardId];
+    // NOTE: Hate-1 does NOT say "other cards", so it can delete itself!
+    const disallowedIds: string[] = [];
     const availableTargets = countValidDeleteTargets(newState, disallowedIds);
     const deleteCount = Math.min(2, availableTargets);
 
@@ -236,7 +237,7 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
             type: 'select_cards_to_delete',
             count: deleteCount,
             sourceCardId,
-            disallowedIds: [sourceCardId],
+            disallowedIds: [],
             actor: actor,
         };
     } else {

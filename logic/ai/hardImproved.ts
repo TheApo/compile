@@ -1052,16 +1052,44 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_shift_for_gravity_1': {
-            const playerCards = state.player.lanes.flat();
+            // CRITICAL: Gravity-1 says "Shift 1 card either to or from this line"
+            // Must pick a card that is EITHER in the Gravity lane OR can be shifted INTO it
+            const { sourceLaneIndex } = action; // This is the Gravity-1 lane
+
+            // Strategy 1: Shift player's strongest card AWAY from their lane (if it's not in Gravity lane)
+            const playerCards: { card: PlayedCard; laneIndex: number }[] = [];
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // Only uncovered cards
+                    playerCards.push({ card: topCard, laneIndex });
+                }
+            });
+
+            // Filter: Only cards NOT in Gravity lane (we can shift them TO Gravity)
+            const playerCardsNotInGravity = playerCards.filter(c => c.laneIndex !== sourceLaneIndex);
+            if (playerCardsNotInGravity.length > 0) {
+                // Pick the strongest threat to disrupt
+                playerCardsNotInGravity.sort((a, b) =>
+                    getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state)
+                );
+                return { type: 'flipCard', cardId: playerCardsNotInGravity[0].card.id };
+            }
+
+            // Strategy 2: Shift a card FROM Gravity lane to another lane (clear our Gravity lane)
+            const gravityLaneCards = state.opponent.lanes[sourceLaneIndex];
+            if (gravityLaneCards.length > 0) {
+                const topCard = gravityLaneCards[gravityLaneCards.length - 1];
+                return { type: 'flipCard', cardId: topCard.id };
+            }
+
+            // Fallback: Pick any player card (if Gravity lane is player's lane)
             if (playerCards.length > 0) {
-                playerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'deleteCard', cardId: playerCards[0].id };
+                playerCards.sort((a, b) =>
+                    getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state)
+                );
+                return { type: 'flipCard', cardId: playerCards[0].card.id };
             }
-            const ownCards = state.opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                ownCards.sort((a, b) => getCardPower(a) - getCardPower(b));
-                return { type: 'deleteCard', cardId: ownCards[0].id };
-            }
+
             return { type: 'skip' };
         }
 

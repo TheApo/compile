@@ -31,7 +31,34 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
     switch (prev.actionRequired.type) {
         case 'select_lane_for_shift': {
-            const { cardToShiftId, cardOwner, actor, sourceEffect } = prev.actionRequired;
+            const { cardToShiftId, cardOwner, actor, sourceEffect, originalLaneIndex, sourceCardId } = prev.actionRequired;
+
+            // CRITICAL VALIDATION for Gravity-1: "Shift 1 card either to or from this line"
+            // The shift must involve the Gravity-1's lane (either as source OR destination)
+            const sourceCard = findCardOnBoard(prev, sourceCardId);
+            if (sourceCard && sourceCard.card.protocol === 'Gravity' && sourceCard.card.value === 1) {
+                // Find Gravity-1's lane
+                let gravity1LaneIndex = -1;
+                for (let i = 0; i < prev[sourceCard.owner].lanes.length; i++) {
+                    if (prev[sourceCard.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                        gravity1LaneIndex = i;
+                        break;
+                    }
+                }
+
+                // RULE: Either originalLaneIndex OR targetLaneIndex must be the Gravity-1 lane
+                if (gravity1LaneIndex !== -1) {
+                    const isFromGravityLane = originalLaneIndex === gravity1LaneIndex;
+                    const isToGravityLane = targetLaneIndex === gravity1LaneIndex;
+
+                    if (!isFromGravityLane && !isToGravityLane) {
+                        // ILLEGAL: Shifting between two lanes that are NOT the Gravity lane
+                        console.error(`Illegal Gravity-1 shift: Must shift to or from Gravity lane ${gravity1LaneIndex}, but tried ${originalLaneIndex} → ${targetLaneIndex}`);
+                        return { nextState: prev }; // Block the illegal move
+                    }
+                }
+            }
+
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {

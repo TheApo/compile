@@ -38,13 +38,28 @@ export const useGameState = (
         if (gameState.log.length <= 1 && gameState.turn !== startingPlayer) {
             setGameState(prev => {
                 const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+
+                // Build protocol info for logging
+                const playerProtocolsText = prev.player.protocols.join(' | ');
+                const opponentProtocolsText = prev.opponent.protocols.join(' | ');
+
                 return {
                     ...prev,
                     turn: startingPlayer,
-                    log: [{
-                        player: 'player',
-                        message: `Game Started. ${starterName} goes first.`
-                    }]
+                    log: [
+                        {
+                            player: 'player',
+                            message: `Game Started. ${starterName} goes first.`
+                        },
+                        {
+                            player: 'player',
+                            message: `Player's protocols: ${playerProtocolsText}`
+                        },
+                        {
+                            player: 'player',
+                            message: `Opponent's protocols: ${opponentProtocolsText}`
+                        }
+                    ]
                 };
             });
         }

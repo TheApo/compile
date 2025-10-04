@@ -96,11 +96,46 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
 
     const getLaneShiftTargetability = (targetLaneIndex: number, targetOwner: Player): boolean => {
         if (!actionRequired || actionRequired.actor !== 'player') return false;
-    
+
         switch (actionRequired.type) {
-            case 'select_lane_for_shift':
+            case 'select_lane_for_shift': {
                 // Target lane must belong to the card's owner and not be the original lane.
-                return targetOwner === actionRequired.cardOwner && targetLaneIndex !== actionRequired.originalLaneIndex;
+                if (targetOwner !== actionRequired.cardOwner || targetLaneIndex === actionRequired.originalLaneIndex) {
+                    return false;
+                }
+
+                // CRITICAL VALIDATION for Gravity-1: "Shift 1 card either to or from this line"
+                // The shift must involve the Gravity-1's lane (either as source OR destination)
+                const sourceCard = [...gameState.player.lanes.flat(), ...gameState.opponent.lanes.flat()]
+                    .find(c => c.id === actionRequired.sourceCardId);
+
+                if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
+                    // Find Gravity-1's lane
+                    let gravity1LaneIndex = -1;
+                    for (const owner of ['player', 'opponent'] as Player[]) {
+                        for (let i = 0; i < gameState[owner].lanes.length; i++) {
+                            if (gameState[owner].lanes[i].some(c => c.id === actionRequired.sourceCardId)) {
+                                gravity1LaneIndex = i;
+                                break;
+                            }
+                        }
+                        if (gravity1LaneIndex !== -1) break;
+                    }
+
+                    // RULE: Either originalLaneIndex OR targetLaneIndex must be the Gravity-1 lane
+                    if (gravity1LaneIndex !== -1) {
+                        const isFromGravityLane = actionRequired.originalLaneIndex === gravity1LaneIndex;
+                        const isToGravityLane = targetLaneIndex === gravity1LaneIndex;
+
+                        // At least ONE must be true
+                        if (!isFromGravityLane && !isToGravityLane) {
+                            return false; // ILLEGAL: Neither source nor target is Gravity lane
+                        }
+                    }
+                }
+
+                return true;
+            }
             case 'shift_flipped_card_optional': {
                 // Darkness-1 card is always on the opponent's side.
                 const cardOwner: Player = 'opponent';
