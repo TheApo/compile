@@ -192,6 +192,25 @@ export function refreshHandForPlayer(state: GameState, player: Player): GameStat
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     let newState = drawForPlayer(state, player, cardsToDraw);
+
+    // Track refresh in stats
+    const newPlayerState = {
+        ...newState[player],
+        stats: {
+            ...newState[player].stats,
+            handsRefreshed: newState[player].stats.handsRefreshed + 1,
+        }
+    };
+
+    newState = {
+        ...newState,
+        [player]: newPlayerState,
+        stats: {
+            ...newState.stats,
+            [player]: newPlayerState.stats,
+        }
+    };
+
     return log(newState, player, `${playerName} refreshes their hand, drawing ${cardsToDraw} card(s).`);
 }
 

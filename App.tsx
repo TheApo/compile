@@ -9,10 +9,11 @@ import { ProtocolSelection } from './screens/ProtocolSelection';
 import { GameScreen } from './screens/GameScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { CardLibraryScreen } from './screens/CardLibraryScreen';
+import { StatisticsScreen } from './screens/StatisticsScreen';
 import { CoinFlipModal } from './components/CoinFlipModal';
 import { Difficulty, GameState } from './types';
 
-type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary';
+type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics';
 export type Player = 'player' | 'opponent';
 
 export function App() {
@@ -96,6 +97,8 @@ export function App() {
         return <ResultsScreen onPlayAgain={handleBackToMenu} winner={winner} finalState={finalGameState} difficulty={difficulty} />;
       case 'CardLibrary':
         return <CardLibraryScreen onBack={handleBackToMenu} />;
+      case 'Statistics':
+        return <StatisticsScreen onBack={handleBackToMenu} />;
       default:
         return <MainMenu onNavigate={(target) => setScreen(target)} difficulty={difficulty} setDifficulty={setDifficulty} useControl={useControl} onUseControlChange={setUseControl} />;
     }

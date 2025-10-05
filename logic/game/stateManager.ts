@@ -20,6 +20,7 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
         cardsFlipped: 0,
         cardsShifted: 0,
         cardsDrawn: drawnCards.length, // Initial draw
+        handsRefreshed: 0,
     };
 
     return {

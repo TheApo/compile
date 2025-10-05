@@ -215,12 +215,17 @@ export const resolveRearrangeProtocols = (
             stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
             return performFillHand(stateAfterRecalc, actor);
         } else if (originalAction.type === 'continue_turn') {
-            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming turn...`);
+            // After compile + control rearrange, the turn should END (unless there are Speed-2 actions)
             if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
+                stateAfterRecalc = log(stateAfterRecalc, actor, `Processing remaining Speed-2 effects...`);
                 stateAfterRecalc.queuedActions = [
                     ...originalAction.queuedSpeed2Actions,
                     ...(stateAfterRecalc.queuedActions || [])
                 ];
+            } else {
+                // No more actions - turn ends after compile
+                stateAfterRecalc = log(stateAfterRecalc, actor, `Turn ends after compile.`);
+                stateAfterRecalc.phase = 'hand_limit';
             }
         } else if (originalAction.type === 'resume_interrupted_turn') {
             // CRITICAL: Restore the interrupt after rearrange

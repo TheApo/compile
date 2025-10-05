@@ -555,7 +555,45 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         // Simple lane selections
-        case 'select_lane_for_shift':
+        case 'select_lane_for_shift': {
+            let possibleLanes = [0, 1, 2].filter(i =>
+                !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex
+            ).filter(i =>
+                !('originalLaneIndex' in action) || i !== action.originalLaneIndex
+            );
+
+            // CRITICAL: Check if this is Gravity-1 shift (must shift TO or FROM Gravity lane)
+            if ('sourceCardId' in action) {
+                const sourceCard = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].find(c => c.id === action.sourceCardId);
+                if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
+                    // Find which lane has the Gravity-1 card
+                    let gravityLaneIndex: number | null = null;
+                    for (let i = 0; i < 3; i++) {
+                        const allLanes = [...state.player.lanes[i], ...state.opponent.lanes[i]];
+                        if (allLanes.some(c => c.id === action.sourceCardId)) {
+                            gravityLaneIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (gravityLaneIndex !== null && 'originalLaneIndex' in action) {
+                        if (action.originalLaneIndex === gravityLaneIndex) {
+                            // Shifting FROM Gravity lane - already filtered correctly
+                        } else {
+                            // Shifting TO Gravity lane - MUST go to Gravity lane only
+                            possibleLanes = [gravityLaneIndex];
+                        }
+                    }
+                }
+            }
+
+            if (possibleLanes.length > 0) {
+                // Pick random lane (human-like)
+                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            return { type: 'selectLane', laneIndex: 0 };
+        }
         case 'select_lane_for_water_3':
         case 'select_lane_to_shift_cards_for_light_3': {
             const possibleLanes = [0, 1, 2].filter(i =>

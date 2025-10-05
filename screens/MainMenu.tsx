@@ -11,7 +11,7 @@ import { shuffleDeck } from '../utils/gameLogic';
 import { Difficulty } from '../types';
 
 interface MainMenuProps {
-  onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary') => void;
+  onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary' | 'Statistics') => void;
   difficulty: Difficulty;
   setDifficulty: (difficulty: Difficulty) => void;
   useControl: boolean;
@@ -97,10 +97,13 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
             <button className="btn" onClick={() => onNavigate('CardLibrary')}>
               Cards
             </button>
+            <button className="btn" onClick={() => onNavigate('Statistics')}>
+              Statistics
+            </button>
             <button className="btn" onClick={() => setShowRules(true)}>
               Rules
             </button>
-            <p className="version-info">Version 0.17</p>
+            <p className="version-info">Version 0.18</p>
           </div>
         </div>
         

@@ -22,6 +22,7 @@ export interface PlayerStats {
     cardsFlipped: number;
     cardsShifted: number;
     cardsDrawn: number;
+    handsRefreshed: number;
 }
 
 export interface PlayerState {

@@ -23,10 +23,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         return { newState: prevState };
     }
 
-    // RULE: An opponent's face-up Metal-2 blocks playing face-down.
+    // RULE: An opponent's uncovered face-up Metal-2 blocks playing face-down.
     if (!isFaceUp) {
-        const opponentHasMetalTwo = opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
-        if (opponentHasMetalTwo) {
+        const topOpponentCardIsMetalTwo = topOpponentCard && topOpponentCard.isFaceUp && topOpponentCard.protocol === 'Metal' && topOpponentCard.value === 2;
+        if (topOpponentCardIsMetalTwo) {
             console.error(`Illegal Move: ${player} tried to play face-down against Metal-2 in lane ${laneIndex}`);
             return { newState: prevState };
         }

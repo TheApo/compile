@@ -19,6 +19,7 @@ import { RearrangeProtocolsModal } from '../components/RearrangeProtocolsModal';
 import { SwapProtocolsModal } from '../components/SwapProtocolsModal';
 import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
+import { useStatistics } from '../hooks/useStatistics';
 
 
 interface GameScreenProps {
@@ -64,10 +65,36 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
   const [showCoinFlip, setShowCoinFlip] = useState(true);
 
-  const handleCoinFlipComplete = useCallback((starter: Player) => {
+  // Statistics tracking
+  const {
+    startGame: startGameTracking,
+    endGame,
+    trackPlayerCardPlayed,
+    trackPlayerCardDeleted,
+    trackPlayerCoinFlip,
+  } = useStatistics(playerProtocols, difficulty, useControlMechanic);
+
+  const handleCoinFlipComplete = useCallback((starter: Player, choice: 'heads' | 'tails', won: boolean) => {
     setActualStartingPlayer(starter);
     setShowCoinFlip(false);
-  }, []);
+    trackPlayerCoinFlip(choice, won);
+  }, [trackPlayerCoinFlip]);
+
+  // Start tracking when coin flip completes
+  useEffect(() => {
+    if (!showCoinFlip && actualStartingPlayer) {
+      startGameTracking();
+    }
+  }, [showCoinFlip, actualStartingPlayer, startGameTracking]);
+
+  // Wrap onEndGame to track statistics
+  const wrappedOnEndGame = useCallback((winner: Player, finalState: GameState) => {
+    // Count compiles
+    const compilesCount = finalState.player.compiled.filter(c => c).length;
+
+    endGame(winner, finalState.stats.player, compilesCount);
+    onEndGame(winner, finalState);
+  }, [endGame, onEndGame]);
 
   // Initialize game state - will use 'player' initially, but that's ok because we don't show the game until coin flip is done
   const {
@@ -102,7 +129,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   } = useGameState(
     playerProtocols,
     opponentProtocols,
-    onEndGame,
+    wrappedOnEndGame,
     difficulty,
     useControlMechanic,
     actualStartingPlayer ?? 'player'
@@ -422,7 +449,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             />
         )}
         {showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (
-            <RearrangeProtocolsModal 
+            <RearrangeProtocolsModal
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
                 onConfirm={(newOrder: string[]) => {

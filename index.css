@@ -66,13 +66,19 @@ body {
   left: 2rem;
   right: 2rem;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   z-index: 100;
 }
 
 .app-header h2 {
   margin: 0;
+  text-align: center;
+}
+
+.app-header .btn-back {
+  position: absolute;
+  right: 0;
 }
 
 h1, h2 {
@@ -194,7 +200,7 @@ p {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6.5rem;
+  gap: 3rem;
 }
 
 .main-menu-start-group, .main-menu-other-actions {

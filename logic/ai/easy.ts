@@ -467,7 +467,46 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             return { type: 'skip' };
         }
-        case 'select_lane_for_shift':
+        case 'select_lane_for_shift': {
+            let possibleLanes = [0, 1, 2];
+            if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
+                possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
+            }
+            if ('originalLaneIndex' in action && action.originalLaneIndex !== undefined) {
+                possibleLanes = possibleLanes.filter(l => l !== action.originalLaneIndex);
+            }
+
+            // CRITICAL: Check if this is Gravity-1 shift (must shift TO or FROM Gravity lane)
+            if ('sourceCardId' in action) {
+                const sourceCard = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].find(c => c.id === action.sourceCardId);
+                if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
+                    // Find which lane has the Gravity-1 card
+                    let gravityLaneIndex: number | null = null;
+                    for (let i = 0; i < 3; i++) {
+                        const allLanes = [...state.player.lanes[i], ...state.opponent.lanes[i]];
+                        if (allLanes.some(c => c.id === action.sourceCardId)) {
+                            gravityLaneIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (gravityLaneIndex !== null && 'originalLaneIndex' in action) {
+                        if (action.originalLaneIndex === gravityLaneIndex) {
+                            // Shifting FROM Gravity lane - already filtered correctly
+                        } else {
+                            // Shifting TO Gravity lane - MUST go to Gravity lane only
+                            possibleLanes = [gravityLaneIndex];
+                        }
+                    }
+                }
+            }
+
+            if (possibleLanes.length > 0) {
+                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            return { type: 'selectLane', laneIndex: 0 };
+        }
         case 'select_lane_for_death_2':
         case 'select_lane_for_life_3_play':
         case 'select_lane_to_shift_revealed_card_for_light_2':

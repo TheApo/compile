@@ -1007,10 +1007,36 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_lane_for_shift': {
-            const { cardToShiftId, cardOwner, originalLaneIndex } = action;
+            const { cardToShiftId, cardOwner, originalLaneIndex, sourceCardId } = action;
             const cardToShift = findCardOnBoard(state, cardToShiftId)?.card;
             if (!cardToShift) return { type: 'skip' };
-            const possibleLanes = [0, 1, 2].filter(i => i !== originalLaneIndex);
+
+            // CRITICAL: Check if this is Gravity-1 shift (must shift TO or FROM Gravity lane)
+            const sourceCard = findCardOnBoard(state, sourceCardId)?.card;
+            let gravityLaneIndex: number | null = null;
+            if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
+                // Find which lane has the Gravity-1 card
+                for (let i = 0; i < 3; i++) {
+                    const allLanes = [...state.player.lanes[i], ...state.opponent.lanes[i]];
+                    if (allLanes.some(c => c.id === sourceCardId)) {
+                        gravityLaneIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            let possibleLanes = [0, 1, 2].filter(i => i !== originalLaneIndex);
+
+            // If Gravity-1: Only allow shifts TO or FROM the Gravity lane
+            if (gravityLaneIndex !== null) {
+                if (originalLaneIndex === gravityLaneIndex) {
+                    // Shifting FROM Gravity lane - can go to any other lane
+                    possibleLanes = possibleLanes; // Already filtered
+                } else {
+                    // Shifting TO Gravity lane - MUST go to Gravity lane only
+                    possibleLanes = [gravityLaneIndex];
+                }
+            }
             if (cardOwner === 'opponent') {
                 const scoredLanes = possibleLanes.map(laneIndex => {
                     const valueToAdd = getEffectiveCardValue(cardToShift, state.opponent.lanes[laneIndex]);

@@ -9,7 +9,7 @@ type CoinSide = 'heads' | 'tails';
 type FlipPhase = 'choose' | 'flipping' | 'result';
 
 interface CoinFlipModalProps {
-  onComplete: (startingPlayer: 'player' | 'opponent') => void;
+  onComplete: (startingPlayer: 'player' | 'opponent', choice: CoinSide, won: boolean) => void;
 }
 
 export function CoinFlipModal({ onComplete }: CoinFlipModalProps) {
@@ -38,8 +38,9 @@ export function CoinFlipModal({ onComplete }: CoinFlipModalProps) {
     if (flipResult === null || playerChoice === null) return;
 
     // Player wins if their choice matches the result
-    const startingPlayer = flipResult === playerChoice ? 'player' : 'opponent';
-    onComplete(startingPlayer);
+    const won = flipResult === playerChoice;
+    const startingPlayer = won ? 'player' : 'opponent';
+    onComplete(startingPlayer, playerChoice, won);
   };
 
   return (
