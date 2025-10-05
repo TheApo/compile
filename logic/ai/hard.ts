@@ -90,8 +90,11 @@ const getBestMove = (state: GameState): AIAction => {
 
     // --- Evaluate Playing Cards ---
     for (const card of opponent.hand) {
-        if (card.protocol === 'Water' && card.value === 4 && opponent.lanes.flat().length === 0) {
-            continue;
+        // CRITICAL: Water-4 returns 1 card to hand - only play if we have OTHER cards to return
+        // Otherwise it just returns itself (wasted turn). Play face-down instead.
+        if (card.protocol === 'Water' && card.value === 4) {
+            const cardsOnBoard = opponent.lanes.flat().length;
+            if (cardsOnBoard === 0) continue;
         }
         
         for (let i = 0; i < 3; i++) {

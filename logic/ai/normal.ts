@@ -79,8 +79,13 @@ const getBestMove = (state: GameState): AIAction => {
 
     // Evaluate all possible card plays
     for (const card of state.opponent.hand) {
-        // Skip Water-4 if no cards on board
-        if (card.protocol === 'Water' && card.value === 4 && state.opponent.lanes.flat().length === 0) continue;
+        // CRITICAL: Water-4 returns 1 card to hand - only play if we have cards in OTHER protocols
+        // Otherwise it just returns itself (wasted turn). Play face-down instead.
+        if (card.protocol === 'Water' && card.value === 4) {
+            const cardsOnBoard = state.opponent.lanes.flat();
+            const hasNonWaterCards = cardsOnBoard.some(c => c.protocol !== 'Water');
+            if (!hasNonWaterCards) continue;
+        }
 
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;

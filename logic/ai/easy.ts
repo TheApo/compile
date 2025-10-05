@@ -36,11 +36,13 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
         }
     }
 
-    // Filter out unplayable cards like Water-4 on an empty board
+    // Filter out unplayable cards like Water-4 on an empty board or only Water cards
     const playableHand = opponent.hand.filter(card => {
         if (card.protocol === 'Water' && card.value === 4) {
-            // Water-4 is only playable if the AI has other cards on the board to return.
-            return opponent.lanes.flat().length > 0;
+            // Water-4 is only playable if the AI has cards in OTHER protocols to return.
+            const cardsOnBoard = opponent.lanes.flat();
+            const hasNonWaterCards = cardsOnBoard.some(c => c.protocol !== 'Water');
+            return hasNonWaterCards;
         }
         return true;
     });
