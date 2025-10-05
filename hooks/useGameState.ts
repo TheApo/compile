@@ -100,7 +100,9 @@ export const useGameState = (
                     let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
                     stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
 
-                    // FIX: Trigger uncover effect if the deleted card was a top card
+                    // CRITICAL: Trigger uncover effect if the deleted card was a top card.
+                    // The processedUncoverEventIds mechanism prevents double-triggering if the resolver callback also calls handleUncoverEffect.
+                    // This is needed for direct deletes (e.g., AI actions) that don't have resolver callbacks.
                     if (wasTopCard && laneIndex !== -1) {
                         const uncoverResult = handleUncoverEffect(stateAfterDelete, nextRequest.owner, laneIndex);
                         stateAfterDelete = uncoverResult.newState;
@@ -843,8 +845,11 @@ export const useGameState = (
 
     useEffect(() => {
         const action = gameState.actionRequired;
-        const isOpponentActionDuringPlayerTurn = 
-            gameState.turn === 'player' &&
+        // CRITICAL FIX: Check for opponent actions during player's turn, INCLUDING during interrupts.
+        // If an interrupt is active (_interruptedTurn === 'player'), the opponent can have actions even though turn === 'opponent'.
+        const isPlayerTurnOrInterrupt = gameState.turn === 'player' || gameState._interruptedTurn === 'player';
+        const isOpponentActionDuringPlayerTurn =
+            isPlayerTurnOrInterrupt &&
             !gameState.animationState &&
             action && 'actor' in action && action.actor === 'opponent';
 

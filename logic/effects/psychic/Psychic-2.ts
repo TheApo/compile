@@ -11,10 +11,12 @@ import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
     const opponent: Player = actor === 'player' ? 'opponent' : 'player';
     let newState = { ...state };
-    
+
     const opponentHandCount = newState[opponent].hand.length;
 
-    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent, actor };
+    // CRITICAL: The actor who performs the rearrange is the OWNER of the card (actor),
+    // and the target is their opponent's protocols.
+    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent, actor: actor };
     
     if (opponentHandCount > 0) {
         newState.actionRequired = {

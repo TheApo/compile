@@ -285,7 +285,7 @@ export type ActionRequired = {
     sourceCardId: string;
     target: Player;
     actor: Player;
-    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] };
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
 } | {
     type: 'select_lane_for_water_3';
     sourceCardId: string;

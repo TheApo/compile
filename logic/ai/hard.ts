@@ -98,9 +98,22 @@ const getBestMove = (state: GameState): AIAction => {
             if (isLaneBlockedByPlague0(i)) continue;
             if (opponent.compiled[i]) continue;
             
-            // FIX: Prevent AI from playing Metal-6 on a lane with less than 4 points.
-            if (card.protocol === 'Metal' && card.value === 6 && opponent.laneValues[i] < 4) {
-                continue;
+            // CRITICAL: Metal-6 deletes itself when covered or flipped!
+            // Only play it if it will be the LAST card before compiling (lane reaches 10+).
+            if (card.protocol === 'Metal' && card.value === 6) {
+                const currentLaneValue = opponent.laneValues[i];
+                const valueAfterPlaying = currentLaneValue + 6;
+
+                // Only play Metal-6 if it will bring the lane to 10+ (ready to compile)
+                if (valueAfterPlaying < 10) {
+                    continue; // Don't play Metal-6 if it won't reach compile threshold
+                }
+
+                // Additional check: Make sure we can actually win the lane with it
+                const playerValue = player.laneValues[i];
+                if (valueAfterPlaying <= playerValue) {
+                    continue; // Playing Metal-6 won't win the lane
+                }
             }
             
             const canPlayerCompileThisLane = player.laneValues[i] >= 10 && player.laneValues[i] > opponent.laneValues[i];
@@ -388,26 +401,41 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const allUncoveredPlayer = getUncovered('player');
                 const allUncoveredOpponent = getUncovered('opponent');
 
-                // 1. Score flipping opponent's face-up cards (high threat = high score)
+                // 1. PLAYER cards (opponent - we want to weaken them)
                 allUncoveredPlayer.forEach(c => {
-                    if (c.isFaceUp && !requiresFaceDown) potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                    if (c.isFaceUp && !requiresFaceDown) {
+                        // Flipping PLAYER face-up to face-down - weakens them (GOOD!)
+                        potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) });
+                    }
                 });
-                // 2. Score flipping own face-down cards (value gain + reveal)
+
+                // 2. OWN face-down cards - flip to face-up to gain value (strengthens us)
                 allUncoveredOpponent.forEach(c => {
                     if (!c.isFaceUp) {
                         const valueGain = getCardThreat({ ...c, isFaceUp: true }, 'opponent', state) - getCardThreat(c, 'opponent', state);
                         potentialTargets.push({ cardId: c.id, score: valueGain + 3 });
                     }
                 });
-                // 3. Score flipping opponent's face-down cards (info gain)
+
+                // 3. PLAYER face-down cards - flip to see them (info gain)
                 allUncoveredPlayer.forEach(c => {
                     if (!c.isFaceUp) potentialTargets.push({ cardId: c.id, score: 2 });
                 });
-                // 4. Score flipping own face-up cards (usually bad, negative score)
+
+                // 4. OWN face-up cards - flipping is usually BAD (loses value)
                 allUncoveredOpponent.forEach(c => {
                     if (c.isFaceUp && !requiresFaceDown) {
                         if (!canTargetSelf && c.id === sourceCardId) return;
-                        potentialTargets.push({ cardId: c.id, score: -getCardThreat(c, 'opponent', state) });
+
+                        const laneIndex = state.opponent.lanes.findIndex(lane =>
+                            lane.length > 0 && lane[lane.length - 1].id === c.id
+                        );
+                        const isCompiled = laneIndex !== -1 ? state.opponent.compiled[laneIndex] : false;
+
+                        // If compiled lane - less penalty (doesn't matter much)
+                        // If NOT compiled - heavy penalty (loses value!)
+                        const penalty = isCompiled ? -getCardThreat(c, 'opponent', state) / 2 : -getCardThreat(c, 'opponent', state) - 10;
+                        potentialTargets.push({ cardId: c.id, score: penalty });
                     }
                 });
             }

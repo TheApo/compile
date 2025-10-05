@@ -51,7 +51,21 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
 
     // 2. Default Dumb Logic: Play the highest value card face up if possible, otherwise face down.
     const sortedHand = [...playableHand].sort((a, b) => b.value - a.value);
-    const cardToPlay = sortedHand[0];
+
+    // CRITICAL: Avoid Metal-6 unless it will reach compile threshold (10+)
+    // Metal-6 deletes itself when covered, so it's a waste if played too early
+    const cardToPlay = sortedHand.find(card => {
+        if (card.protocol === 'Metal' && card.value === 6) {
+            // Check all lanes to see if Metal-6 would reach 10+ in any lane
+            for (let i = 0; i < 3; i++) {
+                if (opponent.laneValues[i] + 6 >= 10) {
+                    return true; // Metal-6 is playable in at least one lane
+                }
+            }
+            return false; // Metal-6 would be wasted, skip it
+        }
+        return true; // All other cards are fine
+    }) || sortedHand[0]; // Fallback to highest card if no valid card found
 
     // Try to find a lane where it can be played face up.
     if (!playerHasPsychic1) {
@@ -259,29 +273,43 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const allUncoveredPlayer = getUncovered('player');
             const allUncoveredOpponent = getUncovered('opponent');
 
-            // Priority 1: Flip opponent's highest-value face-up card.
+            // Priority 1: Flip PLAYER's (opponent's) highest-value face-up card to weaken them.
             if (!requiresFaceDown) {
                 const opponentFaceUp = allUncoveredPlayer.filter(c => c.isFaceUp).sort((a,b) => b.value - a.value);
                 if (opponentFaceUp.length > 0) return { type: 'flipCard', cardId: opponentFaceUp[0].id };
             }
-            
-            // Priority 2: Flip own face-down card to get points on the board.
+
+            // Priority 2: Flip OWN face-down card to face-up to get points on the board (strengthens us).
             const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
             if (ownFaceDown.length > 0) return { type: 'flipCard', cardId: ownFaceDown[0].id };
 
-            // Priority 3: Flip opponent's face-down card to see it.
+            // Priority 3: Flip PLAYER's face-down card to see it.
             const opponentFaceDown = allUncoveredPlayer.filter(c => !c.isFaceUp);
             if (opponentFaceDown.length > 0) return { type: 'flipCard', cardId: opponentFaceDown[0].id };
-            
-            // Priority 4: Flip own face-up card (bad move, but mandatory actions must be resolved).
+
+            // Priority 4: Flip OWN face-up card (BAD move - only if compiled or mandatory).
             if (!requiresFaceDown) {
                 const ownFaceUp = allUncoveredOpponent.filter(c => {
                     if (!c.isFaceUp) return false;
                     if (!canTargetSelf && c.id === action.sourceCardId) return false;
                     return true;
                 });
-                if (ownFaceUp.length > 0) {
-                    if (!isOptional) return { type: 'flipCard', cardId: ownFaceUp[0].id };
+
+                // Only flip own face-up if it's in a compiled lane (minimal damage)
+                const compiledOwnFaceUp = ownFaceUp.filter(c => {
+                    const laneIndex = state.opponent.lanes.findIndex(lane =>
+                        lane.length > 0 && lane[lane.length - 1].id === c.id
+                    );
+                    return laneIndex !== -1 && state.opponent.compiled[laneIndex];
+                });
+
+                if (compiledOwnFaceUp.length > 0) {
+                    if (!isOptional) return { type: 'flipCard', cardId: compiledOwnFaceUp[0].id };
+                }
+
+                // Last resort: flip any own face-up card if mandatory
+                if (ownFaceUp.length > 0 && !isOptional) {
+                    return { type: 'flipCard', cardId: ownFaceUp[0].id };
                 }
             }
 

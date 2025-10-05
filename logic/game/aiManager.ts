@@ -75,9 +75,11 @@ export const resolveRequiredOpponentAction = (
         const action = state.actionRequired;
         if (!action) return state;
 
-        // Determine if the AI ('opponent') needs to act during the player's turn.
-        const isOpponentInterrupt = state.turn === 'player' && 'actor' in action && action.actor === 'opponent';
-        
+        // CRITICAL FIX: Determine if the AI ('opponent') needs to act during the player's turn OR during an interrupt.
+        // If _interruptedTurn === 'player', the opponent can have actions even though turn === 'opponent'.
+        const isPlayerTurnOrInterrupt = state.turn === 'player' || state._interruptedTurn === 'player';
+        const isOpponentInterrupt = isPlayerTurnOrInterrupt && 'actor' in action && action.actor === 'opponent';
+
         if (!isOpponentInterrupt) return state;
 
         const aiDecision = getAIAction(state, action, difficulty);

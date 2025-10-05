@@ -69,14 +69,20 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     if (!cardInfo) return state;
 
     const { card, owner } = cardInfo;
-    const actor = state.turn;
+
+    // CRITICAL FIX: Use the actor from actionRequired if available, otherwise fall back to state.turn
+    // This prevents actor confusion during interrupts (e.g., when Fire-0 is uncovered during Death-0's turn)
+    const actor = (state.actionRequired && 'actor' in state.actionRequired)
+        ? state.actionRequired.actor
+        : state.turn;
+
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const faceDirection = card.isFaceUp ? "face-down" : "face-up";
     const cardName = `${card.protocol}-${card.value}`; // Always show card name
 
     let newState = log(state, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
-    
+
     const newStats = { ...newState.stats[actor], cardsFlipped: newState.stats[actor].cardsFlipped + 1 };
     const newPlayerState = { ...newState[actor], stats: newStats };
     newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
@@ -134,6 +140,19 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
                 result.newState._interruptedTurn = state.turn;
                 result.newState._interruptedPhase = state.phase;
                 result.newState.turn = newActionActor;
+
+                // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),
+                // set originalAction to resume the interrupted turn after the action completes.
+                if (result.newState.actionRequired.type === 'prompt_rearrange_protocols') {
+                    result.newState.actionRequired = {
+                        ...result.newState.actionRequired,
+                        originalAction: {
+                            type: 'resume_interrupted_turn',
+                            interruptedTurn: state.turn,
+                            interruptedPhase: state.phase,
+                        }
+                    };
+                }
             }
         } else {
             // CRITICAL FIX: If the uncover effect didn't create an action requirement,
@@ -315,17 +334,30 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
                     ...(result.newState.queuedActions || []),
                     result.newState.actionRequired
                 ];
-                result.newState.actionRequired = null; 
+                result.newState.actionRequired = null;
                 return result;
             }
         }
-        
+
         // Standard interrupt logic if no interrupt is in progress, or if the new action
         // is for the currently interrupting player.
         if (newActionActor !== state.turn) {
             result.newState._interruptedTurn = state.turn;
             result.newState._interruptedPhase = state.phase;
             result.newState.turn = newActionActor;
+
+            // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),
+            // set originalAction to resume the interrupted turn after the action completes.
+            if (result.newState.actionRequired.type === 'prompt_rearrange_protocols') {
+                result.newState.actionRequired = {
+                    ...result.newState.actionRequired,
+                    originalAction: {
+                        type: 'resume_interrupted_turn',
+                        interruptedTurn: state.turn,
+                        interruptedPhase: state.phase,
+                    }
+                };
+            }
         }
     }
     return result;
