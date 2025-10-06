@@ -205,7 +205,8 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
 
     // Snapshot before removal
     const laneBeforeRemoval = state[owner].lanes[laneIndex];
-    const isRemovingTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === targetCardId;
+    const wasTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === targetCardId;
+    const hadCardsBelow = laneBeforeRemoval.length > 1 && !wasTopCard;
 
     let newState = { ...state };
     const ownerState = { ...newState[owner] };
@@ -230,8 +231,15 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     newState.actionRequired = null;
     const stateAfterRecalc = recalculateAllLaneValues(newState);
 
-    if (isRemovingTopCard) {
-        return handleUncoverEffect(stateAfterRecalc, owner, laneIndex);
+    // CRITICAL: Uncover happens when:
+    // 1. The top card was removed (reveals the card below), OR
+    // 2. A card below was removed AND there are still cards in the lane (the top card becomes uncovered)
+    if (wasTopCard || hadCardsBelow) {
+        const laneAfterRemoval = stateAfterRecalc[owner].lanes[laneIndex];
+        if (laneAfterRemoval.length > 0) {
+            // There's still a card in the lane - it's now uncovered
+            return handleUncoverEffect(stateAfterRecalc, owner, laneIndex);
+        }
     }
 
     return { newState: stateAfterRecalc };

@@ -319,7 +319,7 @@ export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): Gam
                     originalLaneIndex: originalLaneIndex,
                     sourceCardId: sourceCardId,
                     actor: actor,
-                    sourceEffect: 'speed_3_end', // Not exactly, but it's a shift from an end effect
+                    // Spirit-3 only shifts, it does NOT flip afterwards
                 };
             }
         }

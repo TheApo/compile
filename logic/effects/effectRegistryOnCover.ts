@@ -3,18 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player, EffectResult } from "../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../types";
 import { findAndFlipCards } from "../../utils/gameStateModifiers";
 import { executeOnCover as hate4 } from './hate/Hate-4';
 import { execute as fire0OnCover } from './fire/Fire-0-oncover';
 import { execute as life3OnCover } from './life/Life-3-oncover';
 import { log } from "../utils/log";
 
-type OnCoverEffectExecutor = (coveredCard: PlayedCard, laneIndex: number, state: GameState, owner: Player) => EffectResult;
+type OnCoverEffectExecutor = (coveredCard: PlayedCard, laneIndex: number, state: GameState, context: EffectContext) => EffectResult;
 
-const apathy2: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
+const apathy2: OnCoverEffectExecutor = (coveredCard, laneIndex, state, context) => {
     // When this card would be covered: First, flip this card.
-    const actor = state.turn; // The player causing the cover event
+    const { actor, cardOwner } = context;
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
     // The log should be from the actor's perspective, but the effect is tied to the card.
     let newState = log(state, actor, `${cardName} effect triggers: flipping itself face-down.`);
@@ -22,23 +22,23 @@ const apathy2: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) =>
     return { newState };
 };
 
-const life0: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
-    const actor = state.turn;
+const life0: OnCoverEffectExecutor = (coveredCard, laneIndex, state, context) => {
+    const { actor, cardOwner } = context;
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
     let newState = log(state, actor, `${cardName} effect triggers: deleting itself.`);
-    return { 
+    return {
         newState,
-        animationRequests: [{ type: 'delete', cardId: coveredCard.id, owner }] 
+        animationRequests: [{ type: 'delete', cardId: coveredCard.id, owner: cardOwner }]
     };
 };
 
-const metal6: OnCoverEffectExecutor = (coveredCard, laneIndex, state, owner) => {
-    const actor = state.turn;
+const metal6: OnCoverEffectExecutor = (coveredCard, laneIndex, state, context) => {
+    const { actor, cardOwner } = context;
     const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
     let newState = log(state, actor, `${cardName} effect triggers on cover: deleting itself.`);
     return {
         newState,
-        animationRequests: [{ type: 'delete', cardId: coveredCard.id, owner }]
+        animationRequests: [{ type: 'delete', cardId: coveredCard.id, owner: cardOwner }]
     };
 };
 

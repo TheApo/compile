@@ -9,6 +9,7 @@ import { log } from '../../utils/log';
 import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { getEffectiveCardValue } from '../stateManager';
+import * as phaseManager from '../phaseManager';
 
 export type CardActionResult = {
     nextState: GameState;
@@ -416,6 +417,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
 
                     // 3. Handle uncovering with the pre-computed next delete action
+                    let hadInterruptThatResolved = false;
                     if (wasTopCard) {
                         const stateBeforeUncover = stateAfterTriggers;
                         const uncoverResult = handleUncoverEffect(stateBeforeUncover, cardInfo.owner, laneIndex);
@@ -423,9 +425,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         // Check if the uncover created an interrupt (turn switch)
                         const uncoverCreatedInterrupt = uncoverResult.newState._interruptedTurn !== undefined;
 
-                        // Merge queues and preserve the next delete step
+                        // Check if an interrupt was resolved during this callback
+                        if (stateBeforeUncover._interruptedTurn && !uncoverResult.newState._interruptedTurn) {
+                            hadInterruptThatResolved = true;
+                        }
+
+                        // Use the queue from the uncover result (it already includes any existing queued actions)
+                        // IMPORTANT: Don't merge with stateBeforeUncover.queuedActions because that would duplicate
+                        // actions that were created by the uncover effect itself!
                         const mergedQueue = [
-                            ...(stateBeforeUncover.queuedActions || []),
                             ...(uncoverResult.newState.queuedActions || [])
                         ];
 
@@ -470,6 +478,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             actionRequired: nextAction,
                             queuedActions: queueCopy
                         };
+                    }
+
+                    // CRITICAL: If we just resolved an interrupt, DON'T call endTurnCb
+                    // because it would progress phases based on the ORIGINAL phase (before interrupt).
+                    // Instead, just return the state and let the game continue in the current phase.
+                    if (hadInterruptThatResolved) {
+                        // We had an interrupt that just resolved - stay in current phase
+                        return stateAfterTriggers;
                     }
 
                     return endTurnCb(stateAfterTriggers);
@@ -596,12 +612,25 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                  requiresAnimation = {
                     animationRequests: result.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        if (s.actionRequired) return s;
-                        return endTurnCb(s);
+                        // Process any queued actions (like flip_self_for_water_0) WITHOUT ending the turn
+                        // This is critical: we only want to resolve the queue, not advance phases
+                        const stateAfterQueue = phaseManager.processQueuedActions(s);
+
+                        // If a queued action created a new actionRequired (e.g., a shift prompt), return it
+                        if (stateAfterQueue.actionRequired) {
+                            return stateAfterQueue;
+                        }
+
+                        // Otherwise, continue in the current phase (action phase)
+                        return stateAfterQueue;
                     }
                 };
+            } else {
+                // No animation - process queue immediately
+                newState = phaseManager.processQueuedActions(newState);
             }
-            requiresTurnEnd = !newState.actionRequired;
+            // We stay in action phase, no turn end needed
+            requiresTurnEnd = false;
             break;
         }
         case 'select_any_card_to_flip': { // Life-1

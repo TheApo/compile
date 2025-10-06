@@ -117,10 +117,14 @@ export const advancePhase = (state: GameState): GameState => {
             }
 
             // FIX: Check if there are queued actions before ending the turn.
-            // This prevents the turn from ending prematurely when effects like Spirit-3
-            // are triggered during the end phase but queued for later resolution.
+            // Process the queue to pop the next action.
             if (nextState.queuedActions && nextState.queuedActions.length > 0) {
-                return nextState;
+                nextState = processEndOfAction(nextState);
+                // If processEndOfAction created an action, return it
+                if (nextState.actionRequired) {
+                    return nextState;
+                }
+                // Otherwise, the queue was cleared, continue to end the turn
             }
 
             // If no new action was generated, the turn is over.
@@ -143,6 +147,111 @@ export const advancePhase = (state: GameState): GameState => {
     }
     return state; // Should not be reached
 }
+
+/**
+ * Process only the queued actions without advancing phases.
+ * Use this when you want to resolve queued effects but stay in the current phase.
+ */
+export const processQueuedActions = (state: GameState): GameState => {
+    // Check for a queued ACTION first.
+    if (!state.queuedActions || state.queuedActions.length === 0) {
+        return state;
+    }
+
+    console.log('[processQueuedActions] Processing queued actions:', state.queuedActions);
+    let mutableState = { ...state };
+    let queuedActions = [...mutableState.queuedActions];
+
+    while (queuedActions.length > 0) {
+        const nextAction = queuedActions.shift()!;
+        console.log('[processQueuedActions] Processing action:', nextAction.type);
+
+        // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
+        if (nextAction.sourceCardId) {
+            const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
+            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
+                mutableState = log(mutableState, nextAction.actor, `Queued effect from ${cardName} was cancelled because the source is no longer active.`);
+                continue; // Skip this action
+            }
+        }
+
+        // --- Auto-resolving actions ---
+        if (nextAction.type === 'flip_self_for_water_0') {
+            const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            console.log('[processQueuedActions] Processing flip_self_for_water_0:', { sourceCardId, sourceCardInfo: sourceCardInfo ? 'found' : 'NOT FOUND' });
+
+            // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+            } else {
+                // If the card was removed or flipped by an intermediate effect, cancel this part of the action.
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+            }
+            console.log('[processQueuedActions] flip_self_for_water_0 resolved, continuing to next action');
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        if (nextAction.type === 'flip_self_for_psychic_4') {
+            const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+            // FIX: Auto-resolve Psychic-4 self-flip after interrupt (e.g., from uncover effect)
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+            } else {
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+            }
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        if (nextAction.type === 'reveal_opponent_hand') {
+            const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
+            const opponentState = { ...mutableState[opponentId] };
+
+            if (opponentState.hand.length > 0) {
+                opponentState.hand = opponentState.hand.map(c => ({ ...c, isRevealed: true }));
+                mutableState[opponentId] = opponentState;
+                const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent reveals their hand.`);
+            } else {
+                const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent has no cards to reveal.`);
+            }
+            continue; // Action resolved, move to next in queue
+        }
+
+        // --- Conditional actions (check if possible) ---
+        if (nextAction.type === 'select_any_opponent_card_to_shift') {
+            const opponent = nextAction.actor === 'player' ? 'opponent' : 'player';
+            if (mutableState[opponent].lanes.flat().length === 0) {
+                const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
+                mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
+                continue; // Action impossible, skip and move to next in queue
+            }
+        }
+
+        // --- If we reach here, the action is not auto-resolving and is possible ---
+        mutableState.actionRequired = nextAction;
+        mutableState.queuedActions = queuedActions; // Update the state with the rest of the queue
+        return mutableState; // Break loop and return to wait for user/AI input
+    }
+
+    // All queued actions were auto-resolved or impossible.
+    return { ...mutableState, queuedActions: [], actionRequired: null };
+};
 
 export const processEndOfAction = (state: GameState): GameState => {
     if (state.winner) return state;
@@ -223,11 +332,13 @@ export const processEndOfAction = (state: GameState): GameState => {
 
     // Check for a queued ACTION first.
     if (state.queuedActions && state.queuedActions.length > 0) {
+        console.log('[processEndOfAction] Processing queued actions:', state.queuedActions);
         let mutableState = { ...state };
         let queuedActions = [...mutableState.queuedActions];
 
         while (queuedActions.length > 0) {
             const nextAction = queuedActions.shift()!;
+            console.log('[processEndOfAction] Processing action:', nextAction.type);
 
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
             if (nextAction.sourceCardId) {
@@ -243,6 +354,7 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+                console.log('[phaseManager] Processing flip_self_for_water_0:', { sourceCardId, sourceCardInfo: sourceCardInfo ? 'found' : 'NOT FOUND' });
 
                 // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
@@ -255,6 +367,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
                     mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
                 }
+                console.log('[phaseManager] flip_self_for_water_0 resolved, continuing to next action');
                 continue; // Action resolved (or cancelled), move to next in queue
             }
 
@@ -393,6 +506,13 @@ export const continueTurnProgression = (state: GameState): GameState => {
         // Safety break to prevent infinite loops.
         if (oldPhase === nextState.phase && !nextState.actionRequired) {
             console.error("Game is stuck in an automatic phase loop:", oldPhase);
+            console.error("State:", {
+                phase: nextState.phase,
+                turn: nextState.turn,
+                actionRequired: nextState.actionRequired,
+                queuedActions: nextState.queuedActions,
+                interruptedTurn: nextState._interruptedTurn
+            });
             break;
         }
     }

@@ -139,11 +139,11 @@ export const scenario1_Psychic3Uncover: TestScenario = {
  *
  * Setup:
  * - Opponent's Psychic-4 auf Lane 0
- * - Player's Fire-2 auf Lane 1, darunter Fire-4
+ * - Player's Fire-4 auf Lane 1 (unten), Fire-2 darauf (oben)
  * - Opponent's Turn, End Phase
  *
- * Test: Psychic-4 triggert → Opponent returnt Fire-2 → Fire-4 uncovered (Opponent muss 2 discarden)
- * Erwartet: Fire-4 Interrupt läuft, dann Psychic-4 flippt sich (aus Queue)
+ * Test: Psychic-4 triggert → Opponent returnt Fire-2 (oben) → Fire-4 uncovered (Player muss 2 discarden)
+ * Erwartet: Fire-4 Interrupt läuft (Player discardet 2), dann Psychic-4 flippt sich (aus Queue)
  */
 export const scenario2_Psychic4EndEffect: TestScenario = {
     name: "Psychic-4 End Effect mit Uncover-Interrupt",
@@ -201,11 +201,14 @@ export const scenario3_Spirit3EndPhase: TestScenario = {
         // Player: Spirit-3 auf Lane 0
         newState = placeCard(newState, 'player', 0, createCard('Spirit', 3, true));
 
-        // Deck mit genug Karten
+        // Deck mit genug Karten (using actual Card objects from database)
+        const fireCard = cards.find(c => c.protocol === 'Fire' && c.value === 1);
+        const waterCard = cards.find(c => c.protocol === 'Water' && c.value === 1);
+        const spiritCard = cards.find(c => c.protocol === 'Spirit' && c.value === 1);
         newState.player.deck = [
-            { protocol: 'Fire', value: 1 },
-            { protocol: 'Water', value: 1 },
-            { protocol: 'Spirit', value: 1 },
+            fireCard!,
+            waterCard!,
+            spiritCard!,
         ];
 
         newState = recalculateAllLaneValues(newState);
@@ -323,6 +326,106 @@ export const scenario8_Plague4Owner: TestScenario = {
     }
 };
 
+/**
+ * Szenario 8: Plague-4 Owner vs Turn Check
+ *
+ * Setup:
+ * - Opponent's Plague-4 auf Lane 0
+ * - Player's face-down card auf Lane 1
+ * - Opponent's Turn, End Phase
+ *
+ * Test: Plague-4 triggert → Player deleted face-down → Opponent (owner) wird für flip gefragt
+ * Erwartet: Opponent (card owner) wird für flip gefragt, nicht turn player
+ */
+export const scenario9_Water: TestScenario = {
+    name: "Water Owner vs Turn Check",
+    description: "Plague-4 End → Player deletet → Opponent (owner) wird für flip gefragt",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Plague', 'Death', 'Metal'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Plague-4 auf Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Plague', 4, true));
+
+        // Player: Face-down card auf Lane 1
+        newState = placeCard(newState, 'player', 2, createCard('Water', 4, false));
+		
+		// Player: Plague-2 in Hand + Karten zum Discarden
+        newState.player.hand = [
+            createCard('Water', 0, true),
+            createCard('Fire', 1),
+            createCard('Water', 1),
+            createCard('Spirit', 1),
+        ];
+
+        // Opponent: Genug Karten zum Discarden
+        newState.opponent.hand = [
+            createCard('Fire', 2),
+            createCard('Water', 2),
+            createCard('Spirit', 2),
+            createCard('Death', 2),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 10: Hate-1 Multi-Delete mit Uncover-Interrupt
+ *
+ * Setup:
+ * - Player's Hate-1 in Hand + 4 andere Karten zum Discarden
+ * - Opponent's Plague-5 (unten) + Plague-0 (oben, uncovered) auf Lane 0
+ * - Opponent hat 5 Karten in Hand zum Discarden
+ *
+ * Test: Player spielt Hate-1 → discardet 3 → löscht Plague-0 → Plague-5 uncovered (Opponent discard Interrupt) → Player soll 2. Delete machen
+ * Erwartet: Nach Plague-5 Interrupt bleibt Player dran für den 2. Delete (nicht Opponent's Zug)
+ */
+export const scenario10_Hate1Interrupt: TestScenario = {
+    name: "Hate-1 Multi-Delete mit Uncover-Interrupt",
+    description: "Hate-1 löscht Plague-0 → Plague-5 uncovered → Interrupt → Player macht 2. Delete",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Hate', 'Water'],
+            ['Plague', 'Death', 'Metal'],
+            'player',
+            'action'
+        );
+
+        // Player: Hate-1 in Hand + 4 Karten zum Discarden
+        newState.player.hand = [
+            createCard('Hate', 1, true),
+            createCard('Psychic', 2, true),
+            createCard('Psychic', 4, true),
+            createCard('Hate', 4, true),
+            createCard('Water', 1, true),
+        ];
+
+        // Opponent: Plague-5 (unten) + Plague-0 (oben, uncovered) auf Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Plague', 2, true)); // UNTEN
+        newState = placeCard(newState, 'opponent', 0, createCard('Plague', 0, true)); // OBEN (uncovered)
+
+        // Opponent: 5 Karten in Hand zum Discarden
+        newState.opponent.hand = [
+            createCard('Fire', 2, true),
+            createCard('Water', 2, true),
+            createCard('Spirit', 2, true),
+            createCard('Death', 2, true),
+            createCard('Metal', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -331,4 +434,6 @@ export const allScenarios: TestScenario[] = [
     scenario4_Plague2Actor,
     scenario5_Darkness1Interrupt,
     scenario8_Plague4Owner,
+    scenario9_Water,
+    scenario10_Hate1Interrupt,
 ];

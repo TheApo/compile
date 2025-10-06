@@ -29,7 +29,15 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     const opponentLaneBeforePlay = stateBeforePlay[opponent].lanes[laneIndex];
     if (opponentLaneBeforePlay.length > 0) {
         const cardToBeCovered = opponentLaneBeforePlay[opponentLaneBeforePlay.length - 1];
-        onCoverResult = executeOnCoverEffect(cardToBeCovered, laneIndex, stateBeforePlay);
+        // Create a context for the on-cover effect (the opponent's card is being covered by Gravity-6's forced play)
+        const onCoverContext: EffectContext = {
+            cardOwner: opponent,
+            actor: cardOwner, // The Gravity-6 owner is causing the cover
+            currentTurn: context.currentTurn,
+            opponent: cardOwner,
+            triggerType: 'cover'
+        };
+        onCoverResult = executeOnCoverEffect(cardToBeCovered, laneIndex, stateBeforePlay, onCoverContext);
         stateAfterOnCover = onCoverResult.newState;
     }
 

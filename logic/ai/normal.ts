@@ -478,15 +478,31 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_card_to_return':
         case 'select_opponent_card_to_return': {
-            const playerCards = state.player.lanes.flat();
-            if (playerCards.length > 0) {
-                playerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'returnCard', cardId: playerCards[0].id };
+            // Psychic-4: Return player's card (only uncovered cards are valid)
+            const validPlayerCards: PlayedCard[] = [];
+            state.player.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    // Only the top card (uncovered) is targetable
+                    validPlayerCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validPlayerCards.length > 0) {
+                validPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'returnCard', cardId: validPlayerCards[0].id };
             }
-            const ownCards = state.opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                ownCards.sort((a, b) => a.value - b.value);
-                return { type: 'returnCard', cardId: ownCards[0].id };
+
+            // Fallback: Return own uncovered card if no player cards available
+            const validOwnCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    validOwnCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validOwnCards.length > 0) {
+                validOwnCards.sort((a, b) => a.value - b.value);
+                return { type: 'returnCard', cardId: validOwnCards[0].id };
             }
             return { type: 'skip' };
         }
@@ -810,10 +826,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_own_card_to_return_for_water_4': {
-            const ownCards = state.opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                // Easy AI: Pick a random card to return.
-                const randomCard = ownCards[Math.floor(Math.random() * ownCards.length)];
+            // Water-4: Return own card (only uncovered cards are valid)
+            const validOwnCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    // Only the top card (uncovered) is targetable
+                    validOwnCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validOwnCards.length > 0) {
+                // Normal AI: Pick a random uncovered card to return
+                const randomCard = validOwnCards[Math.floor(Math.random() * validOwnCards.length)];
                 return { type: 'returnCard', cardId: randomCard.id };
             }
             // This shouldn't happen if the action was generated correctly, but as a fallback:

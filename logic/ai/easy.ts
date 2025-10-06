@@ -321,17 +321,34 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_card_to_return':
         case 'select_opponent_card_to_return': {
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) return { type: 'returnCard', cardId: allCards[0].id };
+            // Psychic-4: Return card (only uncovered cards are valid)
+            const validCards: PlayedCard[] = [];
+            // Easy AI tries player cards first, then own cards
+            state.player.lanes.forEach(lane => {
+                if (lane.length > 0) validCards.push(lane[lane.length - 1]);
+            });
+            state.opponent.lanes.forEach(lane => {
+                if (lane.length > 0) validCards.push(lane[lane.length - 1]);
+            });
+
+            if (validCards.length > 0) return { type: 'returnCard', cardId: validCards[0].id };
             if ('optional' in action && action.optional) return { type: 'skip' };
             return { type: 'skip' };
         }
 
         case 'select_own_card_to_return_for_water_4': {
-            const ownCards = state.opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                // Easy AI: Pick a random card to return.
-                const randomCard = ownCards[Math.floor(Math.random() * ownCards.length)];
+            // Water-4: Return own card (only uncovered cards are valid)
+            const validOwnCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    // Only the top card (uncovered) is targetable
+                    validOwnCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validOwnCards.length > 0) {
+                // Easy AI: Pick a random uncovered card to return
+                const randomCard = validOwnCards[Math.floor(Math.random() * validOwnCards.length)];
                 return { type: 'returnCard', cardId: randomCard.id };
             }
             // This shouldn't happen if the action was generated correctly, but as a fallback:
