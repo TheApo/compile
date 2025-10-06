@@ -225,6 +225,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             } else if (event.key.toLowerCase() === 's') {
                 console.log('Debug: Setting up Speed-2 + Control test scenario.');
                 setupTestScenario('speed-2-control-test');
+            } else if (event.key.toLowerCase() === 'u') {
+                console.log('Debug: Setting up Death-1 Uncover test scenario.');
+                // Import the scenario and use it as a setup function
+                import('../utils/testScenarios').then(module => {
+                    setupTestScenario(module.scenario11_Death1UncoverTest.setup);
+                });
             }
         }
     };

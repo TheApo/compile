@@ -157,12 +157,60 @@ Nach jedem Test:
 
 ---
 
+---
+
+## 🔥 Keyboard Shortcuts (während des Spiels)
+
+Drücke **Ctrl + Shift + [Taste]** für schnellen Szenario-Load:
+
+| Shortcut | Szenario | Beschreibung |
+|----------|----------|--------------|
+| **Ctrl+Shift+U** | **Death-1 Uncover Test** | 🆕 **NEUER TEST für Bug-Fix!** |
+| Ctrl+Shift+P | Speed-0 Interrupt | Speed-0 Interrupt-Test |
+| Ctrl+Shift+L | Speed-1 Trigger | Speed-1 Discard Trigger |
+| Ctrl+Shift+F | Fire On-Cover | Fire-0 On-Cover Bug-Test |
+| Ctrl+Shift+S | Speed-2 Control | Speed-2 + Control Mechanic |
+
+### 🆕 Death-1 Uncover Test (Ctrl+Shift+U)
+
+**Szenario-Datei:** `utils/testScenarios.ts` → `scenario11_Death1UncoverTest`
+
+**Was passiert:**
+- **Opponent** hat Death-1 in Lane 0 (Start Phase)
+- **Player** hat in Lane 0:
+  - Speed-3 (face-up, **covered** - unten)
+  - Light-0 (face-up, **uncovered** - oben)
+- AI wird Death-1 aktivieren und Light-0 löschen
+- Speed-3 wird **uncovered** → Middle command sollte triggern!
+
+**Was zu testen:**
+- ✅ **Speed-3 Effekt triggert** (Log: "Speed-3 is uncovered and its effects are re-triggered")
+- ✅ **Player wird gefragt eine eigene Karte zu shiften** (Action Required)
+- ✅ **Kein Softlock** (das war der Bug!)
+- ✅ Shift funktioniert normal
+- ✅ Turn endet korrekt
+
+**Erwartete Log-Sequenz:**
+```
+1. Start Effect: Death-1 triggers.
+2. Death-1: Opponent chooses to draw and delete.
+3. Death-1: Opponent deletes Player's Light-0 and the Death-1 card itself.
+4. Speed-3 is uncovered and its effects are re-triggered.
+5. Action: Select one of your cards to shift  ← MUSS ERSCHEINEN!
+```
+
+**⚠️ VORHER (Bug):** Speed-3 wurde uncovered, aber Action wurde ignoriert → Kein Shift-Prompt!
+**✅ NACHHER (Fix in `cardResolver.ts:333-337`):** Speed-3 uncover setzt actionRequired → Wird NICHT mehr gelöscht → Shift-Prompt erscheint!
+
+---
+
 ## 🎯 Nächste Schritte
 
 1. Starte `npm run dev`
-2. Klicke auf 🐛 DEBUG
-3. Lade Szenario 1
-4. Teste und dokumentiere in TEST_PLAN.md
-5. Wiederhole für alle Szenarien
+2. **Drücke Ctrl+Shift+D** um Debug Button sichtbar zu machen
+3. Klicke auf 🐛 DEBUG
+4. Lade Szenario 1 **ODER** drücke **Ctrl+Shift+U** für den neuen Death-1 Test
+5. Teste und dokumentiere in TEST_PLAN.md
+6. Wiederhole für alle Szenarien
 
 Viel Erfolg beim Testen! 🚀

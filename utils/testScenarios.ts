@@ -426,6 +426,54 @@ export const scenario10_Hate1Interrupt: TestScenario = {
     }
 };
 
+/**
+ * Szenario 11: Death-1 Delete → Speed-3 Uncover Bug-Test
+ *
+ * Setup:
+ * - Opponent's Death-1 (face-up) auf Lane 0
+ * - Player's Speed-3 (face-up, covered - unten) + Light-0 (face-up, uncovered - oben) auf Lane 0
+ * - Opponent's Turn, Start Phase
+ *
+ * Test: Death-1 triggert → AI löscht Light-0 → Speed-3 uncovered → Player sollte Shift-Prompt bekommen
+ * Erwartet:
+ *   - Speed-3 wird uncovered (Log: "Speed-3 is uncovered and its effects are re-triggered")
+ *   - Player bekommt Action: "Select one of your cards to shift"
+ *   - KEIN Softlock!
+ *
+ * Bug (VORHER): actionRequired wurde nach uncover auf null gesetzt → Shift-Prompt verloren
+ * Fix (NACHHER): actionRequired wird geprüft und NICHT gelöscht wenn uncover sie gesetzt hat
+ */
+export const scenario11_Death1UncoverTest: TestScenario = {
+    name: "Death-1 Delete → Speed-3 Uncover",
+    description: "🆕 Death-1 löscht Light-0 → Speed-3 uncovered → Player shiftet (Bug-Fix Test)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Speed', 'Light', 'Water'],
+            ['Death', 'Fire', 'Metal'],
+            'opponent',
+            'start'
+        );
+
+        // Player: Speed-3 (unten, covered) + Light-0 (oben, uncovered) auf Lane 0
+        newState = placeCard(newState, 'player', 0, createCard('Speed', 3, true)); // UNTEN (covered)
+        newState = placeCard(newState, 'player', 0, createCard('Light', 0, true)); // OBEN (uncovered - wird gelöscht)
+
+        // CRITICAL: Speed-3 needs "other cards" to shift! Add a card in another lane
+        newState = placeCard(newState, 'player', 1, createCard('Water', 1, true)); // Another card for Speed-3 to shift
+
+        // Opponent: Death-1 (face-up) auf Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 1, true));
+
+        // Empty hands (will be drawn by Death-1 effect)
+        newState.player.hand = [];
+        newState.opponent.hand = [];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -436,4 +484,5 @@ export const allScenarios: TestScenario[] = [
     scenario8_Plague4Owner,
     scenario9_Water,
     scenario10_Hate1Interrupt,
+    scenario11_Death1UncoverTest,
 ];

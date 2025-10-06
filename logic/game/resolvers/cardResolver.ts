@@ -330,13 +330,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         stateAfterDelete = uncoverResult.newState;
                     }
 
-                    stateAfterDelete.actionRequired = null;
+                    // CRITICAL FIX: Don't clear actionRequired if uncover set one!
+                    // If there's an actionRequired from uncover, return it immediately
+                    if (stateAfterDelete.actionRequired) {
+                        return stateAfterDelete;
+                    }
+
+                    // Otherwise, check for queued actions
                     if (stateAfterDelete.queuedActions && stateAfterDelete.queuedActions.length > 0) {
                         const newQueue = [...stateAfterDelete.queuedActions];
                         const nextAction = newQueue.shift();
                         return { ...stateAfterDelete, actionRequired: nextAction, queuedActions: newQueue };
                     }
-                    
+
                     // This action happened in the start phase, so we use a different turn progression.
                     return endTurnCb(stateAfterDelete);
                 }
