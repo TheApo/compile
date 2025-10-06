@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../types";
+import { GameState, PlayedCard, EffectResult, Player, EffectContext } from "../types";
 import { effectRegistry } from "./effects/effectRegistry";
 import { effectRegistryStart } from "./effects/effectRegistryStart";
 import { effectRegistryEnd } from "./effects/effectRegistryEnd";
@@ -13,10 +13,11 @@ import { log } from "./utils/log";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
-export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult {
+export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult {
     // Rule: A card's middle effect only triggers if it is uncovered.
     // This applies whether it was just played or just flipped face-up.
-    const lane = state[actor].lanes[laneIndex];
+    const { cardOwner, opponent } = context;
+    const lane = state[cardOwner].lanes[laneIndex];
     const cardInLane = lane.find(c => c.id === card.id);
     if (!cardInLane) {
         // This can happen if the card was deleted by a chained effect before its own effect could resolve.
@@ -27,10 +28,9 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     if (!isUncovered) {
         return { newState: state }; // Card is covered, do not trigger middle effect.
     }
-    
+
     // Check for Apathy-2 in the same line, which ignores middle effects for both players
-    const opponent = actor === 'player' ? 'opponent' : 'player';
-    const playerLaneHasApathy2 = state[actor].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2 && c.id !== card.id);
+    const playerLaneHasApathy2 = state[cardOwner].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2 && c.id !== card.id);
     const opponentLaneHasApathy2 = state[opponent].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2);
 
     if (playerLaneHasApathy2 || opponentLaneHasApathy2) {
@@ -41,7 +41,7 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     const execute = effectRegistry[effectKey];
 
     if (execute) {
-        const result = execute(card, laneIndex, state, actor);
+        const result = execute(card, laneIndex, state, context);
         const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
         return {
             ...result,
@@ -54,7 +54,7 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
 // --- TRIGGERED EFFECTS (BOTTOM BOX) ---
 
-export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number, state: GameState): EffectResult {
+export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult {
     // Rule: Bottom box effects only trigger if the card is face-up AND uncovered.
     // This function is only called for cards that are about to be covered, so they are by definition uncovered.
     // We just need to check if it's face-up.
@@ -62,39 +62,25 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         return { newState: state };
     }
 
-    const players: Player[] = ['player', 'opponent'];
-    let owner: Player | null = null;
-    for (const p of players) {
-        if (state[p].lanes[laneIndex].some(c => c.id === coveredCard.id)) {
-            owner = p;
-            break;
-        }
-    }
-
-    if (!owner) {
-        console.error("Could not find owner for onCover effect card", coveredCard);
-        return { newState: state };
-    }
-
     const effectKey = `${coveredCard.protocol}-${coveredCard.value}`;
     const execute = effectRegistryOnCover[effectKey];
 
     if (execute) {
-        const result = execute(coveredCard, laneIndex, state, owner);
+        const result = execute(coveredCard, laneIndex, state, context);
         const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
         return {
             ...result,
             newState: stateWithRecalculatedValues,
         };
     }
-    
+
     return { newState: state };
 }
 
 function processTriggeredEffects(
     state: GameState,
     effectKeyword: 'Start' | 'End',
-    effectRegistry: Record<string, (card: PlayedCard, state: GameState) => EffectResult>
+    effectRegistry: Record<string, (card: PlayedCard, state: GameState, context: EffectContext) => EffectResult>
 ): EffectResult {
     const player = state.turn;
     let newState = { ...state };
@@ -143,7 +129,17 @@ function processTriggeredEffects(
             // Log that the effect is triggering with Start/End marker
             newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
 
-            const result = execute(card, newState);
+            // Build context for the effect
+            const opponent = player === 'player' ? 'opponent' : 'player';
+            const context: EffectContext = {
+                cardOwner: player,
+                actor: player,
+                currentTurn: state.turn,
+                opponent,
+                triggerType: effectKeyword === 'Start' ? 'start' : 'end'
+            };
+
+            const result = execute(card, newState, context);
             newState = recalculateAllLaneValues(result.newState);
 
             const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';

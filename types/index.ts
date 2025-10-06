@@ -15,6 +15,28 @@ export interface PlayedCard extends Card {
     isRevealed?: boolean;
 }
 
+/**
+ * EffectContext provides clear semantic context for card effects.
+ * This helps distinguish between:
+ * - cardOwner: Who owns the card (the "you" in card text)
+ * - actor: Who is performing the current action (can differ during interrupts)
+ * - currentTurn: Whose turn it is
+ * - opponent: The opponent of the card owner
+ *
+ * Example: Psychic-3 (opponent's card) gets uncovered during player's turn
+ * - cardOwner: 'opponent' (Psychic-3 belongs to opponent)
+ * - actor: 'player' (player must discard because card text says "Your opponent discards...")
+ * - currentTurn: 'player' (it's player's turn)
+ * - opponent: 'player' (opponent of card owner)
+ */
+export type EffectContext = {
+    cardOwner: Player;           // Wem gehört die Karte? (the "you" in card text)
+    actor: Player;               // Wer führt die Aktion aus? (für Prompts und Queue)
+    currentTurn: Player;         // Wessen Zug ist es?
+    opponent: Player;            // Gegner des Kartenbesitzers
+    triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover'; // Wie wurde der Effekt ausgelöst?
+};
+
 export interface PlayerStats {
     cardsPlayed: number;
     cardsDiscarded: number;
@@ -38,6 +60,15 @@ export interface PlayerState {
 }
 
 export type GamePhase = 'start' | 'control' | 'compile' | 'action' | 'hand_limit' | 'end';
+
+/**
+ * Base properties that can be added to ActionRequired types in the future.
+ * These help track the context of actions for correct actor/owner handling.
+ */
+export type ActionMetadata = {
+    sourceCardOwner?: Player;    // Wem gehört die Source-Karte? (for future use)
+    initiator?: Player;          // Wer hat den Effekt ausgelöst? (for future use)
+};
 
 export type ActionRequired = {
     type: 'discard';
@@ -336,6 +367,10 @@ export type ActionRequired = {
     originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
 } | {
     type: 'flip_self_for_water_0';
+    sourceCardId: string;
+    actor: Player;
+} | {
+    type: 'flip_self_for_psychic_4';
     sourceCardId: string;
     actor: Player;
 } | null;

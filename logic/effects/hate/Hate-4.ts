@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { log } from "../../utils/log";
 
 /**
  * Hate-4: When this card would be covered: First, delete the lowest value covered card in this line.
  */
-export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state: GameState, owner: Player): EffectResult => {
+export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     const players: Player[] = ['player', 'opponent'];
     const allCoveredCardsInLine: { card: PlayedCard, owner: Player }[] = [];
 
@@ -43,9 +44,9 @@ export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state
     const triggeringCardName = `${coveredCard.protocol}-${coveredCard.value}`;
     const deletedCardName = cardToDelete.card.isFaceUp ? `${cardToDelete.card.protocol}-${cardToDelete.card.value}` : 'a face-down card';
     const deletedOwnerName = cardToDelete.owner === 'player' ? "Player's" : "Opponent's";
-    
+
     // The log should be attributed to the card's owner, who is performing the effect.
-    let newState = log(state, owner, `${triggeringCardName} effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
+    let newState = log(state, cardOwner, `${triggeringCardName} effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
 
     return {
         newState,

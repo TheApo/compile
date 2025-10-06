@@ -3,17 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Darkness-2: You may flip 1 covered card in this line.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner, opponent } = context;
     let newState = { ...state };
-    const opponent = actor === 'player' ? 'opponent' : 'player';
 
     // A card is covered if it's not the last one in the stack.
-    const ownCovered = newState[actor].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
+    const ownCovered = newState[cardOwner].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
     const opponentCovered = newState[opponent].lanes[laneIndex].filter((c, index, arr) => index < arr.length - 1);
     const allCoveredInLine = [...ownCovered, ...opponentCovered];
 
@@ -23,7 +23,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             laneIndex,
             sourceCardId: card.id,
             optional: true,
-            actor,
+            actor: cardOwner,
         };
     }
 

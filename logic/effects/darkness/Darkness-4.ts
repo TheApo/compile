@@ -3,15 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { log } from "../../utils/log";
 
 /**
  * Darkness-4: Shift 1 face-down card.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     let newState = { ...state };
-    
+
     // According to default targeting rules, "shift" can only target uncovered cards.
     const uncoveredFaceDownCards: PlayedCard[] = [];
     for (const p of ['player', 'opponent'] as Player[]) {
@@ -24,16 +25,16 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         }
     }
-    
+
     if (uncoveredFaceDownCards.length > 0) {
-        newState = log(newState, actor, "Darkness-4: Prompts to shift 1 face-down card.");
+        newState = log(newState, cardOwner, "Darkness-4: Prompts to shift 1 face-down card.");
         newState.actionRequired = {
             type: 'select_face_down_card_to_shift_for_darkness_4',
             sourceCardId: card.id,
-            actor,
+            actor: cardOwner,
         };
     } else {
-        newState = log(newState, actor, "Darkness-4: No valid face-down card to shift.");
+        newState = log(newState, cardOwner, "Darkness-4: No valid face-down card to shift.");
     }
 
     return { newState };

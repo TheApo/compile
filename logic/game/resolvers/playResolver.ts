@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player, EffectResult } from '../../../types';
+import { GameState, PlayedCard, Player, EffectResult, EffectContext } from '../../../types';
 import { refreshHandForPlayer } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 import { recalculateAllLaneValues } from '../stateManager';
@@ -57,7 +57,14 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     const targetLaneBeforePlay = prevState[player].lanes[laneIndex];
     if (targetLaneBeforePlay.length > 0) {
         const topCard = targetLaneBeforePlay[targetLaneBeforePlay.length - 1];
-        onCoverResult = executeOnCoverEffect(topCard, laneIndex, prevState);
+        const coverContext: EffectContext = {
+            cardOwner: player,
+            actor: player,
+            currentTurn: prevState.turn,
+            opponent: player === 'player' ? 'opponent' : 'player',
+            triggerType: 'cover'
+        };
+        onCoverResult = executeOnCoverEffect(topCard, laneIndex, prevState, coverContext);
     }
     const stateAfterOnCover = onCoverResult.newState;
 
@@ -136,7 +143,14 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         // For human player, execute immediately.
         let onPlayResult: EffectResult = { newState: stateAfterMove };
         if (isFaceUp && !stateAfterMove.actionRequired) {
-            onPlayResult = executeOnPlayEffect(newCardOnBoard, laneIndex, stateAfterMove, player);
+            const playContext: EffectContext = {
+                cardOwner: player,
+                actor: player,
+                currentTurn: stateAfterMove.turn,
+                opponent: player === 'player' ? 'opponent' : 'player',
+                triggerType: 'play'
+            };
+            onPlayResult = executeOnPlayEffect(newCardOnBoard, laneIndex, stateAfterMove, playContext);
         }
 
         // Combine animations from both onCover (which had no action but might have animations) and onPlay.

@@ -20,6 +20,7 @@ import { SwapProtocolsModal } from '../components/SwapProtocolsModal';
 import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
+import { DebugPanel } from '../components/DebugPanel';
 
 
 interface GameScreenProps {
@@ -79,6 +80,13 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     setShowCoinFlip(false);
     trackPlayerCoinFlip(choice, won);
   }, [trackPlayerCoinFlip]);
+
+  // Debug: Skip coin flip for test scenarios
+  const handleSkipCoinFlip = useCallback(() => {
+    setActualStartingPlayer('player');
+    setShowCoinFlip(false);
+    startGameTracking();
+  }, [startGameTracking]);
 
   // Start tracking when coin flip completes
   useEffect(() => {
@@ -241,7 +249,10 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     }
 
     // Second priority: Resolving a required action that targets a lane
-    if (turn === 'player' && actionRequired &&
+    // FIX: Check actionRequired.actor instead of turn, because during interrupt scenarios
+    // (e.g., Spirit-3 triggering during opponent's end phase), the player needs to act
+    // even though turn might still be set to 'opponent'.
+    if (actionRequired && actionRequired.actor === 'player' &&
         ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete'].includes(actionRequired.type)) {
         resolveActionWithLane(laneIndex);
         return;
@@ -555,6 +566,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             </div>
         </div>
         {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
+        <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} />
     </div>
   );
 }

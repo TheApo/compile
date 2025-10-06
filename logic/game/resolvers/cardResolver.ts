@@ -22,9 +22,10 @@ export type CardActionResult = {
 function handleMetal6Flip(state: GameState, targetCardId: string, action: ActionRequired): CardActionResult | null {
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (cardInfo && cardInfo.card.protocol === 'Metal' && cardInfo.card.value === 6) {
-        let newState = log(state, state.turn, `Metal-6 effect triggers on flip: deleting itself.`);
-        
-        const actor = state.turn;
+        // FIX: Use actor from action parameter, not state.turn (critical for interrupts)
+        const actor = 'actor' in action ? action.actor : state.turn;
+        let newState = log(state, actor, `Metal-6 effect triggers on flip: deleting itself.`);
+
         const newStats = { ...state.stats[actor], cardsDeleted: state.stats[actor].cardsDeleted + 1 };
         const newPlayerState = { ...state[actor], stats: newStats };
         newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
@@ -162,13 +163,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
                 if (originalLaneIndex !== -1) {
+                    // FIX: Use actor from the current action, not prev.turn
+                    // This is critical for interrupt scenarios (e.g., Psychic-3 uncovered during opponent's turn)
                     const nextAction: ActionRequired = {
                         type: 'select_lane_for_shift',
                         cardToShiftId: targetCardId,
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor: prev.actionRequired.actor,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -210,13 +213,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
                 if (originalLaneIndex !== -1) {
+                    // FIX: Use actor from action, not prev.turn
                     const nextAction: ActionRequired = {
                         type: 'select_lane_for_shift',
                         cardToShiftId: targetCardId,
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor: prev.actionRequired.actor,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -236,13 +240,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
                 if (originalLaneIndex !== -1) {
+                    // FIX: Use actor from action, not prev.turn
                     const nextAction: ActionRequired = {
                         type: 'select_lane_for_shift',
                         cardToShiftId: targetCardId,
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor: prev.actionRequired.actor,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -262,13 +267,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
                 if (originalLaneIndex !== -1) {
+                    // FIX: Use actor from action, not prev.turn
                     const nextAction: ActionRequired = {
                         type: 'select_lane_for_shift',
                         cardToShiftId: targetCardId,
                         cardOwner,
                         originalLaneIndex,
                         sourceCardId: prev.actionRequired.sourceCardId,
-                        actor: prev.turn,
+                        actor: prev.actionRequired.actor,
                         sourceEffect: 'speed_3_end',
                     };
                     newState.actionRequired = nextAction;
@@ -498,11 +504,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         stateWithTriggers = uncoverResult.newState;
                     }
 
+                    // CRITICAL: The flip prompt is for the Plague-4 card owner (the "you" in card text).
+                    // We need to find who owns the source card to determine the correct actor.
+                    const sourceCardInfo = findCardOnBoard(stateWithTriggers, prev.actionRequired.sourceCardId);
+                    const plague4Owner = sourceCardInfo?.owner || prev.turn;
+
                     const nextAction: ActionRequired = {
                         type: 'plague_4_player_flip_optional',
                         sourceCardId: prev.actionRequired.sourceCardId,
                         optional: true,
-                        actor: prev.turn, // The prompt is for the turn player
+                        actor: plague4Owner, // The prompt is for the Plague-4 owner
                     };
 
                     // If uncover effect created an action, queue the plague_4 flip action
@@ -540,23 +551,38 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const result = internalReturnCard(prev, targetCardId);
             let stateAfterReturn = result.newState;
 
-            // Manually process the self-flip.
-            const sourceCardInfo = findCardOnBoard(stateAfterReturn, sourceCardId);
-            if (sourceCardInfo) {
-                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                stateAfterReturn = log(stateAfterReturn, actor, `${cardName}: Flips itself.`);
-                stateAfterReturn = findAndFlipCards(new Set([sourceCardId]), stateAfterReturn);
-                stateAfterReturn.animationState = { type: 'flipCard', cardId: sourceCardId };
+            // FIX: If the return triggered an interrupt (e.g., uncover effect),
+            // queue the Psychic-4 self-flip to happen after the interrupt resolves.
+            if (stateAfterReturn.actionRequired) {
+                const flipAction: ActionRequired = {
+                    type: 'flip_self_for_psychic_4',
+                    sourceCardId: sourceCardId,
+                    actor: actor,
+                };
+                stateAfterReturn.queuedActions = [
+                    ...(stateAfterReturn.queuedActions || []),
+                    flipAction
+                ];
+                newState = stateAfterReturn;
+                requiresTurnEnd = false; // There's still an action pending
+            } else {
+                // No interrupt - flip immediately
+                const sourceCardInfo = findCardOnBoard(stateAfterReturn, sourceCardId);
+                if (sourceCardInfo) {
+                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                    stateAfterReturn = log(stateAfterReturn, actor, `${cardName}: Flips itself.`);
+                    stateAfterReturn = findAndFlipCards(new Set([sourceCardId]), stateAfterReturn);
+                    stateAfterReturn.animationState = { type: 'flipCard', cardId: sourceCardId };
+                }
+                newState = stateAfterReturn;
+                requiresTurnEnd = true;
             }
-
-            newState = stateAfterReturn;
-            requiresTurnEnd = true; // The multi-step action is fully complete.
 
             if (result.animationRequests) {
                 requiresAnimation = {
                     animationRequests: result.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        if (s.actionRequired) return s; // An interrupt (e.g., from uncover) happened.
+                        if (s.actionRequired) return s; // An interrupt happened, will be resolved separately
                         return endTurnCb(s);
                     },
                 };

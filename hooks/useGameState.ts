@@ -536,8 +536,15 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback, onEndGame]);
 
-    const setupTestScenario = useCallback((scenario: string) => {
+    const setupTestScenario = useCallback((scenarioOrFunction: string | ((state: GameState) => GameState)) => {
         setGameState(currentState => {
+            // NEW: If it's a function, call it directly with current state
+            if (typeof scenarioOrFunction === 'function') {
+                return scenarioOrFunction(currentState);
+            }
+
+            // OLD: String-based scenarios (legacy)
+            const scenario = scenarioOrFunction;
             if (scenario === 'speed-0-interrupt') {
                 const debugPlayerProtocols = ['Speed', 'Life', 'Water'];
                 const debugOpponentProtocols = ['Metal', 'Death', 'Hate'];

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player, ActionRequired, EffectResult } from "../../../types";
+import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { recalculateAllLaneValues } from "../stateManager";
@@ -29,10 +29,17 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
 
     newState.actionRequired = null; // Clear the completed discard action before setting a new one
 
+    // FIX: If there are queued actions, we need to queue the chained effect too,
+    // rather than setting it as the immediate actionRequired. This prevents
+    // queued actions (like Psychic-4 flip) from being lost.
+    const hasQueuedActions = newState.queuedActions && newState.queuedActions.length > 0;
+
+    let nextAction: ActionRequired | null = null;
+
     switch (sourceEffect) {
         case 'fire_1':
             newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to delete 1 card.`);
-            newState.actionRequired = {
+            nextAction = {
                 type: 'select_cards_to_delete',
                 count: 1,
                 sourceCardId: sourceCardId,
@@ -42,7 +49,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             break;
         case 'fire_2':
             newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to return 1 card.`);
-            newState.actionRequired = {
+            nextAction = {
                 type: 'select_card_to_return',
                 sourceCardId: sourceCardId,
                 actor: player,
@@ -50,7 +57,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             break;
         case 'fire_3':
             newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to flip 1 card.`);
-            newState.actionRequired = {
+            nextAction = {
                 type: 'select_card_to_flip_for_fire_3',
                 sourceCardId: sourceCardId,
                 actor: player,
@@ -59,6 +66,16 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
         case 'spirit_1_start':
             // No chained effect, the action is complete.
             break;
+    }
+
+    // FIX: If there are queued actions, append the chained effect to the queue.
+    // Otherwise, set it as the immediate actionRequired.
+    if (nextAction) {
+        if (hasQueuedActions) {
+            newState.queuedActions = [...(newState.queuedActions || []), nextAction];
+        } else {
+            newState.actionRequired = nextAction;
+        }
     }
 
     return newState;
@@ -116,7 +133,14 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         newState.processedUncoverEventIds = [...(newState.processedUncoverEventIds || []), eventId];
 
         // Re-triggering the on-play effect is the main part of the mechanic.
-        const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, owner);
+        const uncoverContext: EffectContext = {
+            cardOwner: owner,
+            actor: owner,
+            currentTurn: newState.turn,
+            opponent: owner === 'player' ? 'opponent' : 'player',
+            triggerType: 'uncover'
+        };
+        const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, uncoverContext);
 
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
@@ -193,7 +217,11 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
 
     newState[owner] = ownerState;
 
-    const actor = newState.turn;
+    // FIX: Use actor from actionRequired if available, otherwise fall back to turn
+    // This is critical for interrupt scenarios (e.g., Psychic-4 during opponent's turn)
+    const actor = (newState.actionRequired && 'actor' in newState.actionRequired)
+        ? newState.actionRequired.actor
+        : newState.turn;
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const cardName = `${card.protocol}-${card.value}`;
@@ -269,7 +297,14 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     let resultAfterOnCover: EffectResult = { newState: stateAfterRecalc };
     if (cardToBeCovered) {
-        resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc);
+        const coverContext: EffectContext = {
+            cardOwner: cardOwner,
+            actor: actor,
+            currentTurn: stateAfterRecalc.turn,
+            opponent: cardOwner === 'player' ? 'opponent' : 'player',
+            triggerType: 'cover'
+        };
+        resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc, coverContext);
     }
 
     if (isRemovingTopCard) {
@@ -321,7 +356,14 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
     if (laneIndex === -1) return { newState: state };
 
     // executeOnPlayEffect internally handles the "uncovered" check
-    const result = executeOnPlayEffect(card, laneIndex, state, owner);
+    const flipContext: EffectContext = {
+        cardOwner: owner,
+        actor: owner,
+        currentTurn: state.turn,
+        opponent: owner === 'player' ? 'opponent' : 'player',
+        triggerType: 'flip'
+    };
+    const result = executeOnPlayEffect(card, laneIndex, state, flipContext);
     
     if (result.newState.actionRequired) {
         const newActionActor = result.newState.actionRequired.actor;

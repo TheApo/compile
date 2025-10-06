@@ -3,25 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 
 /**
  * Metal-1: Draw 2 cards. Your opponent cannot compile next turn.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    const opponent = actor === 'player' ? 'opponent' : 'player';
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner, opponent } = context;
     let newState = { ...state };
-    
-    newState = drawForPlayer(newState, actor, 2);
-    newState = log(newState, actor, "Metal-1: Draw 2 cards.");
-    
+
+    newState = drawForPlayer(newState, cardOwner, 2);
+    newState = log(newState, cardOwner, "Metal-1: Draw 2 cards.");
+
     // Immutable update for the opponent's state
     const opponentState = { ...newState[opponent], cannotCompile: true };
     newState = { ...newState, [opponent]: opponentState };
 
-    newState = log(newState, actor, "Metal-1: Opponent cannot compile next turn.");
+    newState = log(newState, cardOwner, "Metal-1: Opponent cannot compile next turn.");
 
     return { newState };
 };

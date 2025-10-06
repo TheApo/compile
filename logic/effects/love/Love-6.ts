@@ -3,16 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 
 /**
  * Love-6: Your opponent draws 2 cards.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    const opponent = actor === 'player' ? 'opponent' : 'player';
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner, opponent } = context;
     let newState = drawForPlayer(state, opponent, 2);
-    newState = log(newState, actor, "Love-6: Opponent draws 2 cards.");
+    newState = log(newState, cardOwner, "Love-6: Opponent draws 2 cards.");
     return { newState };
 }

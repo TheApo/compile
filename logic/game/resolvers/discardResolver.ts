@@ -159,7 +159,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
 export const resolvePlague2Discard = (prev: GameState, cardIdsToDiscard: string[]): GameState => {
     if (prev.actionRequired?.type !== 'plague_2_player_discard') return prev;
 
-    const player = prev.turn;
+    // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
+    const player = prev.actionRequired.actor;
     const opponent = player === 'player' ? 'opponent' : 'player';
     
     // Discard the player's cards first
@@ -184,13 +185,14 @@ export const resolvePlague2Discard = (prev: GameState, cardIdsToDiscard: string[
 export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard: string[]): GameState => {
     if (prev.actionRequired?.type !== 'plague_2_opponent_discard') return prev;
 
-    const player = 'opponent';
-    const opponent = 'player';
-    
-    // AI discards its cards
+    // FIX: Use actor from actionRequired, not hardcoded values (critical for interrupt scenarios)
+    const player = prev.actionRequired.actor;
+    const opponent = player === 'player' ? 'opponent' : 'player';
+
+    // The Plague-2 owner (actor) discards their cards first
     let newState = discardCards(prev, cardIdsToDiscard, player);
 
-    // Now, require the human player (opponent of the current turn) to discard.
+    // Now, require the opponent to discard
     const opponentDiscardCount = cardIdsToDiscard.length + 1;
     if (newState[opponent].hand.length > 0) {
         newState.actionRequired = {

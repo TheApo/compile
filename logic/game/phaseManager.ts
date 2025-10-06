@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, GamePhase, PlayedCard, ActionRequired } from '../../types';
+import { GameState, Player, GamePhase, PlayedCard, ActionRequired, EffectContext } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
 import { findCardOnBoard } from './helpers/actionUtils';
@@ -107,13 +107,20 @@ export const advancePhase = (state: GameState): GameState => {
         case 'end': {
             const stateBeforeEffects = { ...nextState };
             nextState = executeEndPhaseEffects(nextState).newState;
-            
+
             const actionBefore = stateBeforeEffects.actionRequired;
             const actionAfter = nextState.actionRequired;
 
             // If the end phase effects created a NEW action, we should pause and wait for it.
             if (actionAfter && actionAfter !== actionBefore) {
                  return nextState;
+            }
+
+            // FIX: Check if there are queued actions before ending the turn.
+            // This prevents the turn from ending prematurely when effects like Spirit-3
+            // are triggered during the end phase but queued for later resolution.
+            if (nextState.queuedActions && nextState.queuedActions.length > 0) {
+                return nextState;
             }
 
             // If no new action was generated, the turn is over.
@@ -189,7 +196,14 @@ export const processEndOfAction = (state: GameState): GameState => {
 
         if (cardLocation) {
             const { card: cardOnBoard, owner: cardOwner } = cardLocation;
-            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateWithoutQueue, cardOwner);
+            const queuedEffectContext: EffectContext = {
+                cardOwner: cardOwner,
+                actor: cardOwner,
+                currentTurn: stateWithoutQueue.turn,
+                opponent: cardOwner === 'player' ? 'opponent' : 'player',
+                triggerType: 'play'
+            };
+            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateWithoutQueue, queuedEffectContext);
             if (newState.actionRequired) {
                 // The queued effect produced an action. Return this new state and wait.
                 return newState;
@@ -229,7 +243,7 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-                
+
                 // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
@@ -239,6 +253,23 @@ export const processEndOfAction = (state: GameState): GameState => {
                 } else {
                     // If the card was removed or flipped by an intermediate effect, cancel this part of the action.
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                }
+                continue; // Action resolved (or cancelled), move to next in queue
+            }
+
+            if (nextAction.type === 'flip_self_for_psychic_4') {
+                const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
+                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+                // FIX: Auto-resolve Psychic-4 self-flip after interrupt (e.g., from uncover effect)
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                    mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                    mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+                } else {
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
                     mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue

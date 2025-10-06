@@ -3,15 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Speed-3: Shift 1 of your other cards.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     // A valid target is an uncovered card that is not the source card.
     const validTargets: PlayedCard[] = [];
-    for (const lane of state[actor].lanes) {
+    for (const lane of state[cardOwner].lanes) {
         if (lane.length > 0) {
             const topCard = lane[lane.length - 1]; // This is the uncovered card.
             if (topCard.id !== card.id) {
@@ -27,7 +28,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
                 actionRequired: {
                     type: 'select_own_other_card_to_shift',
                     sourceCardId: card.id,
-                    actor,
+                    actor: cardOwner,
                 }
             }
         };
