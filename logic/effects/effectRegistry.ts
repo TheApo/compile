@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../types";
 import { drawForPlayer } from "../../utils/gameStateModifiers";
 import { log } from "../utils/log";
 import { execute as apathy1 } from './apathy/Apathy-1';
@@ -68,7 +68,7 @@ import { execute as water2 } from './water/Water-2';
 import { execute as water3 } from './water/Water-3';
 import { execute as water4 } from './water/Water-4';
 
-type EffectExecutor = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player) => EffectResult;
+type EffectExecutor = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext) => EffectResult;
 
 export const effectRegistry: Record<string, EffectExecutor> = {
     'Apathy-1': apathy1,

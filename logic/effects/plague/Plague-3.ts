@@ -3,14 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 
 /**
  * Plague-3: Flip each other face-up card.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     const cardsToFlip = new Set<string>();
 
     // Per default targeting rules, "Flip card" targets only uncovered cards.
@@ -26,13 +27,13 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         }
     }
-    
+
     if (cardsToFlip.size > 0) {
         let newState = { ...state };
-        newState = log(newState, actor, `Plague-3: Flip ${cardsToFlip.size} card(s) face-down.`);
+        newState = log(newState, cardOwner, `Plague-3: Flip ${cardsToFlip.size} card(s) face-down.`);
         // Note: findAndFlipCards will also update lane values.
         return { newState: findAndFlipCards(new Set(cardsToFlip), newState) };
     }
-    
+
     return { newState: state };
 }

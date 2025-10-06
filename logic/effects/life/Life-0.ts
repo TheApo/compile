@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player, AnimationRequest } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, AnimationRequest } from "../../../types";
 import { drawCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
 import { v4 as uuidv4 } from 'uuid';
@@ -12,14 +12,15 @@ import { executeOnCoverEffect } from "../../effectExecutor";
 /**
  * Life-0: Play the top card of your deck face-down in each line where you have a card.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     const stateBeforePlay = { ...state };
-    const playerState = { ...stateBeforePlay[actor] };
+    const playerState = { ...stateBeforePlay[cardOwner] };
 
     const lanesWithCards = [];
     for (let i = 0; i < 3; i++) {
         // Check includes the just-played card.
-        if (stateBeforePlay[actor].lanes[i].length > 0) {
+        if (stateBeforePlay[cardOwner].lanes[i].length > 0) {
             lanesWithCards.push(i);
         }
     }
@@ -35,11 +36,16 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
     let combinedOnCoverAnimations: AnimationRequest[] = [];
     for (let i = 0; i < lanesWithCards.length; i++) {
         const targetLaneIndex = lanesWithCards[i];
-        const lane = stateAfterOnCover[actor].lanes[targetLaneIndex];
-        
+        const lane = stateAfterOnCover[cardOwner].lanes[targetLaneIndex];
+
         if (lane.length > 0) {
             const cardToBeCovered = lane[lane.length - 1];
-            const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterOnCover);
+            // Build context for executeOnCoverEffect
+            const coverContext: EffectContext = {
+                ...context,
+                triggerType: 'cover'
+            };
+            const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterOnCover, coverContext);
             stateAfterOnCover = onCoverResult.newState;
             if (onCoverResult.animationRequests) {
                 combinedOnCoverAnimations.push(...onCoverResult.animationRequests);
@@ -49,24 +55,24 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         }
     }
-    
+
     // --- Play Cards Logic ---
-    const finalPlayerState = { ...stateAfterOnCover[actor] };
+    const finalPlayerState = { ...stateAfterOnCover[cardOwner] };
     const newPlayerLanes = [...finalPlayerState.lanes];
     for (let i = 0; i < newCardsToPlay.length; i++) {
         const targetLaneIndex = lanesWithCards[i];
         newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
     }
-    
+
     finalPlayerState.lanes = newPlayerLanes;
     finalPlayerState.deck = remainingDeck;
     finalPlayerState.discard = newDiscard;
 
-    let finalState = { ...stateAfterOnCover, [actor]: finalPlayerState };
-    finalState = log(finalState, actor, `Life-0: Plays ${drawnCards.length} card(s) face-down.`);
-    
-    return { 
-        newState: finalState, 
-        animationRequests: combinedOnCoverAnimations.length > 0 ? combinedOnCoverAnimations : undefined 
+    let finalState = { ...stateAfterOnCover, [cardOwner]: finalPlayerState };
+    finalState = log(finalState, cardOwner, `Life-0: Plays ${drawnCards.length} card(s) face-down.`);
+
+    return {
+        newState: finalState,
+        animationRequests: combinedOnCoverAnimations.length > 0 ? combinedOnCoverAnimations : undefined
     };
 };

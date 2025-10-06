@@ -4,7 +4,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired } from '../../../types';
+import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired, EffectContext } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
@@ -88,8 +88,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         }
         case 'shift_flipped_card_optional': {
             const cardToShiftId = prev.actionRequired.cardId;
-            const cardOwner: Player = prev.turn === 'player' ? 'opponent' : 'player';
-            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, prev.turn);
+            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
+            const actor = prev.actionRequired.actor;
+            const cardOwner: Player = actor === 'player' ? 'opponent' : 'player';
+            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {
                  // FIX: Implemented `onCompleteCallback` for consistency, ensuring any post-animation logic can be handled.
@@ -135,7 +137,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_death_2': {
-            const actor = prev.turn;
+            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
+            const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const targetProtocolName = prev.player.protocols[targetLaneIndex];
             newState = log(newState, actor, `Death-2: ${actorName} targets Protocol ${targetProtocolName}.`);
@@ -186,7 +189,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_metal_3_delete': {
-            const actor = prev.turn;
+            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
+            const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const targetProtocolName = prev.player.protocols[targetLaneIndex];
 
@@ -238,7 +242,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 ? stateBeforePlay[actor].lanes[targetLaneIndex][stateBeforePlay[actor].lanes[targetLaneIndex].length - 1]
                 : null;
             if (cardToBeCovered) {
-                onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateBeforePlay);
+                const coverContext: EffectContext = {
+                    cardOwner: actor,
+                    actor: actor,
+                    currentTurn: stateBeforePlay.turn,
+                    opponent: actor === 'player' ? 'opponent' : 'player',
+                    triggerType: 'cover'
+                };
+                onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateBeforePlay, coverContext);
                 stateAfterOnCover = onCoverResult.newState;
             }
 
@@ -330,7 +341,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_water_3': {
-            const player = prev.turn;
+            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
+            const player = prev.actionRequired.actor;
             const opponent = player === 'player' ? 'opponent' : 'player';
             
             const playerState = { ...prev[player] };

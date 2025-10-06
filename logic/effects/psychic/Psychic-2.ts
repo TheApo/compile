@@ -3,21 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Psychic-2: Your opponent discards 2 cards. Rearrange their protocols.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
-    const opponent: Player = actor === 'player' ? 'opponent' : 'player';
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner, opponent } = context;
     let newState = { ...state };
 
     const opponentHandCount = newState[opponent].hand.length;
 
-    // CRITICAL: The actor who performs the rearrange is the OWNER of the card (actor),
+    // CRITICAL: The actor who performs the rearrange is the OWNER of the card (cardOwner),
     // and the target is their opponent's protocols.
-    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent, actor: actor };
-    
+    const rearrangeAction = { type: 'prompt_rearrange_protocols' as const, sourceCardId: card.id, target: opponent, actor: cardOwner };
+
     if (opponentHandCount > 0) {
         newState.actionRequired = {
             type: 'discard',

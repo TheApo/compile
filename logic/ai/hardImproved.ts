@@ -120,6 +120,8 @@ const evaluateStrategicPosition = (state: GameState): {
     criticalLane: number;
     oneAwayFromWin: boolean;
     closestToWin: number;
+    canWinByOutlasting: boolean;
+    outLastLane: number;
 } => {
     const opponentCompiledCount = state.opponent.compiled.filter(c => c).length;
     const playerCompiledCount = state.player.compiled.filter(c => c).length;
@@ -154,7 +156,25 @@ const evaluateStrategicPosition = (state: GameState): {
         }
     }
 
-    return { shouldDisrupt, shouldRush, needsDefense, criticalLane, oneAwayFromWin, closestToWin };
+    // CRITICAL NEW STRATEGY: Can we win by outlasting the player?
+    // If player has 0-1 cards and we have the lead (or close) in a lane, we can just keep playing there to win!
+    let canWinByOutlasting = false;
+    let outLastLane = -1;
+    if (state.player.hand.length <= 1 && state.opponent.hand.length >= 2) {
+        // Player is low on cards, we have resources - find our best lane
+        for (let i = 0; i < 3; i++) {
+            if (state.opponent.compiled[i]) continue; // Skip compiled lanes
+            const lead = state.opponent.laneValues[i] - state.player.laneValues[i];
+            // We're ahead OR close behind - we can win by just playing more!
+            if (lead >= -2) { // Even if we're 2 behind, with multiple cards we can overtake
+                canWinByOutlasting = true;
+                outLastLane = i;
+                break;
+            }
+        }
+    }
+
+    return { shouldDisrupt, shouldRush, needsDefense, criticalLane, oneAwayFromWin, closestToWin, canWinByOutlasting, outLastLane };
 };
 
 const getBestMove = (state: GameState): AIAction => {
@@ -222,6 +242,12 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             const canPlayerCompileThisLane = state.player.laneValues[i] >= 10 && state.player.laneValues[i] > state.opponent.laneValues[i] && !state.player.compiled[i];
+
+            // CRITICAL: Player has 10+ but we're ahead/tied - they can compile NEXT turn if we don't keep ahead!
+            const playerNearCompile = state.player.laneValues[i] >= 10 && !state.player.compiled[i];
+            const weAreCloseOrBehind = state.opponent.laneValues[i] <= state.player.laneValues[i] + 2; // Within 2 points
+            const mustStayAhead = playerNearCompile && weAreCloseOrBehind;
+
             const baseScore = getCardPower(card);
 
             // FACE-UP PLAY
@@ -251,12 +277,43 @@ const getBestMove = (state: GameState): AIAction => {
                         score = -2000;
                         reason += ` [FAILS TO BLOCK - AVOID!]`;
                     }
+                }
+                // CRITICAL: Player has 10+ and we're close - MUST stay ahead to prevent next-turn compile!
+                else if (mustStayAhead) {
+                    if (resultingValue > state.player.laneValues[i]) {
+                        // We'll be ahead - EXCELLENT! Face-up is even better than face-down (effects + value)
+                        score = 1700 + resultingValue * 5 + baseScore;
+                        reason += ` [STAYS AHEAD (face-up) - blocks next-turn compile (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
+                    } else if (resultingValue === state.player.laneValues[i]) {
+                        // Tied - okay, but not great (player can still overtake next turn)
+                        score = 900 + baseScore;
+                        reason += ` [TIES (face-up) - prevents compile for now]`;
+                    } else {
+                        // We fall behind - TERRIBLE! Player will compile next turn!
+                        // DON'T play face-up if it doesn't keep us ahead - play face-down instead!
+                        score = -3000;
+                        reason += ` [REJECT: Falls behind! (Player: ${state.player.laneValues[i]}, Us: ${resultingValue}) - use face-down instead!]`;
+                    }
                 } else {
                     score += baseScore * 1.5;
                     score += valueToAdd * 2;
 
+                    // CRITICAL: Can win by outlasting player (they have no cards!)
+                    if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
+                        // Player can't respond! Just dominate this lane!
+                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                            score += 6000; // EVEN HIGHER THAN ONE AWAY - guaranteed win!
+                            reason += ` [OUTLAST WIN - Player has ${state.player.hand.length} cards!!!]`;
+                        } else if (resultingValue > state.player.laneValues[i]) {
+                            score += 3500; // Very high - taking the lead
+                            reason += ` [OUTLAST: Taking lead (player has ${state.player.hand.length} cards)]`;
+                        } else {
+                            score += 2000; // Still very high - building toward win
+                            reason += ` [OUTLAST: Building (player helpless with ${state.player.hand.length} cards)]`;
+                        }
+                    }
                     // CRITICAL: One away from winning - massively prioritize winning lane
-                    if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
+                    else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
                         if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
                             score += 5000; // HIGHEST PRIORITY - WIN THE GAME!
                             reason += ` [GAME-WINNING COMPILE!!!]`;
@@ -347,11 +404,41 @@ const getBestMove = (state: GameState): AIAction => {
                         score = -1800;
                         reason += ` [FAILS TO BLOCK]`;
                     }
+                }
+                // CRITICAL: Player has 10+ and we're close - MUST stay ahead to prevent next-turn compile!
+                else if (mustStayAhead) {
+                    if (resultingValue > state.player.laneValues[i]) {
+                        // We'll be ahead - good! Prevents player from compiling next turn
+                        score = 1500 + resultingValue * 5;
+                        reason += ` [STAYS AHEAD - blocks next-turn compile (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
+                    } else if (resultingValue === state.player.laneValues[i]) {
+                        // Tied - okay, but not great (player can still overtake)
+                        score = 800;
+                        reason += ` [TIES - prevents compile for now (Player: ${state.player.laneValues[i]})]`;
+                    } else {
+                        // We fall behind - BAD! Player will compile next turn!
+                        score = -1500;
+                        reason += ` [FALLS BEHIND - player can compile next! (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
+                    }
                 } else {
                     score += valueToAdd * 3;
 
+                    // CRITICAL: Can win by outlasting player (they have no cards!)
+                    if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
+                        // Player can't respond! Just dominate this lane!
+                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                            score += 5500; // Very high (slightly less than face-up)
+                            reason += ` [OUTLAST WIN (face-down) - Player has ${state.player.hand.length} cards!!!]`;
+                        } else if (resultingValue > state.player.laneValues[i]) {
+                            score += 3200; // Very high - taking the lead
+                            reason += ` [OUTLAST: Taking lead (player has ${state.player.hand.length} cards)]`;
+                        } else {
+                            score += 1800; // Still very high - building toward win
+                            reason += ` [OUTLAST: Building (player helpless)]`;
+                        }
+                    }
                     // CRITICAL: One away from winning - massively prioritize winning lane
-                    if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
+                    else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
                         if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
                             score += 4500; // Slightly lower than face-up, but still highest priority
                             reason += ` [GAME-WINNING COMPILE (face-down)!!!]`;
@@ -997,9 +1084,19 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const futurePlayerLaneValue = state.player.laneValues[laneIndex] + valueToAdd;
                 const futurePlayerLead = futurePlayerLaneValue - state.opponent.laneValues[laneIndex];
                 let score = -futurePlayerLead;
+
+                // CRITICAL: Check if target lane is compiled
+                const isCompiled = state.player.compiled[laneIndex];
+
+                // BAD: Shifting would allow player to compile/recompile (>= 10 and winning)
                 if (futurePlayerLaneValue >= 10 && futurePlayerLaneValue > state.opponent.laneValues[laneIndex]) {
-                    score -= 300;
+                    score -= 1000; // MASSIVE PENALTY - Player can compile!
                 }
+                // GOOD: Compiled lane + NOT enabling compile = PERFECT!
+                else if (isCompiled) {
+                    score += 800; // HUGE BONUS - Value becomes useless in compiled lane!
+                }
+
                 return { laneIndex, score };
             });
             scoredLanes.sort((a, b) => b.score - a.score);
@@ -1053,9 +1150,23 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     const valueToAdd = getEffectiveCardValue(cardToShift, state.player.lanes[laneIndex]);
                     const futureLaneValue = state.player.laneValues[laneIndex] + valueToAdd;
                     const futureLead = futureLaneValue - state.opponent.laneValues[laneIndex];
-                    return { laneIndex, score: futureLead };
+                    let score = futureLead; // Higher = worse for us, so we want LOW score
+
+                    // CRITICAL: Check if target lane is compiled
+                    const isCompiled = state.player.compiled[laneIndex];
+
+                    // BAD: Shifting would allow player to compile/recompile
+                    if (futureLaneValue >= 10 && futureLaneValue > state.opponent.laneValues[laneIndex]) {
+                        score += 1000; // MASSIVE PENALTY - Player can compile!
+                    }
+                    // GOOD: Compiled lane + NOT enabling compile = PERFECT!
+                    else if (isCompiled) {
+                        score -= 800; // HUGE BONUS (negative score = good) - Value becomes useless!
+                    }
+
+                    return { laneIndex, score };
                 });
-                scoredLanes.sort((a, b) => a.score - b.score);
+                scoredLanes.sort((a, b) => a.score - b.score); // LOWEST score is best
                 return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
             }
         }
@@ -1238,11 +1349,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     score += 200;
                 }
 
-                // Also consider: If shifting to targetLaneIndex helps us compile
-                const targetValue = state.opponent.laneValues[targetLaneIndex];
-                const targetPlayerValue = state.player.laneValues[targetLaneIndex];
-                if (targetValue + faceDownValue >= 10 && targetValue + faceDownValue > targetPlayerValue && !state.opponent.compiled[targetLaneIndex]) {
-                    score += 100; // We can compile target lane after this shift
+                // CRITICAL: Check if SOURCE lane (i) is compiled
+                const isSourceCompiled = state.player.compiled[i];
+
+                // CRITICAL: Player card shifts TO player's targetLaneIndex (same side!)
+                const futurePlayerValue = state.player.laneValues[targetLaneIndex] + faceDownValue;
+                const targetOpponentValue = state.opponent.laneValues[targetLaneIndex];
+
+                // BAD: Shifting TO target would allow player to compile/recompile there
+                if (futurePlayerValue >= 10 && futurePlayerValue > targetOpponentValue && !state.player.compiled[targetLaneIndex]) {
+                    score -= 500; // HUGE PENALTY - Player can compile at destination!
+                }
+                // GOOD: Destination is compiled, so value becomes useless there!
+                else if (state.player.compiled[targetLaneIndex]) {
+                    score += 400; // HUGE BONUS - Destination is compiled, value is wasted!
+                }
+                // ALSO GOOD: Source is compiled
+                else if (isSourceCompiled) {
+                    score += 300; // BONUS - Removing from compiled lane!
                 }
 
                 if (score > bestScore) {
@@ -1320,6 +1444,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         // Higher score = better to shift
                         let score = faceDownValue * 3;
 
+                        // CRITICAL: Check if SOURCE lane is compiled
+                        const isCompiled = state.player.compiled[i];
+
                         if (playerLead > 0) {
                             score += playerLead * 8; // Prioritize lanes where player is winning
                         }
@@ -1329,6 +1456,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             score += 150;
                         } else if (playerValue >= 8) {
                             score += 40; // Near compile
+                        }
+
+                        // CRITICAL: If source is compiled, HUGE BONUS (value is useless there!)
+                        if (isCompiled) {
+                            score += 300;
                         }
 
                         potentialTargets.push({ cardId: topCard.id, score, owner: 'player' });
@@ -1379,17 +1511,42 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 }
             });
             if (validTargets.length > 0) {
-                validTargets.sort((a, b) => state.player.laneValues[b.laneIndex] - state.player.laneValues[a.laneIndex]);
+                // CRITICAL: Prioritize compiled lanes (value is useless there!)
+                validTargets.sort((a, b) => {
+                    const aCompiled = state.player.compiled[a.laneIndex];
+                    const bCompiled = state.player.compiled[b.laneIndex];
+
+                    // First: Compiled lanes (BEST)
+                    if (aCompiled && !bCompiled) return -1;
+                    if (!aCompiled && bCompiled) return 1;
+
+                    // Second: Higher value lanes (more disruption)
+                    return state.player.laneValues[b.laneIndex] - state.player.laneValues[a.laneIndex];
+                });
                 return { type: 'deleteCard', cardId: validTargets[0].card.id };
             }
             return { type: 'skip' };
         }
 
         case 'select_any_opponent_card_to_shift': {
-            const validTargets = state.player.lanes.map(lane => lane.length > 0 ? lane[lane.length - 1] : null).filter((c): c is PlayedCard => c !== null);
+            const validTargets = state.player.lanes
+                .map((lane, laneIndex) => lane.length > 0 ? { card: lane[lane.length - 1], laneIndex } : null)
+                .filter((item): item is { card: PlayedCard; laneIndex: number } => item !== null);
+
             if (validTargets.length > 0) {
-                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'deleteCard', cardId: validTargets[0].id };
+                // CRITICAL: Prioritize UNCOMPILED lanes as SOURCE (hurts player more!)
+                validTargets.sort((a, b) => {
+                    const aCompiled = state.player.compiled[a.laneIndex];
+                    const bCompiled = state.player.compiled[b.laneIndex];
+
+                    // First: UNCOMPILED lanes (removing value hurts player!)
+                    if (!aCompiled && bCompiled) return -1; // Prefer uncompiled as source
+                    if (aCompiled && !bCompiled) return 1;  // Avoid compiled as source
+
+                    // Second: Higher threat cards
+                    return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
+                });
+                return { type: 'deleteCard', cardId: validTargets[0].card.id };
             }
             return { type: 'skip' };
         }
@@ -1516,26 +1673,48 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_return': {
-            // Metal-4 or other return effects: Return player's strongest card
-            const playerCards = state.player.lanes.flat();
-            if (playerCards.length > 0) {
-                playerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'returnCard', cardId: playerCards[0].id };
+            // Fire-2 or other return effects: Return card (only uncovered cards are valid)
+            const validPlayerCards: PlayedCard[] = [];
+            state.player.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    // Only the top card (uncovered) is targetable
+                    validPlayerCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validPlayerCards.length > 0) {
+                validPlayerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'returnCard', cardId: validPlayerCards[0].id };
             }
-            const ownCards = state.opponent.lanes.flat();
-            if (ownCards.length > 0) {
-                ownCards.sort((a, b) => getCardThreat(a, 'opponent', state) - getCardThreat(b, 'opponent', state));
-                return { type: 'returnCard', cardId: ownCards[0].id };
+
+            // Fallback: Return own uncovered card
+            const validOwnCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    validOwnCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validOwnCards.length > 0) {
+                validOwnCards.sort((a, b) => getCardThreat(a, 'opponent', state) - getCardThreat(b, 'opponent', state));
+                return { type: 'returnCard', cardId: validOwnCards[0].id };
             }
             return { type: 'skip' };
         }
 
         case 'select_opponent_card_to_return': {
-            // Psychic-4: Return player's card
-            const playerCards = state.player.lanes.flat();
-            if (playerCards.length > 0) {
-                playerCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'returnCard', cardId: playerCards[0].id };
+            // Psychic-4: Return player's card (only uncovered cards are valid)
+            const validCards: PlayedCard[] = [];
+            state.player.lanes.forEach(lane => {
+                if (lane.length > 0) {
+                    // Only the top card (uncovered) is targetable
+                    validCards.push(lane[lane.length - 1]);
+                }
+            });
+
+            if (validCards.length > 0) {
+                validCards.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
+                return { type: 'returnCard', cardId: validCards[0].id };
             }
             return { type: 'skip' };
         }
@@ -1843,9 +2022,19 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             if (validTargets.length > 0) {
                 validTargets.sort((a, b) => {
+                    const aCompiled = state.player.compiled[a.laneIndex];
+                    const bCompiled = state.player.compiled[b.laneIndex];
+
+                    // CRITICAL: Prioritize compiled lanes (value is useless there!)
+                    if (aCompiled && !bCompiled) return -1;
+                    if (!aCompiled && bCompiled) return 1;
+
+                    // Second: Higher lane value (more disruption)
                     const laneValueA = state.player.laneValues[a.laneIndex];
                     const laneValueB = state.player.laneValues[b.laneIndex];
                     if (laneValueA !== laneValueB) return laneValueB - laneValueA;
+
+                    // Third: Higher threat cards
                     return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
                 });
                 return { type: 'deleteCard', cardId: validTargets[0].card.id };

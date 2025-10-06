@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { log } from "../../utils/log";
 
 /**
  * Death-4: Delete a card with a value of 0 or 1.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     const validTargets: PlayedCard[] = [];
     for (const p of ['player', 'opponent'] as Player[]) {
         for (const lane of state[p].lanes) {
@@ -21,16 +22,16 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             }
         }
     }
-        
+
     if (validTargets.length > 0) {
         return {
             newState: {
                 ...state,
-                actionRequired: { type: 'select_low_value_card_to_delete', sourceCardId: card.id, actor }
+                actionRequired: { type: 'select_low_value_card_to_delete', sourceCardId: card.id, actor: cardOwner }
             }
         };
     }
-    
-    const newState = log(state, actor, "Death-4: No valid targets (face-up, uncovered card with value 0 or 1) found.");
+
+    const newState = log(state, cardOwner, "Death-4: No valid targets (face-up, uncovered card with value 0 or 1) found.");
     return { newState };
 };

@@ -219,6 +219,10 @@ p {
     align-items: center;
 }
 
+.main-menu-other-actions .btn {
+    width: 100%;
+}
+
 .version-info {
     font-size: 0.7rem;
     color: var(--secondary-color);

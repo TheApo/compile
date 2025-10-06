@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest } from '../../types';
+import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest, EffectContext } from '../../types';
 import { easyAI } from '../ai/easy';
 import { normalAI } from '../ai/normal';
 import { hardAI } from '../ai/hardImproved';
@@ -518,7 +518,14 @@ export const runOpponentTurn = (
                                 // An on-cover effect created an action. Do not process the on-play effect.
                             } else if (stateForOnPlay.queuedEffect) {
                                 const { card, laneIndex } = stateForOnPlay.queuedEffect;
-                                onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, 'opponent');
+                                const onPlayContext: EffectContext = {
+                                    cardOwner: 'opponent',
+                                    actor: 'opponent',
+                                    currentTurn: stateForOnPlay.turn,
+                                    opponent: 'player',
+                                    triggerType: 'play'
+                                };
+                                onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, onPlayContext);
                                 onPlayResult.newState.queuedEffect = undefined;
                             }
                             

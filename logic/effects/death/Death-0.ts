@@ -3,15 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Death-0: Delete 1 card from each other line.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     const otherLaneIndices = [0, 1, 2].filter(i => i !== laneIndex);
-    
-    const lanesWithCards = otherLaneIndices.filter(i => 
+
+    const lanesWithCards = otherLaneIndices.filter(i =>
         state.player.lanes[i].length > 0 || state.opponent.lanes[i].length > 0
     );
 
@@ -21,13 +22,13 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
         return {
             newState: {
                 ...state,
-                actionRequired: { 
-                    type: 'select_card_from_other_lanes_to_delete', 
+                actionRequired: {
+                    type: 'select_card_from_other_lanes_to_delete',
                     sourceCardId: card.id,
                     disallowedLaneIndex: laneIndex,
                     lanesSelected: [],
                     count: countToDelete,
-                    actor,
+                    actor: cardOwner,
                 }
             }
         };

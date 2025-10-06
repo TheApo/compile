@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Gravity-2: Flip 1 card. Shift that card to this line.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     let newState = { ...state };
     const allCardsOnBoard = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
 
@@ -17,7 +18,7 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_card_to_flip_and_shift_for_gravity_2',
             sourceCardId: card.id,
             targetLaneIndex: laneIndex,
-            actor: actor,
+            actor: cardOwner,
         };
     }
 

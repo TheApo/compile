@@ -3,17 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, Player } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { log } from "../../utils/log";
 
 /**
  * Gravity-4: Shift 1 face-down card to this line.
  */
-export const execute = (card: PlayedCard, laneIndex: number, state: GameState, actor: Player): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     let newState = { ...state };
 
     const validTargets: PlayedCard[] = [];
-    
+
     // According to default targeting rules, only "uncovered" cards can be targeted unless specified otherwise.
     // Therefore, we only check the top card of each other lane.
     const players: Player[] = ['player', 'opponent'];
@@ -35,11 +36,11 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, a
             type: 'select_face_down_card_to_shift_for_gravity_4',
             sourceCardId: card.id,
             targetLaneIndex: laneIndex,
-            actor,
+            actor: cardOwner,
         };
     } else {
-        newState = log(newState, actor, "Gravity-4: No valid face-down cards in other lines to shift.");
+        newState = log(newState, cardOwner, "Gravity-4: No valid face-down cards in other lines to shift.");
     }
-    
+
     return { newState };
 };
