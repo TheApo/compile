@@ -151,6 +151,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   const [showRearrangeModal, setShowRearrangeModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [debugModalPlayer, setDebugModalPlayer] = useState<Player | null>(null);
+  const [showDebugButton, setShowDebugButton] = useState(false);
 
   const gameStateRef = useRef(gameState);
   useEffect(() => {
@@ -203,7 +204,10 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     const handleDebugKeyDown = (event: KeyboardEvent) => {
         if (event.ctrlKey && event.shiftKey) {
             event.preventDefault();
-            if (event.key.toLowerCase() === 'w') {
+            if (event.key.toLowerCase() === 'd') {
+                console.log('Debug: Toggling debug button visibility.');
+                setShowDebugButton(prev => !prev);
+            } else if (event.key.toLowerCase() === 'w') {
                 console.log('Debug: Forcing player win.');
                 onEndGame('player', gameState);
             } else if (event.key.toLowerCase() === 'o') {
@@ -566,7 +570,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             </div>
         </div>
         {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
-        <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} />
+        {showDebugButton && <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} />}
     </div>
   );
 }
