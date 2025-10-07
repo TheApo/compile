@@ -377,7 +377,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const playerName = player === 'player' ? 'Player' : 'Opponent';
                 const sourceCard = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
                 const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'a card effect';
-                newState = log(newState, player, `${sourceName}: ${playerName} returns ${totalReturned} card(s) with value 2.`);
+                const laneNames = ['left', 'middle', 'right'];
+                newState = log(newState, player, `${sourceName}: ${playerName} selects ${laneNames[targetLaneIndex]} lane and returns ${totalReturned} card(s) with value 2 (Player: ${playerCardsToReturn.length}, Opponent: ${opponentCardsToReturn.length}).`);
             }
             break;
         }

@@ -60,13 +60,89 @@ const updateMemory = (state: GameState) => {
 
 const DISRUPTION_KEYWORDS = ['delete', 'flip', 'shift', 'return', 'discard'];
 
-const getCardPower = (card: PlayedCard): number => {
-    let power = 12 - card.value; // Higher value for low-cost cards
-    if (DISRUPTION_KEYWORDS.some(kw => card.keywords[kw])) power += 8;
-    if (card.keywords['draw']) power += 4;
-    if (card.keywords['play']) power += 10; // Very powerful
-    if (card.keywords['prevent']) power += 6;
-    return power;
+/**
+ * Calculate baseScore based on ACTUAL executable effects in current game state
+ */
+const calculateEffectBaseScore = (card: PlayedCard, state: GameState): number => {
+    let baseScore = 0;
+
+    // COUNT: How many opponent cards can be deleted?
+    if (card.keywords['delete']) {
+        const opponentCardsOnBoard = state.player.lanes.flat().length;
+        const deleteCount = card.middle.match(/Delete (\d+)/)?.[1];
+        if (deleteCount) {
+            const actualDeletes = Math.min(parseInt(deleteCount), opponentCardsOnBoard);
+            baseScore += actualDeletes * 100; // +100 per deletable card
+        }
+    }
+
+    // COUNT: How many opponent cards can be flipped? (estimate value loss)
+    if (card.keywords['flip'] && card.middle.includes('opponent')) {
+        const opponentFaceUpCards = state.player.lanes.flat().filter(c => c.isFaceUp);
+        if (opponentFaceUpCards.length > 0) {
+            // Estimate: Average opponent face-up card is value 3 → flips to 1 → loss of 2
+            const flipCount = Math.min(1, opponentFaceUpCards.length); // Most cards flip 1
+            baseScore += flipCount * 2 * 50; // (valueBefore - valueAfter) * 50
+        }
+    }
+
+    // COUNT: How many own cards can be flipped? (estimate value gain)
+    if (card.keywords['flip'] && (card.middle.includes('your') || card.middle.includes('1 of YOUR'))) {
+        const ownFaceDownCards = state.opponent.lanes.flat().filter(c => !c.isFaceUp);
+        if (ownFaceDownCards.length > 0) {
+            // Estimate: Average face-down is 0-1 → flips to 2-3 → gain of 2
+            const flipCount = Math.min(1, ownFaceDownCards.length);
+            baseScore += flipCount * 2 * 50; // (valueAfter - valueBefore) * 50
+        }
+    }
+
+    // COUNT: Discard self (negative)
+    if (card.keywords['discard'] && !card.middle.includes('opponent')) {
+        const discardCount = card.middle.match(/Discard (\d+)/)?.[1];
+        if (discardCount) {
+            baseScore -= parseInt(discardCount) * 30; // -30 per discard
+        }
+    }
+
+    // COUNT: Discard opponent (positive)
+    if (card.keywords['discard'] && card.middle.includes('opponent')) {
+        const discardCount = card.middle.match(/(\d+)/)?.[1];
+        if (discardCount && state.player.hand.length > 0) {
+            const actualDiscards = Math.min(parseInt(discardCount), state.player.hand.length);
+            baseScore += actualDiscards * 30; // +30 per opponent discard
+        }
+    }
+
+    // COUNT: Return (only if cards can be returned)
+    if (card.keywords['return']) {
+        const returnableCards = state.opponent.lanes.flat().length; // Simplification
+        if (returnableCards > 0) {
+            baseScore += 20; // +20 if return is possible
+        }
+    }
+
+    // COUNT: Shift (only if cards can be shifted)
+    if (card.keywords['shift']) {
+        const shiftableCards = state.player.lanes.flat().length + state.opponent.lanes.flat().length;
+        if (shiftableCards > 0) {
+            baseScore += 30; // +30 if shift is possible
+        }
+    }
+
+    // BONUS: Draw cards
+    if (card.keywords['draw']) {
+        const drawCount = card.middle.match(/Draw (\d+)/)?.[1];
+        if (drawCount) {
+            baseScore += parseInt(drawCount) * 20; // +20 per draw
+        }
+    }
+
+    // BONUS: Play extra cards
+    if (card.keywords['play']) {
+        baseScore += 40; // Playing extra cards is very valuable
+    }
+
+    return baseScore;
 };
 
 const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): number => {
@@ -105,6 +181,253 @@ const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): numbe
     if (DISRUPTION_KEYWORDS.some(kw => card.keywords[kw])) threat += 5;
 
     return threat;
+};
+
+/**
+ * UNIVERSAL SHIFT SCORING: Score a card for shifting
+ * Returns higher score = better to shift this card
+ */
+const scoreCardForShift = (card: PlayedCard, cardOwner: Player, currentLaneIndex: number, state: GameState): number => {
+    const laneValue = state[cardOwner].laneValues[currentLaneIndex];
+    const isCompiled = state[cardOwner].compiled[currentLaneIndex];
+
+    // ===== AI'S OWN CARDS =====
+    if (cardOwner === 'opponent') {
+        if (isCompiled) {
+            // FROM compiled lane → HIGHEST priority to move out!
+            return 10000;
+        }
+
+        // FROM uncompiled lane
+        const distanceToCompile = 10 - laneValue;
+
+        if (distanceToCompile <= 0) {
+            // Lane is at 10+ but not compiled (opponent might be higher)
+            // DON'T shift away - we need to keep this strong!
+            return -10000;
+        } else if (distanceToCompile <= 3) {
+            // Lane at 7-9 → very close to compile, DON'T weaken!
+            return -5000;
+        } else {
+            // Weak lane (0-6) → okay to shift FROM here
+            return 1000;
+        }
+    }
+
+    // ===== OPPONENT'S CARDS (PLAYER) =====
+    else {
+        if (isCompiled) {
+            // FROM compiled lane → useless to shift (already done)
+            return 0;
+        }
+
+        // FROM uncompiled lane → the STRONGER, the BETTER to disrupt!
+        let score = laneValue * 1000; // Higher value = higher priority
+
+        // If they can compile THIS turn, CRITICAL!
+        if (laneValue >= 10 && laneValue > state.opponent.laneValues[currentLaneIndex]) {
+            score += 100000; // EMERGENCY!
+        }
+
+        return score;
+    }
+};
+
+/**
+ * UNIVERSAL LANE SCORING: Score a target lane for shifting TO
+ * Returns higher score = better target lane
+ */
+const scoreLaneForShiftTarget = (cardToShift: PlayedCard, cardOwner: Player, targetLaneIndex: number, state: GameState): number => {
+    const targetLaneValue = state[cardOwner].laneValues[targetLaneIndex];
+    const isCompiled = state[cardOwner].compiled[targetLaneIndex];
+    const cardValue = getEffectiveCardValue(cardToShift, state[cardOwner].lanes[targetLaneIndex]);
+
+    // ===== SHIFTING AI'S OWN CARD =====
+    if (cardOwner === 'opponent') {
+        if (isCompiled) {
+            // TO compiled lane → BAD! Wasted value
+            return -10000;
+        }
+
+        // TO uncompiled lane → prefer lanes close to compile
+        const futureValue = targetLaneValue + cardValue;
+        const distanceToCompile = 10 - futureValue;
+
+        if (distanceToCompile <= 0) {
+            // Would enable compile → EXCELLENT!
+            if (futureValue > state.player.laneValues[targetLaneIndex]) {
+                return 50000; // Can compile immediately!
+            }
+            return 30000; // Close to compile
+        } else if (distanceToCompile <= 3) {
+            // Would bring us close (7-9) → GOOD
+            return 20000;
+        } else {
+            // Still weak → prefer weakest lanes
+            return 10000 - targetLaneValue * 100; // Prefer lower values
+        }
+    }
+
+    // ===== SHIFTING OPPONENT'S CARD =====
+    else {
+        if (isCompiled) {
+            // TO compiled lane → PERFECT! Waste their value!
+            return 100000;
+        }
+
+        // TO uncompiled lane → prefer WEAK lanes (spread their value thin)
+        const futureValue = targetLaneValue + cardValue;
+
+        if (futureValue >= 10 && futureValue > state.opponent.laneValues[targetLaneIndex]) {
+            // Would let them compile → TERRIBLE!
+            return -100000;
+        }
+
+        // Prefer shifting to WEAKEST uncompiled lanes (spread damage)
+        return 50000 - targetLaneValue * 1000; // Lower value = higher score
+    }
+};
+
+/**
+ * Calculate effect power of a card (for flip scoring)
+ * Returns higher value = stronger effect
+ */
+const getEffectPower = (card: PlayedCard): number => {
+    let power = 0;
+
+    // Strong disruption keywords
+    if (card.keywords['delete']) power += 30;
+    if (card.keywords['discard']) power += 20;
+    if (card.keywords['return']) power += 15;
+    if (card.keywords['shift']) power += 10;
+
+    // Utility keywords
+    if (card.keywords['draw']) power += 8;
+    if (card.keywords['play']) power += 25; // Very strong
+    if (card.keywords['prevent']) power += 12;
+    if (card.keywords['flip']) power += 10;
+
+    // Special powerful cards (based on protocol-value combinations)
+    if (card.protocol === 'Hate' && card.value === 1) power += 40; // Delete 2 cards!
+    if (card.protocol === 'Death' && card.value === 3) power += 35; // Delete face-down
+    if (card.protocol === 'Fire' && card.value === 4) power += 30; // Discard 4
+    if (card.protocol === 'Psychic' && card.value === 0) power += 25; // Draw + opponent discards + reveal
+
+    return power;
+};
+
+/**
+ * UNIVERSAL FLIP SCORING: Score a card for flipping
+ * Returns higher score = better to flip this card
+ * Uses Memory system to know face-down cards!
+ */
+const scoreCardForFlip = (card: PlayedCard, cardOwner: Player, laneIndex: number, state: GameState): number => {
+    const laneValue = state[cardOwner].laneValues[laneIndex];
+    const isCompiled = state[cardOwner].compiled[laneIndex];
+
+    // ===== OPPONENT'S CARDS (PLAYER) - DISRUPT! =====
+    if (cardOwner === 'player') {
+
+        if (card.isFaceUp) {
+            // Face-Up → Face-Down: Score = (Value - 2) × 100
+            // Value 0→-200, Value 1→-100 (BAD!), Value 2→0 (neutral), Value 6→400 (GREAT!)
+            let score = (card.value - 2) * 100;
+
+            // Bonus for deactivating strong effects
+            const effectPower = getEffectPower(card);
+            score += effectPower * 10;
+
+            // Extra bonus if lane is strong (weaken their compile attempt)
+            if (laneValue >= 8) {
+                score += 200;
+            }
+
+            return score;
+        } else {
+            // Face-Down → Face-Up: RISKY! But sometimes better than flipping own valuable cards
+
+            // Check Memory: Do we know this card?
+            if (aiMemory.knownPlayerCards.has(card.id)) {
+                const knownCard = aiMemory.knownPlayerCards.get(card.id)!;
+
+                // LOW values (0-1): DON'T flip! They become 2
+                if (knownCard.value <= 1) {
+                    return -800; // Very bad - strengthens opponent
+                }
+
+                // HIGH values (4-6): Risky but at least we know
+                const effectPower = getEffectPower(knownCard);
+
+                if (knownCard.value >= 4 || effectPower > 30) {
+                    return -400; // Risky but known
+                } else {
+                    return -300; // Mediocre card
+                }
+            } else {
+                // UNKNOWN card: Risky but NOT worse than losing own value!
+                // Expected value: 50% chance low (0-1), 50% chance high (2-6)
+                // Risk it if alternative is flipping own valuable cards
+                return -600; // Risky but acceptable if no better option
+            }
+        }
+    }
+
+    // ===== AI'S OWN CARDS (OPPONENT) - OPTIMIZE! =====
+    else {
+
+        if (card.isFaceUp) {
+            // Face-Up → Face-Down: Usually BAD! (lose value + effects)
+
+            // Only good for very weak cards (0-1) that already triggered
+            if (card.value <= 1) {
+                const hasOnPlayEffect = card.keywords && (card.keywords['play'] || card.keywords['uncover']);
+                if (!hasOnPlayEffect) {
+                    return 50; // Okay to flip down weak card with no effects
+                }
+            }
+
+            return -1000; // Generally bad
+
+        } else {
+            // Face-Down → Face-Up: GOOD! (activate effects + add value)
+
+            // We KNOW our own cards (AI remembers what it played)
+            let knownCard: PlayedCard | undefined;
+
+            if (aiMemory.knownOwnCards.has(card.id)) {
+                knownCard = aiMemory.knownOwnCards.get(card.id);
+            }
+
+            // If unknown (shouldn't happen), assume average
+            const cardValue = knownCard?.value ?? card.value;
+            const effectPower = knownCard ? getEffectPower(knownCard) : 10;
+
+            // Base score: higher value = better
+            let score = cardValue * 100;
+
+            // Bonus for strong effects
+            score += effectPower * 5;
+
+            // Lane context bonus
+            if (!isCompiled) {
+                const futureValue = laneValue - 2 + cardValue; // -2 for current face-down, +cardValue for face-up
+
+                // Would enable compile?
+                if (futureValue >= 10 && futureValue > state.player.laneValues[laneIndex]) {
+                    score += 500; // HUGE bonus! Can compile!
+                } else if (futureValue >= 7) {
+                    score += 200; // Close to compile
+                }
+            }
+
+            // DON'T flip very low values (0-1) unless lane context is good
+            if (cardValue <= 1 && score < 300) {
+                score = 10; // Low priority
+            }
+
+            return score;
+        }
+    }
 };
 
 type ScoredMove = {
@@ -193,15 +516,105 @@ const getBestMove = (state: GameState): AIAction => {
 
     const playerHasPsychic1 = state.player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
 
+    // NEW: Control becomes important ONLY when player has 2 compiled protocols
+    const playerCompiledCount = state.player.compiled.filter(c => c).length;
+    const controlIsImportant = state.useControlMechanic && playerCompiledCount >= 2;
+
+    // NEW: Diversification needed when AI has 1+ compiled AND player has control
+    const aiCompiledCount = state.opponent.compiled.filter(c => c).length;
+    const playerHasControl = state.useControlMechanic && state.controlCardHolder === 'player';
+    const needsDiversification = aiCompiledCount >= 1 && playerHasControl;
+
+    // NEW: Calculate protocol concentration for synergy bonus
+    const getProtocolConcentration = (laneIndex: number, protocol: string): number => {
+        // Count how many cards of this protocol are already in the lane
+        return state.opponent.lanes[laneIndex].filter(c => c.protocol === protocol).length;
+    };
+
+    // NEW: Calculate diversification bonus - reward spreading across lanes when player has control
+    const getDiversificationBonus = (laneIndex: number): number => {
+        if (!needsDiversification) return 0;
+
+        // Find the lane with highest value (excluding compiled lanes)
+        let highestUncompiledValue = 0;
+        let highestLaneIndex = -1;
+        state.opponent.lanes.forEach((lane, i) => {
+            if (!state.opponent.compiled[i]) {
+                const value = state.opponent.laneValues[i];
+                if (value > highestUncompiledValue) {
+                    highestUncompiledValue = value;
+                    highestLaneIndex = i;
+                }
+            }
+        });
+
+        // If this is the WEAKEST uncompiled lane, give bonus (diversify away from strongest)
+        const currentLaneValue = state.opponent.laneValues[laneIndex];
+        const isWeakerLane = currentLaneValue < highestUncompiledValue;
+
+        if (isWeakerLane && !state.opponent.compiled[laneIndex]) {
+            // Bonus inversely proportional to lane value (weaker lanes = higher bonus)
+            const valueDifference = highestUncompiledValue - currentLaneValue;
+            return 500 + (valueDifference * 50); // More bonus for bigger difference
+        }
+
+        return 0;
+    };
+
+    // NEW: Check if a lane is undefendable (player can compile next turn, no card can block)
+    const isLaneUndefendable = (laneIndex: number): boolean => {
+        const playerLaneValue = state.player.laneValues[laneIndex];
+        const aiLaneValue = state.opponent.laneValues[laneIndex];
+        const playerCompiled = state.player.compiled[laneIndex];
+
+        // Only check if player can compile next turn
+        if (playerLaneValue < 10 || playerCompiled || playerLaneValue <= aiLaneValue) {
+            return false; // Not a threat or already compiled
+        }
+
+        // Check if ANY card in hand can defend (reach >= player value)
+        const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+        const aiProtocol = state.opponent.protocols[laneIndex];
+        const playerProtocol = state.player.protocols[laneIndex];
+
+        for (const card of state.opponent.hand) {
+            // Can play face-up?
+            const matchesProtocol = card.protocol === aiProtocol || card.protocol === playerProtocol || aiHasSpirit1;
+            const faceUpValue = matchesProtocol && !playerHasPsychic1 ? card.value : 0;
+
+            // Can play face-down (always possible unless Metal-2)
+            const playerHasMetalTwo = state.player.lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+            const faceDownValue = playerHasMetalTwo ? 0 : getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[laneIndex]);
+
+            // Best possible value
+            const bestValue = Math.max(faceUpValue, faceDownValue);
+            const resultingValue = aiLaneValue + bestValue;
+
+            // Can we block?
+            if (resultingValue >= playerLaneValue) {
+                return false; // Can defend!
+            }
+        }
+
+        return true; // No card can defend - lane is lost
+    };
+
     // Evaluate all possible card plays
     for (const card of state.opponent.hand) {
-        // CRITICAL: Water-4 returns 1 card to hand - only play if we have cards in OTHER protocols
-        // Otherwise it just returns itself (wasted turn). Play face-down instead.
+        // CRITICAL: Water-4 MUST return 1 card (not optional!)
+        // Only play face-up if we have OTHER uncovered cards we want to return.
+        // Otherwise it returns itself = wasted turn!
         if (card.protocol === 'Water' && card.value === 4) {
-            const cardsOnBoard = state.opponent.lanes.flat();
-            // Check if there are any cards in protocols OTHER than Water
-            const hasNonWaterCards = cardsOnBoard.some(c => c.protocol !== 'Water');
-            if (!hasNonWaterCards) continue; // Skip face-up Water-4
+            // Count uncovered cards in OTHER lanes (not the lane we're about to play in)
+            let hasOtherUncoveredCards = false;
+            for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
+                if (state.opponent.lanes[laneIdx].length > 0) {
+                    hasOtherUncoveredCards = true;
+                    break;
+                }
+            }
+            // If no other uncovered cards exist, Water-4 would return itself = skip face-up play
+            if (!hasOtherUncoveredCards) continue;
         }
 
         // Skip 0-value cards as first move (they often need other cards in play to be useful)
@@ -241,6 +654,49 @@ const getBestMove = (state: GameState): AIAction => {
                 }
             }
 
+            // CRITICAL: Hate-2 deletes own highest value uncovered, then opponent's highest!
+            // If Hate-2 would delete ITSELF, the effect stops and opponent loses NOTHING = suicide!
+            const isHate2 = card.protocol === 'Hate' && card.value === 2;
+            let hate2WouldSuicideFaceUp = false;
+            let hate2WouldSuicideFaceDown = false;
+
+            if (isHate2) {
+                // Helper: Check if Hate-2 would be the highest uncovered after playing
+                const wouldSuicide = (isFaceUp: boolean): boolean => {
+                    // Simulate all uncovered cards after playing Hate-2
+                    const simulatedHate2 = { ...card, isFaceUp };
+                    const allUncoveredAfterPlay = state.opponent.lanes
+                        .map((lane, laneIdx) => {
+                            if (laneIdx === i) {
+                                // This lane will have Hate-2 on top
+                                const newLane = [...lane, simulatedHate2];
+                                return { card: simulatedHate2, laneContext: newLane };
+                            } else if (lane.length > 0) {
+                                return { card: lane[lane.length - 1], laneContext: lane };
+                            }
+                            return null;
+                        })
+                        .filter((item): item is { card: PlayedCard; laneContext: PlayedCard[] } => item !== null);
+
+                    if (allUncoveredAfterPlay.length === 0) return false;
+
+                    // Find highest value uncovered card
+                    const highestUncovered = allUncoveredAfterPlay.reduce((highest, current) => {
+                        const highestValue = getEffectiveCardValue(highest.card, highest.laneContext);
+                        const currentValue = getEffectiveCardValue(current.card, current.laneContext);
+                        return currentValue > highestValue ? current : highest;
+                    });
+
+                    // Is Hate-2 the highest? (Check by protocol AND value AND face state)
+                    return highestUncovered.card.protocol === 'Hate' &&
+                           highestUncovered.card.value === 2 &&
+                           highestUncovered.card.isFaceUp === isFaceUp;
+                };
+
+                hate2WouldSuicideFaceUp = wouldSuicide(true);
+                hate2WouldSuicideFaceDown = wouldSuicide(false);
+            }
+
             const canPlayerCompileThisLane = state.player.laneValues[i] >= 10 && state.player.laneValues[i] > state.opponent.laneValues[i] && !state.player.compiled[i];
 
             // CRITICAL: Player has 10+ but we're ahead/tied - they can compile NEXT turn if we don't keep ahead!
@@ -248,7 +704,7 @@ const getBestMove = (state: GameState): AIAction => {
             const weAreCloseOrBehind = state.opponent.laneValues[i] <= state.player.laneValues[i] + 2; // Within 2 points
             const mustStayAhead = playerNearCompile && weAreCloseOrBehind;
 
-            const baseScore = getCardPower(card);
+            const baseScore = calculateEffectBaseScore(card, state);
 
             // FACE-UP PLAY
             // RULE: Can play face-up ONLY if card protocol matches:
@@ -263,287 +719,341 @@ const getBestMove = (state: GameState): AIAction => {
             const canPlayFaceUp = (matchesOwnProtocol || matchesOpposingProtocol || aiHasSpirit1) && !playerHasPsychic1;
 
             if (canPlayFaceUp) {
-                let score = 0;
-                let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
-                const valueToAdd = card.value;
-                const resultingValue = state.opponent.laneValues[i] + valueToAdd;
+                // Skip Hate-2 face-up if it would suicide
+                if (isHate2 && hate2WouldSuicideFaceUp) {
+                    // Don't evaluate face-up play - it's suicide!
+                } else {
+                    let score = 0;
+                    let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}.`;
+                    const valueToAdd = card.value;
+                    const resultingValue = state.opponent.laneValues[i] + valueToAdd;
 
-                // CRITICAL: Block player compile
+                // === PRIORITY 1: CRITICAL DEFENSE (only when absolutely necessary) ===
                 if (canPlayerCompileThisLane) {
-                    if (resultingValue > state.player.laneValues[i]) {
-                        score = 2000 + resultingValue * 10;
-                        reason += ` [BLOCKS IMMEDIATE COMPILE THREAT]`;
+                    // Player can compile THIS turn - must block!
+                    // Base score first
+                    score = valueToAdd * 1000 + baseScore * 10;
+
+                    if (resultingValue >= state.player.laneValues[i]) {
+                        score += 10000; // Additive bonus - higher value cards still preferred
+                        reason += ` [BLOCKS IMMEDIATE COMPILE]`;
                     } else {
-                        score = -2000;
-                        reason += ` [FAILS TO BLOCK - AVOID!]`;
+                        score -= 5; // Can't block - slightly negative but not prohibitive
+                        reason += ` [FAILS TO BLOCK]`;
                     }
                 }
-                // CRITICAL: Player has 10+ and we're close - MUST stay ahead to prevent next-turn compile!
-                else if (mustStayAhead) {
-                    if (resultingValue > state.player.laneValues[i]) {
-                        // We'll be ahead - EXCELLENT! Face-up is even better than face-down (effects + value)
-                        score = 1700 + resultingValue * 5 + baseScore;
-                        reason += ` [STAYS AHEAD (face-up) - blocks next-turn compile (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
-                    } else if (resultingValue === state.player.laneValues[i]) {
-                        // Tied - okay, but not great (player can still overtake next turn)
-                        score = 900 + baseScore;
-                        reason += ` [TIES (face-up) - prevents compile for now]`;
+                // === PRIORITY 2: WIN THE GAME (if one away) ===
+                else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score = 20000; // HIGHEST - win the game!
+                        reason += ` [GAME-WINNING COMPILE!!!]`;
                     } else {
-                        // We fall behind - TERRIBLE! Player will compile next turn!
-                        // DON'T play face-up if it doesn't keep us ahead - play face-down instead!
-                        score = -3000;
-                        reason += ` [REJECT: Falls behind! (Player: ${state.player.laneValues[i]}, Us: ${resultingValue}) - use face-down instead!]`;
+                        score = 5000 + resultingValue * 50; // Build toward win
+                        reason += ` [Building winning lane]`;
                     }
-                } else {
-                    score += baseScore * 1.5;
-                    score += valueToAdd * 2;
+                }
+                // === PRIORITY 3: OUTLAST WIN (player has no cards) ===
+                else if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score = 18000; // Almost highest - guaranteed win
+                        reason += ` [OUTLAST WIN]`;
+                    } else {
+                        score = 8000 + resultingValue * 30;
+                        reason += ` [OUTLAST: Building]`;
+                    }
+                }
+                // === PRIORITY 4: BUILD OWN PROTOCOLS (MAIN STRATEGY!) ===
+                else {
+                    // Base score: Card value DOMINATES effect power
+                    score = valueToAdd * 1000 + baseScore * 10;
 
-                    // CRITICAL: Can win by outlasting player (they have no cards!)
-                    if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
-                        // Player can't respond! Just dominate this lane!
-                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
-                            score += 6000; // EVEN HIGHER THAN ONE AWAY - guaranteed win!
-                            reason += ` [OUTLAST WIN - Player has ${state.player.hand.length} cards!!!]`;
-                        } else if (resultingValue > state.player.laneValues[i]) {
-                            score += 3500; // Very high - taking the lead
-                            reason += ` [OUTLAST: Taking lead (player has ${state.player.hand.length} cards)]`;
-                        } else {
-                            score += 2000; // Still very high - building toward win
-                            reason += ` [OUTLAST: Building (player helpless with ${state.player.hand.length} cards)]`;
-                        }
+                    // BONUS 1: Compile this protocol!
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
+                        score += 3000; // Additive bonus - higher value cards still win
+                        reason += ` [COMPILES PROTOCOL!]`;
                     }
-                    // CRITICAL: One away from winning - massively prioritize winning lane
-                    else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
-                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
-                            score += 5000; // HIGHEST PRIORITY - WIN THE GAME!
-                            reason += ` [GAME-WINNING COMPILE!!!]`;
-                        } else if (resultingValue >= 8) {
-                            score += 1500; // Very high - getting close to win
-                            reason += ` [CRITICAL: Near game-winning compile]`;
-                        } else {
-                            score += 500; // Still prioritize this lane
-                            reason += ` [Building winning lane]`;
-                        }
+                    // BONUS 2: Moderate progress (5-7)
+                    else if (resultingValue >= 5 && !state.opponent.compiled[i]) {
+                        score += 1000 + (resultingValue * 50);
+                        reason += ` [Building: ${resultingValue}/10]`;
                     }
-                    // STRATEGIC: Setup own compile
-                    else if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
-                        score += 800;
-                        reason += ` [SETS UP COMPILE WIN]`;
-                    } else if (resultingValue >= 8 && !state.opponent.compiled[i]) {
-                        score += 200;
-                        reason += ` [Near compile]`;
+                    // PENALTY: Weak lane (<5)
+                    else if (resultingValue < 5 && !state.opponent.compiled[i]) {
+                        score += 200 + (resultingValue * 20);
+                        reason += ` [Weak lane: ${resultingValue}/10]`;
                     }
 
-                    // STRATEGIC: Disruption value
+                    // BONUS 4: Protocol Synergy (same protocol already in lane)
+                    const protocolConcentration = getProtocolConcentration(i, card.protocol);
+                    if (protocolConcentration > 0) {
+                        const synergyBonus = protocolConcentration * 800; // 800 per card of same protocol!
+                        score += synergyBonus;
+                        reason += ` [SYNERGY: ${protocolConcentration + 1}x ${card.protocol}]`;
+                    }
+
+                    // BONUS 5: Value Concentration (prefer strong lanes over spreading)
+                    // BUT: Diversification bonus if player has control and can block us
+                    const currentLaneValue = state.opponent.laneValues[i];
+                    const diversificationBonus = getDiversificationBonus(i);
+
+                    if (diversificationBonus > 0) {
+                        // Player has control - DIVERSIFY!
+                        score += diversificationBonus;
+                        reason += ` [DIVERSIFY: +${diversificationBonus}]`;
+                    } else {
+                        // Normal concentration bonus
+                        if (currentLaneValue >= 6) {
+                            score += 600; // Prefer adding to strong lanes
+                            reason += ` [Concentration]`;
+                        } else if (currentLaneValue >= 3) {
+                            score += 200;
+                        }
+                    }
+
+                    // BONUS 6: Disruption effects (if player is threatening)
                     const hasDisruption = DISRUPTION_KEYWORDS.some(kw => card.keywords[kw]);
                     if (hasDisruption) {
                         if (strategy.shouldDisrupt) {
-                            score += 150;
-                            reason += ` [Disruption needed]`;
+                            score += 400;
+                            reason += ` [Disruption]`;
                         }
+                        // Extra bonus if disrupting in player's strong lane
                         if (state.player.laneValues[i] >= 7) {
-                            score += 80;
-                            reason += ` [Disrupts threat lane]`;
-                        }
-                        // CRITICAL: When one away from winning, disrupting player's compiled lanes is VERY valuable
-                        if (strategy.oneAwayFromWin && state.player.compiled[i]) {
-                            score += 600;
-                            reason += ` [ONE AWAY: Disrupt player's compiled lane!]`;
+                            score += 200;
+                            reason += ` [vs threat]`;
                         }
                     }
 
-                    // STRATEGIC: Control setup - prioritize getting control BEFORE player compiles their last protocol
-                    if (state.useControlMechanic && state.opponent.compiled[i]) {
+                    // BONUS 7: Control (ONLY if player has 2 compiled)
+                    if (controlIsImportant && state.opponent.compiled[i]) {
                         const leadDiff = resultingValue - state.player.laneValues[i];
-                        const playerCompiledCount = state.player.compiled.filter(c => c).length;
-
                         if (leadDiff > 0) {
-                            let controlScore = 100 + leadDiff * 5;
-
-                            // CRITICAL: If player has 1+ compiled protocols, getting control is MUCH more valuable
-                            // because we can disrupt them by rearranging when we refresh!
-                            if (playerCompiledCount === 2) {
-                                // Player is one away from winning! Getting control is ESSENTIAL!
-                                controlScore += 800;
-                                reason += ` [CRITICAL: Get Control to disrupt player's last protocol!]`;
-                            } else if (playerCompiledCount === 1) {
-                                // Player has 1 compiled, getting control is very valuable
-                                controlScore += 300;
-                                reason += ` [Get Control to disrupt player]`;
-                            } else {
-                                reason += ` [Control setup: +${leadDiff}]`;
-                            }
-
-                            score += controlScore;
+                            score += 1500 + leadDiff * 100; // Important for control
+                            reason += ` [CONTROL: lead +${leadDiff}]`;
                         }
                     }
 
-                    // STRATEGIC: Card synergy
+                    // BONUS 8: Card advantage effects
                     if (card.keywords['play'] || card.keywords['draw']) {
-                        score += 50; // Prioritize card advantage
-                        reason += ` [Card advantage]`;
+                        score += 300;
+                        reason += ` [Card+]`;
+                    }
+
+                    // PENALTY: Playing in compiled lane (unless for control)
+                    if (state.opponent.compiled[i] && !controlIsImportant) {
+                        score -= 3; // Slightly negative - not optimal but acceptable
+                        reason += ` [WASTED in compiled]`;
+                    }
+
+                    // PENALTY: Weak defense (if player can compile next turn)
+                    if (mustStayAhead && resultingValue <= state.player.laneValues[i]) {
+                        score -= 1; // Slightly negative - falling behind is suboptimal but not terrible
+                        reason += ` [DANGER: Falls behind]`;
+                    }
+
+                    // PENALTY: Lane is undefendable - player can compile, no card can stop it
+                    if (isLaneUndefendable(i)) {
+                        score -= 4000; // Don't waste cards in lost lanes
+                        reason += ` [UNDEFENDABLE LANE]`;
                     }
                 }
 
-                possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score, reason });
+                    possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true }, score, reason });
+                }
             }
 
             // FACE-DOWN PLAY
             const playerHasMetalTwo = state.player.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
             if (!playerHasMetalTwo) {
-                const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
-                const resultingValue = state.opponent.laneValues[i] + valueToAdd;
-                let score = 0;
-                let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
+                // Skip Hate-2 face-down if it would suicide
+                if (isHate2 && hate2WouldSuicideFaceDown) {
+                    // Don't evaluate face-down play - it's suicide!
+                } else {
+                    const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
+                    const resultingValue = state.opponent.laneValues[i] + valueToAdd;
+                    let score = 0;
+                    let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i}.`;
 
+                // === PRIORITY 1: CRITICAL DEFENSE ===
                 if (canPlayerCompileThisLane) {
                     if (resultingValue > state.player.laneValues[i]) {
-                        score = 1800 + resultingValue * 10;
+                        score = 9000; // Slightly lower than face-up defense
                         reason += ` [BLOCKS COMPILE]`;
                     } else {
-                        score = -1800;
+                        score = -4000;
                         reason += ` [FAILS TO BLOCK]`;
                     }
                 }
-                // CRITICAL: Player has 10+ and we're close - MUST stay ahead to prevent next-turn compile!
-                else if (mustStayAhead) {
-                    if (resultingValue > state.player.laneValues[i]) {
-                        // We'll be ahead - good! Prevents player from compiling next turn
-                        score = 1500 + resultingValue * 5;
-                        reason += ` [STAYS AHEAD - blocks next-turn compile (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
-                    } else if (resultingValue === state.player.laneValues[i]) {
-                        // Tied - okay, but not great (player can still overtake)
-                        score = 800;
-                        reason += ` [TIES - prevents compile for now (Player: ${state.player.laneValues[i]})]`;
+                // === PRIORITY 2-3: WIN CONDITIONS ===
+                else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score = 17000; // Lower than face-up (no effects)
+                        reason += ` [GAME-WIN]`;
                     } else {
-                        // We fall behind - BAD! Player will compile next turn!
-                        score = -1500;
-                        reason += ` [FALLS BEHIND - player can compile next! (Player: ${state.player.laneValues[i]}, Us: ${resultingValue})]`;
+                        score = 4500 + resultingValue * 40;
+                        reason += ` [Building win]`;
                     }
-                } else {
-                    score += valueToAdd * 3;
+                }
+                else if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score = 16000;
+                        reason += ` [OUTLAST WIN]`;
+                    } else {
+                        score = 7000 + resultingValue * 25;
+                        reason += ` [OUTLAST]`;
+                    }
+                }
+                // === PRIORITY 4: BUILD PROTOCOLS (but less valuable than face-up) ===
+                else {
+                    // Base score: only value (no effect power)
+                    score = valueToAdd * 50; // Half of face-up
 
-                    // CRITICAL: Can win by outlasting player (they have no cards!)
-                    if (strategy.canWinByOutlasting && i === strategy.outLastLane) {
-                        // Player can't respond! Just dominate this lane!
-                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
-                            score += 5500; // Very high (slightly less than face-up)
-                            reason += ` [OUTLAST WIN (face-down) - Player has ${state.player.hand.length} cards!!!]`;
-                        } else if (resultingValue > state.player.laneValues[i]) {
-                            score += 3200; // Very high - taking the lead
-                            reason += ` [OUTLAST: Taking lead (player has ${state.player.hand.length} cards)]`;
-                        } else {
-                            score += 1800; // Still very high - building toward win
-                            reason += ` [OUTLAST: Building (player helpless)]`;
+                    // BONUS 1: Compile this protocol!
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
+                        score += 6000; // Lower than face-up (8000)
+                        reason += ` [COMPILES]`;
+                    }
+                    // BONUS 2: Very close to compile
+                    else if (resultingValue >= 8 && !state.opponent.compiled[i]) {
+                        score += 2000 - ((10 - resultingValue) * 300);
+                        reason += ` [Close: ${resultingValue}/10]`;
+                    }
+                    // BONUS 3: Building
+                    else if (resultingValue >= 5 && !state.opponent.compiled[i]) {
+                        score += 600 + (resultingValue * 30);
+                        reason += ` [Building: ${resultingValue}/10]`;
+                    }
+                    else if (!state.opponent.compiled[i]) {
+                        score += 100 + (resultingValue * 15);
+                        reason += ` [Weak: ${resultingValue}/10]`;
+                    }
+
+                    // BONUS 4: Protocol Synergy (same protocol)
+                    const protocolConcentration = getProtocolConcentration(i, card.protocol);
+                    if (protocolConcentration > 0) {
+                        score += protocolConcentration * 400; // Half of face-up bonus
+                        reason += ` [SYNERGY: ${protocolConcentration + 1}x]`;
+                    }
+
+                    // BONUS 5: Concentration / Diversification
+                    const currentLaneValue = state.opponent.laneValues[i];
+                    const diversificationBonus = getDiversificationBonus(i);
+
+                    if (diversificationBonus > 0) {
+                        // Player has control - DIVERSIFY!
+                        score += diversificationBonus / 2; // Half of face-up bonus
+                        reason += ` [DIVERSIFY]`;
+                    } else {
+                        // Normal concentration
+                        if (currentLaneValue >= 6) {
+                            score += 300;
+                            reason += ` [Conc]`;
                         }
                     }
-                    // CRITICAL: One away from winning - massively prioritize winning lane
-                    else if (strategy.oneAwayFromWin && i === strategy.closestToWin) {
-                        if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
-                            score += 4500; // Slightly lower than face-up, but still highest priority
-                            reason += ` [GAME-WINNING COMPILE (face-down)!!!]`;
-                        } else if (resultingValue >= 8) {
-                            score += 1300;
-                            reason += ` [CRITICAL: Near game-winning compile]`;
-                        } else {
-                            score += 400;
-                            reason += ` [Building winning lane]`;
-                        }
-                    }
-                    else if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
-                        score += 700;
-                        reason += ` [COMPILE SETUP]`;
+
+                    // PENALTY: Save powerful effects for face-up play
+                    if (calculateEffectBaseScore(card, state) >= 150 && !strategy.oneAwayFromWin) {
+                        score -= 800; // Strong penalty - waste of good effect
+                        reason += ` [Wasting effect]`;
                     }
 
-                    // STRATEGIC: Save powerful effects for later (unless one away from win)
-                    if (getCardPower(card) >= 15 && !strategy.oneAwayFromWin) {
-                        score -= 20;
-                        reason += ` [Saving effect]`;
+                    // PENALTY: Compiled lane
+                    if (state.opponent.compiled[i] && !controlIsImportant) {
+                        score -= 2500;
+                        reason += ` [WASTED]`;
+                    }
+
+                    // PENALTY: Weak defense
+                    if (mustStayAhead && resultingValue <= state.player.laneValues[i]) {
+                        score -= 1500;
+                        reason += ` [DANGER]`;
+                    }
+
+                    // PENALTY: Lane is undefendable - player can compile, no card can stop it
+                    if (isLaneUndefendable(i)) {
+                        score -= 4000; // Don't waste cards in lost lanes
+                        reason += ` [UNDEFENDABLE LANE]`;
                     }
                 }
 
-                possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, reason });
+                    possibleMoves.push({ move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false }, score, reason });
+                }
             }
         }
     }
 
-    // Evaluate Filling Hand
+    // Evaluate Filling Hand - NEW SIMPLE LOGIC
     if (state.opponent.hand.length < 5) {
-        let fillHandScore = 5;
-        const avgHandPower = state.opponent.hand.reduce((sum, c) => sum + getCardPower(c), 0) / (state.opponent.hand.length || 1);
+        let fillHandScore = -5000; // Default: NEVER
+        let fillHandReason = "Refresh hand";
 
+        // RULE 1: Hand empty - MUST draw
         if (state.opponent.hand.length === 0) {
-            fillHandScore = 1000; // Must draw
-        } else if (strategy.oneAwayFromWin) {
-            // When one away from winning (without control), ONLY fill hand if we have NO playable cards in the winning lane
-            // Otherwise we're wasting a turn that could win the game!
+            fillHandScore = 1000;
+            fillHandReason = "Refresh hand (EMPTY - must draw!)";
+        }
+        // RULE 2: Only 1 card AND can't play it meaningfully
+        else if (state.opponent.hand.length === 1) {
+            const card = state.opponent.hand[0];
+
+            // Check if this card can be played somewhere useful
+            let canPlayUsefully = false;
+            for (let i = 0; i < 3; i++) {
+                if (isLaneBlockedByPlague0(i)) continue;
+
+                // Can we compile with this card?
+                const faceUpValue = state.opponent.laneValues[i] + card.value;
+                const faceDownValue = state.opponent.laneValues[i] + getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
+
+                if ((faceUpValue >= 10 || faceDownValue >= 10) && !state.opponent.compiled[i]) {
+                    canPlayUsefully = true;
+                    break;
+                }
+
+                // Or at least build toward compile (5+)?
+                if (faceUpValue >= 5 || faceDownValue >= 5) {
+                    canPlayUsefully = true;
+                    break;
+                }
+            }
+
+            if (!canPlayUsefully) {
+                fillHandScore = 500;
+                fillHandReason = "Refresh hand (1 card - not useful)";
+            }
+        }
+        // RULE 3: Control + Player threatening to compile another lane
+        else {
+            const hasControl = state.useControlMechanic && state.controlCardHolder === 'opponent';
+            const playerCompiledCount = state.player.compiled.filter(c => c).length;
+
+            if (hasControl && playerCompiledCount >= 1) {
+                // Check if player can compile an UNCOMPILED lane this/next turn
+                const playerCanCompileAnother = state.player.laneValues.some((v, i) =>
+                    !state.player.compiled[i] && v >= 10 && v > state.opponent.laneValues[i]
+                );
+
+                if (playerCanCompileAnother) {
+                    fillHandScore = 2000;
+                    fillHandReason = `Refresh hand (CONTROL - stop player's next compile!)`;
+                }
+            }
+        }
+
+        // OVERRIDE: Never refresh if we're one away from winning and can win NOW
+        if (strategy.oneAwayFromWin) {
             const hasPlayableCard = state.opponent.hand.some(c => {
-                // Can this card be played in the winning lane to reach 10+?
                 const laneIndex = strategy.closestToWin;
                 if (laneIndex === -1) return false;
                 const faceUpValue = state.opponent.laneValues[laneIndex] + c.value;
                 const faceDownValue = state.opponent.laneValues[laneIndex] + getEffectiveCardValue({ ...c, isFaceUp: false }, state.opponent.lanes[laneIndex]);
                 return (faceUpValue >= 10 || faceDownValue >= 10);
             });
+
             if (hasPlayableCard) {
-                fillHandScore = -5000; // NEVER refresh if we can win!
-            } else if (state.opponent.hand.length >= 3) {
-                fillHandScore = -1000; // Don't refresh with 3+ cards when close to winning
-            } else {
-                fillHandScore = 100; // Only if we really need more cards
+                fillHandScore = -5000;
+                fillHandReason = "Refresh hand (CAN WIN - DON'T REFRESH!)";
             }
-        } else {
-            // CRITICAL STRATEGY: If PLAYER (opponent of AI) is close to winning AND AI has Control Component,
-            // refreshing is EXTREMELY valuable because we can rearrange their protocols to disrupt them!
-            const playerCompiledCount = state.player.compiled.filter(c => c).length;
-            const hasControl = state.useControlMechanic && state.controlCardHolder === 'opponent';
-
-            if (hasControl && playerCompiledCount >= 1) {
-                // Player has compiled at least 1 protocol and we have control
-                // BUT: Only refresh if player actually has cards on the board to disrupt!
-                const playerHasCardsOnBoard = state.player.lanes.flat().length > 0;
-                const playerTotalValue = state.player.laneValues.reduce((sum, v) => sum + v, 0);
-
-                // Check if player can compile NEXT turn (immediate threat!)
-                const playerCanCompileNextTurn = state.player.laneValues.some((v, i) =>
-                    !state.player.compiled[i] && v >= 10 && v > state.opponent.laneValues[i]
-                );
-
-                // EXCEPTION: If player can compile next turn, refresh is CRITICAL even with 4+ cards!
-                // We need to rearrange NOW to stop the compile threat
-                if (playerCanCompileNextTurn && playerHasCardsOnBoard && playerTotalValue > 0) {
-                    if (playerCompiledCount === 2) {
-                        // CRITICAL: Player can win next turn! Must rearrange NOW!
-                        fillHandScore = 2000; // HIGHEST PRIORITY
-                    } else {
-                        // Player can get 2nd compile next turn, very dangerous
-                        fillHandScore = 1200;
-                    }
-                }
-                // Normal case: Only refresh if we have < 4 cards
-                else if (playerHasCardsOnBoard && playerTotalValue > 0 && state.opponent.hand.length < 4) {
-                    if (playerCompiledCount === 2) {
-                        // CRITICAL: Player is one away from winning! Rearranging is ESSENTIAL!
-                        fillHandScore = 1500; // VERY HIGH PRIORITY
-                    } else {
-                        // Player has 1 compiled, still valuable to disrupt
-                        fillHandScore = 600;
-                    }
-                } else if (avgHandPower < 10 && !strategy.needsDefense) {
-                    fillHandScore = 50; // Normal weak hand logic
-                }
-            } else if (avgHandPower < 10 && !strategy.needsDefense) {
-                fillHandScore = 50; // Hand is weak and no emergency
-            } else if (strategy.needsDefense && !state.opponent.hand.some(c => c.value >= 3)) {
-                fillHandScore = 200; // Need high-value cards to defend
-            }
-        }
-
-        let fillHandReason = "Refresh hand";
-        if (strategy.oneAwayFromWin) {
-            fillHandReason = "Refresh hand (ONE AWAY FROM WIN - avoid unless necessary!)";
-        } else if (state.useControlMechanic && state.controlCardHolder === 'opponent' && state.player.compiled.filter(c => c).length >= 1) {
-            fillHandReason = `Refresh hand (HAVE CONTROL - can disrupt player's ${state.player.compiled.filter(c => c).length} compiled protocols!)`;
         }
 
         possibleMoves.push({ move: { type: 'fillHand' }, score: fillHandScore, reason: fillHandReason });
@@ -614,29 +1124,26 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (!aHasDisruption && bHasDisruption) return -1; // Keep b
 
                 // Among non-disruption or both-disruption, keep lower power
-                return getCardPower(a) - getCardPower(b);
+                return calculateEffectBaseScore(a, state) - calculateEffectBaseScore(b, state);
             });
             return { type: 'discardCards', cardIds: sortedHand.slice(0, action.count).map(c => c.id) };
         }
 
         case 'select_opponent_card_to_flip': {
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
+            // Darkness-1: Flip opponent's cards (uncovered only)
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
 
-            const playerUncovered = getUncovered('player');
-            if (playerUncovered.length === 0) return { type: 'skip' };
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, score });
+                }
+            });
 
-            // IMPROVED: Prioritize flipping threatening face-up cards
-            const targets = playerUncovered.map(c => ({
-                cardId: c.id,
-                score: c.isFaceUp
-                    ? getCardThreat(c, 'player', state) + 10
-                    : state.player.laneValues[state.player.lanes.findIndex(l => l.some(card => card.id === c.id))] + 5
-            }));
-
+            if (targets.length === 0) return { type: 'skip' };
             targets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: targets[0].cardId };
+            return { type: 'flipCard', cardId: targets[0].card.id };
         }
 
         case 'select_cards_to_delete':
@@ -677,289 +1184,212 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        // Keep remaining action handlers from original but improved flip logic
         case 'select_any_card_to_flip':
         case 'select_any_other_card_to_flip': {
-            // Love-4, Plague-3, etc: Flip any card (face-up or face-down)
-            // Strategy: PLAYER cards - flip face-up to face-down (removes threat)
-            //          OWN cards - flip face-down to face-up (activates effects, adds value)
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
+            // Love-4, Plague-3, etc: Flip any uncovered card
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
+            const sourceCardId = action.type === 'select_any_other_card_to_flip' ? action.sourceCardId : null;
 
-            const playerUncovered = getUncovered('player');
-            const opponentUncovered = getUncovered('opponent');
-
-            const targets: { cardId: string; score: number }[] = [];
-
-            // PLAYER CARDS: Prefer flipping face-up to face-down (neutralize threats)
-            playerUncovered.forEach(c => {
-                const laneIndex = state.player.lanes.findIndex(l => l.some(card => card.id === c.id));
-                const laneValue = state.player.laneValues[laneIndex];
-
-                if (c.isFaceUp) {
-                    // Flipping face-up to face-down removes threat and value
-                    let score = getCardThreat(c, 'player', state) * 2 + c.value * 3;
-
-                    // Extra priority if player is close to compile
-                    if (laneValue >= 8) {
-                        score += 50;
-                    }
-                    if (laneValue >= 10 && laneValue > state.opponent.laneValues[laneIndex]) {
-                        score += 100; // CRITICAL: Block compile threat
-                    }
-
-                    targets.push({ cardId: c.id, score });
-                } else {
-                    // Flipping face-down to face-up could be bad (activates their effects)
-                    // Only consider if we know it's weak
-                    const knownThreat = getCardThreat(c, 'player', state);
-                    if (knownThreat < 5) {
-                        targets.push({ cardId: c.id, score: 3 }); // Low priority
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (topCard.id !== sourceCardId) {
+                        const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'player', score });
                     }
                 }
             });
 
-            // OWN CARDS: Prefer flipping face-down to face-up (activate effects, add value)
-            opponentUncovered.forEach(c => {
-                const laneIndex = state.opponent.lanes.findIndex(l => l.some(card => card.id === c.id));
-
-                if (!c.isFaceUp) {
-                    // Flip our own face-down cards to activate effects and add their full value
-                    const threat = aiMemory.knownOwnCards.has(c.id)
-                        ? getCardThreat(aiMemory.knownOwnCards.get(c.id)!, 'opponent', state)
-                        : c.value;
-
-                    let score = threat * 2 + 20;
-
-                    // Extra priority if it helps us compile
-                    const currentValue = state.opponent.laneValues[laneIndex];
-                    const faceDownValue = state.opponent.lanes[laneIndex].some(card => card.isFaceUp && card.protocol === 'Darkness' && card.value === 2) ? 4 : 2;
-                    const potentialValue = currentValue - faceDownValue + (aiMemory.knownOwnCards.get(c.id)?.value || c.value);
-
-                    if (potentialValue >= 10 && potentialValue > state.player.laneValues[laneIndex]) {
-                        score += 80; // Could enable compile
-                    }
-
-                    targets.push({ cardId: c.id, score });
-                } else {
-                    // Our own face-up card - generally DON'T flip to face-down
-                    // Only if it's very weak and already triggered its effects
-                    const hasOnPlayEffect = c.keywords && (c.keywords['play'] || c.keywords['uncover']);
-                    if (!hasOnPlayEffect && c.value <= 1) {
-                        targets.push({ cardId: c.id, score: 2 }); // Very low priority
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (topCard.id !== sourceCardId) {
+                        const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
                     }
                 }
             });
 
             if (targets.length === 0) return { type: 'skip' };
-
             targets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: targets[0].cardId };
+            return { type: 'flipCard', cardId: targets[0].card.id };
         }
 
         case 'select_any_face_down_card_to_flip_optional': {
-            // Life-2: May flip 1 face-down card (only face-down!)
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
+            // Life-2: May flip 1 face-down card (only uncovered face-down cards!)
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
 
-            const playerUncovered = getUncovered('player');
-            const opponentUncovered = getUncovered('opponent');
-
-            const targets: { cardId: string; score: number }[] = [];
-
-            // Only consider face-down cards!
-            playerUncovered.forEach(c => {
-                if (!c.isFaceUp) {
-                    // Check if we know what it is from memory
-                    const knownThreat = getCardThreat(c, 'player', state);
-                    // If it's known to be dangerous, give it LOW score (avoid flipping)
-                    const baseScore = knownThreat > 10 ? -knownThreat : 5;
-                    targets.push({ cardId: c.id, score: baseScore });
-                }
-            });
-
-            opponentUncovered.forEach(c => {
-                if (!c.isFaceUp) {
-                    // Flip our own face-down cards to activate effects
-                    const threat = aiMemory.knownOwnCards.has(c.id)
-                        ? getCardThreat(aiMemory.knownOwnCards.get(c.id)!, 'opponent', state)
-                        : c.value;
-                    targets.push({ cardId: c.id, score: threat + 12 });
-                }
-            });
-
-            if (targets.length === 0) return { type: 'skip' };
-
-            targets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: targets[0].cardId };
-        }
-
-        case 'select_any_card_to_flip_optional': {
-            // General optional flip (any card, face-up or face-down)
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
-
-            const playerUncovered = getUncovered('player');
-            const opponentUncovered = getUncovered('opponent');
-
-            const targets: { cardId: string; score: number }[] = [];
-
-            playerUncovered.forEach(c => {
-                if (c.isFaceUp) {
-                    // Flipping face-up cards face-down removes their threat - HIGH priority
-                    targets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) + 20 });
-                } else {
-                    // For face-down cards: Check if we know what it is from memory
-                    const knownThreat = getCardThreat(c, 'player', state);
-                    const baseScore = knownThreat > 10 ? -knownThreat : 5;
-                    targets.push({ cardId: c.id, score: baseScore });
-                }
-            });
-
-            opponentUncovered.forEach(c => {
-                if (!c.isFaceUp) {
-                    // Flip our own face-down cards to activate effects
-                    const threat = aiMemory.knownOwnCards.has(c.id)
-                        ? getCardThreat(aiMemory.knownOwnCards.get(c.id)!, 'opponent', state)
-                        : c.value;
-                    targets.push({ cardId: c.id, score: threat + 12 });
-                }
-            });
-
-            if (targets.length === 0) return { type: 'skip' };
-
-            targets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: targets[0].cardId };
-        }
-
-        case 'select_own_face_up_covered_card_to_flip': {
-            const potentialTargets: { card: PlayedCard; score: number }[] = [];
-            state.opponent.lanes.forEach(lane => {
-                for (let i = 0; i < lane.length - 1; i++) {
-                    const card = lane[i];
-                    if (card.isFaceUp) {
-                        const faceDownValue = getEffectiveCardValue({ ...card, isFaceUp: false }, lane);
-                        const faceUpValue = card.value;
-                        const score = faceDownValue - faceUpValue;
-                        potentialTargets.push({ card, score });
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) { // Only face-down
+                        const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'player', score });
                     }
                 }
             });
-            if (potentialTargets.length > 0) {
-                potentialTargets.sort((a, b) => b.score - a.score);
-                if (potentialTargets[0].score > 0) {
-                    return { type: 'flipCard', cardId: potentialTargets[0].card.id };
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) { // Only face-down
+                        const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
+                    }
                 }
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id };
+        }
+
+        case 'select_any_card_to_flip_optional': {
+            // Spirit-2: May flip any uncovered card (face-up or face-down)
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, owner: 'player', score });
+                }
+            });
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
+                }
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id };
+        }
+
+        case 'select_own_face_up_covered_card_to_flip': {
+            // Apathy-4: May flip own face-up COVERED cards
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                for (let i = 0; i < lane.length - 1; i++) { // Only covered cards
+                    const card = lane[i];
+                    if (card.isFaceUp) {
+                        const score = scoreCardForFlip(card, 'opponent', laneIndex, state);
+                        targets.push({ card, laneIndex, score });
+                    }
+                }
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            // Only flip if it's actually beneficial (positive score)
+            if (targets[0].score > 0) {
+                return { type: 'flipCard', cardId: targets[0].card.id };
             }
             return { type: 'skip' };
         }
 
         case 'select_face_down_card_to_reveal_for_light_2': {
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
-            const targets: { card: PlayedCard; score: number }[] = [];
-            getUncovered('player').forEach(c => {
-                if (!c.isFaceUp) {
-                    const laneIndex = state.player.lanes.findIndex(lane => lane.some(card => card.id === c.id));
-                    targets.push({ card: c, score: state.player.laneValues[laneIndex] + 10 });
+            // Light-2: Reveal (flip up) face-down UNCOVERED card, then may shift or flip it
+            // Only uncovered face-down cards
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // UNCOVERED only
+                    if (!topCard.isFaceUp) {
+                        const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'player', score });
+                    }
                 }
             });
-            getUncovered('opponent').forEach(c => {
-                if (!c.isFaceUp) targets.push({ card: c, score: -10 });
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // UNCOVERED only
+                    if (!topCard.isFaceUp) {
+                        const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
+                    }
+                }
             });
-            if (targets.length > 0) {
-                targets.sort((a, b) => b.score - a.score);
-                return { type: 'deleteCard', cardId: targets[0].card.id };
-            }
-            return { type: 'skip' };
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id }; // FIX: flipCard not deleteCard!
         }
 
         case 'select_opponent_face_up_card_to_flip': {
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
-            const validTargets = getUncovered('player').filter(c => c.isFaceUp);
-            if (validTargets.length > 0) {
-                validTargets.sort((a, b) => getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state));
-                return { type: 'flipCard', cardId: validTargets[0].id };
-            }
-            return { type: 'skip' };
+            // Apathy-3: Flip opponent's face-up cards only
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (topCard.isFaceUp) {
+                        const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                        targets.push({ card: topCard, laneIndex, score });
+                    }
+                }
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id };
         }
 
         case 'select_card_to_flip_for_fire_3':
         case 'select_card_to_flip_for_light_0':
         case 'select_any_other_card_to_flip_for_water_0':
         case 'select_covered_card_in_line_to_flip_optional': {
-            const potentialTargets: { cardId: string; score: number }[] = [];
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
+
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
+                // Special case: Only covered cards in a specific lane
                 const { laneIndex } = action;
-                const playerCovered = state.player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                playerCovered.forEach(c => potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) }));
-                const opponentCovered = state.opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                opponentCovered.forEach(c => potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'opponent', state) / 2 }));
+                state.player.lanes[laneIndex].forEach((c, i, arr) => {
+                    if (i < arr.length - 1) { // Covered card
+                        const score = scoreCardForFlip(c, 'player', laneIndex, state);
+                        targets.push({ card: c, laneIndex, owner: 'player', score });
+                    }
+                });
+                state.opponent.lanes[laneIndex].forEach((c, i, arr) => {
+                    if (i < arr.length - 1) { // Covered card
+                        const score = scoreCardForFlip(c, 'opponent', laneIndex, state);
+                        targets.push({ card: c, laneIndex, owner: 'opponent', score });
+                    }
+                });
             } else {
-                const getUncovered = (p: Player): PlayedCard[] => state[p].lanes
-                    .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                    .filter((c): c is PlayedCard => c !== null);
-                const allUncoveredPlayer = getUncovered('player');
-                const allUncoveredOpponent = getUncovered('opponent');
-                // PLAYER CARDS (we want to weaken them)
-                allUncoveredPlayer.forEach(c => {
-                    if (c.isFaceUp) {
-                        // Flip PLAYER face-up to face-down - removes threat (GOOD!)
-                        potentialTargets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) + 10 });
-                    } else {
-                        // Flip PLAYER face-down to face-up - use memory to avoid flipping dangerous cards
-                        const knownThreat = getCardThreat(c, 'player', state);
-                        const baseScore = knownThreat > 10 ? -knownThreat : 5;
-                        potentialTargets.push({ cardId: c.id, score: baseScore });
+                // General case: All uncovered cards (or all except source for Water-0)
+                const sourceCardId = action.type === 'select_any_other_card_to_flip_for_water_0' ? action.sourceCardId : null;
+
+                state.player.lanes.forEach((lane, laneIndex) => {
+                    if (lane.length > 0) {
+                        const topCard = lane[lane.length - 1];
+                        if (topCard.id !== sourceCardId) {
+                            const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                            targets.push({ card: topCard, laneIndex, owner: 'player', score });
+                        }
                     }
                 });
 
-                // OPPONENT CARDS (our own cards - we want to strengthen ourselves)
-                allUncoveredOpponent.forEach(c => {
-                    const laneIndex = state.opponent.lanes.findIndex(lane =>
-                        lane.length > 0 && lane[lane.length - 1].id === c.id
-                    );
-                    const isCompiled = laneIndex !== -1 ? state.opponent.compiled[laneIndex] : false;
-
-                    if (!c.isFaceUp) {
-                        // Flipping OWN face-down to face-up
-                        const currentThreat = getCardThreat(c, 'opponent', state);
-                        const faceUpThreat = getCardThreat({ ...c, isFaceUp: true }, 'opponent', state);
-                        const valueGain = faceUpThreat - currentThreat;
-
-                        // POSITIVE score if it increases OUR value (good for us!)
-                        // Bonus for flipping our own cards face-up if they gain value
-                        const score = valueGain > 0 ? valueGain + 5 : -5;
-                        potentialTargets.push({ cardId: c.id, score: score });
-                    } else {
-                        // Flipping OWN face-up to face-down - Usually BAD (loses value)
-                        // ONLY do this if:
-                        // 1. Protocol is already compiled (pointless to keep high value there)
-                        // 2. Card has very low value (minimal loss)
-                        const currentThreat = getCardThreat(c, 'opponent', state);
-                        const faceDownThreat = getCardThreat({ ...c, isFaceUp: false }, 'opponent', state);
-                        const valueLoss = currentThreat - faceDownThreat;
-
-                        if (isCompiled) {
-                            // Compiled lane - flipping doesn't hurt us much, small penalty
-                            potentialTargets.push({ cardId: c.id, score: -valueLoss });
-                        } else {
-                            // NOT compiled - flipping face-up to face-down is BAD!
-                            // Heavy penalty proportional to value loss
-                            potentialTargets.push({ cardId: c.id, score: -valueLoss - 20 });
+                state.opponent.lanes.forEach((lane, laneIndex) => {
+                    if (lane.length > 0) {
+                        const topCard = lane[lane.length - 1];
+                        if (topCard.id !== sourceCardId) {
+                            const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                            targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
                         }
                     }
                 });
             }
-            if (potentialTargets.length === 0) return { type: 'skip' };
-            potentialTargets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: potentialTargets[0].cardId };
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id };
         }
 
         case 'select_card_from_other_lanes_to_delete': {
@@ -1065,13 +1495,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'gravity_2_shift_after_flip':
         case 'shift_flipped_card_optional': {
-            const cardInfo = findCardOnBoard(state, action.cardId);
+            const cardId = action.type === 'gravity_2_shift_after_flip' ? action.cardToShiftId : action.cardId;
+            const cardInfo = findCardOnBoard(state, cardId);
             if (!cardInfo || cardInfo.owner !== 'player') return { type: 'skip' };
             const { card: cardToShift } = cardInfo;
             let originalLaneIndex = -1;
             for (let i = 0; i < state.player.lanes.length; i++) {
-                if (state.player.lanes[i].some(c => c.id === action.cardId)) {
+                if (state.player.lanes[i].some(c => c.id === cardId)) {
                     originalLaneIndex = i;
                     break;
                 }
@@ -1104,6 +1536,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_lane_for_shift': {
+            // After selecting WHICH card to shift, now select WHERE to shift it
             const { cardToShiftId, cardOwner, originalLaneIndex, sourceCardId } = action;
             const cardToShift = findCardOnBoard(state, cardToShiftId)?.card;
             if (!cardToShift) return { type: 'skip' };
@@ -1134,47 +1567,84 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     possibleLanes = [gravityLaneIndex];
                 }
             }
-            if (cardOwner === 'opponent') {
-                const scoredLanes = possibleLanes.map(laneIndex => {
-                    const valueToAdd = getEffectiveCardValue(cardToShift, state.opponent.lanes[laneIndex]);
-                    const futureLaneValue = state.opponent.laneValues[laneIndex] + valueToAdd;
-                    const futureLead = futureLaneValue - state.player.laneValues[laneIndex];
-                    let score = futureLead;
-                    if (futureLaneValue >= 10 && futureLaneValue > state.player.laneValues[laneIndex]) score += 150;
-                    return { laneIndex, score };
-                });
-                scoredLanes.sort((a, b) => b.score - a.score);
-                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
-            } else {
-                const scoredLanes = possibleLanes.map(laneIndex => {
-                    const valueToAdd = getEffectiveCardValue(cardToShift, state.player.lanes[laneIndex]);
-                    const futureLaneValue = state.player.laneValues[laneIndex] + valueToAdd;
-                    const futureLead = futureLaneValue - state.opponent.laneValues[laneIndex];
-                    let score = futureLead; // Higher = worse for us, so we want LOW score
 
-                    // CRITICAL: Check if target lane is compiled
-                    const isCompiled = state.player.compiled[laneIndex];
+            // Use universal scoring function
+            const scoredLanes = possibleLanes.map(laneIndex => ({
+                laneIndex,
+                score: scoreLaneForShiftTarget(cardToShift, cardOwner, laneIndex, state)
+            }));
 
-                    // BAD: Shifting would allow player to compile/recompile
-                    if (futureLaneValue >= 10 && futureLaneValue > state.opponent.laneValues[laneIndex]) {
-                        score += 1000; // MASSIVE PENALTY - Player can compile!
-                    }
-                    // GOOD: Compiled lane + NOT enabling compile = PERFECT!
-                    else if (isCompiled) {
-                        score -= 800; // HUGE BONUS (negative score = good) - Value becomes useless!
-                    }
-
-                    return { laneIndex, score };
-                });
-                scoredLanes.sort((a, b) => a.score - b.score); // LOWEST score is best
-                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
-            }
+            scoredLanes.sort((a, b) => b.score - a.score); // Highest score wins
+            return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
         }
 
         case 'select_own_card_to_shift_for_speed_3': {
-            const ownCards = state.opponent.lanes.flat();
-            ownCards.sort((a, b) => getCardThreat(b, 'opponent', state) - getCardThreat(a, 'opponent', state));
-            return { type: 'deleteCard', cardId: ownCards[0].id };
+            // Speed-3: Shift 1 of YOUR cards (AI's own cards), then flip Speed-3 itself
+            // Card loses value (3→2), so ONLY shift if:
+            // 1. Source lane is COMPILED (wasted value anyway) → shift to best uncompiled
+            // 2. Target lane can COMPILE with +2 (strategic win)
+
+            const candidates: { card: PlayedCard; sourceLaneIndex: number; bestScore: number }[] = [];
+
+            state.opponent.lanes.forEach((lane, sourceLaneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+
+                const sourceIsCompiled = state.opponent.compiled[sourceLaneIndex];
+                let bestScore = -Infinity;
+
+                // Check all possible target lanes for this card
+                for (let targetLaneIndex = 0; targetLaneIndex < 3; targetLaneIndex++) {
+                    if (targetLaneIndex === sourceLaneIndex) continue;
+
+                    const targetLaneValue = state.opponent.laneValues[targetLaneIndex];
+                    const targetIsCompiled = state.opponent.compiled[targetLaneIndex];
+
+                    if (targetIsCompiled) continue; // Don't shift TO compiled lanes
+
+                    // Calculate future value after shift (card becomes 2 when flipped)
+                    const futureTargetValue = targetLaneValue + 2;
+                    const playerTargetValue = state.player.laneValues[targetLaneIndex];
+
+                    let score = 0;
+
+                    // Strategy 1: Source is COMPILED → good to move out
+                    if (sourceIsCompiled) {
+                        score += 10000;
+                        // Prefer targets that are close to compiling
+                        if (futureTargetValue >= 10 && futureTargetValue > playerTargetValue) {
+                            score += 50000; // Can compile!
+                        } else if (futureTargetValue >= 8) {
+                            score += 5000; // Close to compile
+                        }
+                    }
+                    // Strategy 2: Source is NOT compiled, but target can COMPILE
+                    else if (futureTargetValue >= 10 && futureTargetValue > playerTargetValue) {
+                        score += 50000; // Worth losing 1 value to compile another lane!
+                    }
+                    // Otherwise: Bad move - loses value for no reason
+                    else {
+                        score = -10000;
+                    }
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                    }
+                }
+
+                candidates.push({ card: topCard, sourceLaneIndex, bestScore });
+            });
+
+            if (candidates.length === 0) return { type: 'skip' };
+
+            candidates.sort((a, b) => b.bestScore - a.bestScore);
+
+            // Only shift if it makes strategic sense (positive score)
+            if (candidates[0].bestScore > 0) {
+                return { type: 'deleteCard', cardId: candidates[0].card.id };
+            }
+
+            return { type: 'skip' };
         }
 
         case 'select_lane_for_water_3': {
@@ -1201,11 +1671,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const score = (playerTargets * (12 + playerHandSizeModifier)) - (opponentTargets * 6);
                 return { laneIndex: i, score };
             });
-            if (scoredLanes.some(l => l.score > 0)) {
-                scoredLanes.sort((a, b) => b.score - a.score);
-                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
-            }
-            return { type: 'selectLane', laneIndex: 0 };
+            // Always pick the lane with the highest score (even if negative, pick least bad option)
+            scoredLanes.sort((a, b) => b.score - a.score);
+            return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
         }
 
         case 'prompt_rearrange_protocols':
@@ -1225,10 +1693,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     const couldPlayBeforeJ = card.protocol === state.opponent.protocols[j];
                     const canPlayNowI = card.protocol === newProtocols[i];
                     const canPlayNowJ = card.protocol === newProtocols[j];
-                    if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card);
-                    if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card);
-                    if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card);
-                    if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card);
+                    if (canPlayNowI && !couldPlayBeforeI) score += calculateEffectBaseScore(card, state);
+                    if (canPlayNowJ && !couldPlayBeforeJ) score += calculateEffectBaseScore(card, state);
+                    if (!canPlayNowI && couldPlayBeforeI) score -= calculateEffectBaseScore(card, state);
+                    if (!canPlayNowJ && couldPlayBeforeJ) score -= calculateEffectBaseScore(card, state);
                 }
                 if (score > bestScore) {
                     bestScore = score;
@@ -1239,66 +1707,58 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_shift_for_gravity_1': {
-            // CRITICAL: Gravity-1 says "Shift 1 card either to or from this line"
-            // Must pick a card that is EITHER in the Gravity lane OR can be shifted INTO it
-            const { sourceLaneIndex } = action; // This is the Gravity-1 lane
+            // Gravity-1: "Shift 1 card either to or from this line"
+            // Use universal shift scoring logic
+            const { sourceLaneIndex } = action;
 
-            // Strategy 1: Shift player's strongest card AWAY from their lane (if it's not in Gravity lane)
-            const playerCards: { card: PlayedCard; laneIndex: number }[] = [];
-            state.player.lanes.forEach((lane, laneIndex) => {
-                if (lane.length > 0) {
-                    const topCard = lane[lane.length - 1]; // Only uncovered cards
-                    playerCards.push({ card: topCard, laneIndex });
-                }
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            // Evaluate ALL cards (own + opponent) and pick the best to shift
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                const score = scoreCardForShift(topCard, 'opponent', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
             });
 
-            // Filter: Only cards NOT in Gravity lane (we can shift them TO Gravity)
-            const playerCardsNotInGravity = playerCards.filter(c => c.laneIndex !== sourceLaneIndex);
-            if (playerCardsNotInGravity.length > 0) {
-                // Pick the strongest threat to disrupt
-                playerCardsNotInGravity.sort((a, b) =>
-                    getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state)
-                );
-                return { type: 'flipCard', cardId: playerCardsNotInGravity[0].card.id };
-            }
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                const score = scoreCardForShift(topCard, 'player', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
 
-            // Strategy 2: Shift a card FROM Gravity lane to another lane (clear our Gravity lane)
-            const gravityLaneCards = state.opponent.lanes[sourceLaneIndex];
-            if (gravityLaneCards.length > 0) {
-                const topCard = gravityLaneCards[gravityLaneCards.length - 1];
-                return { type: 'flipCard', cardId: topCard.id };
-            }
+            if (targets.length === 0) return { type: 'skip' };
 
-            // Fallback: Pick any player card (if Gravity lane is player's lane)
-            if (playerCards.length > 0) {
-                playerCards.sort((a, b) =>
-                    getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state)
-                );
-                return { type: 'flipCard', cardId: playerCards[0].card.id };
-            }
-
-            return { type: 'skip' };
+            // Pick highest score
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id }; // FIX: shiftCard not flipCard!
         }
 
         case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
-            const allUncovered = [...getUncovered('player'), ...getUncovered('opponent')];
-            if (allUncovered.length === 0) return { type: 'skip' };
-            const sortedTargets = allUncovered.sort((a, b) => {
-                const aIsPlayer = state.player.lanes.flat().some(c => c.id === a.id);
-                const bIsPlayer = state.player.lanes.flat().some(c => c.id === b.id);
-                if (aIsPlayer && a.isFaceUp && (!bIsPlayer || !b.isFaceUp)) return -1;
-                if (bIsPlayer && b.isFaceUp && (!aIsPlayer || !a.isFaceUp)) return 1;
-                if (aIsPlayer && a.isFaceUp && bIsPlayer && b.isFaceUp) {
-                    return getCardThreat(b, 'player', state) - getCardThreat(a, 'player', state);
+            // Gravity-2: Flip any uncovered card, then shift it to target lane
+            // Use scoreCardForFlip to choose which card to flip (and thus shift)
+            const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, owner: 'player', score });
                 }
-                const aScore = !aIsPlayer && !a.isFaceUp ? 50 + a.value : 1;
-                const bScore = !bIsPlayer && !b.isFaceUp ? 50 + b.value : 1;
-                return bScore - aScore;
             });
-            return { type: 'deleteCard', cardId: sortedTargets[0].id };
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, owner: 'opponent', score });
+                }
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: targets[0].card.id };
         }
 
         case 'select_face_down_card_to_shift_for_gravity_4': {
@@ -1503,52 +1963,42 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_opponent_face_down_card_to_shift': {
-            const validTargets: { card: PlayedCard; laneIndex: number }[] = [];
-            state.player.lanes.forEach((lane, index) => {
-                if (lane.length > 0) {
-                    const topCard = lane[lane.length - 1];
-                    if (!topCard.isFaceUp) validTargets.push({ card: topCard, laneIndex: index });
+            // Shift OPPONENT's face-down card (disrupt them)
+            // Rule: ONLY face-down cards from opponent
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                if (!topCard.isFaceUp) {
+                    // Use universal shift logic for opponent cards
+                    const score = scoreCardForShift(topCard, 'player', laneIndex, state);
+                    targets.push({ card: topCard, laneIndex, score });
                 }
             });
-            if (validTargets.length > 0) {
-                // CRITICAL: Prioritize compiled lanes (value is useless there!)
-                validTargets.sort((a, b) => {
-                    const aCompiled = state.player.compiled[a.laneIndex];
-                    const bCompiled = state.player.compiled[b.laneIndex];
 
-                    // First: Compiled lanes (BEST)
-                    if (aCompiled && !bCompiled) return -1;
-                    if (!aCompiled && bCompiled) return 1;
+            if (targets.length === 0) return { type: 'skip' };
 
-                    // Second: Higher value lanes (more disruption)
-                    return state.player.laneValues[b.laneIndex] - state.player.laneValues[a.laneIndex];
-                });
-                return { type: 'deleteCard', cardId: validTargets[0].card.id };
-            }
-            return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id }; // FIX: shiftCard not deleteCard!
         }
 
         case 'select_any_opponent_card_to_shift': {
-            const validTargets = state.player.lanes
-                .map((lane, laneIndex) => lane.length > 0 ? { card: lane[lane.length - 1], laneIndex } : null)
-                .filter((item): item is { card: PlayedCard; laneIndex: number } => item !== null);
+            // Shift ANY opponent card (face-up or face-down, disrupt them)
+            // Use universal shift logic
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
 
-            if (validTargets.length > 0) {
-                // CRITICAL: Prioritize UNCOMPILED lanes as SOURCE (hurts player more!)
-                validTargets.sort((a, b) => {
-                    const aCompiled = state.player.compiled[a.laneIndex];
-                    const bCompiled = state.player.compiled[b.laneIndex];
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                const score = scoreCardForShift(topCard, 'player', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
 
-                    // First: UNCOMPILED lanes (removing value hurts player!)
-                    if (!aCompiled && bCompiled) return -1; // Prefer uncompiled as source
-                    if (aCompiled && !bCompiled) return 1;  // Avoid compiled as source
+            if (targets.length === 0) return { type: 'skip' };
 
-                    // Second: Higher threat cards
-                    return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
-                });
-                return { type: 'deleteCard', cardId: validTargets[0].card.id };
-            }
-            return { type: 'skip' };
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id }; // FIX: shiftCard not deleteCard!
         }
 
         case 'select_card_from_hand_to_play': {
@@ -1575,7 +2025,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         if (canPlayFaceUp) {
                             const valueToAdd = card.value;
                             const resultingValue = state.opponent.laneValues[laneIndex] + valueToAdd;
-                            let score = getCardPower(card) + valueToAdd * 2;
+                            let score = calculateEffectBaseScore(card, state) + valueToAdd * 2;
 
                             if (resultingValue >= 10 && resultingValue > state.player.laneValues[laneIndex]) {
                                 score += 500; // Compile setup
@@ -1608,14 +2058,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_from_hand_to_give': {
             // Love-1: Give weakest card
             if (state.opponent.hand.length === 0) return { type: 'skip' };
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
+            const sortedHand = [...state.opponent.hand].sort((a, b) => calculateEffectBaseScore(a, state) - calculateEffectBaseScore(b, state));
             return { type: 'giveCard', cardId: sortedHand[0].id };
         }
 
         case 'select_card_from_hand_to_reveal': {
             // Psychic-1: Reveal strongest card for psychological effect
             if (state.opponent.hand.length === 0) return { type: 'skip' };
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(b) - getCardPower(a));
+            const sortedHand = [...state.opponent.hand].sort((a, b) => calculateEffectBaseScore(b, state) - calculateEffectBaseScore(a, state));
             return { type: 'revealCard', cardId: sortedHand[0].id };
         }
 
@@ -1624,7 +2074,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (state.opponent.hand.length === 0) return { type: 'skip' };
 
             // Discard weakest card (lowest power)
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
+            const sortedHand = [...state.opponent.hand].sort((a, b) => calculateEffectBaseScore(a, state) - calculateEffectBaseScore(b, state));
             return { type: 'resolvePlague2Discard', cardIds: [sortedHand[0].id] };
         }
 
@@ -1634,7 +2084,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (maxDiscard === 0) return { type: 'skip' };
 
             // Discard weakest cards to draw better ones
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
+            const sortedHand = [...state.opponent.hand].sort((a, b) => calculateEffectBaseScore(a, state) - calculateEffectBaseScore(b, state));
             const toDiscard = sortedHand.slice(0, maxDiscard);
             return { type: 'resolveFire4Discard', cardIds: toDiscard.map(c => c.id) };
         }
@@ -1645,7 +2095,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (maxDiscard === 0) return { type: 'skip' };
 
             // Discard weakest cards (keep disruption and high power)
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
+            const sortedHand = [...state.opponent.hand].sort((a, b) => calculateEffectBaseScore(a, state) - calculateEffectBaseScore(b, state));
             const toDiscard = sortedHand.slice(0, maxDiscard);
             return { type: 'resolveHate1Discard', cardIds: toDiscard.map(c => c.id) };
         }
@@ -1754,18 +2204,20 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_face_down_card_to_delete': {
+            // Death-3: Delete face-down UNCOVERED card only (top card of lane)
             // STRATEGIC: Prioritize player's face-down cards in NON-COMPILED, high-value lanes
             const targets: { cardId: string; score: number }[] = [];
 
             state.player.lanes.forEach((lane, laneIndex) => {
-                lane.forEach(c => {
-                    if (!c.isFaceUp) {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // Only uncovered card
+                    if (!topCard.isFaceUp) {
                         const laneValue = state.player.laneValues[laneIndex];
                         const isCompiled = state.player.compiled[laneIndex];
                         const compiledPenalty = isCompiled ? -1000 : 0; // Huge penalty for compiled lanes
-                        targets.push({ cardId: c.id, score: laneValue + 10 + compiledPenalty });
+                        targets.push({ cardId: topCard.id, score: laneValue + 10 + compiledPenalty });
                     }
-                });
+                }
             });
 
             if (targets.length > 0) {
@@ -1773,9 +2225,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'deleteCard', cardId: targets[0].cardId };
             }
 
-            // Fallback: own face-down
-            state.opponent.lanes.flat().forEach(c => {
-                if (!c.isFaceUp) targets.push({ cardId: c.id, score: -5 });
+            // Fallback: own face-down uncovered cards
+            state.opponent.lanes.forEach((lane) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) targets.push({ cardId: topCard.id, score: -5 });
+                }
             });
 
             if (targets.length > 0) {
@@ -1787,28 +2242,54 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_own_other_card_to_shift': {
-            // Shift own card (not the source)
-            const ownCards = state.opponent.lanes.flat().filter(c => c.id !== action.sourceCardId);
-            if (ownCards.length > 0) {
-                // Shift card that would benefit most from repositioning
-                ownCards.sort((a, b) => getCardThreat(b, 'opponent', state) - getCardThreat(a, 'opponent', state));
-                return { type: 'deleteCard', cardId: ownCards[0].id };
-            }
-            return { type: 'skip' };
+            // Speed-3 mid-game: Shift own card (not the source)
+            // Use universal shift logic
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                if (topCard.id === action.sourceCardId) return; // Exclude source card
+
+                const score = scoreCardForShift(topCard, 'opponent', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id }; // FIX: shiftCard not deleteCard!
         }
 
         case 'select_lane_to_shift_cards_for_light_3': {
-            // Light-3: Shift all face-down from one lane to another
-            const sourceLanes = [0, 1, 2].map(laneIndex => {
-                const faceDownCount = state.player.lanes[laneIndex].filter(c => !c.isFaceUp).length;
-                return { laneIndex, faceDownCount };
-            }).filter(l => l.faceDownCount > 0);
+            // Light-3: Shift all face-down cards from sourceLaneIndex to a target lane
+            // Source lane is already determined by the effect, AI chooses target
+            const sourceLaneIndex = action.sourceLaneIndex;
+            const actor = action.actor;
 
-            if (sourceLanes.length === 0) return { type: 'skip' };
+            // Available target lanes (exclude source lane)
+            const targetLanes = [0, 1, 2].filter(i => i !== sourceLaneIndex);
 
-            // Choose lane with most face-down cards
-            sourceLanes.sort((a, b) => b.faceDownCount - a.faceDownCount);
-            return { type: 'selectLane', laneIndex: sourceLanes[0].laneIndex };
+            if (targetLanes.length === 0) return { type: 'skip' };
+
+            // Score each target lane
+            const scores = targetLanes.map(targetIndex => {
+                let score = 0;
+
+                // Prefer shifting to weaker lanes to build them up
+                const targetValue = state[actor].laneValues[targetIndex];
+                score += (10 - targetValue) * 10; // Higher score for weaker lanes
+
+                // Prefer uncompiled lanes
+                if (!state[actor].compiled[targetIndex]) {
+                    score += 100;
+                }
+
+                return { laneIndex: targetIndex, score };
+            });
+
+            scores.sort((a, b) => b.score - a.score);
+            return { type: 'selectLane', laneIndex: scores[0].laneIndex };
         }
 
         case 'select_lane_to_shift_revealed_card_for_light_2': {
@@ -1861,7 +2342,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: true };
-        case 'prompt_give_card_for_love_1': return { type: 'resolveLove1Prompt', accept: true };
+        case 'prompt_give_card_for_love_1':
+            // Love-1: Give 1 card to opponent, draw 2
+            // SKIP: Giving cards to opponent is bad even with +1 net card advantage
+            // - Opponent gets more options
+            // - Might give away good cards
+            // - Better to keep card quality high
+            return { type: 'resolveLove1Prompt', accept: false };
         case 'plague_4_player_flip_optional': {
             // Plague-4: May flip the card face-up
             // Strategic: Flip if the card has good ongoing effects or we want it revealed
@@ -1969,7 +2456,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const { card, owner } = cardInfo;
             let flipScore = 0;
             if (owner === 'opponent') {
-                flipScore = getCardPower(card) + card.value;
+                flipScore = calculateEffectBaseScore(card, state) + card.value;
             } else {
                 flipScore = -getCardThreat(card, 'player', state);
             }
@@ -2037,7 +2524,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     // Third: Higher threat cards
                     return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
                 });
-                return { type: 'deleteCard', cardId: validTargets[0].card.id };
+                return { type: 'shiftCard', cardId: validTargets[0].card.id }; // FIX: shiftCard not deleteCard!
             }
             return { type: 'skip' };
         }

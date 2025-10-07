@@ -139,6 +139,7 @@ function processTriggeredEffects(
                 triggerType: effectKeyword === 'Start' ? 'start' : 'end'
             };
 
+            // FIXED: Now calls execute with proper signature (card, state, context)
             const result = execute(card, newState, context);
             newState = recalculateAllLaneValues(result.newState);
 

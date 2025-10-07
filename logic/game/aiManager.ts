@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest, EffectContext } from '../../types';
+import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest, EffectContext, GamePhase } from '../../types';
 import { easyAI } from '../ai/easy';
 import { normalAI } from '../ai/normal';
 import { hardAI } from '../ai/hardImproved';
@@ -129,9 +129,9 @@ export const resolveRequiredOpponentAction = (
         }
 
         // --- Generic Card Selection Handler ---
-        if (aiDecision.type === 'deleteCard' || aiDecision.type === 'flipCard' || aiDecision.type === 'returnCard') {
+        if (aiDecision.type === 'deleteCard' || aiDecision.type === 'flipCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard') {
             const { nextState, requiresAnimation } = resolveActionWithCard(state, aiDecision.cardId);
-            
+
             if (requiresAnimation) {
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
@@ -182,7 +182,7 @@ const handleRequiredAction = (
         if (choice === 'skip') {
             let stateAfterSkip = log(state, actor, "Opponent skips rearranging protocols.");
             stateAfterSkip.actionRequired = null;
-            
+
             if (originalAction.type === 'compile') {
                 const laneIndex = originalAction.laneIndex;
                 setTimeout(() => {
@@ -194,9 +194,14 @@ const handleRequiredAction = (
                     });
                 }, 1000);
                 return { ...stateAfterSkip, animationState: { type: 'compile' as const, laneIndex }, compilableLanes: [] };
-            } else { // fill_hand
+            } else if (originalAction.type === 'fill_hand') {
+                // Only fill hand if the original action was fill_hand
                 const stateAfterFill = actions.fillHand(stateAfterSkip, actor);
                 return phaseManager.processEndOfAction(stateAfterFill);
+            } else {
+                // For continue_turn or resume_interrupted_turn after compile: just process end of action
+                // Do NOT automatically fill hand!
+                return phaseManager.processEndOfAction(stateAfterSkip);
             }
         } else { // 'player' or 'opponent'
             const target = choice;
@@ -418,6 +423,18 @@ export const runOpponentTurn = (
     setGameState(currentState => {
         if (currentState.turn !== 'opponent' || currentState.winner || currentState.animationState) {
             return currentState;
+        }
+
+        // CRITICAL FIX: runOpponentTurn should only act in specific phases where opponent makes decisions
+        // start: Start-phase effects can create prompts for AI (e.g., Death-1)
+        // compile: AI decides whether to compile
+        // action: AI plays card or refreshes hand (ONLY ONCE per turn!)
+        // hand_limit: AI must discard cards if > 5
+        // end: End-phase effects can create prompts for AI (e.g., Love-1, Fire-3)
+        // NOT included: control (automatic phase)
+        const validPhases: GamePhase[] = ['start', 'compile', 'action', 'hand_limit', 'end'];
+        if (!validPhases.includes(currentState.phase)) {
+            return currentState; // Not a phase where opponent makes active decisions
         }
 
         if (currentState.actionRequired) {

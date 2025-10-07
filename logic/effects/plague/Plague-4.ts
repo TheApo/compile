@@ -3,16 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 import { log } from "../../utils/log";
 
 /**
  * Plague-4 End Phase Effect: Your opponent deletes 1 of their face-down cards. You may flip this card.
  */
-export const execute = (card: PlayedCard, state: GameState): EffectResult => {
-    const actor = state.turn;
-    const opponent = actor === 'player' ? 'opponent' : 'player';
-    
+export const execute = (card: PlayedCard, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner, opponent } = context;
+
     // Find opponent's UNCOVERED face-down cards, as per default targeting rules.
     const opponentUncoveredFaceDownCards: PlayedCard[] = [];
     for (const lane of state[opponent].lanes) {
@@ -25,7 +24,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
     }
 
     if (opponentUncoveredFaceDownCards.length > 0) {
-        return { 
+        return {
             newState: {
                 ...state,
                 actionRequired: {
@@ -36,9 +35,9 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
             }
         };
     }
-    
+
     // If opponent has no targetable face-down cards, skip straight to the player's optional flip
-    const newState = log(state, actor, "Plague-4: Opponent has no targetable face-down cards to delete.");
+    const newState = log(state, cardOwner, "Plague-4: Opponent has no targetable face-down cards to delete.");
     return {
         newState: {
             ...newState,
@@ -46,7 +45,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                 type: 'plague_4_player_flip_optional',
                 sourceCardId: card.id,
                 optional: true,
-                actor,
+                actor: cardOwner,
             }
         }
     };

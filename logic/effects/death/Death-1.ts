@@ -3,9 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
-export const execute = (card: PlayedCard, state: GameState): EffectResult => {
+/**
+ * Death-1 Start: You may draw 1 card. If you do, delete 1 other card, then delete this card.
+ */
+export const execute = (card: PlayedCard, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
     return {
         newState: {
             ...state,
@@ -13,7 +17,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                 type: 'prompt_death_1_effect',
                 sourceCardId: card.id,
                 optional: true,
-                actor: state.turn,
+                actor: cardOwner,
             }
         }
     };

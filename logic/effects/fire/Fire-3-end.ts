@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult } from "../../../types";
+import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 
 /**
  * Fire-3 End Phase: You may discard 1 card. If you do, flip 1 card.
  */
-export const execute = (card: PlayedCard, state: GameState): EffectResult => {
-    const player = state.turn;
-    if (state[player].hand.length > 0) {
+export const execute = (card: PlayedCard, state: GameState, context: EffectContext): EffectResult => {
+    const { cardOwner } = context;
+    if (state[cardOwner].hand.length > 0) {
         return {
             newState: {
                 ...state,
@@ -18,7 +18,7 @@ export const execute = (card: PlayedCard, state: GameState): EffectResult => {
                     type: 'prompt_fire_3_discard',
                     sourceCardId: card.id,
                     optional: true,
-                    actor: player,
+                    actor: cardOwner,
                 }
             }
         };
