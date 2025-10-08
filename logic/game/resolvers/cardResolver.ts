@@ -651,25 +651,24 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                  requiresAnimation = {
                     animationRequests: result.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        // Process any queued actions (like flip_self_for_water_0) WITHOUT ending the turn
-                        // This is critical: we only want to resolve the queue, not advance phases
+                        // Process any queued actions
                         const stateAfterQueue = phaseManager.processQueuedActions(s);
 
-                        // If a queued action created a new actionRequired (e.g., a shift prompt), return it
+                        // If a queued action created a new actionRequired, return it
                         if (stateAfterQueue.actionRequired) {
                             return stateAfterQueue;
                         }
 
-                        // Otherwise, continue in the current phase (action phase)
-                        return stateAfterQueue;
+                        // Otherwise, END THE TURN (Water-4 effect is done)
+                        return endTurnCb(stateAfterQueue);
                     }
                 };
             } else {
                 // No animation - process queue immediately
                 newState = phaseManager.processQueuedActions(newState);
             }
-            // We stay in action phase, no turn end needed
-            requiresTurnEnd = false;
+            // CRITICAL FIX: Turn should end after Water-4 return (like all other on-play effects)
+            requiresTurnEnd = !newState.actionRequired;
             break;
         }
         case 'select_any_card_to_flip': { // Life-1

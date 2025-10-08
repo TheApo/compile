@@ -326,7 +326,7 @@ const handleRequiredAction = (
         return phaseManager.processEndOfAction(nextState);
     }
 
-    if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard') {
+    if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard') {
         const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(state, aiDecision.cardId);
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;

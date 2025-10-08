@@ -73,6 +73,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     trackPlayerCardPlayed,
     trackPlayerCardDeleted,
     trackPlayerCoinFlip,
+    trackPlayerRearrange,
   } = useStatistics(playerProtocols, difficulty, useControlMechanic);
 
   const handleCoinFlipComplete = useCallback((starter: Player, choice: 'heads' | 'tails', won: boolean) => {
@@ -474,6 +475,10 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
                 onConfirm={(newOrder: string[]) => {
+                    // Track rearrange in statistics if player is doing it
+                    if (gameState.actionRequired?.actor === 'player') {
+                        trackPlayerRearrange();
+                    }
                     resolveRearrangeProtocols(newOrder);
                     setShowRearrangeModal(false);
                 }}

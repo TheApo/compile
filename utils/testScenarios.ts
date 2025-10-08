@@ -492,7 +492,112 @@ export const scenario11_Darkness1HateChain: TestScenario = {
 };
 
 /**
- * Szenario 12: Death-1 Delete → Speed-3 Uncover Bug-Test
+ * Szenario 12: Water-4 Return → Turn End Bug-Test
+ *
+ * Setup:
+ * - Opponent's Water-4 in Hand
+ * - Opponent's Life-4 (face-up) auf Lane 0
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: Opponent spielt Water-4 → returnt Life-4 → Turn sollte enden (Player's Turn)
+ * Erwartet:
+ *   1. Opponent spielt Water-4
+ *   2. Opponent wählt Life-4 zum Returnen
+ *   3. Life-4 geht auf Hand zurück
+ *   4. Turn endet → Player ist dran!
+ *   5. state.turn === 'player'
+ *
+ * Bug (VORHER): requiresTurnEnd = false → Opponent blieb am Zug und konnte nochmal spielen!
+ * Fix (NACHHER): requiresTurnEnd = !newState.actionRequired → Turn endet wie bei allen anderen On-Play-Effekten
+ */
+export const scenario12_Water4TurnEnd: TestScenario = {
+    name: "Water-4 Return → Turn End",
+    description: "🆕 Water-4 returnt Karte → Turn endet (Bug-Fix: Opponent spielt nicht zweimal)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Spirit', 'Light'],
+            ['Fire', 'Water', 'Death'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent: Water-4 in Hand
+        newState.opponent.hand = [createCard('Water', 4, true)];
+
+        // Opponent: Life-4 (face-up) auf Lane 0 (wird returned)
+        newState = placeCard(newState, 'opponent', 0, createCard('Life', 4, true));
+		newState = placeCard(newState, 'opponent', 2, createCard('Death', 4, false));
+
+		newState = placeCard(newState, 'player', 1, createCard('Spirit', 1, true));
+		newState = placeCard(newState, 'player', 2, createCard('Light', 5, false));
+
+        // Player: Ein paar Karten in Hand (damit klar ist dass Player dran ist danach)
+        newState.player.hand = [
+            createCard('Fire', 1),
+            createCard('Spirit', 2),
+            createCard('Hate', 4),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 13: Psychic-3 Discard + Shift Test
+ *
+ * Setup:
+ * - Opponent's Psychic-3 in Hand
+ * - Player hat 3 Karten auf Hand (zum Discarden)
+ * - Player hat je 1 Karte auf jeder Lane (zum Shiften)
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: Opponent spielt Psychic-3 → Player discardet 1 Karte → AI shiftet Player's Karte
+ * Erwartet:
+ *   1. Opponent spielt Psychic-3
+ *   2. Player muss 1 Karte discarden
+ *   3. AI wählt eine von Player's Karten zum Shiften
+ *   4. Karte wird geshiftet
+ *   5. KEIN "AI has no logic for mandatory action" Fehler!
+ *
+ * Bug (VORHER): shiftCard fehlte in handleRequiredAction → AI konnte nicht shiften
+ * Fix (NACHHER): shiftCard zu handleRequiredAction hinzugefügt
+ */
+export const scenario13_Psychic3ShiftTest: TestScenario = {
+    name: "Psychic-3 Discard + Shift",
+    description: "🆕 Psychic-3 On-Play → Player discardet → AI shiftet (Bug-Fix: AI kann shiften)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Psychic', 'Death', 'Metal'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent: Psychic-3 in Hand
+        newState.opponent.hand = [createCard('Psychic', 3, true)];
+
+        // Player: 3 Karten auf Hand (zum Discarden)
+        newState.player.hand = [
+            createCard('Fire', 1),
+            createCard('Water', 2),
+            createCard('Spirit', 1),
+        ];
+
+        // Player: Je 1 Karte auf jeder Lane (zum Shiften)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 14: Death-1 Delete → Speed-3 Uncover Bug-Test
  *
  * Setup:
  * - Opponent's Death-1 (face-up) auf Lane 0
@@ -502,13 +607,13 @@ export const scenario11_Darkness1HateChain: TestScenario = {
  * Test: Death-1 triggert → AI löscht Light-0 → Speed-3 uncovered → Player sollte Shift-Prompt bekommen
  * Erwartet:
  *   - Speed-3 wird uncovered (Log: "Speed-3 is uncovered and its effects are re-triggered")
- *   - Player bekommt Action: "Select one of your cards to shift"
+ *   - Player bekomme Action: "Select one of your cards to shift"
  *   - KEIN Softlock!
  *
  * Bug (VORHER): actionRequired wurde nach uncover auf null gesetzt → Shift-Prompt verloren
  * Fix (NACHHER): actionRequired wird geprüft und NICHT gelöscht wenn uncover sie gesetzt hat
  */
-export const scenario12_Death1UncoverTest: TestScenario = {
+export const scenario14_Death1UncoverTest: TestScenario = {
     name: "Death-1 Delete → Speed-3 Uncover",
     description: "🆕 Death-1 löscht Light-0 → Speed-3 uncovered → Player shiftet (Bug-Fix Test)",
     setup: (state: GameState) => {
@@ -550,5 +655,7 @@ export const allScenarios: TestScenario[] = [
     scenario9_Water,
     scenario10_Hate1Interrupt,
     scenario11_Darkness1HateChain,
-    scenario12_Death1UncoverTest,
+    scenario12_Water4TurnEnd,
+    scenario13_Psychic3ShiftTest,
+    scenario14_Death1UncoverTest,
 ];

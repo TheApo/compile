@@ -13,6 +13,7 @@ import {
     trackCardPlayed,
     trackCardDeleted,
     trackCoinFlip,
+    trackRearrange,
 } from '../utils/statistics';
 
 export function useStatistics(
@@ -57,6 +58,15 @@ export function useStatistics(
         });
     }, []);
 
+    // Track protocol rearrange (from Control mechanic or compile/refresh)
+    const trackPlayerRearrange = useCallback(() => {
+        setStatistics(prevStats => {
+            const newStats = trackRearrange(prevStats);
+            saveStatistics(newStats);
+            return newStats;
+        });
+    }, []);
+
     // End game and update statistics
     const endGame = useCallback((winner: Player, playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; handsRefreshed: number }, compilesCount?: number) => {
         if (gameStartTimeRef.current === null) return;
@@ -88,5 +98,6 @@ export function useStatistics(
         trackPlayerCardPlayed,
         trackPlayerCardDeleted,
         trackPlayerCoinFlip,
+        trackPlayerRearrange,
     };
 }
