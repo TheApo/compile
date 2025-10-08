@@ -329,9 +329,20 @@ const scoreCardForFlip = (card: PlayedCard, cardOwner: Player, laneIndex: number
     if (cardOwner === 'player') {
 
         if (card.isFaceUp) {
-            // Face-Up → Face-Down: Score = (Value - 2) × 100
-            // Value 0→-200, Value 1→-100 (BAD!), Value 2→0 (neutral), Value 6→400 (GREAT!)
-            let score = (card.value - 2) * 100;
+            // Face-Up → Face-Down: Consider BOTH the value change AND effect deactivation
+
+            // CRITICAL: How much does opponent GAIN from this flip?
+            // card.value → 2 means opponent gains (2 - card.value)
+            // Lower values (0, 1) are BAD to flip (opponent gains more!)
+            // Higher values (5, 6) are GOOD to flip (opponent loses value!)
+            const valueDelta = 2 - card.value; // Positive = opponent gains, Negative = opponent loses
+
+            // Base score: Prefer flipping HIGH value cards (opponent loses value)
+            // Value 0: delta=+2 → score=-200 (VERY BAD!)
+            // Value 1: delta=+1 → score=-100 (BAD!)
+            // Value 2: delta=0 → score=0 (neutral)
+            // Value 6: delta=-4 → score=+400 (GREAT!)
+            let score = -valueDelta * 100;
 
             // Bonus for deactivating strong effects
             const effectPower = getEffectPower(card);
@@ -2415,7 +2426,28 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Only accept if best score is positive (beneficial)
             return { type: 'resolveFire3Prompt', accept: bestScore > 5 };
         }
-        case 'prompt_shift_for_speed_3': return { type: 'resolveSpeed3Prompt', accept: true };
+        case 'prompt_shift_for_speed_3': {
+            // Speed-3 End: Shift 1 of your cards from other protocols
+            // Only accept if we have at least 2 cards (so we can shift 1)
+            const totalCards = state.opponent.lanes.flat().length;
+            const hasMultipleCards = totalCards >= 2;
+
+            // Also check: Do we have cards in other protocols than Speed-3?
+            const sourceCardId = action.sourceCardId;
+            const sourceCardInfo = findCardOnBoard(state, sourceCardId);
+            const sourceLaneIndex = sourceCardInfo ?
+                state.opponent.lanes.findIndex(l => l.some(c => c.id === sourceCardId)) : -1;
+
+            // Count cards in OTHER lanes
+            let cardsInOtherLanes = 0;
+            state.opponent.lanes.forEach((lane, i) => {
+                if (i !== sourceLaneIndex && lane.length > 0) {
+                    cardsInOtherLanes += lane.filter(c => c.id !== sourceCardId).length;
+                }
+            });
+
+            return { type: 'resolveSpeed3Prompt', accept: hasMultipleCards && cardsInOtherLanes > 0 };
+        }
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };

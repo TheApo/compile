@@ -6,7 +6,7 @@
 import { GameState, Player, GamePhase, PlayedCard, ActionRequired, EffectContext } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
-import { findCardOnBoard, internalShiftCard } from './helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log } from '../utils/log';
 
@@ -231,15 +231,16 @@ export const processQueuedActions = (state: GameState): GameState => {
         if (nextAction.type === 'gravity_2_shift_after_flip') {
             const { cardToShiftId, targetLaneIndex, cardOwner, actor, sourceCardId } = nextAction;
 
-            // Validate that both cards still exist AND source is still face-up before performing the shift
+            // Validate that both cards still exist AND source is still face-up AND uncovered before performing the shift
             const flippedCardStillExists = findCardOnBoard(mutableState, cardToShiftId);
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp;
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered;
 
             if (!flippedCardStillExists || !sourceCardStillValid) {
-                // One of the cards was deleted/returned, or source was flipped face-down → Cancel the shift
+                // One of the cards was deleted/returned, or source was flipped face-down/covered → Cancel the shift
                 const sourceName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Gravity-2';
-                mutableState = log(mutableState, actor, `${sourceName}: Shift cancelled because the card no longer exists or is face-down.`);
+                mutableState = log(mutableState, actor, `${sourceName}: Shift cancelled because the card no longer exists or is not active.`);
             } else {
                 // Perform the shift
                 const shiftResult = internalShiftCard(mutableState, cardToShiftId, cardOwner, targetLaneIndex, actor);
@@ -259,11 +260,12 @@ export const processQueuedActions = (state: GameState): GameState => {
             }
         }
 
-        // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists AND is face-up!
+        // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists, is face-up, AND uncovered!
         if (nextAction.type === 'shift_flipped_card_optional') {
             const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
-            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                // Source card was deleted/returned/flipped face-down → Cancel the shift
+            const sourceIsUncovered = isCardUncovered(mutableState, nextAction.sourceCardId);
+            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
+                // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                 mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
                 continue; // Action cancelled, move to next in queue
@@ -481,11 +483,12 @@ export const processEndOfAction = (state: GameState): GameState => {
                 }
             }
 
-            // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists AND is face-up!
+            // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists, is face-up, AND uncovered!
             if (nextAction.type === 'shift_flipped_card_optional') {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
-                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                    // Source card was deleted/returned/flipped face-down → Cancel the shift
+                const sourceIsUncovered = isCardUncovered(mutableState, nextAction.sourceCardId);
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
+                    // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
                     continue; // Action cancelled, move to next in queue

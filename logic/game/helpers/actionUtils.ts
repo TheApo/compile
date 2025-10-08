@@ -20,6 +20,22 @@ export function findCardOnBoard(state: GameState, cardId: string | undefined): {
     return null;
 }
 
+/**
+ * Check if a card is UNCOVERED (top card in its lane).
+ * Returns true only if the card is on top of its lane (not covered by another card).
+ */
+export function isCardUncovered(state: GameState, cardId: string | undefined): boolean {
+    if (!cardId) return false;
+    for (const p of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[p].lanes) {
+            if (lane.length > 0 && lane[lane.length - 1].id === cardId) {
+                return true; // Card is on top of this lane
+            }
+        }
+    }
+    return false; // Card not found or is covered
+}
+
 export function handleChainedEffectsOnDiscard(state: GameState, player: Player, sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start', sourceCardId?: string): GameState {
     let newState = { ...state };
 

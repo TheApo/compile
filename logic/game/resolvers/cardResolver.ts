@@ -6,7 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
-import { findCardOnBoard, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { getEffectiveCardValue } from '../stateManager';
 import * as phaseManager from '../phaseManager';
@@ -519,9 +519,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         // CRITICAL: Validate shift actions before setting as actionRequired!
                         if (nextAction?.type === 'shift_flipped_card_optional' || nextAction?.type === 'gravity_2_shift_after_flip') {
                             const sourceCardInfo = findCardOnBoard(stateAfterTriggers, nextAction.sourceCardId);
+                            const sourceIsUncovered = isCardUncovered(stateAfterTriggers, nextAction.sourceCardId);
 
-                            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                                // Source card was deleted/returned/flipped face-down → Cancel the shift
+                            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
+                                // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
                                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                                 let loggedState = log(stateAfterTriggers, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
 
@@ -944,13 +945,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const nextAction = newQueue.shift();
 
             // CRITICAL: Validate shift actions before setting as actionRequired!
-            // If the source card (e.g., Darkness-1, Gravity-2) was flipped face-down during the interrupt,
+            // If the source card (e.g., Darkness-1, Gravity-2) was flipped face-down/covered during the interrupt,
             // the shift action must be cancelled.
             if (nextAction?.type === 'shift_flipped_card_optional' || nextAction?.type === 'gravity_2_shift_after_flip') {
                 const sourceCardInfo = findCardOnBoard(newState, nextAction.sourceCardId);
+                const sourceIsUncovered = isCardUncovered(newState, nextAction.sourceCardId);
 
-                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                    // Source card was deleted/returned/flipped face-down → Cancel the shift
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
+                    // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     const loggedState = log(newState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
 

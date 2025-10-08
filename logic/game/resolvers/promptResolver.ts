@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, GamePhase } from '../../../types';
+import { GameState, Player, GamePhase, PlayedCard } from '../../../types';
 import { log } from '../../utils/log';
 import { findAndFlipCards, drawForPlayer } from '../../../utils/gameStateModifiers';
 import { findCardOnBoard, handleOnFlipToFaceUp } from '../helpers/actionUtils';
@@ -102,17 +102,35 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
 export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_shift_for_speed_3') return prevState;
 
-    const { actor } = prevState.actionRequired;
+    const { actor, sourceCardId } = prevState.actionRequired;
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     if (accept) {
-        newState = log(newState, actor, `Speed-3 End: ${actorName} chooses to shift a card.`);
-        newState.actionRequired = {
-            type: 'select_own_card_to_shift_for_speed_3',
-            sourceCardId: prevState.actionRequired.sourceCardId,
-            actor,
-        };
+        // CRITICAL: Check if there are valid targets (cards in other protocols)
+        // A valid target is an uncovered card that is not the source card.
+        const validTargets: PlayedCard[] = [];
+        for (const lane of newState[actor].lanes) {
+            if (lane.length > 0) {
+                const topCard = lane[lane.length - 1]; // This is the uncovered card.
+                if (topCard.id !== sourceCardId) {
+                    validTargets.push(topCard);
+                }
+            }
+        }
+
+        if (validTargets.length > 0) {
+            newState = log(newState, actor, `Speed-3 End: ${actorName} chooses to shift a card.`);
+            newState.actionRequired = {
+                type: 'select_own_card_to_shift_for_speed_3',
+                sourceCardId,
+                actor,
+            };
+        } else {
+            // No valid targets - auto-skip
+            newState = log(newState, actor, `Speed-3 End: ${actorName} has no cards to shift, skipping effect.`);
+            newState.actionRequired = null;
+        }
     } else {
         newState = log(newState, actor, `Speed-3 End: ${actorName} skips the shift.`);
         newState.actionRequired = null;
