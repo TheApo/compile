@@ -301,10 +301,10 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'selectLane' && (
-        action.type === 'select_lane_for_shift' || 
-        action.type === 'select_lane_for_death_2' || 
-        action.type === 'select_lane_for_play' || 
-        action.type === 'select_lane_for_water_3' || 
+        action.type === 'select_lane_for_shift' ||
+        action.type === 'select_lane_for_death_2' ||
+        action.type === 'select_lane_for_play' ||
+        action.type === 'select_lane_for_water_3' ||
         action.type === 'select_lane_for_metal_3_delete' ||
         action.type === 'select_lane_for_life_3_play' ||
         action.type === 'shift_flipped_card_optional' ||

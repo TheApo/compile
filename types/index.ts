@@ -423,7 +423,7 @@ export interface GameState {
     }
 }
 
-export type AIAction = 
+export type AIAction =
     | { type: 'playCard'; cardId: string; laneIndex: number; isFaceUp: boolean; }
     | { type: 'fillHand'; }
     | { type: 'discardCards'; cardIds: string[]; }
@@ -431,6 +431,7 @@ export type AIAction =
     | { type: 'deleteCard', cardId: string }
     | { type: 'flipCard', cardId: string }
     | { type: 'returnCard', cardId: string }
+    | { type: 'shiftCard', cardId: string }
     | { type: 'selectLane', laneIndex: number }
     | { type: 'skip' }
     | { type: 'resolveDeath1Prompt', accept: boolean }

@@ -644,6 +644,61 @@ export const scenario14_Death1UncoverTest: TestScenario = {
     }
 };
 
+/**
+ * Szenario 15: Gravity-2 Flip + Shift mit Interrupt (Metal-5 Discard)
+ *
+ * Setup:
+ * - Opponent's Hand: Gravity-2 (face-up)
+ * - Opponent's Lane 1: Metal-5 (face-down)
+ * - Opponent's Protokolle: ['Gravity', 'Metal', 'Fire']
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: AI spielt Gravity-2 → flippt Metal-5 → Metal-5 On-Flip discard triggert → AI muss danach Metal-5 shiften
+ * Erwartet:
+ *   1. AI spielt Gravity-2
+ *   2. AI flippt Metal-5 face-up (select_card_to_flip_and_shift_for_gravity_2)
+ *   3. Metal-5 On-Flip Effect: AI discardet 1 Karte
+ *   4. QUEUED ACTION: gravity_2_shift_after_flip → AI shiftet Metal-5
+ *   5. Turn endet
+ *
+ * Bug (VORHER): gravity_2_shift_after_flip nicht in aiManager → AI stuck
+ * Fix (NACHHER): gravity_2_shift_after_flip in selectLane handler hinzugefügt
+ */
+export const scenario15_Gravity2ShiftInterrupt: TestScenario = {
+    name: "Gravity-2 Flip → Metal-5 Discard → Shift",
+    description: "🆕 Gravity-2 flippt Metal-5 → Discard Interrupt → shiften (Bug-Fix: AI stuck)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Light'],
+            ['Gravity', 'Metal', 'Fire'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent's hand: Gravity-2 + 1 andere Karte (für Metal-5 Discard)
+        newState.opponent.hand = [
+            createCard('Gravity', 2, true),
+            createCard('Fire', 1)
+        ];
+
+        // Opponent's Lane 1: Metal-5 face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 5, false));
+
+        // Player: Ein paar Karten für vollständiges Setup
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Light', 3, true));
+
+        newState.player.hand = [
+            createCard('Water', 1),
+            createCard('Fire', 3)
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -658,4 +713,5 @@ export const allScenarios: TestScenario[] = [
     scenario12_Water4TurnEnd,
     scenario13_Psychic3ShiftTest,
     scenario14_Death1UncoverTest,
+    scenario15_Gravity2ShiftInterrupt,
 ];

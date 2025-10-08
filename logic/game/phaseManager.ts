@@ -6,7 +6,7 @@
 import { GameState, Player, GamePhase, PlayedCard, ActionRequired, EffectContext } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
-import { findCardOnBoard } from './helpers/actionUtils';
+import { findCardOnBoard, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log } from '../utils/log';
 
@@ -228,6 +228,26 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved, move to next in queue
         }
 
+        if (nextAction.type === 'gravity_2_shift_after_flip') {
+            const { cardToShiftId, targetLaneIndex, cardOwner, actor, sourceCardId } = nextAction;
+
+            // Validate that both cards still exist AND source is still face-up before performing the shift
+            const flippedCardStillExists = findCardOnBoard(mutableState, cardToShiftId);
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp;
+
+            if (!flippedCardStillExists || !sourceCardStillValid) {
+                // One of the cards was deleted/returned, or source was flipped face-down → Cancel the shift
+                const sourceName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Gravity-2';
+                mutableState = log(mutableState, actor, `${sourceName}: Shift cancelled because the card no longer exists or is face-down.`);
+            } else {
+                // Perform the shift
+                const shiftResult = internalShiftCard(mutableState, cardToShiftId, cardOwner, targetLaneIndex, actor);
+                mutableState = shiftResult.newState;
+            }
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
         // --- Conditional actions (check if possible) ---
         if (nextAction.type === 'select_any_opponent_card_to_shift') {
             const opponent = nextAction.actor === 'player' ? 'opponent' : 'player';
@@ -236,6 +256,17 @@ export const processQueuedActions = (state: GameState): GameState => {
                 const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
                 mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
                 continue; // Action impossible, skip and move to next in queue
+            }
+        }
+
+        // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists AND is face-up!
+        if (nextAction.type === 'shift_flipped_card_optional') {
+            const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
+            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                // Source card was deleted/returned/flipped face-down → Cancel the shift
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+                continue; // Action cancelled, move to next in queue
             }
         }
 
@@ -257,6 +288,19 @@ export const processEndOfAction = (state: GameState): GameState => {
     // and interrupt actions for the other player (which the useGameState hook will trigger the AI for).
     if (state.actionRequired) {
         return state;
+    }
+
+    // CRITICAL FIX: Process queued actions BEFORE checking for interrupts.
+    // This ensures actions like gravity_2_shift_after_flip are processed even when
+    // there's no interrupt (e.g., opponent flips their own card, triggering their own discard).
+    if (state.queuedActions && state.queuedActions.length > 0) {
+        const stateAfterQueue = processQueuedActions(state);
+        // If queued actions created a new actionRequired, return immediately
+        if (stateAfterQueue.actionRequired) {
+            return stateAfterQueue;
+        }
+        // Continue with the processed state
+        state = stateAfterQueue;
     }
 
     // Check for a completed interrupt first.
@@ -434,6 +478,17 @@ export const processEndOfAction = (state: GameState): GameState => {
                     const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
                     mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
                     continue; // Action impossible, skip and move to next in queue
+                }
+            }
+
+            // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists AND is face-up!
+            if (nextAction.type === 'shift_flipped_card_optional') {
+                const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                    // Source card was deleted/returned/flipped face-down → Cancel the shift
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                    mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+                    continue; // Action cancelled, move to next in queue
                 }
             }
 

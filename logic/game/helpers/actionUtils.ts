@@ -21,13 +21,18 @@ export function findCardOnBoard(state: GameState, cardId: string | undefined): {
 }
 
 export function handleChainedEffectsOnDiscard(state: GameState, player: Player, sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start', sourceCardId?: string): GameState {
-    if (!sourceEffect || !sourceCardId) return state;
-
     let newState = { ...state };
+
+    // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
+    newState.actionRequired = null;
+
+    // If there's no chained effect, we still need to process queued actions if they exist
+    if (!sourceEffect || !sourceCardId) {
+        return newState; // No chained effect, but actionRequired is now cleared
+    }
+
     const sourceCard = findCardOnBoard(newState, sourceCardId)?.card;
     const sourceCardName = sourceCard ? `${sourceCard.protocol}-${sourceCard.value}` : 'A card effect';
-
-    newState.actionRequired = null; // Clear the completed discard action before setting a new one
 
     // FIX: If there are queued actions, we need to queue the chained effect too,
     // rather than setting it as the immediate actionRequired. This prevents
@@ -68,11 +73,25 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             break;
     }
 
-    // FIX: If there are queued actions, append the chained effect to the queue.
-    // Otherwise, set it as the immediate actionRequired.
+    // FIX: If there are queued actions, we need to insert the chained effect BEFORE any
+    // follow-up actions (like shift_flipped_card_optional) to ensure correct order.
+    // Example: Fire-1 effect should be: Discard → Delete → Shift (if source still valid)
     if (nextAction) {
         if (hasQueuedActions) {
-            newState.queuedActions = [...(newState.queuedActions || []), nextAction];
+            // Split queue: chained effect goes BEFORE shift actions, but AFTER other effects
+            const existingQueue = newState.queuedActions || [];
+            const shiftActions = existingQueue.filter(a =>
+                a.type === 'shift_flipped_card_optional' ||
+                a.type === 'gravity_2_shift_after_flip'
+            );
+            const otherActions = existingQueue.filter(a =>
+                a.type !== 'shift_flipped_card_optional' &&
+                a.type !== 'gravity_2_shift_after_flip'
+            );
+
+
+            // Order: other effects → chained effect → shift actions
+            newState.queuedActions = [...otherActions, nextAction, ...shiftActions];
         } else {
             newState.actionRequired = nextAction;
         }

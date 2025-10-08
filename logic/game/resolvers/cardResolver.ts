@@ -143,18 +143,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 // 1. The flipped card still exists (not deleted/returned)
                 // 2. The source card (Darkness-1) still exists (not deleted/returned)
                 if (interruptAction && interruptAction !== nextAction) {
-                    // Check if both cards still exist after the interrupt
+                    // If there's an interrupt, queue the shift prompt.
+                    // The validation (checking if source is still face-up) happens at the end of this function.
                     const flippedCardStillExists = findCardOnBoard(result.newState, targetCardId);
-                    const sourceCardStillExists = findCardOnBoard(result.newState, sourceCardId);
 
-                    if (flippedCardStillExists && sourceCardStillExists) {
-                        // Both cards exist - queue the shift prompt AFTER the interrupt
+                    if (flippedCardStillExists) {
+                        // Flipped card still exists - queue the shift prompt AFTER the interrupt
+                        // Note: We don't check if source is face-up here because the interrupt hasn't been resolved yet!
                         result.newState.queuedActions = [
                             ...(result.newState.queuedActions || []),
                             nextAction
                         ];
                     }
-                    // If either card was deleted/returned, the shift prompt is cancelled (don't queue it)
+                    // If the flipped card was deleted/returned during the interrupt, don't queue the shift
                 }
 
                 newState = result.newState;
@@ -173,14 +174,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_opponent_covered_card_to_shift':
         case 'select_face_down_card_to_shift_for_darkness_4':
         case 'select_any_opponent_card_to_shift': {
-            // CRITICAL: For optional shift actions (like Darkness-1), validate that the source card still exists!
-            // If the source card was deleted/returned during an interrupt, the shift is cancelled.
+            // CRITICAL: For optional shift actions (like Darkness-1), validate that the source card still exists AND is face-up!
+            // If the source card was deleted/returned/flipped during an interrupt, the shift is cancelled.
             if (prev.actionRequired.type === 'shift_flipped_card_optional') {
                 const sourceCardId = prev.actionRequired.sourceCardId;
-                const sourceCardStillExists = findCardOnBoard(prev, sourceCardId);
-                if (!sourceCardStillExists) {
-                    // Source card (e.g., Darkness-1) was deleted/returned → Cancel the shift
-                    newState = { ...prev, actionRequired: null };
+                const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                    // Source card (e.g., Darkness-1) was deleted/returned/flipped → Cancel the shift
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                    newState = log(prev, prev.actionRequired.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+                    newState.actionRequired = null;
                     requiresTurnEnd = true;
                     break;
                 }
@@ -512,6 +515,27 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         // Pop the first queued action and make it the current action
                         const queueCopy = [...stateAfterTriggers.queuedActions];
                         const nextAction = queueCopy.shift();
+
+                        // CRITICAL: Validate shift actions before setting as actionRequired!
+                        if (nextAction?.type === 'shift_flipped_card_optional' || nextAction?.type === 'gravity_2_shift_after_flip') {
+                            const sourceCardInfo = findCardOnBoard(stateAfterTriggers, nextAction.sourceCardId);
+
+                            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                                // Source card was deleted/returned/flipped face-down → Cancel the shift
+                                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                                let loggedState = log(stateAfterTriggers, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+
+                                // Continue processing remaining queue
+                                if (queueCopy.length > 0) {
+                                    const nextNextAction = queueCopy.shift();
+                                    return { ...loggedState, actionRequired: nextNextAction, queuedActions: queueCopy };
+                                } else {
+                                    // No more queued actions - end turn
+                                    return endTurnCb({ ...loggedState, actionRequired: null, queuedActions: [] });
+                                }
+                            }
+                        }
+
                         return {
                             ...stateAfterTriggers,
                             actionRequired: nextAction,
@@ -836,12 +860,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 // 1. The flipped card still exists (not deleted/returned)
                 // 2. The source card (Gravity-2) still exists (not deleted/returned)
                 if (interruptAction) {
-                    // Check if both cards still exist after the interrupt
+                    // If there's an interrupt, queue the shift action.
+                    // The validation (checking if source is still face-up) happens in processQueuedActions.
                     const flippedCardStillExists = findCardOnBoard(result.newState, targetCardId);
-                    const sourceCardStillExists = findCardOnBoard(result.newState, sourceCardId);
 
-                    if (flippedCardStillExists && sourceCardStillExists) {
-                        // Both cards exist - queue the shift to happen AFTER the interrupt
+                    if (flippedCardStillExists) {
+                        // Flipped card still exists - queue the shift to happen AFTER the interrupt
+                        // Note: We don't check if source is face-up here because the interrupt hasn't been resolved yet!
                         const shiftAction: ActionRequired = {
                             type: 'gravity_2_shift_after_flip',
                             cardToShiftId: targetCardId,
@@ -855,7 +880,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             shiftAction
                         ];
                     }
-                    // If either card was deleted/returned, the shift is cancelled (don't queue it)
+                    // If the flipped card was deleted/returned during the interrupt, don't queue the shift
 
                     newState = result.newState;
                     requiresTurnEnd = false;
@@ -875,12 +900,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             // This is the queued shift action after Gravity-2 flip triggered an interrupt
             const { cardToShiftId, targetLaneIndex, cardOwner, actor, sourceCardId } = prev.actionRequired;
 
-            // CRITICAL: Validate that both cards still exist before performing the shift!
+            // CRITICAL: Validate that both cards still exist AND source is still face-up before performing the shift!
             const flippedCardStillExists = findCardOnBoard(prev, cardToShiftId);
-            const sourceCardStillExists = findCardOnBoard(prev, sourceCardId);
+            const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
+            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp;
 
-            if (!flippedCardStillExists || !sourceCardStillExists) {
-                // One of the cards was deleted/returned → Cancel the shift
+            if (!flippedCardStillExists || !sourceCardStillValid) {
+                // One of the cards was deleted/returned, or source was flipped face-down → Cancel the shift
                 newState = { ...prev, actionRequired: null };
                 requiresTurnEnd = true;
                 break;
@@ -916,6 +942,28 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         if (newState.queuedActions && newState.queuedActions.length > 0) {
             const newQueue = [...newState.queuedActions];
             const nextAction = newQueue.shift();
+
+            // CRITICAL: Validate shift actions before setting as actionRequired!
+            // If the source card (e.g., Darkness-1, Gravity-2) was flipped face-down during the interrupt,
+            // the shift action must be cancelled.
+            if (nextAction?.type === 'shift_flipped_card_optional' || nextAction?.type === 'gravity_2_shift_after_flip') {
+                const sourceCardInfo = findCardOnBoard(newState, nextAction.sourceCardId);
+
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                    // Source card was deleted/returned/flipped face-down → Cancel the shift
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                    const loggedState = log(newState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+
+                    // Continue processing remaining queue
+                    if (newQueue.length > 0) {
+                        const nextNextAction = newQueue.shift();
+                        return { nextState: { ...loggedState, actionRequired: nextNextAction, queuedActions: newQueue }, requiresTurnEnd: false };
+                    } else {
+                        return { nextState: { ...loggedState, actionRequired: null, queuedActions: [] }, requiresTurnEnd: true };
+                    }
+                }
+            }
+
             return { nextState: { ...newState, actionRequired: nextAction, queuedActions: newQueue }, requiresTurnEnd: false };
         }
     } else if (!requiresAnimation && newState.actionRequired !== null) {

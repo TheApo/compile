@@ -230,7 +230,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 console.log('Debug: Setting up Death-1 Uncover test scenario.');
                 // Import the scenario and use it as a setup function
                 import('../utils/testScenarios').then(module => {
-                    setupTestScenario(module.scenario11_Death1UncoverTest.setup);
+                    setupTestScenario(module.scenario14_Death1UncoverTest.setup);
                 });
             }
         }
