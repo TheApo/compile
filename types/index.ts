@@ -240,6 +240,13 @@ export type ActionRequired = {
     targetLaneIndex: number;
     actor: Player;
 } | {
+    type: 'gravity_2_shift_after_flip';
+    cardToShiftId: string;
+    targetLaneIndex: number;
+    cardOwner: Player;
+    sourceCardId: string;
+    actor: Player;
+} | {
     type: 'select_face_down_card_to_shift_for_gravity_4';
     sourceCardId: string;
     targetLaneIndex: number;

@@ -158,13 +158,11 @@ export const processQueuedActions = (state: GameState): GameState => {
         return state;
     }
 
-    console.log('[processQueuedActions] Processing queued actions:', state.queuedActions);
     let mutableState = { ...state };
     let queuedActions = [...mutableState.queuedActions];
 
     while (queuedActions.length > 0) {
         const nextAction = queuedActions.shift()!;
-        console.log('[processQueuedActions] Processing action:', nextAction.type);
 
         // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
         if (nextAction.sourceCardId) {
@@ -180,7 +178,6 @@ export const processQueuedActions = (state: GameState): GameState => {
         if (nextAction.type === 'flip_self_for_water_0') {
             const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-            console.log('[processQueuedActions] Processing flip_self_for_water_0:', { sourceCardId, sourceCardInfo: sourceCardInfo ? 'found' : 'NOT FOUND' });
 
             // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
@@ -193,7 +190,6 @@ export const processQueuedActions = (state: GameState): GameState => {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
                 mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
             }
-            console.log('[processQueuedActions] flip_self_for_water_0 resolved, continuing to next action');
             continue; // Action resolved (or cancelled), move to next in queue
         }
 
@@ -273,6 +269,34 @@ export const processEndOfAction = (state: GameState): GameState => {
         restoredState.turn = originalTurnPlayer;
         restoredState.phase = originalPhase;
 
+        // CRITICAL FIX: If interrupt happened during start/end phase, process queued actions first,
+        // then return to let the normal phase progression continue (via runOpponentTurn).
+        // Otherwise the while-loop below will advance phases without giving the AI a chance to act.
+        if (originalPhase === 'start' || originalPhase === 'end') {
+            // FIX: Process queued actions (like flip_self_for_psychic_4) before returning
+            if (restoredState.queuedActions && restoredState.queuedActions.length > 0) {
+                restoredState = processQueuedActions(restoredState);
+            }
+            // If queued actions were processed and no new actionRequired was created,
+            // AND we're in end phase, we need to end the turn now (even if animation is playing).
+            if (!restoredState.actionRequired && originalPhase === 'end') {
+                // End the turn: switch turn and reset to start phase
+                const nextTurn: Player = restoredState.turn === 'player' ? 'opponent' : 'player';
+                const endingPlayerState = {...restoredState[restoredState.turn], cannotCompile: false};
+                return {
+                    ...restoredState,
+                    [restoredState.turn]: endingPlayerState,
+                    turn: nextTurn,
+                    phase: 'start',
+                    processedStartEffectIds: [],
+                    processedEndEffectIds: [],
+                    processedSpeed1TriggerThisTurn: false,
+                    processedUncoverEventIds: [],
+                };
+            }
+            return restoredState;
+        }
+
         // The interrupt is over. The original turn player's action that was
         // interrupted is now considered complete. Continue processing the rest
         // of their turn from this restored state, without returning early.
@@ -332,13 +356,11 @@ export const processEndOfAction = (state: GameState): GameState => {
 
     // Check for a queued ACTION first.
     if (state.queuedActions && state.queuedActions.length > 0) {
-        console.log('[processEndOfAction] Processing queued actions:', state.queuedActions);
         let mutableState = { ...state };
         let queuedActions = [...mutableState.queuedActions];
 
         while (queuedActions.length > 0) {
             const nextAction = queuedActions.shift()!;
-            console.log('[processEndOfAction] Processing action:', nextAction.type);
 
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
             if (nextAction.sourceCardId) {
@@ -354,7 +376,6 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-                console.log('[phaseManager] Processing flip_self_for_water_0:', { sourceCardId, sourceCardInfo: sourceCardInfo ? 'found' : 'NOT FOUND' });
 
                 // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
@@ -367,7 +388,6 @@ export const processEndOfAction = (state: GameState): GameState => {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
                     mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
                 }
-                console.log('[phaseManager] flip_self_for_water_0 resolved, continuing to next action');
                 continue; // Action resolved (or cancelled), move to next in queue
             }
 

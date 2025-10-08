@@ -7,9 +7,11 @@ import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../typ
 
 /**
  * Water-4: Return 1 of your cards.
+ * IMPORTANT: This is NOT optional! If Water-4 is the only uncovered card, it returns itself.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
     const { cardOwner } = context;
+
     return {
         newState: {
             ...state,
