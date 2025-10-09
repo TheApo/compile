@@ -856,6 +856,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
                 const interruptAction = result.newState.actionRequired;
 
+                console.log(`[Gravity-2] After flip, interruptAction:`, interruptAction?.type || 'none');
+
                 // CRITICAL: If the flipped card triggers an effect, we need to COMPLETE that first,
                 // then do the shift ONLY if:
                 // 1. The flipped card still exists (not deleted/returned)
@@ -864,6 +866,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // If there's an interrupt, queue the shift action.
                     // The validation (checking if source is still face-up) happens in processQueuedActions.
                     const flippedCardStillExists = findCardOnBoard(result.newState, targetCardId);
+
+                    console.log(`[Gravity-2] Flipped card still exists:`, !!flippedCardStillExists);
 
                     if (flippedCardStillExists) {
                         // Flipped card still exists - queue the shift to happen AFTER the interrupt
@@ -880,6 +884,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             ...(result.newState.queuedActions || []),
                             shiftAction
                         ];
+
+                        console.log(`[Gravity-2] Queued shift action. Queue length:`, result.newState.queuedActions.length);
                     }
                     // If the flipped card was deleted/returned during the interrupt, don't queue the shift
 
@@ -890,6 +896,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 stateAfterFlip = result.newState;
             }
 
+            console.log(`[Gravity-2] No interrupt detected, performing immediate shift`);
             // No interrupt - perform shift immediately
             const shiftResult = internalShiftCard(stateAfterFlip, targetCardId, cardInfoBeforeFlip!.owner, targetLaneIndex, actor);
             newState = shiftResult.newState;

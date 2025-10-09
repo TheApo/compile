@@ -308,6 +308,7 @@ const handleRequiredAction = (
         action.type === 'select_lane_for_metal_3_delete' ||
         action.type === 'select_lane_for_life_3_play' ||
         action.type === 'shift_flipped_card_optional' ||
+        action.type === 'gravity_2_shift_after_flip' ||
         action.type === 'select_lane_to_shift_revealed_card_for_light_2' ||
         action.type === 'select_lane_to_shift_cards_for_light_3'
     )) {

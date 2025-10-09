@@ -84,6 +84,10 @@ function initScenarioBase(state: GameState, playerProtocols: string[], opponentP
     newState.actionRequired = null;
     newState.queuedActions = [];
 
+    // CRITICAL: Clear interrupt state from previous scenarios
+    newState._interruptedTurn = undefined;
+    newState._interruptedPhase = undefined;
+
     // Initialize effect tracking arrays
     newState.processedStartEffectIds = [];
     newState.processedEndEffectIds = [];

@@ -131,17 +131,20 @@ export const advancePhase = (state: GameState): GameState => {
             const nextTurn: Player = turnPlayer === 'player' ? 'opponent' : 'player';
             // The `cannotCompile` flag applies for one turn. Now that this player's turn is over,
             // we can reset their flag so they are able to compile on their *next* turn.
-            const endingPlayerState = {...nextState[turnPlayer], cannotCompile: false}; 
-            
-            return { 
-                ...nextState, 
+            const endingPlayerState = {...nextState[turnPlayer], cannotCompile: false};
+
+            return {
+                ...nextState,
                 [turnPlayer]: endingPlayerState, // Apply the reset to the player whose turn just ended
-                turn: nextTurn, 
+                turn: nextTurn,
                 phase: 'start',
                 processedStartEffectIds: [],
                 processedEndEffectIds: [],
                 processedSpeed1TriggerThisTurn: false,
                 processedUncoverEventIds: [],
+                // CRITICAL: Clear interrupt state when starting a new turn
+                _interruptedTurn: undefined,
+                _interruptedPhase: undefined,
             };
         }
     }
@@ -338,6 +341,9 @@ export const processEndOfAction = (state: GameState): GameState => {
                     processedEndEffectIds: [],
                     processedSpeed1TriggerThisTurn: false,
                     processedUncoverEventIds: [],
+                    // CRITICAL: Clear interrupt state when starting a new turn
+                    _interruptedTurn: undefined,
+                    _interruptedPhase: undefined,
                 };
             }
             return restoredState;

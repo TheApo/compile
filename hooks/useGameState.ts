@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, Player, Difficulty, PlayedCard, AnimationRequest, GamePhase, ActionRequired, Card } from '../types';
 import * as stateManager from '../logic/game/stateManager';
 import * as phaseManager from '../logic/game/phaseManager';
@@ -32,6 +32,12 @@ export const useGameState = (
     });
 
     const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
+    // Ref-based lock to prevent race conditions between AI processing hooks
+    const isProcessingAIRef = useRef<boolean>(false);
+
+    // Scenario version counter - increments on each scenario change to invalidate old timers
+    const scenarioVersionRef = useRef<number>(0);
 
     // Update turn when startingPlayer changes (from coin flip)
     useEffect(() => {
@@ -537,6 +543,13 @@ export const useGameState = (
     }, [getTurnProgressionCallback, onEndGame]);
 
     const setupTestScenario = useCallback((scenarioOrFunction: string | ((state: GameState) => GameState)) => {
+        // CRITICAL: Clear the processing lock when switching scenarios
+        // This prevents old setTimeout callbacks from interfering with the new scenario
+        isProcessingAIRef.current = false;
+
+        // Increment scenario version to invalidate any pending setTimeout callbacks
+        scenarioVersionRef.current++;
+
         setGameState(currentState => {
             // NEW: If it's a function, call it directly with current state
             if (typeof scenarioOrFunction === 'function') {
@@ -811,9 +824,23 @@ export const useGameState = (
     }, [gameState.animationState, getTurnProgressionCallback]);
 
 
+    // Hook 1: AI Turn Processing (Normal opponent turns)
     useEffect(() => {
-        if (gameState.turn === 'opponent' && !gameState.winner && !gameState.animationState) {
+        if (gameState.turn === 'opponent' &&
+            !gameState.winner &&
+            !gameState.animationState &&
+            !isProcessingAIRef.current) {
+
+            isProcessingAIRef.current = true;
+            const currentScenarioVersion = scenarioVersionRef.current;
+
             const timer = setTimeout(() => {
+                // Check if scenario has changed - if so, abort this callback
+                if (scenarioVersionRef.current !== currentScenarioVersion) {
+                    console.log('[AI Hook 1] Scenario changed, aborting stale callback');
+                    return;
+                }
+
                 aiManager.runOpponentTurn(gameState, setGameState, difficulty, {
                     compileLane: (s, l) => resolvers.performCompile(s, l, onEndGame),
                     playCard: resolvers.playCard,
@@ -846,26 +873,42 @@ export const useGameState = (
                     revealOpponentHand: resolvers.revealOpponentHand,
                 }, processAnimationQueue, phaseManager);
             }, 1500);
-            return () => clearTimeout(timer);
+            return () => {
+                clearTimeout(timer);
+                isProcessingAIRef.current = false;
+            };
         }
     }, [gameState.turn, gameState.winner, gameState.animationState, difficulty, onEndGame, processAnimationQueue, gameState.actionRequired]);
 
+    // Hook 2: Opponent Action During Player Turn (Higher priority - shorter timeout)
     useEffect(() => {
         const action = gameState.actionRequired;
         // CRITICAL FIX: Check for opponent actions during player's turn, INCLUDING during interrupts.
         // If an interrupt is active (_interruptedTurn === 'player'), the opponent can have actions even though turn === 'opponent'.
         const isPlayerTurnOrInterrupt = gameState.turn === 'player' || gameState._interruptedTurn === 'player';
+        const hasOpponentAction = action && 'actor' in action && action.actor === 'opponent';
         const isOpponentActionDuringPlayerTurn =
             isPlayerTurnOrInterrupt &&
             !gameState.animationState &&
-            action && 'actor' in action && action.actor === 'opponent';
+            hasOpponentAction;
 
-        if (isOpponentActionDuringPlayerTurn) {
+        // CRITICAL: Check the lock AND set it in a way that prevents race conditions
+        // We check !isProcessingAIRef.current AFTER all other conditions, and set it immediately
+        if (isOpponentActionDuringPlayerTurn && !isProcessingAIRef.current) {
+            isProcessingAIRef.current = true;
+            const currentScenarioVersion = scenarioVersionRef.current;
+
             const timer = setTimeout(() => {
+                // Check if scenario has changed - if so, abort this callback
+                if (scenarioVersionRef.current !== currentScenarioVersion) {
+                    console.log('[AI Hook 2] Scenario changed, aborting stale callback');
+                    return;
+                }
+
                 aiManager.resolveRequiredOpponentAction(
-                    gameState, 
-                    setGameState, 
-                    difficulty, 
+                    gameState,
+                    setGameState,
+                    difficulty,
                     {
                         discardCards: resolvers.discardCards,
                         flipCard: resolvers.flipCard,
@@ -879,14 +922,17 @@ export const useGameState = (
                         resolveHate1Discard: resolvers.resolveHate1Discard,
                         revealOpponentHand: resolvers.revealOpponentHand,
                         resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
-                    }, 
-                    phaseManager, 
+                    },
+                    phaseManager,
                     processAnimationQueue,
                     resolvers.resolveActionWithCard,
                     resolvers.resolveActionWithLane
                 );
-            }, 1500); // AI "thinking" time
-            return () => clearTimeout(timer);
+            }, 1400); // Shorter timeout - interrupts have priority!
+            return () => {
+                clearTimeout(timer);
+                isProcessingAIRef.current = false;
+            };
         }
     }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue, onEndGame]);
 
