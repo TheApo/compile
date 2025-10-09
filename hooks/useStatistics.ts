@@ -58,10 +58,10 @@ export function useStatistics(
         });
     }, []);
 
-    // Track protocol rearrange (from Control mechanic or compile/refresh)
-    const trackPlayerRearrange = useCallback(() => {
+    // Track protocol rearrange (from Control mechanic only)
+    const trackPlayerRearrange = useCallback((actor: 'player' | 'opponent') => {
         setStatistics(prevStats => {
-            const newStats = trackRearrange(prevStats);
+            const newStats = trackRearrange(prevStats, actor);
             saveStatistics(newStats);
             return newStats;
         });

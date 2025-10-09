@@ -18,6 +18,7 @@ export interface GameStatistics {
         totalPlaytime: number; // in seconds
         fastestWin: number | null; // in seconds
         longestGame: number | null; // in seconds
+        lastGameDuration: number | null; // in seconds
         currentStreak: number; // positive = win streak, negative = lose streak
         longestWinStreak: number;
         longestLoseStreak: number;
@@ -56,7 +57,9 @@ export interface GameStatistics {
     control: {
         gamesWithControl: number;
         gamesWithoutControl: number;
-        totalRearranges: number;
+        playerRearranges: number;  // Player's rearranges (own + opponent protocols)
+        aiRearranges: number;       // AI's rearranges
+        totalRearranges: number;    // Sum of player + AI
     };
 
     coinFlip: {
@@ -77,6 +80,7 @@ export function initializeStatistics(): GameStatistics {
             totalPlaytime: 0,
             fastestWin: null,
             longestGame: null,
+            lastGameDuration: null,
             currentStreak: 0,
             longestWinStreak: 0,
             longestLoseStreak: 0,
@@ -104,6 +108,8 @@ export function initializeStatistics(): GameStatistics {
         control: {
             gamesWithControl: 0,
             gamesWithoutControl: 0,
+            playerRearranges: 0,
+            aiRearranges: 0,
             totalRearranges: 0,
         },
         coinFlip: {
@@ -127,10 +133,17 @@ export function loadStatistics(): GameStatistics {
         const stats: GameStatistics = {
             ...parsed,
             version: STATS_VERSION,
-            control: parsed.control || {
-                gamesWithControl: 0,
-                gamesWithoutControl: 0,
-                totalRearranges: 0,
+            global: {
+                ...parsed.global,
+                lastGameDuration: parsed.global?.lastGameDuration || null,
+            },
+            control: {
+                gamesWithControl: parsed.control?.gamesWithControl || 0,
+                gamesWithoutControl: parsed.control?.gamesWithoutControl || 0,
+                playerRearranges: parsed.control?.playerRearranges || 0,
+                aiRearranges: parsed.control?.aiRearranges || 0,
+                // Keep existing totalRearranges, don't reset it!
+                totalRearranges: parsed.control?.totalRearranges || 0,
             },
             coinFlip: parsed.coinFlip || {
                 headsChosen: 0,
@@ -145,8 +158,8 @@ export function loadStatistics(): GameStatistics {
             },
         };
 
-        // Save migrated version if needed
-        if (!parsed.control || !parsed.coinFlip || !parsed.actions?.totalCompiles) {
+        // Save migrated version if needed (add new fields)
+        if (!parsed.control?.playerRearranges || !parsed.coinFlip || !parsed.actions?.totalCompiles) {
             saveStatistics(stats);
         }
 
@@ -187,7 +200,7 @@ export function updateStatisticsOnGameEnd(
     }
     newStats.global.totalPlaytime += gameDurationSeconds;
 
-    // Update fastest/longest game
+    // Update fastest/longest/last game
     if (playerWon) {
         if (newStats.global.fastestWin === null || gameDurationSeconds < newStats.global.fastestWin) {
             newStats.global.fastestWin = gameDurationSeconds;
@@ -196,6 +209,7 @@ export function updateStatisticsOnGameEnd(
     if (newStats.global.longestGame === null || gameDurationSeconds > newStats.global.longestGame) {
         newStats.global.longestGame = gameDurationSeconds;
     }
+    newStats.global.lastGameDuration = gameDurationSeconds;
 
     // Update streaks
     if (playerWon) {
@@ -282,9 +296,16 @@ export function trackCardDeleted(stats: GameStatistics, cardName: string): GameS
     return newStats;
 }
 
-export function trackRearrange(stats: GameStatistics): GameStatistics {
+export function trackRearrange(stats: GameStatistics, actor: 'player' | 'opponent'): GameStatistics {
     const newStats = { ...stats };
+
+    if (actor === 'player') {
+        newStats.control.playerRearranges++;
+    } else {
+        newStats.control.aiRearranges++;
+    }
     newStats.control.totalRearranges++;
+
     return newStats;
 }
 
@@ -312,6 +333,11 @@ export function getWinRate(stats: GameStatistics): number {
     return (stats.global.totalGamesWon / stats.global.totalGamesPlayed) * 100;
 }
 
+export function getAverageGameDuration(stats: GameStatistics): number {
+    if (stats.global.totalGamesPlayed === 0) return 0;
+    return Math.floor(stats.global.totalPlaytime / stats.global.totalGamesPlayed);
+}
+
 export function getFavoriteProtocols(stats: GameStatistics): Array<{ protocol: string; timesUsed: number; winRate: number }> {
     const protocols = Object.entries(stats.protocols)
         .map(([protocol, data]) => ({
@@ -333,6 +359,18 @@ export function getBestWinRateProtocols(stats: GameStatistics): Array<{ protocol
             winRate: (data.wins / data.timesUsed) * 100,
         }))
         .sort((a, b) => b.winRate - a.winRate);
+
+    return protocols.slice(0, 5);
+}
+
+export function getLeastUsedProtocols(stats: GameStatistics): Array<{ protocol: string; timesUsed: number; winRate: number }> {
+    const protocols = Object.entries(stats.protocols)
+        .map(([protocol, data]) => ({
+            protocol,
+            timesUsed: data.timesUsed,
+            winRate: data.timesUsed > 0 ? (data.wins / data.timesUsed) * 100 : 0,
+        }))
+        .sort((a, b) => a.timesUsed - b.timesUsed); // Ascending order (least used first)
 
     return protocols.slice(0, 5);
 }

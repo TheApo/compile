@@ -146,9 +146,9 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
 
     // PRIORITY 2: If AI must rearrange its own protocols - ONLY if it's beneficial!
     if (targetPlayerKey === 'opponent') {
-        // STRATEGY: Evaluate ALL possible swaps between compiled and uncompiled lanes
-        // Score = compiled_value - uncompiled_value
-        // Higher score = better for AI (strengthens AI more)
+        // STRATEGY: Find swap that brings uncompiled protocol CLOSEST to victory (10)
+        // Goal: Maximize compiled_value to get uncompiled protocol as close to 10 as possible
+        // Score = distance to victory AFTER swap (lower is better!)
 
         const compiledIndices: number[] = [];
         const uncompiledIndices: number[] = [];
@@ -175,24 +175,39 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         // Evaluate ALL combinations
-        let bestSwap: { compiledIdx: number; uncompiledIdx: number; score: number } | null = null;
+        // Find swap that minimizes distance to 10 for uncompiled protocol
+        let bestSwap: { compiledIdx: number; uncompiledIdx: number; distanceToWin: number } | null = null;
 
         for (const compiledIdx of compiledIndices) {
             for (const uncompiledIdx of uncompiledIndices) {
-                const score = aiState.laneValues[compiledIdx] - aiState.laneValues[uncompiledIdx];
+                // After swap: uncompiled protocol gets compiled lane's value
+                const valueAfterSwap = aiState.laneValues[compiledIdx];
+                const distanceToWin = 10 - valueAfterSwap;
 
-                if (!bestSwap || score > bestSwap.score) {
-                    bestSwap = { compiledIdx, uncompiledIdx, score };
+                // Only consider if it brings us closer to 10 (distance >= 0)
+                if (distanceToWin >= 0) {
+                    // Lower distance is better (closer to victory)
+                    if (!bestSwap || distanceToWin < bestSwap.distanceToWin) {
+                        bestSwap = { compiledIdx, uncompiledIdx, distanceToWin };
+                    }
                 }
             }
         }
 
-        // Only swap if it actually helps us (score > 0)
-        if (bestSwap && bestSwap.score > 0) {
-            const newOrder = [...aiState.protocols];
-            [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
-                [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
-            return { type: 'rearrangeProtocols', newOrder };
+        // Only swap if it brings us significantly closer to victory (distance <= 3)
+        // AND it's better than current state
+        if (bestSwap && bestSwap.distanceToWin <= 3) {
+            // Check if this is actually an improvement over current state
+            const currentUncompiledValue = aiState.laneValues[bestSwap.uncompiledIdx];
+            const currentDistance = 10 - currentUncompiledValue;
+
+            // Only swap if new distance is better than current
+            if (bestSwap.distanceToWin < currentDistance) {
+                const newOrder = [...aiState.protocols];
+                [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
+                    [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
+                return { type: 'rearrangeProtocols', newOrder };
+            }
         }
 
         // No beneficial swap found

@@ -2466,12 +2466,22 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'plague_4_opponent_delete': {
-            // Plague-4: Opponent must delete their own face-down card
-            const ownFaceDown = state.opponent.lanes.flat().filter(c => !c.isFaceUp);
-            if (ownFaceDown.length > 0) {
-                // Delete lowest value face-down card
-                ownFaceDown.sort((a, b) => a.value - b.value);
-                return { type: 'deleteCard', cardId: ownFaceDown[0].id };
+            // Plague-4: Opponent must delete their own UNCOVERED face-down card
+            // IMPORTANT: Only UNCOVERED (top) cards can be deleted, not covered ones!
+            const ownFaceDownUncovered: PlayedCard[] = [];
+            state.opponent.lanes.forEach((lane) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // UNCOVERED card
+                    if (!topCard.isFaceUp) {
+                        ownFaceDownUncovered.push(topCard);
+                    }
+                }
+            });
+
+            if (ownFaceDownUncovered.length > 0) {
+                // Delete lowest value face-down UNCOVERED card (minimize loss)
+                ownFaceDownUncovered.sort((a, b) => a.value - b.value);
+                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
             }
             return { type: 'skip' };
         }

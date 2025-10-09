@@ -10,9 +10,11 @@ import {
     getWinRate,
     getFavoriteProtocols,
     getBestWinRateProtocols,
+    getLeastUsedProtocols,
     getMostPlayedCards,
     getMostDeletedCards,
     formatTime,
+    getAverageGameDuration,
 } from '../utils/statistics';
 import '../styles/StatisticsScreen.css';
 
@@ -23,8 +25,10 @@ interface StatisticsScreenProps {
 export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
     const stats = loadStatistics();
     const winRate = getWinRate(stats);
+    const averageGameDuration = getAverageGameDuration(stats);
     const favoriteProtocols = getFavoriteProtocols(stats);
     const bestProtocols = getBestWinRateProtocols(stats);
+    const leastUsedProtocols = getLeastUsedProtocols(stats);
     const mostPlayedCards = getMostPlayedCards(stats);
     const mostDeletedCards = getMostDeletedCards(stats);
 
@@ -81,10 +85,26 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                             <span className="stat-label">Total Playtime</span>
                             <span className="stat-value">{formatTime(stats.global.totalPlaytime)}</span>
                         </div>
+                        <div className="stat-item">
+                            <span className="stat-label">Average Game</span>
+                            <span className="stat-value">{formatTime(averageGameDuration)}</span>
+                        </div>
                         {stats.global.fastestWin && (
                             <div className="stat-item">
                                 <span className="stat-label">Fastest Win</span>
                                 <span className="stat-value">{formatTime(stats.global.fastestWin)}</span>
+                            </div>
+                        )}
+                        {stats.global.longestGame && (
+                            <div className="stat-item">
+                                <span className="stat-label">Longest Game</span>
+                                <span className="stat-value">{formatTime(stats.global.longestGame)}</span>
+                            </div>
+                        )}
+                        {stats.global.lastGameDuration && (
+                            <div className="stat-item">
+                                <span className="stat-label">Last Game</span>
+                                <span className="stat-value">{formatTime(stats.global.lastGameDuration)}</span>
                             </div>
                         )}
                     </div>
@@ -110,6 +130,24 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                     </div>
                 </section>
 
+                {/* Best Win Rate Protocols */}
+                {bestProtocols.length > 0 && (
+                    <section className="stats-section">
+                        <h2 className="section-title">Best Win Rate</h2>
+                        <div className="protocol-list">
+                            {bestProtocols.map((proto, index) => (
+                                <div key={proto.protocol} className="protocol-item">
+                                    <span className="protocol-rank">{index + 1}.</span>
+                                    <span className="protocol-name">{proto.protocol}</span>
+                                    <span className="protocol-stats win">
+                                        {proto.winRate.toFixed(0)}% · {proto.timesUsed}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 {/* Favorite Protocols */}
                 {favoriteProtocols.length > 0 && (
                     <section className="stats-section">
@@ -128,17 +166,17 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                     </section>
                 )}
 
-                {/* Best Win Rate Protocols */}
-                {bestProtocols.length > 0 && (
+                {/* Least Used Protocols */}
+                {leastUsedProtocols.length > 0 && (
                     <section className="stats-section">
-                        <h2 className="section-title">Best Win Rate</h2>
+                        <h2 className="section-title">Least Used Protocols</h2>
                         <div className="protocol-list">
-                            {bestProtocols.map((proto, index) => (
+                            {leastUsedProtocols.map((proto, index) => (
                                 <div key={proto.protocol} className="protocol-item">
                                     <span className="protocol-rank">{index + 1}.</span>
                                     <span className="protocol-name">{proto.protocol}</span>
-                                    <span className="protocol-stats win">
-                                        {proto.winRate.toFixed(0)}% · {proto.timesUsed}
+                                    <span className="protocol-stats">
+                                        {proto.timesUsed} · {proto.winRate.toFixed(0)}%
                                     </span>
                                 </div>
                             ))}
@@ -189,6 +227,14 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="stat-item">
                             <span className="stat-label">Without Control</span>
                             <span className="stat-value">{stats.control.gamesWithoutControl}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-label">Your Rearranges</span>
+                            <span className="stat-value">{stats.control.playerRearranges}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-label">AI Rearranges</span>
+                            <span className="stat-value">{stats.control.aiRearranges}</span>
                         </div>
                         <div className="stat-item">
                             <span className="stat-label">Total Rearranges</span>

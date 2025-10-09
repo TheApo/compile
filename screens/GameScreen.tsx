@@ -475,9 +475,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
                 onConfirm={(newOrder: string[]) => {
-                    // Track rearrange in statistics if player is doing it
-                    if (gameState.actionRequired?.actor === 'player') {
-                        trackPlayerRearrange();
+                    // Track rearrange in statistics ONLY if from Control Mechanic (not Psychic-2 etc.)
+                    if (gameState.actionRequired?.sourceCardId === 'CONTROL_MECHANIC' && gameState.actionRequired?.actor) {
+                        trackPlayerRearrange(gameState.actionRequired.actor);
                     }
                     resolveRearrangeProtocols(newOrder);
                     setShowRearrangeModal(false);
