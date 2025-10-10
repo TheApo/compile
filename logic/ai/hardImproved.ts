@@ -612,28 +612,28 @@ const getBestMove = (state: GameState): AIAction => {
 
     // Evaluate all possible card plays
     for (const card of state.opponent.hand) {
-        // CRITICAL: Water-4 MUST return 1 card (not optional!)
-        // Only play face-up if we have OTHER uncovered cards we want to return.
-        // Otherwise it returns itself = wasted turn!
-        if (card.protocol === 'Water' && card.value === 4) {
-            // Count uncovered cards in OTHER lanes (not the lane we're about to play in)
-            let hasOtherUncoveredCards = false;
-            for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
-                if (state.opponent.lanes[laneIdx].length > 0) {
-                    hasOtherUncoveredCards = true;
-                    break;
-                }
-            }
-            // If no other uncovered cards exist, Water-4 would return itself = skip face-up play
-            if (!hasOtherUncoveredCards) continue;
-        }
-
         // Skip 0-value cards as first move (they often need other cards in play to be useful)
         const totalCardsOnBoard = state.opponent.lanes.flat().length + state.player.lanes.flat().length;
         if (card.value === 0 && totalCardsOnBoard === 0) continue;
 
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
+
+            // CRITICAL: Water-4 MUST return 1 card (not optional!)
+            // Only play face-up if we have OTHER uncovered cards we want to return.
+            // Otherwise it returns itself = wasted turn!
+            if (card.protocol === 'Water' && card.value === 4) {
+                // Count uncovered cards in OTHER lanes (NOT the lane we're about to play in!)
+                let hasOtherUncoveredCards = false;
+                for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
+                    if (laneIdx !== i && state.opponent.lanes[laneIdx].length > 0) {
+                        hasOtherUncoveredCards = true;
+                        break;
+                    }
+                }
+                // If no other uncovered cards exist, Water-4 would return itself = skip face-up play
+                if (!hasOtherUncoveredCards) continue;
+            }
             if (state.opponent.compiled[i]) {
                 // STRATEGIC: Consider playing in compiled lanes for Control or disruption
                 if (!state.useControlMechanic) continue;
@@ -783,7 +783,15 @@ const getBestMove = (state: GameState): AIAction => {
                         score += 3000; // Additive bonus - higher value cards still win
                         reason += ` [COMPILES PROTOCOL!]`;
                     }
-                    // BONUS 2: Moderate progress (5-7)
+                    // BONUS 2: Tied or behind but above 10 - KEEP FIGHTING (only if we can catch up or have delete)
+                    else if (resultingValue >= 10 && state.player.laneValues[i] >= 10 && !state.opponent.compiled[i]
+                             && (resultingValue >= state.player.laneValues[i] || card.keywords['delete'])) {
+                        // Both players are above 10 - continue playing to win the standoff!
+                        const deficit = state.player.laneValues[i] - resultingValue;
+                        score += 2500 - (deficit * 50); // High priority, decreases slightly if behind
+                        reason += ` [FIGHTING STANDOFF: ${resultingValue} vs ${state.player.laneValues[i]}]`;
+                    }
+                    // BONUS 3: Moderate progress (5-7)
                     else if (resultingValue >= 5 && !state.opponent.compiled[i]) {
                         score += 1000 + (resultingValue * 50);
                         reason += ` [Building: ${resultingValue}/10]`;
@@ -924,12 +932,20 @@ const getBestMove = (state: GameState): AIAction => {
                         score += 6000; // Lower than face-up (8000)
                         reason += ` [COMPILES]`;
                     }
-                    // BONUS 2: Very close to compile
+                    // BONUS 2: Tied or behind but above 10 - KEEP FIGHTING (only if we can catch up or have delete)
+                    else if (resultingValue >= 10 && state.player.laneValues[i] >= 10 && !state.opponent.compiled[i]
+                             && (resultingValue >= state.player.laneValues[i] || card.keywords['delete'])) {
+                        // Both players are above 10 - continue playing to win the standoff!
+                        const deficit = state.player.laneValues[i] - resultingValue;
+                        score += 5000 - (deficit * 100); // Very high priority, decreases if behind
+                        reason += ` [STANDOFF: ${resultingValue} vs ${state.player.laneValues[i]}]`;
+                    }
+                    // BONUS 3: Very close to compile
                     else if (resultingValue >= 8 && !state.opponent.compiled[i]) {
                         score += 2000 - ((10 - resultingValue) * 300);
                         reason += ` [Close: ${resultingValue}/10]`;
                     }
-                    // BONUS 3: Building
+                    // BONUS 4: Building
                     else if (resultingValue >= 5 && !state.opponent.compiled[i]) {
                         score += 600 + (resultingValue * 30);
                         reason += ` [Building: ${resultingValue}/10]`;

@@ -79,16 +79,24 @@ const getBestMove = (state: GameState): AIAction => {
 
     // Evaluate all possible card plays
     for (const card of state.opponent.hand) {
-        // CRITICAL: Water-4 returns 1 card to hand - only play if we have cards in OTHER protocols
-        // Otherwise it just returns itself (wasted turn). Play face-down instead.
-        if (card.protocol === 'Water' && card.value === 4) {
-            const cardsOnBoard = state.opponent.lanes.flat();
-            const hasNonWaterCards = cardsOnBoard.some(c => c.protocol !== 'Water');
-            if (!hasNonWaterCards) continue;
-        }
-
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
+
+            // CRITICAL: Water-4 MUST return 1 card (not optional!)
+            // Only play face-up if we have OTHER uncovered cards we want to return.
+            // Otherwise it returns itself = wasted turn!
+            if (card.protocol === 'Water' && card.value === 4) {
+                // Count uncovered cards in OTHER lanes (NOT the lane we're about to play in!)
+                let hasOtherUncoveredCards = false;
+                for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
+                    if (laneIdx !== i && state.opponent.lanes[laneIdx].length > 0) {
+                        hasOtherUncoveredCards = true;
+                        break;
+                    }
+                }
+                // If no other uncovered cards exist, Water-4 would return itself = skip face-up play
+                if (!hasOtherUncoveredCards) continue;
+            }
             if (state.opponent.compiled[i]) continue; // Don't play in compiled lanes
 
             // CRITICAL: Metal-6 deletes itself when covered or flipped!
