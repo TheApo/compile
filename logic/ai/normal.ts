@@ -114,9 +114,30 @@ const getBestMove = (state: GameState): AIAction => {
                 && !state.player.compiled[i];
             const baseScore = getCardPower(card);
 
-            // FACE-UP PLAY
+            // CRITICAL: Check if Hate-2 would delete itself if played face-up
+            let hate2WouldSuicide = false;
+            if (card.protocol === 'Hate' && card.value === 2) {
+                // Find max value of all uncovered cards (excluding this lane)
+                let maxOtherValue = 0;
+                for (let checkLane = 0; checkLane < 3; checkLane++) {
+                    const checkLaneCards = state.opponent.lanes[checkLane];
+                    if (checkLaneCards.length > 0 && checkLane !== i) {
+                        const uncovered = checkLaneCards[checkLaneCards.length - 1];
+                        const uncoveredValue = uncovered.isFaceUp ? uncovered.value : 2;
+                        if (uncoveredValue > maxOtherValue) {
+                            maxOtherValue = uncoveredValue;
+                        }
+                    }
+                }
+                // If Hate-2 (value 2) would be highest or tied, it would delete itself
+                if (2 >= maxOtherValue) {
+                    hate2WouldSuicide = true;
+                }
+            }
+
+            // FACE-UP PLAY (but not if Hate-2 would suicide)
             const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1) && !playerHasPsychic1;
+            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1) && !playerHasPsychic1 && !hate2WouldSuicide;
             if (canPlayFaceUp) {
                 let score = 0;
                 let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}`;
@@ -178,6 +199,12 @@ const getBestMove = (state: GameState): AIAction => {
                     }
                 } else {
                     score += valueToAdd * 2;
+
+                    // Special: Hate-2 face-down still has strong delete effect!
+                    if (card.protocol === 'Hate' && card.value === 2) {
+                        score += 25; // Bonus for Hate-2's effect even face-down
+                        reason += ` [Hate-2 effect bonus]`;
+                    }
 
                     if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
                         score += 110;
@@ -712,6 +739,47 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'deleteCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
+        }
+
+        case 'select_own_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            state[actor].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
+        }
+
+        case 'select_opponent_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const opponent = actor === 'player' ? 'opponent' : 'player';
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            state[opponent].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
         }
 
         case 'select_opponent_face_up_card_to_flip': {

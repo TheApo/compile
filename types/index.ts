@@ -152,6 +152,16 @@ export type ActionRequired = {
     sourceCardId: string;
     actor: Player;
 } | {
+    type: 'select_own_highest_card_to_delete_for_hate_2';
+    sourceCardId: string;
+    actor: Player;
+    count: 1;
+} | {
+    type: 'select_opponent_highest_card_to_delete_for_hate_2';
+    sourceCardId: string;
+    actor: Player;
+    count: 1;
+} | {
     type: 'select_card_from_other_lanes_to_delete';
     sourceCardId: string;
     disallowedLaneIndex: number;

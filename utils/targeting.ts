@@ -4,6 +4,7 @@
  */
 
 import { GameState, PlayedCard, Player } from "../types";
+import { findAllHighestUncoveredCards } from "../logic/game/helpers/actionUtils";
 
 export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolean => {
     const { actionRequired } = gameState;
@@ -121,7 +122,18 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner !== gameState.turn && isUncovered;
         case 'select_opponent_card_to_return':
             return owner === 'opponent' && isUncovered;
-            
+        case 'select_own_highest_card_to_delete_for_hate_2': {
+            if (!isUncovered) return false;
+            const highestCards = findAllHighestUncoveredCards(gameState, actionRequired.actor);
+            return highestCards.some(c => c.card.id === card.id);
+        }
+        case 'select_opponent_highest_card_to_delete_for_hate_2': {
+            if (!isUncovered) return false;
+            const opponent = actionRequired.actor === 'player' ? 'opponent' : 'player';
+            const highestCards = findAllHighestUncoveredCards(gameState, opponent);
+            return highestCards.some(c => c.card.id === card.id);
+        }
+
         default:
             return false;
     }

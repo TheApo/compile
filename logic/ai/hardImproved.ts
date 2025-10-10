@@ -1483,6 +1483,79 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'select_own_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            state[actor].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            // Hard AI Strategy: If multiple ties, pick the least valuable lane
+            // (e.g., lowest current lane value, or already compiled lane)
+            highestCards.sort((a, b) => {
+                const aLaneValue = state[actor].laneValues[a.laneIndex];
+                const bLaneValue = state[actor].laneValues[b.laneIndex];
+                const aCompiled = state[actor].compiled[a.laneIndex];
+                const bCompiled = state[actor].compiled[b.laneIndex];
+
+                // Prefer compiled lanes (less valuable to keep cards there)
+                if (aCompiled && !bCompiled) return -1;
+                if (!aCompiled && bCompiled) return 1;
+
+                // Prefer lower lane value (less impact to delete from)
+                return aLaneValue - bLaneValue;
+            });
+
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
+        }
+
+        case 'select_opponent_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const opponent = actor === 'player' ? 'opponent' : 'player';
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            state[opponent].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            // Hard AI Strategy: If multiple ties, pick the MOST valuable lane
+            // (e.g., highest current lane value, or non-compiled lane - maximum damage)
+            highestCards.sort((a, b) => {
+                const aLaneValue = state[opponent].laneValues[a.laneIndex];
+                const bLaneValue = state[opponent].laneValues[b.laneIndex];
+                const aCompiled = state[opponent].compiled[a.laneIndex];
+                const bCompiled = state[opponent].compiled[b.laneIndex];
+
+                // Prefer non-compiled lanes (more valuable to opponent)
+                if (!aCompiled && bCompiled) return -1;
+                if (aCompiled && !bCompiled) return 1;
+
+                // Prefer higher lane value (maximum damage)
+                return bLaneValue - aLaneValue;
+            });
+
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
+        }
+
         case 'select_own_card_to_return_for_water_4': {
             const ownCardsWithContext: { card: PlayedCard, lane: PlayedCard[] }[] = [];
             state.opponent.lanes.forEach(lane => {

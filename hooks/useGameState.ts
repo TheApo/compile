@@ -24,7 +24,8 @@ export const useGameState = (
     onEndGame: (winner: Player, finalState: GameState) => void,
     difficulty: Difficulty,
     useControlMechanic: boolean,
-    startingPlayer: Player = 'player'
+    startingPlayer: Player = 'player',
+    trackPlayerRearrange?: (actor: 'player' | 'opponent') => void
 ) => {
     const [gameState, setGameState] = useState<GameState>(() => {
         const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic, startingPlayer);
@@ -485,16 +486,21 @@ export const useGameState = (
 
     const resolveRearrangeProtocols = useCallback((newOrder: string[]) => {
         setGameState(prev => {
+            // Track rearrange in statistics ONLY if from Control Mechanic (not Psychic-2 etc.)
+            if (trackPlayerRearrange && prev.actionRequired?.sourceCardId === 'CONTROL_MECHANIC' && prev.actionRequired?.actor) {
+                trackPlayerRearrange(prev.actionRequired.actor);
+            }
+
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
-            
+
             if (nextState.winner) {
                 return nextState;
             }
 
             return turnProgressionCb(nextState);
         });
-    }, [getTurnProgressionCallback, onEndGame]);
+    }, [getTurnProgressionCallback, onEndGame, trackPlayerRearrange]);
     
     const resolvePsychic4Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -871,7 +877,7 @@ export const useGameState = (
                     resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
                     resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
                     revealOpponentHand: resolvers.revealOpponentHand,
-                }, processAnimationQueue, phaseManager);
+                }, processAnimationQueue, phaseManager, trackPlayerRearrange);
             }, 1500);
             return () => {
                 clearTimeout(timer);
@@ -926,7 +932,8 @@ export const useGameState = (
                     phaseManager,
                     processAnimationQueue,
                     resolvers.resolveActionWithCard,
-                    resolvers.resolveActionWithLane
+                    resolvers.resolveActionWithLane,
+                    trackPlayerRearrange
                 );
             }, 1400); // Shorter timeout - interrupts have priority!
             return () => {

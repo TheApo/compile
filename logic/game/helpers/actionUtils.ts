@@ -6,7 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log } from "../../utils/log";
-import { recalculateAllLaneValues } from "../stateManager";
+import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
@@ -447,3 +447,40 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
     }
     return result;
 };
+
+/**
+ * Find all highest value uncovered cards for a given player.
+ * Used for Hate-2 effect where player must choose which of their highest cards to delete.
+ *
+ * @param state Current game state
+ * @param player The player whose uncovered cards to check
+ * @returns Array of card info objects for all cards tied for highest value
+ */
+export function findAllHighestUncoveredCards(
+    state: GameState,
+    player: Player
+): Array<{ card: PlayedCard; laneIndex: number; owner: Player; value: number }> {
+    const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; owner: Player; value: number }> = [];
+
+    // Collect all uncovered cards for the player
+    state[player].lanes.forEach((lane, laneIndex) => {
+        if (lane.length > 0) {
+            const uncoveredCard = lane[lane.length - 1];
+            const value = getEffectiveCardValue(uncoveredCard, lane);
+            uncoveredCards.push({
+                card: uncoveredCard,
+                laneIndex,
+                owner: player,
+                value
+            });
+        }
+    });
+
+    if (uncoveredCards.length === 0) return [];
+
+    // Find the highest value
+    const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+
+    // Return all cards with the highest value (handles ties)
+    return uncoveredCards.filter(c => c.value === maxValue);
+}

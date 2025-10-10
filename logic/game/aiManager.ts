@@ -50,6 +50,8 @@ type PhaseManager = {
     continueTurnAfterStartPhaseAction: (s: GameState) => GameState,
 }
 
+type TrackPlayerRearrange = (actor: 'player' | 'opponent') => void;
+
 const getAIAction = (state: GameState, action: ActionRequired | null, difficulty: Difficulty): AIAction => {
     switch (difficulty) {
         case 'normal':
@@ -69,7 +71,8 @@ export const resolveRequiredOpponentAction = (
     phaseManager: PhaseManager,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     resolveActionWithCard: (s: GameState, c: string) => CardActionResult,
-    resolveActionWithLane: (s: GameState, l: number) => LaneActionResult
+    resolveActionWithLane: (s: GameState, l: number) => LaneActionResult,
+    trackPlayerRearrange?: TrackPlayerRearrange
 ) => {
     setGameState(state => {
         const action = state.actionRequired;
@@ -101,6 +104,11 @@ export const resolveRequiredOpponentAction = (
         }
 
         if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
+            // Track AI rearrange in statistics ONLY if from Control Mechanic
+            if (trackPlayerRearrange && action.sourceCardId === 'CONTROL_MECHANIC' && action.actor) {
+                trackPlayerRearrange(action.actor);
+            }
+
             const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
             return phaseManager.processEndOfAction(newState);
         }
@@ -164,7 +172,8 @@ const handleRequiredAction = (
     difficulty: Difficulty,
     actions: ActionDispatchers,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
-    phaseManager: PhaseManager
+    phaseManager: PhaseManager,
+    trackPlayerRearrange?: TrackPlayerRearrange
 ): GameState => {
 
     const aiDecision = getAIAction(state, state.actionRequired, difficulty);
@@ -296,6 +305,11 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
+        // Track AI rearrange in statistics ONLY if from Control Mechanic
+        if (trackPlayerRearrange && action.sourceCardId === 'CONTROL_MECHANIC' && action.actor) {
+            trackPlayerRearrange(action.actor);
+        }
+
         const nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
         return phaseManager.processEndOfAction(nextState);
     }
@@ -420,6 +434,7 @@ export const runOpponentTurn = (
     actions: ActionDispatchers,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     phaseManager: PhaseManager,
+    trackPlayerRearrange?: TrackPlayerRearrange
 ) => {
     setGameState(currentState => {
         if (currentState.turn !== 'opponent' || currentState.winner || currentState.animationState) {
@@ -478,7 +493,7 @@ export const runOpponentTurn = (
         // 2. If an action is required (e.g. from start phase), handle it.
         // This might result in a new state that needs further processing.
         if (state.actionRequired) {
-            return handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+            return handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
         }
         
         // 3. Handle Compile Phase

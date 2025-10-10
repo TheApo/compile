@@ -703,6 +703,333 @@ export const scenario15_Gravity2ShiftInterrupt: TestScenario = {
     }
 };
 
+/**
+ * Szenario 16: Hate-2 Spieler spielt (Einfach)
+ *
+ * Setup:
+ * - Player hat Hate-2 in Hand
+ * - Player hat verschiedene Werte auf Lanes: Fire-4 (Lane 0), Water-2 (Lane 1), Light-6 (Lane 2)
+ * - Opponent hat verschiedene Werte: Metal-3 (Lane 0), Death-5 (Lane 1), Gravity-2 (Lane 2)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Player spielt Hate-2 → wählt eigene höchste (Light-6) → wählt Gegners höchste (Death-5)
+ * Erwartet:
+ *   1. Player spielt Hate-2 in Lane 0 (Hate Protocol)
+ *   2. Player muss eigene höchste uncovered Karte wählen (Light-6)
+ *   3. Light-6 wird gelöscht
+ *   4. Player muss Gegners höchste uncovered Karte wählen (Death-5)
+ *   5. Death-5 wird gelöscht
+ *   6. Turn endet
+ */
+export const scenario16_Hate2PlayerPlays: TestScenario = {
+    name: "Hate-2 Player spielt (Einfach)",
+    description: "🆕 Player spielt Hate-2 → Wählt eigene & Gegners höchste Karte",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Water', 'Light'],
+            ['Metal', 'Death', 'Gravity'],
+            'player',
+            'action'
+        );
+
+        // Player: Hate-2 in Hand
+        newState.player.hand = [createCard('Hate', 2, true)];
+
+        // Player: Verschiedene Werte auf Lanes
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 4, true));  // Nicht höchste
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true)); // Tied highest!
+        newState = placeCard(newState, 'player', 2, createCard('Light', 5, true)); // Höchste!
+
+        // Opponent: Verschiedene Werte auf Lanes
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true)); // Nicht höchste
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true)); // Höchste!
+        newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 2, false)); // Face-down (value 2)
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 17: Hate-2 AI spielt (Normal)
+ *
+ * Setup:
+ * - Opponent (AI) hat Hate-2 in Hand
+ * - Opponent hat Fire-5 (Lane 0), Metal-3 (Lane 1), Death-2 face-down (Lane 2)
+ * - Player hat Water-4 (Lane 0), Spirit-6 (Lane 1), Light-2 (Lane 2)
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: AI spielt Hate-2 → wählt eigene höchste (Fire-5) → wählt Players höchste (Spirit-6)
+ * Erwartet:
+ *   1. AI spielt Hate-2 in Lane 0 (Hate Protocol muss bei Opponent sein!)
+ *   2. AI wählt eigene höchste (Fire-5) automatisch
+ *   3. Fire-5 wird gelöscht
+ *   4. AI wählt Players höchste (Spirit-6) automatisch
+ *   5. Spirit-6 wird gelöscht
+ *   6. Turn endet
+ */
+export const scenario17_Hate2AIPlays: TestScenario = {
+    name: "Hate-2 AI spielt (Normal)",
+    description: "🆕 AI spielt Hate-2 → AI wählt eigene & Players höchste automatisch",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Spirit', 'Light'],
+            ['Hate', 'Metal', 'Death'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent (AI): Hate-2 in Hand
+        newState.opponent.hand = [createCard('Hate', 2, true)];
+
+        // Opponent: Verschiedene Werte
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 5, true));  // Höchste!
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 3, true)); // Nicht höchste
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 2, false)); // Face-down (value 2)
+
+        // Player: Verschiedene Werte
+        newState = placeCard(newState, 'player', 0, createCard('Water', 4, true));  // Nicht höchste
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 5, true)); // Höchste!
+        newState = placeCard(newState, 'player', 2, createCard('Light', 2, true));  // Niedrig
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 18: Hate-2 Selbst-Löschung (Player)
+ *
+ * Setup:
+ * - Player hat Hate-2 in Hand
+ * - Player hat NUR niedrige Karten: Fire-1 (Lane 0), Water-0 (Lane 2)
+ * - Opponent hat höhere Werte: Metal-4 (Lane 0), Death-5 (Lane 1)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Player spielt Hate-2 → wird selbst höchste Karte → löscht sich selbst → Effekt endet!
+ * Erwartet:
+ *   1. Player spielt Hate-2 in Lane 0 (Hate Protocol)
+ *   2. Player muss eigene höchste wählen (Hate-2 selbst mit value 2!)
+ *   3. Hate-2 löscht sich selbst
+ *   4. Zweite Klausel triggert NICHT (Opponent verliert nichts)
+ *   5. Log: "Hate-2 deleted itself, second clause does not trigger."
+ */
+export const scenario18_Hate2SelfDelete: TestScenario = {
+    name: "Hate-2 Selbst-Löschung",
+    description: "🆕 Hate-2 löscht sich selbst → Zweite Klausel entfällt (Regelwerk-Check)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Fire', 'Water'],
+            ['Metal', 'Death', 'Gravity'],
+            'player',
+            'action'
+        );
+
+        // Player: Hate-2 in Hand
+        newState.player.hand = [createCard('Hate', 2, true)];
+
+        // Player: NUR niedrige Karten (Hate-2 wird höchste sein!)
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 1, true));  // Niedriger als 2
+        newState = placeCard(newState, 'player', 2, createCard('Water', 0, true)); // Niedriger als 2
+
+        // Opponent: Höhere Werte (sollten NICHT gelöscht werden)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 19: Hate-2 mit Gleichstand (Mehrere höchste)
+ *
+ * Setup:
+ * - Player hat Hate-2 in Hand
+ * - Player hat MEHRERE Karten mit value 4: Fire-4 (Lane 0), Water-4 (Lane 1), Spirit-4 (Lane 2)
+ * - Opponent hat auch Gleichstand: Metal-5 (Lane 0), Death-5 (Lane 1), Gravity-2 (Lane 2)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Player spielt Hate-2 → MUSS wählen welche von 3x value-4 → MUSS wählen welche von 2x value-5
+ * Erwartet:
+ *   1. Player spielt Hate-2
+ *   2. Alle 3 eigenen Karten mit value 4 sind klickbar
+ *   3. Player wählt eine (z.B. Fire-4)
+ *   4. Fire-4 wird gelöscht
+ *   5. Beide Gegner-Karten mit value 5 sind klickbar
+ *   6. Player wählt eine (z.B. Death-5)
+ *   7. Death-5 wird gelöscht
+ */
+export const scenario19_Hate2MultipleTies: TestScenario = {
+    name: "Hate-2 Gleichstand (Auswahl)",
+    description: "🆕 Hate-2 mit mehreren höchsten → Player muss wählen (Tied values)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Gravity'],
+            'player',
+            'action'
+        );
+
+        // Player: Hate-2 in Hand
+        newState.player.hand = [createCard('Hate', 2, true)];
+
+        // Player: DREI Karten mit value 4 (alle gleich hoch!)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 4, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, true));
+
+        // Opponent: ZWEI Karten mit value 5 (gleich hoch!)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 5, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 2, false)); // Niedriger
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 20: Hate-2 mit Face-Down Karten
+ *
+ * Setup:
+ * - Player hat Hate-2 in Hand
+ * - Player hat Face-down Karten (alle value 2): Fire (Lane 0), Water (Lane 1), Spirit (Lane 2)
+ * - Opponent hat gemischt: Metal-6 face-up (Lane 0), Death face-down (Lane 1), Gravity-1 face-up (Lane 2)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Hate-2 mit face-down Karten → ALLE face-down haben value 2!
+ * Erwartet:
+ *   1. Player spielt Hate-2 (wird selbst value 2)
+ *   2. Player's höchste: Alle 3 face-down + Hate-2 = alle value 2 (4x tied!)
+ *   3. Player muss eine der 4 Karten wählen (3x face-down + Hate-2 selbst)
+ *   4. Wenn Hate-2 gewählt → self-delete, Effekt endet
+ *   5. Wenn andere gewählt → Opponent's höchste ist Metal-6
+ */
+export const scenario20_Hate2FaceDown: TestScenario = {
+    name: "Hate-2 Face-Down Karten",
+    description: "🆕 Hate-2 mit face-down → Alle face-down sind value 2 (Tied mit Hate-2)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Fire', 'Water'],
+            ['Metal', 'Death', 'Gravity'],
+            'player',
+            'action'
+        );
+
+        // Player: Hate-2 in Hand
+        newState.player.hand = [createCard('Hate', 2, true)];
+
+        // Player: ALLE face-down (value 2 each!)
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 5, false));   // Face-down = 2
+        newState = placeCard(newState, 'player', 2, createCard('Water', 5, false));  // Face-down = 2
+
+        // Opponent: Gemischt
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 5, true));   // Höchste!
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, false));  // Face-down = 2
+        newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 1, true)); // Niedrig
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 21: Hate-2 AI Play-Validation Test
+ *
+ * Setup:
+ * - Opponent (AI) hat Hate-2 in Hand + andere Karten
+ * - Opponent hat NUR niedrige Karten: Fire-0, Water-1
+ * - Player hat höhere Karten
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: AI sollte Hate-2 NICHT face-up spielen (würde sich selbst löschen)
+ * Erwartet:
+ *   1. AI erkennt: Hate-2 würde sich selbst löschen
+ *   2. AI spielt Hate-2 NICHT face-up (sollte andere Karte spielen oder face-down)
+ *   3. Kein Self-Delete!
+ */
+export const scenario21_Hate2AIValidation: TestScenario = {
+    name: "Hate-2 AI Play-Validation",
+    description: "🆕 AI spielt Hate-2 NICHT face-up wenn es sich selbst löschen würde",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Hate', 'Death', 'Metal'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent (AI): Hate-2 + andere Karten in Hand
+        newState.opponent.hand = [
+            createCard('Hate', 2, true),
+        ];
+
+        // Opponent: NUR niedrige Karten (Hate-2 wäre höchste!)
+        newState = placeCard(newState, 'opponent', 1, createCard('Fire', 0, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Water', 1, true));
+
+        // Player: Höhere Karten
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 5, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 22: Hate-2 AI spielt OFFEN (Optimal)
+ *
+ * Setup:
+ * - Opponent (AI) hat Hate-2 + hohe Karten (Fire-5, Metal-4) → Hate-2 ist NICHT höchste!
+ * - Opponent's höchste: Fire-5
+ * - Player hat nur eine sehr hohe Karte: Spirit-5 (Lane 1)
+ * - Opponent's Turn, Action Phase
+ *
+ * Erwartetes Verhalten:
+ * - Easy/Normal/Hard AI sollten Hate-2 OFFEN spielen (weil nicht höchste)
+ * - AI löscht eigene Fire-5 (verliert 5)
+ * - AI löscht Players Spirit-5 (Gegner verliert 5)
+ * - Plus: Hate-2 bringt 2 Punkte auf dem Board
+ * - Netto: Ausgeglichen, aber taktisch sinnvoll (gleiche Lane!)
+ */
+export const scenario22_Hate2AIPlaysOpen: TestScenario = {
+    name: "Hate-2 AI spielt OFFEN (Optimal)",
+    description: "🆕 AI spielt Hate-2 offen weil nicht höchste Karte",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Spirit', 'Light'],
+            ['Hate', 'Metal', 'Death'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent (AI): Hate-2 + hohe Karten
+        newState.opponent.hand = [createCard('Hate', 2, true)];
+
+        // Opponent: Hohe Karten (Hate-2 wird NICHT höchste sein!)
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 5, true));  // Höchste!
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, true)); // Zweithöchste
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 3, true)); // Dritthöchste
+
+        // Player: NUR eine hohe Karte
+        newState = placeCard(newState, 'player', 0, createCard('Water', 2, true));   // Niedrig
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 5, true));  // Höchste!
+        newState = placeCard(newState, 'player', 2, createCard('Light', 1, true));   // Niedrig
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -718,4 +1045,11 @@ export const allScenarios: TestScenario[] = [
     scenario13_Psychic3ShiftTest,
     scenario14_Death1UncoverTest,
     scenario15_Gravity2ShiftInterrupt,
+    scenario16_Hate2PlayerPlays,
+    scenario17_Hate2AIPlays,
+    scenario18_Hate2SelfDelete,
+    scenario19_Hate2MultipleTies,
+    scenario20_Hate2FaceDown,
+    scenario21_Hate2AIValidation,
+    scenario22_Hate2AIPlaysOpen,
 ];

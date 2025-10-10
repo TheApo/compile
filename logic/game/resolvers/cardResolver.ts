@@ -6,7 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log } from '../../utils/log';
-import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp } from '../helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { getEffectiveCardValue } from '../stateManager';
 import * as phaseManager from '../phaseManager';
@@ -606,6 +606,122 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         stateWithTriggers.actionRequired = nextAction;
                     }
                     return stateWithTriggers;
+                }
+            };
+            requiresTurnEnd = false;
+            break;
+        }
+        case 'select_own_highest_card_to_delete_for_hate_2': {
+            const { sourceCardId, actor } = prev.actionRequired;
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (!cardInfo) return { nextState: prev };
+
+            // Validation: Must be one of the actor's highest uncovered cards
+            const highestCards = findAllHighestUncoveredCards(prev, actor);
+            const isValid = highestCards.some(c => c.card.id === targetCardId);
+            if (!isValid) {
+                newState = log(prev, actor, `Invalid selection: Card is not one of your highest value uncovered cards.`);
+                return { nextState: prev };
+            }
+
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
+            newState = log(newState, actor, `Hate-2: ${actorName} deletes their highest value uncovered card (${cardName}).`);
+
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            const lane = prev[cardInfo.owner].lanes[laneIndex];
+            const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+
+            newState.actionRequired = null;
+            requiresAnimation = {
+                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                onCompleteCallback: (s, endTurnCb) => {
+                    let stateAfterTriggers = checkForHate3Trigger(s, actor);
+
+                    // Handle uncovering
+                    if (wasTopCard) {
+                        const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardInfo.owner, laneIndex);
+                        stateAfterTriggers = uncoverResult.newState;
+                    }
+
+                    // CRITICAL: Check if Hate-2 still exists after deletion (could have deleted itself!)
+                    const hate2StillExists = findCardOnBoard(stateAfterTriggers, sourceCardId);
+
+                    if (hate2StillExists) {
+                        // Hate-2 still exists → Second clause: Select opponent's highest card
+                        const opponent = actor === 'player' ? 'opponent' : 'player';
+                        const nextAction: ActionRequired = {
+                            type: 'select_opponent_highest_card_to_delete_for_hate_2',
+                            sourceCardId: sourceCardId,
+                            actor: actor, // Same actor selects opponent's card
+                            count: 1
+                        };
+
+                        // If uncover created an action, queue the opponent delete
+                        if (stateAfterTriggers.actionRequired) {
+                            stateAfterTriggers.queuedActions = [
+                                ...(stateAfterTriggers.queuedActions || []),
+                                nextAction
+                            ];
+                        } else {
+                            stateAfterTriggers.actionRequired = nextAction;
+                        }
+                        return stateAfterTriggers;
+                    } else {
+                        // Hate-2 deleted itself → Effect ends here (second clause does not trigger)
+                        stateAfterTriggers = log(stateAfterTriggers, actor, `Hate-2 deleted itself, second clause does not trigger.`);
+                        return endTurnCb(stateAfterTriggers);
+                    }
+                }
+            };
+            requiresTurnEnd = false;
+            break;
+        }
+        case 'select_opponent_highest_card_to_delete_for_hate_2': {
+            const { sourceCardId, actor } = prev.actionRequired;
+            const opponent = actor === 'player' ? 'opponent' : 'player';
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+            if (!cardInfo) return { nextState: prev };
+
+            // Validation: Must be one of the opponent's highest uncovered cards
+            const opponentHighestCards = findAllHighestUncoveredCards(prev, opponent);
+            const isValid = opponentHighestCards.some(c => c.card.id === targetCardId);
+            if (!isValid) {
+                newState = log(prev, actor, `Invalid selection: Card is not one of opponent's highest value uncovered cards.`);
+                return { nextState: prev };
+            }
+
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
+            const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
+            newState = log(newState, actor, `Hate-2: ${actorName} deletes ${ownerName} highest value uncovered card (${cardName}).`);
+
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            const lane = prev[cardInfo.owner].lanes[laneIndex];
+            const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+
+            newState.actionRequired = null;
+            requiresAnimation = {
+                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                onCompleteCallback: (s, endTurnCb) => {
+                    let stateAfterTriggers = checkForHate3Trigger(s, actor);
+
+                    // Handle uncovering
+                    if (wasTopCard) {
+                        const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardInfo.owner, laneIndex);
+                        stateAfterTriggers = uncoverResult.newState;
+                    }
+
+                    // Hate-2 effect is complete, end turn
+                    return endTurnCb(stateAfterTriggers);
                 }
             };
             requiresTurnEnd = false;

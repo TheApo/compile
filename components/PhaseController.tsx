@@ -326,6 +326,10 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select an opponent\'s card to shift';
                 case 'select_opponent_card_to_return':
                     return 'Action: Select an opponent\'s card to return';
+                case 'select_own_highest_card_to_delete_for_hate_2':
+                    return 'Action: Select your highest value uncovered card to delete';
+                case 'select_opponent_highest_card_to_delete_for_hate_2':
+                    return 'Action: Select opponent\'s highest value uncovered card to delete';
                 default:
                     return 'Action Required';
             }

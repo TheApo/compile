@@ -141,7 +141,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     wrappedOnEndGame,
     difficulty,
     useControlMechanic,
-    actualStartingPlayer ?? 'player'
+    actualStartingPlayer ?? 'player',
+    trackPlayerRearrange
   );
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
@@ -357,17 +358,28 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
       if (currentState.animationState) return;
 
       const { actionRequired, turn, phase, compilableLanes } = currentState;
-      
+
       // Proxy click to lane if in compile phase
       if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
           handleLanePointerDown(laneIndex);
           return;
       }
-      
+
       // Proxy click to lane if playing a card from hand
       if (turn === 'player' && !actionRequired && selectedCard && phase === 'action') {
           handleLanePointerDown(laneIndex);
           return;
+      }
+
+      // Handle Hate-2 selections
+      if (actionRequired && actionRequired.actor === 'player') {
+          if (actionRequired.type === 'select_own_highest_card_to_delete_for_hate_2' ||
+              actionRequired.type === 'select_opponent_highest_card_to_delete_for_hate_2') {
+              if (isCardTargetable(card, currentState)) {
+                  resolveActionWithCard(card.id);
+                  return;
+              }
+          }
       }
 
       // If it's not a proxy, it's a card-specific interaction.

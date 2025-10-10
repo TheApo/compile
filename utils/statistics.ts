@@ -71,6 +71,18 @@ export interface GameStatistics {
 }
 
 export function initializeStatistics(): GameStatistics {
+    // Initialize all 15 protocols with 0 usage so they appear in "Least Used Protocols"
+    const allProtocols = [
+        'Apathy', 'Darkness', 'Death', 'Fire', 'Gravity',
+        'Hate', 'Life', 'Light', 'Love', 'Metal',
+        'Plague', 'Psychic', 'Speed', 'Spirit', 'Water'
+    ];
+
+    const initialProtocols: { [key: string]: { timesUsed: number; wins: number; losses: number } } = {};
+    allProtocols.forEach(protocol => {
+        initialProtocols[protocol] = { timesUsed: 0, wins: 0, losses: 0 };
+    });
+
     return {
         version: STATS_VERSION,
         global: {
@@ -85,7 +97,7 @@ export function initializeStatistics(): GameStatistics {
             longestWinStreak: 0,
             longestLoseStreak: 0,
         },
-        protocols: {},
+        protocols: initialProtocols,
         aiDifficulty: {
             easy: { played: 0, wins: 0, losses: 0 },
             normal: { played: 0, wins: 0, losses: 0 },
@@ -129,6 +141,20 @@ export function loadStatistics(): GameStatistics {
         }
         const parsed = JSON.parse(stored) as any;
 
+        // Ensure all 15 protocols exist (migration for existing stats)
+        const allProtocols = [
+            'Apathy', 'Darkness', 'Death', 'Fire', 'Gravity',
+            'Hate', 'Life', 'Light', 'Love', 'Metal',
+            'Plague', 'Psychic', 'Speed', 'Spirit', 'Water'
+        ];
+
+        const migratedProtocols = { ...(parsed.protocols || {}) };
+        allProtocols.forEach(protocol => {
+            if (!migratedProtocols[protocol]) {
+                migratedProtocols[protocol] = { timesUsed: 0, wins: 0, losses: 0 };
+            }
+        });
+
         // Always ensure control and coinFlip fields exist (migration)
         const stats: GameStatistics = {
             ...parsed,
@@ -137,6 +163,7 @@ export function loadStatistics(): GameStatistics {
                 ...parsed.global,
                 lastGameDuration: parsed.global?.lastGameDuration || null,
             },
+            protocols: migratedProtocols,
             control: {
                 gamesWithControl: parsed.control?.gamesWithControl || 0,
                 gamesWithoutControl: parsed.control?.gamesWithoutControl || 0,
@@ -158,8 +185,13 @@ export function loadStatistics(): GameStatistics {
             },
         };
 
-        // Save migrated version if needed (add new fields)
-        if (!parsed.control?.playerRearranges || !parsed.coinFlip || !parsed.actions?.totalCompiles) {
+        // Save migrated version if needed (add new fields or protocols)
+        const needsMigration = !parsed.control?.playerRearranges ||
+                               !parsed.coinFlip ||
+                               !parsed.actions?.totalCompiles ||
+                               Object.keys(migratedProtocols).length !== Object.keys(parsed.protocols || {}).length;
+
+        if (needsMigration) {
             saveStatistics(stats);
         }
 

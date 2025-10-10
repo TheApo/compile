@@ -66,11 +66,38 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
             }
             return false; // Metal-6 would be wasted, skip it
         }
+
         return true; // All other cards are fine
     }) || sortedHand[0]; // Fallback to highest card if no valid card found
 
-    // Try to find a lane where it can be played face up.
-    if (!playerHasPsychic1) {
+    // Check if Hate-2 would delete itself if played face-up
+    let hate2WouldSuicide = false;
+    if (cardToPlay.protocol === 'Hate' && cardToPlay.value === 2) {
+        for (let laneIndex = 0; laneIndex < 3; laneIndex++) {
+            if (opponent.protocols[laneIndex] === 'Hate') {
+                // Find max value of all other uncovered cards
+                let maxOtherValue = 0;
+                for (let checkLane = 0; checkLane < 3; checkLane++) {
+                    const checkLaneCards = opponent.lanes[checkLane];
+                    if (checkLaneCards.length > 0 && checkLane !== laneIndex) {
+                        const uncovered = checkLaneCards[checkLaneCards.length - 1];
+                        const uncoveredValue = uncovered.isFaceUp ? uncovered.value : 2;
+                        if (uncoveredValue > maxOtherValue) {
+                            maxOtherValue = uncoveredValue;
+                        }
+                    }
+                }
+                // If Hate-2 (value 2) would be highest or tied, it would delete itself
+                if (2 >= maxOtherValue) {
+                    hate2WouldSuicide = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Try to find a lane where it can be played face up (but not if Hate-2 would suicide).
+    if (!playerHasPsychic1 && !hate2WouldSuicide) {
         const aiHasSpirit1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
@@ -198,6 +225,53 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'deleteCard', cardId: validTargets[0].id };
             }
             return { type: 'skip' };
+        }
+
+        case 'select_own_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            // Collect all uncovered cards for the actor
+            state[actor].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            // Find the highest value
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            // Easy AI: Just pick the first one (simple, no strategy)
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
+        }
+
+        case 'select_opponent_highest_card_to_delete_for_hate_2': {
+            const actor = action.actor;
+            const opponent = actor === 'player' ? 'opponent' : 'player';
+            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
+
+            // Collect all uncovered cards for the opponent
+            state[opponent].lanes.forEach((lane, laneIndex) => {
+                if (lane.length > 0) {
+                    const uncovered = lane[lane.length - 1];
+                    const value = uncovered.isFaceUp ? uncovered.value : 2;
+                    uncoveredCards.push({ card: uncovered, laneIndex, value });
+                }
+            });
+
+            if (uncoveredCards.length === 0) return { type: 'skip' };
+
+            // Find the highest value
+            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
+            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
+
+            // Easy AI: Just pick the first one (simple, no strategy)
+            return { type: 'deleteCard', cardId: highestCards[0].card.id };
         }
 
         case 'select_own_face_up_covered_card_to_flip':

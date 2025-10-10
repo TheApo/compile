@@ -26,8 +26,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
-        const isCompilable = phase === 'compile' && !actionRequired && compilableLanes.includes(laneIndex);
-    
+        const isCompilable = phase === 'compile' && turn === 'player' && !actionRequired && compilableLanes.includes(laneIndex);
+
         const isPlayerTurn = turn === 'player';
         const isPlayFromHand = phase === 'action' && !actionRequired && selectedCardId;
         const isPlayFromEffect = actionRequired?.type === 'select_lane_for_play';
