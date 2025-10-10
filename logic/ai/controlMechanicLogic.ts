@@ -6,6 +6,82 @@
 import { GameState, ActionRequired, AIAction } from '../../types';
 
 /**
+ * Checks if rearranging PLAYER's protocols would be beneficial for the AI.
+ * Returns true if there's at least one swap that hurts the player (score > 0).
+ */
+export function canBenefitFromPlayerRearrange(state: GameState): boolean {
+    const playerState = state.player;
+    const compiledIndices: number[] = [];
+    const uncompiledIndices: number[] = [];
+
+    for (let i = 0; i < 3; i++) {
+        if (playerState.compiled[i]) {
+            compiledIndices.push(i);
+        } else {
+            uncompiledIndices.push(i);
+        }
+    }
+
+    if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
+        return false;
+    }
+
+    // Check if ANY swap would hurt the player (score > 0)
+    for (const compiledIdx of compiledIndices) {
+        for (const uncompiledIdx of uncompiledIndices) {
+            const score = playerState.laneValues[uncompiledIdx] - playerState.laneValues[compiledIdx];
+            if (score > 0) {
+                return true; // Found a beneficial swap!
+            }
+        }
+    }
+
+    return false; // No beneficial swap found
+}
+
+/**
+ * Checks if rearranging AI's (opponent's) own protocols would be beneficial.
+ * Returns true if there's a swap that brings uncompiled protocol closer to victory (distance <= 3).
+ */
+export function canBenefitFromOwnRearrange(state: GameState): boolean {
+    const aiState = state.opponent;
+    const compiledIndices: number[] = [];
+    const uncompiledIndices: number[] = [];
+
+    for (let i = 0; i < 3; i++) {
+        if (aiState.compiled[i]) {
+            compiledIndices.push(i);
+        } else {
+            uncompiledIndices.push(i);
+        }
+    }
+
+    if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
+        return false;
+    }
+
+    // Check if ANY swap brings us closer to victory
+    for (const compiledIdx of compiledIndices) {
+        for (const uncompiledIdx of uncompiledIndices) {
+            const valueAfterSwap = aiState.laneValues[compiledIdx];
+            const distanceToWin = 10 - valueAfterSwap;
+
+            if (distanceToWin >= 0 && distanceToWin <= 3) {
+                // Check if this is actually an improvement over current state
+                const currentUncompiledValue = aiState.laneValues[uncompiledIdx];
+                const currentDistance = 10 - currentUncompiledValue;
+
+                if (distanceToWin < currentDistance) {
+                    return true; // Found a beneficial swap!
+                }
+            }
+        }
+    }
+
+    return false; // No beneficial swap found
+}
+
+/**
  * Determines the best rearrangement of protocols when the AI uses the Control Mechanic.
  * @param state The current game state.
  * @param action The `prompt_rearrange_protocols` action.

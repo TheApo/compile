@@ -8,7 +8,7 @@
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
-import { handleControlRearrange } from './controlMechanicLogic';
+import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
 
 // AI MEMORY: Tracks known information about cards
 interface AIMemory {
@@ -1087,41 +1087,20 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // STRATEGY: Rearranging PLAYER's protocols is almost always the best choice!
-            // It disrupts their strategy by moving compiled protocols to lanes with cards.
-            const playerCompiledCount = state.player.compiled.filter(c => c).length;
+            // CRITICAL FIX: Check if rearrange would ACTUALLY be beneficial BEFORE deciding
+            // Use the same logic as handleControlRearrange to avoid pretending to rearrange
 
-            // If player has compiled any protocol, ALWAYS try to disrupt them
-            if (playerCompiledCount > 0) {
-                // Check if player has cards in non-compiled lanes (target for disruption)
-                const compiledIndex = state.player.compiled.findIndex(c => c);
-                let hasCardsInOtherLanes = false;
-                for (let i = 0; i < 3; i++) {
-                    if (i !== compiledIndex && state.player.lanes[i].length > 0) {
-                        hasCardsInOtherLanes = true;
-                        break;
-                    }
-                }
-
-                if (hasCardsInOtherLanes) {
-                    return { type: 'resolveControlMechanicPrompt', choice: 'player' };
-                }
+            // Priority 1: Try to disrupt player if it would actually hurt them
+            if (canBenefitFromPlayerRearrange(state)) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
-            // Only rearrange own protocols if it actually helps with hand playability
-            const canBenefitFromOwnRearrange = state.opponent.hand.some(card => {
-                const matchingUncompiledLanes = state.opponent.protocols
-                    .map((p, i) => !state.opponent.compiled[i] && p === card.protocol ? i : -1)
-                    .filter(i => i !== -1);
-                // Can't play this card face-up anywhere, but protocol exists
-                return matchingUncompiledLanes.length === 0 && state.opponent.protocols.includes(card.protocol);
-            });
-
-            if (canBenefitFromOwnRearrange) {
+            // Priority 2: Rearrange own protocols ONLY if it brings us closer to victory
+            if (canBenefitFromOwnRearrange(state)) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
 
-            // Otherwise skip - rearranging for no reason wastes the Control
+            // No beneficial rearrange found - skip to avoid wasting the control action
             return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
         }
 

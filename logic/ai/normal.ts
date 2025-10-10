@@ -12,7 +12,7 @@
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
-import { handleControlRearrange } from './controlMechanicLogic';
+import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
 
 type ScoredMove = {
     move: AIAction;
@@ -252,26 +252,18 @@ const getBestMove = (state: GameState): AIAction => {
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // Rearrange player protocols if they have compiled lanes
-            const opponentCompiledCount = state.opponent.compiled.filter(c => c).length;
-            const playerCompiledCount = state.player.compiled.filter(c => c).length;
-
-            if (playerCompiledCount > 0 && state.player.compiled.filter(c => !c).length > 0) {
+            // CRITICAL FIX: Check if rearrange would ACTUALLY be beneficial BEFORE deciding
+            // Priority 1: Try to disrupt player if it actually hurts them
+            if (canBenefitFromPlayerRearrange(state)) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
-            // Maybe rearrange own if beneficial
-            const canBenefit = state.opponent.hand.some(card => {
-                const currentPlayable = state.opponent.protocols.filter((p, i) =>
-                    !state.opponent.compiled[i] && p === card.protocol
-                ).length;
-                return currentPlayable === 0 && state.opponent.protocols.includes(card.protocol);
-            });
-
-            if (canBenefit && opponentCompiledCount < 2 && !shouldMakeMistake()) {
+            // Priority 2: Rearrange own protocols ONLY if it actually helps
+            if (canBenefitFromOwnRearrange(state) && !shouldMakeMistake()) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
 
+            // No beneficial rearrange found - skip to avoid wasting the control action
             return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
         }
 
