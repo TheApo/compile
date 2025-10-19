@@ -220,98 +220,132 @@ export function updateStatisticsOnGameEnd(
     playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; handsRefreshed: number },
     compilesCount?: number
 ): GameStatistics {
-    const newStats = { ...stats };
     const playerWon = winner === 'player';
 
+    // Deep copy all nested objects to prevent mutations
+    const newGlobal = { ...stats.global };
+    const newProtocols = { ...stats.protocols };
+    const newAiDifficulty = {
+        easy: { ...stats.aiDifficulty.easy },
+        normal: { ...stats.aiDifficulty.normal },
+        hard: { ...stats.aiDifficulty.hard }
+    };
+    const newControl = { ...stats.control };
+    const newActions = { ...stats.actions };
+    const newCoinFlip = { ...stats.coinFlip };
+    const newCards = {
+        played: { ...stats.cards.played },
+        deleted: { ...stats.cards.deleted }
+    };
+
     // Update global stats
-    newStats.global.totalGamesPlayed++;
+    newGlobal.totalGamesPlayed++;
     if (playerWon) {
-        newStats.global.totalGamesWon++;
+        newGlobal.totalGamesWon++;
     } else {
-        newStats.global.totalGamesLost++;
+        newGlobal.totalGamesLost++;
     }
-    newStats.global.totalPlaytime += gameDurationSeconds;
+    newGlobal.totalPlaytime += gameDurationSeconds;
 
     // Update fastest/longest/last game
     if (playerWon) {
-        if (newStats.global.fastestWin === null || gameDurationSeconds < newStats.global.fastestWin) {
-            newStats.global.fastestWin = gameDurationSeconds;
+        if (newGlobal.fastestWin === null || gameDurationSeconds < newGlobal.fastestWin) {
+            newGlobal.fastestWin = gameDurationSeconds;
         }
     }
-    if (newStats.global.longestGame === null || gameDurationSeconds > newStats.global.longestGame) {
-        newStats.global.longestGame = gameDurationSeconds;
+    if (newGlobal.longestGame === null || gameDurationSeconds > newGlobal.longestGame) {
+        newGlobal.longestGame = gameDurationSeconds;
     }
-    newStats.global.lastGameDuration = gameDurationSeconds;
+    newGlobal.lastGameDuration = gameDurationSeconds;
 
     // Update streaks
     if (playerWon) {
-        if (newStats.global.currentStreak >= 0) {
-            newStats.global.currentStreak++;
+        if (newGlobal.currentStreak >= 0) {
+            newGlobal.currentStreak++;
         } else {
-            newStats.global.currentStreak = 1;
+            newGlobal.currentStreak = 1;
         }
-        if (newStats.global.currentStreak > newStats.global.longestWinStreak) {
-            newStats.global.longestWinStreak = newStats.global.currentStreak;
+        if (newGlobal.currentStreak > newGlobal.longestWinStreak) {
+            newGlobal.longestWinStreak = newGlobal.currentStreak;
         }
     } else {
-        if (newStats.global.currentStreak <= 0) {
-            newStats.global.currentStreak--;
+        if (newGlobal.currentStreak <= 0) {
+            newGlobal.currentStreak--;
         } else {
-            newStats.global.currentStreak = -1;
+            newGlobal.currentStreak = -1;
         }
-        if (Math.abs(newStats.global.currentStreak) > newStats.global.longestLoseStreak) {
-            newStats.global.longestLoseStreak = Math.abs(newStats.global.currentStreak);
+        if (Math.abs(newGlobal.currentStreak) > newGlobal.longestLoseStreak) {
+            newGlobal.longestLoseStreak = Math.abs(newGlobal.currentStreak);
         }
     }
 
-    // Update protocol stats
+    // Update protocol stats (deep copy each protocol)
     playerProtocols.forEach(protocol => {
-        if (!newStats.protocols[protocol]) {
-            newStats.protocols[protocol] = { timesUsed: 0, wins: 0, losses: 0 };
-        }
-        newStats.protocols[protocol].timesUsed++;
-        if (playerWon) {
-            newStats.protocols[protocol].wins++;
+        if (!newProtocols[protocol]) {
+            newProtocols[protocol] = { timesUsed: 0, wins: 0, losses: 0 };
         } else {
-            newStats.protocols[protocol].losses++;
+            // Deep copy the protocol stats
+            newProtocols[protocol] = { ...newProtocols[protocol] };
+        }
+        newProtocols[protocol].timesUsed++;
+        if (playerWon) {
+            newProtocols[protocol].wins++;
+        } else {
+            newProtocols[protocol].losses++;
         }
     });
 
     // Update AI difficulty stats
-    newStats.aiDifficulty[difficulty].played++;
+    newAiDifficulty[difficulty].played++;
     if (playerWon) {
-        newStats.aiDifficulty[difficulty].wins++;
+        newAiDifficulty[difficulty].wins++;
     } else {
-        newStats.aiDifficulty[difficulty].losses++;
+        newAiDifficulty[difficulty].losses++;
     }
 
     // Update control mechanic stats
     if (useControl) {
-        newStats.control.gamesWithControl++;
+        newControl.gamesWithControl++;
     } else {
-        newStats.control.gamesWithoutControl++;
+        newControl.gamesWithoutControl++;
     }
 
     // Update action stats from game stats
     if (playerStats) {
-        newStats.actions.totalCardsPlayed += playerStats.cardsPlayed;
-        newStats.actions.totalCardsDrawn += playerStats.cardsDrawn;
-        newStats.actions.totalDiscards += playerStats.cardsDiscarded;
-        newStats.actions.totalDeletes += playerStats.cardsDeleted;
-        newStats.actions.totalFlips += playerStats.cardsFlipped;
-        newStats.actions.totalShifts += playerStats.cardsShifted;
-        newStats.actions.totalRefreshes += playerStats.handsRefreshed;
+        newActions.totalCardsPlayed += playerStats.cardsPlayed;
+        newActions.totalCardsDrawn += playerStats.cardsDrawn;
+        newActions.totalDiscards += playerStats.cardsDiscarded;
+        newActions.totalDeletes += playerStats.cardsDeleted;
+        newActions.totalFlips += playerStats.cardsFlipped;
+        newActions.totalShifts += playerStats.cardsShifted;
+        newActions.totalRefreshes += playerStats.handsRefreshed;
     }
 
     if (compilesCount !== undefined) {
-        newStats.actions.totalCompiles += compilesCount;
+        newActions.totalCompiles += compilesCount;
     }
 
-    return newStats;
+    // Return new stats with all updated nested objects
+    return {
+        version: stats.version,
+        global: newGlobal,
+        protocols: newProtocols,
+        aiDifficulty: newAiDifficulty,
+        cards: newCards,
+        actions: newActions,
+        control: newControl,
+        coinFlip: newCoinFlip
+    };
 }
 
 export function trackCardPlayed(stats: GameStatistics, cardName: string): GameStatistics {
-    const newStats = { ...stats };
+    const newStats = {
+        ...stats,
+        cards: {
+            ...stats.cards,
+            played: { ...stats.cards.played }
+        }
+    };
     if (!newStats.cards.played[cardName]) {
         newStats.cards.played[cardName] = 0;
     }
@@ -320,7 +354,13 @@ export function trackCardPlayed(stats: GameStatistics, cardName: string): GameSt
 }
 
 export function trackCardDeleted(stats: GameStatistics, cardName: string): GameStatistics {
-    const newStats = { ...stats };
+    const newStats = {
+        ...stats,
+        cards: {
+            ...stats.cards,
+            deleted: { ...stats.cards.deleted }
+        }
+    };
     if (!newStats.cards.deleted[cardName]) {
         newStats.cards.deleted[cardName] = 0;
     }
@@ -329,7 +369,10 @@ export function trackCardDeleted(stats: GameStatistics, cardName: string): GameS
 }
 
 export function trackRearrange(stats: GameStatistics, actor: 'player' | 'opponent'): GameStatistics {
-    const newStats = { ...stats };
+    const newStats = {
+        ...stats,
+        control: { ...stats.control }  // Deep copy control object!
+    };
 
     if (actor === 'player') {
         newStats.control.playerRearranges++;
@@ -342,7 +385,10 @@ export function trackRearrange(stats: GameStatistics, actor: 'player' | 'opponen
 }
 
 export function trackCoinFlip(stats: GameStatistics, choice: 'heads' | 'tails', won: boolean): GameStatistics {
-    const newStats = { ...stats };
+    const newStats = {
+        ...stats,
+        coinFlip: { ...stats.coinFlip }  // Deep copy coinFlip object!
+    };
 
     if (choice === 'heads') {
         newStats.coinFlip.headsChosen++;

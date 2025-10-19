@@ -76,8 +76,8 @@ export const cards: Card[] = [
         protocol: "Chaos",
         value: 1,
         top: "",
-        middle: "",
-        bottom: "<div><span class='emphasis'>End:</span> Rearrange your protocols. Rearrange your opponent's protocols.</div>",
+        middle: "Rearrange your protocols. Rearrange your opponent's protocols.",
+        bottom: "",
         keywords: {}
     },
     {

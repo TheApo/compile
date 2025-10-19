@@ -7,17 +7,17 @@ import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../.
 import { log } from "../../utils/log";
 
 /**
- * Chaos-1 End Effect: "Rearrange your protocols. Rearrange your opponent's protocols."
+ * Chaos-1 Middle Command: "Rearrange your protocols. Rearrange your opponent's protocols."
  *
  * Triggers two rearrange actions:
  * 1. CardOwner rearranges their own protocols (actionRequired)
  * 2. CardOwner then rearranges opponent's protocols (queued)
  */
-export const execute = (card: PlayedCard, state: GameState, context: EffectContext): EffectResult => {
+export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
     const { cardOwner } = context;
     const opponent: Player = cardOwner === 'player' ? 'opponent' : 'player';
 
-    let newState = log(state, cardOwner, `${cardOwner === 'player' ? 'Player' : 'Opponent'}'s Chaos-1 end effect triggers.`);
+    let newState = log(state, cardOwner, `${cardOwner === 'player' ? 'Player' : 'Opponent'}'s Chaos-1 triggers.`);
 
     // First action: Rearrange own protocols
     newState.actionRequired = {

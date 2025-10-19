@@ -4,7 +4,6 @@
  */
 
 import { GameState, PlayedCard, EffectResult, EffectContext } from "../../types";
-import { execute as chaos1end } from './chaos/Chaos-1-end';
 import { execute as chaos4end } from './chaos/Chaos-4-end';
 import { execute as plague4 } from './plague/Plague-4';
 import { execute as light1 } from './light/Light-1-end';
@@ -17,7 +16,6 @@ import { execute as psychic4 } from './psychic/Psychic-4-end';
 type EndEffectExecutor = (card: PlayedCard, state: GameState, context: EffectContext) => EffectResult;
 
 export const effectRegistryEnd: Record<string, EndEffectExecutor> = {
-    'Chaos-1': chaos1end,
     'Chaos-4': chaos4end,
     'Plague-4': plague4,
     'Light-1': light1,
