@@ -364,10 +364,12 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     // CRITICAL FIX: If the shifted card is now uncovered and face-up in the target lane, trigger its middle command!
     // This implements the rule: "When a card's text enters play by being played, flipped, or uncovered"
+    // IMPORTANT: Only trigger if the card was COVERED before (status changed from covered to uncovered)
     const targetLane = stateAfterOriginalLaneUncover[cardOwner].lanes[targetLaneIndex];
     const shiftedCardIsNowUncovered = targetLane.length > 0 && targetLane[targetLane.length - 1].id === cardToShiftId;
+    const cardWasCoveredBefore = !isRemovingTopCard;  // If it wasn't the top card, it was covered
 
-    if (shiftedCardIsNowUncovered && cardToShift.isFaceUp) {
+    if (shiftedCardIsNowUncovered && cardToShift.isFaceUp && cardWasCoveredBefore) {
         const uncoverTargetResult = handleUncoverEffect(stateAfterOriginalLaneUncover, cardOwner, targetLaneIndex);
         if (uncoverTargetResult.animationRequests) {
             allAnimations.push(...uncoverTargetResult.animationRequests);
