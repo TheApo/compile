@@ -99,11 +99,19 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     // Try to find a lane where it can be played face up (but not if Hate-2 would suicide).
     if (!playerHasPsychic1 && !hate2WouldSuicide) {
         const aiHasSpirit1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+
+        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+        const aiHasChaos3 = opponent.lanes.some((lane) => {
+            if (lane.length === 0) return false;
+            const uncoveredCard = lane[lane.length - 1];
+            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+        });
+
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             // Avoid playing in a lane the player is guaranteed to compile.
             if (canPlayerCompileLane(i)) continue;
-            if (cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1) {
+            if (cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1 || aiHasChaos3) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
         }
@@ -323,11 +331,23 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_flip_for_light_0':
         case 'select_any_other_card_to_flip_for_water_0':
         case 'select_any_face_down_card_to_flip_optional':
+        case 'select_covered_card_to_flip_for_chaos_0':
         case 'select_covered_card_in_line_to_flip_optional': {
             const isOptional = 'optional' in action && action.optional;
             const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
             const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
             const requiresFaceDown = action.type === 'select_any_face_down_card_to_flip_optional';
+
+            // Special case for Chaos-0: "In each line, flip 1 covered card."
+            if (action.type === 'select_covered_card_to_flip_for_chaos_0') {
+                const { laneIndex } = action;
+                const playerCovered = state.player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                if (playerCovered.length > 0) return { type: 'flipCard', cardId: playerCovered[0].id };
+                const opponentCovered = state.opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                if (opponentCovered.length > 0) return { type: 'flipCard', cardId: opponentCovered[0].id };
+                // Note: Chaos-0 should only create actions for lanes with covered cards, so this shouldn't happen.
+                return { type: 'skip' };
+            }
 
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -794,6 +814,20 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (validTargets.length > 0) {
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 // Using 'deleteCard' as the action type to trigger resolveActionWithCard
+                return { type: 'deleteCard', cardId: randomTarget.id };
+            }
+            return { type: 'skip' };
+        }
+        case 'select_own_covered_card_to_shift': {
+            const validTargets: PlayedCard[] = [];
+            for (const lane of state.opponent.lanes) {
+                // A card is covered if it's not the last one.
+                for (let i = 0; i < lane.length - 1; i++) {
+                    validTargets.push(lane[i]);
+                }
+            }
+            if (validTargets.length > 0) {
+                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 return { type: 'deleteCard', cardId: randomTarget.id };
             }
             return { type: 'skip' };

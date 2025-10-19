@@ -53,9 +53,18 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const opponentOfTurnPlayer = gameState.turn === 'player' ? 'opponent' : 'player';
             return owner === opponentOfTurnPlayer && cardIndex < lane.length - 1;
         }
+        case 'select_own_covered_card_to_shift': { // Chaos-2
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            return owner === actionRequired.actor && cardIndex < lane.length - 1;
+        }
         case 'select_covered_card_in_line_to_flip_optional': { // Darkness-2
             const cardIndex = lane.findIndex(c => c.id === card.id);
             // Card must be in the correct lane, and must be covered (not the last card in its stack).
+            return laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
+        }
+        case 'select_covered_card_to_flip_for_chaos_0': { // Chaos-0
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            // Card must be in the current lane being processed, and must be covered
             return laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
         }
 

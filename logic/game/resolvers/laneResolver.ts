@@ -119,9 +119,17 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 canPlayFaceUp = !isFaceDown;
             } else {
                 const playerHasSpiritOne = prev[actor].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+
+                // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+                const playerHasChaosThree = prev[actor].lanes.some((lane) => {
+                    if (lane.length === 0) return false;
+                    const uncoveredCard = lane[lane.length - 1];
+                    return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+                });
+
                 const opponentId = actor === 'player' ? 'opponent' : 'player';
                 const opponentHasPsychic1 = prev[opponentId].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
-                canPlayFaceUp = (playerHasSpiritOne || cardInHand.protocol === prev[actor].protocols[targetLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[targetLaneIndex]) && !opponentHasPsychic1;
+                canPlayFaceUp = (playerHasSpiritOne || playerHasChaosThree || cardInHand.protocol === prev[actor].protocols[targetLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[targetLaneIndex]) && !opponentHasPsychic1;
             }
 
             const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);

@@ -554,25 +554,31 @@ p {
 .opponent-protocols-area h3 { color: var(--danger-color); }
 
 .protocol-display-card {
-  border: 1px solid var(--surface-hover);
+  /* Card-like appearance matching protocol cards */
+  border: 1px solid hsla(253, 91%, 63%, 0.5);
   padding: 1rem;
   text-align: center;
-  background-color: var(--background-color);
-  font-weight: 600;
-  border-radius: 4px;
+  background-color: var(--surface-color);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   animation: reveal 0.5s ease-out forwards;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
 }
 
 .protocol-display-card.player {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 8px var(--primary-color);
 }
 .protocol-display-card.opponent {
   border-color: var(--danger-color);
   color: var(--danger-color);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 8px var(--danger-color);
 }
 
 .protocol-grid-container {
@@ -594,36 +600,38 @@ p {
 }
 
 .protocol-card {
-  border: 1px solid var(--surface-hover);
+  /* Card-like appearance with protocol colors */
+  border: 1px solid hsla(253, 91%, 63%, 0.5);
   padding: 1.5rem 1rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease-in-out;
   background-color: var(--surface-color);
   color: var(--text-color);
-  border-radius: 4px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 1.1em;
+  position: relative;
+  overflow: hidden;
 }
 
 .protocol-card:hover:not([aria-disabled="true"]) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  background-color: var(--surface-hover);
+  transform: translateY(-5px);
+  box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 10px var(--primary-color);
   border-color: var(--primary-color);
-  color: var(--primary-color);
 }
 
 .protocol-card.selected {
-  background-color: var(--primary-color);
-  color: var(--background-color);
   border-color: var(--primary-color);
-  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 15px var(--primary-color);
+  transform: translateY(-5px) scale(1.05);
 }
 
 .protocol-card.chosen {
   opacity: 0.15;
   pointer-events: none;
-  background-color: transparent;
-  border-color: transparent;
 }
 
 .protocol-card[aria-disabled="true"] {
@@ -1386,6 +1394,14 @@ p {
         radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
         repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
 }
+.card-protocol-chaos .card-front {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
 .card-protocol-darkness .card-front {
     border-color: hsl(270, 50%, 70%);
     background-image:
@@ -1464,6 +1480,204 @@ p {
         radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
 }
 .card-protocol-water .card-front {
+    border-color: hsl(210, 80%, 65%);
+    background-image:
+        radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- Protocol Selection Card Styles (Protocol Grid) --- */
+.protocol-card.card-protocol-apathy {
+    border-color: hsl(240, 5%, 60%);
+    background-image:
+        radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
+}
+.protocol-card.card-protocol-chaos {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
+.protocol-card.card-protocol-darkness {
+    border-color: hsl(270, 50%, 70%);
+    background-image:
+        radial-gradient(at 10% 20%, hsla(270, 50%, 70%, 0.2), transparent 60%),
+        radial-gradient(at 90% 80%, hsla(250, 60%, 60%, 0.2), transparent 70%);
+}
+.protocol-card.card-protocol-death {
+    border-color: hsl(0, 70%, 65%);
+    background-image:
+        radial-gradient(at 50% 100%, hsla(0, 70%, 55%, 0.25), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%);
+}
+.protocol-card.card-protocol-fire {
+    border-color: hsl(20, 90%, 65%);
+    background-image:
+        radial-gradient(at 50% 110%, hsla(25, 90%, 60%, 0.3), transparent 60%),
+        radial-gradient(at 10% 10%, hsla(35, 100%, 70%, 0.15), transparent 50%);
+}
+.protocol-card.card-protocol-gravity {
+    border-color: hsl(230, 60%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(230, 60%, 70%, 0.2) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+.protocol-card.card-protocol-hate {
+    border-color: hsl(350, 60%, 60%);
+    background-image:
+        radial-gradient(at 0% 100%, hsla(350, 60%, 50%, 0.25), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, hsla(350, 60%, 60%, 0.05) 15px, hsla(350, 60%, 60%, 0.05) 30px);
+}
+.protocol-card.card-protocol-life {
+    border-color: hsl(140, 70%, 60%);
+    background-image:
+        radial-gradient(at 50% 0%, hsla(140, 70%, 60%, 0.2), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%2361efb5' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.protocol-card.card-protocol-light {
+    border-color: hsl(50, 100%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(50, 100%, 75%, 0.25) 0%, transparent 60%);
+}
+.protocol-card.card-protocol-love {
+    border-color: hsl(320, 80%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(320, 80%, 75%, 0.1) 0%, hsla(320, 80%, 75%, 0.15) 40%, transparent 70%);
+}
+.protocol-card.card-protocol-metal {
+    border-color: hsl(210, 15%, 75%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(210, 15%, 85%, 0.2), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, hsla(210, 15%, 75%, 0.05) 1px, hsla(210, 15%, 75%, 0.05) 2px);
+}
+.protocol-card.card-protocol-plague {
+    border-color: hsl(80, 60%, 55%);
+    background-image:
+        radial-gradient(at 90% 20%, hsla(80, 60%, 55%, 0.2), transparent 50%),
+        radial-gradient(at 30% 85%, hsla(90, 50%, 45%, 0.15), transparent 60%);
+}
+.protocol-card.card-protocol-psychic {
+    border-color: hsl(280, 70%, 70%);
+    background-image:
+        radial-gradient(ellipse at 50% 100%, hsla(280, 70%, 70%, 0.2), transparent 70%);
+}
+.protocol-card.card-protocol-speed {
+    border-color: hsl(180, 80%, 60%);
+    background-image:
+        linear-gradient(0deg, transparent 40%, hsla(180, 80%, 60%, 0.1) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, hsla(180, 80%, 60%, 0.2) 50%, transparent 52%);
+}
+.protocol-card.card-protocol-spirit {
+    border-color: hsl(170, 60%, 65%);
+    background-image:
+        radial-gradient(at 0% 0%, hsla(170, 60%, 65%, 0.2), transparent 50%),
+        radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
+}
+.protocol-card.card-protocol-water {
+    border-color: hsl(210, 80%, 65%);
+    background-image:
+        radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- Protocol Display Card Styles (Selected Protocols Sidebar) --- */
+.protocol-display-card.card-protocol-apathy {
+    border-color: hsl(240, 5%, 60%);
+    background-image:
+        radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
+}
+.protocol-display-card.card-protocol-chaos {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
+.protocol-display-card.card-protocol-darkness {
+    border-color: hsl(270, 50%, 70%);
+    background-image:
+        radial-gradient(at 10% 20%, hsla(270, 50%, 70%, 0.2), transparent 60%),
+        radial-gradient(at 90% 80%, hsla(250, 60%, 60%, 0.2), transparent 70%);
+}
+.protocol-display-card.card-protocol-death {
+    border-color: hsl(0, 70%, 65%);
+    background-image:
+        radial-gradient(at 50% 100%, hsla(0, 70%, 55%, 0.25), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%);
+}
+.protocol-display-card.card-protocol-fire {
+    border-color: hsl(20, 90%, 65%);
+    background-image:
+        radial-gradient(at 50% 110%, hsla(25, 90%, 60%, 0.3), transparent 60%),
+        radial-gradient(at 10% 10%, hsla(35, 100%, 70%, 0.15), transparent 50%);
+}
+.protocol-display-card.card-protocol-gravity {
+    border-color: hsl(230, 60%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(230, 60%, 70%, 0.2) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+.protocol-display-card.card-protocol-hate {
+    border-color: hsl(350, 60%, 60%);
+    background-image:
+        radial-gradient(at 0% 100%, hsla(350, 60%, 50%, 0.25), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, hsla(350, 60%, 60%, 0.05) 15px, hsla(350, 60%, 60%, 0.05) 30px);
+}
+.protocol-display-card.card-protocol-life {
+    border-color: hsl(140, 70%, 60%);
+    background-image:
+        radial-gradient(at 50% 0%, hsla(140, 70%, 60%, 0.2), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%2361efb5' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.protocol-display-card.card-protocol-light {
+    border-color: hsl(50, 100%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(50, 100%, 75%, 0.25) 0%, transparent 60%);
+}
+.protocol-display-card.card-protocol-love {
+    border-color: hsl(320, 80%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(320, 80%, 75%, 0.1) 0%, hsla(320, 80%, 75%, 0.15) 40%, transparent 70%);
+}
+.protocol-display-card.card-protocol-metal {
+    border-color: hsl(210, 15%, 75%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(210, 15%, 85%, 0.2), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, hsla(210, 15%, 75%, 0.05) 1px, hsla(210, 15%, 75%, 0.05) 2px);
+}
+.protocol-display-card.card-protocol-plague {
+    border-color: hsl(80, 60%, 55%);
+    background-image:
+        radial-gradient(at 90% 20%, hsla(80, 60%, 55%, 0.2), transparent 50%),
+        radial-gradient(at 30% 85%, hsla(90, 50%, 45%, 0.15), transparent 60%);
+}
+.protocol-display-card.card-protocol-psychic {
+    border-color: hsl(280, 70%, 70%);
+    background-image:
+        radial-gradient(ellipse at 50% 100%, hsla(280, 70%, 70%, 0.2), transparent 70%);
+}
+.protocol-display-card.card-protocol-speed {
+    border-color: hsl(180, 80%, 60%);
+    background-image:
+        linear-gradient(0deg, transparent 40%, hsla(180, 80%, 60%, 0.1) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, hsla(180, 80%, 60%, 0.2) 50%, transparent 52%);
+}
+.protocol-display-card.card-protocol-spirit {
+    border-color: hsl(170, 60%, 65%);
+    background-image:
+        radial-gradient(at 0% 0%, hsla(170, 60%, 65%, 0.2), transparent 50%),
+        radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
+}
+.protocol-display-card.card-protocol-water {
     border-color: hsl(210, 80%, 65%);
     background-image:
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),

@@ -92,6 +92,10 @@ export type ActionRequired = {
     sourceCardId: string;
     actor: Player;
 } | {
+    type: 'select_own_covered_card_to_shift';
+    sourceCardId: string;
+    actor: Player;
+} | {
     type: 'select_lane_for_shift';
     cardToShiftId: string;
     cardOwner: Player;
@@ -142,6 +146,12 @@ export type ActionRequired = {
     count: number;
     sourceCardId: string;
     disallowedIds: string[];
+    actor: Player;
+} | {
+    type: 'select_covered_card_to_flip_for_chaos_0';
+    sourceCardId: string;
+    laneIndex: number;
+    remainingLanes: number[];
     actor: Player;
 } | {
     type: 'select_face_down_card_to_delete';

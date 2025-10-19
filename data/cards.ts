@@ -62,6 +62,57 @@ export const cards: Card[] = [
         keywords: { discard: true }
     },
     {
+        protocol: "Chaos",
+        value: 0,
+        top: "",
+        middle: "In each line, flip 1 covered card.",
+        bottom: "<div><span class='emphasis'>Start:</span> Draw the top card of your opponent's deck. Your opponent draws the top card of your deck.</div>",
+        keywords: {
+            flip: true,
+            draw: true,
+        }
+    },
+    {
+        protocol: "Chaos",
+        value: 1,
+        top: "",
+        middle: "",
+        bottom: "<div><span class='emphasis'>End:</span> Rearrange your protocols. Rearrange your opponent's protocols.</div>",
+        keywords: {}
+    },
+    {
+        protocol: "Chaos",
+        value: 2,
+        top: "",
+        middle: "Shift 1 of your covered cards.",
+        bottom: "",
+        keywords: { shift: true }
+    },
+    {
+        protocol: "Chaos",
+        value: 3,
+        top: "",
+        middle: "",
+        bottom: "You may play cards without matching protocols.",
+        keywords: { play: true }
+    },
+    {
+        protocol: "Chaos",
+        value: 4,
+        top: "",
+        middle: "",
+        bottom: "<div><span class='emphasis'>End:</span> Discard your hand. Draw the same amount of cards.</div>",
+        keywords: { discard: true, draw: true }
+    },
+    {
+        protocol: "Chaos",
+        value: 5,
+        top: "",
+        middle: "Discard 1 card.",
+        bottom: "",
+        keywords: { discard: true }
+    },
+    {
         protocol: "Darkness",
         value: 0,
         top: "",

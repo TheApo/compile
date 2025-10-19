@@ -227,6 +227,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select one of your face-up, covered cards to flip';
                 case 'select_opponent_covered_card_to_shift':
                     return 'Action: Select one of your opponent\'s covered cards to shift';
+                case 'select_own_covered_card_to_shift':
+                    return 'Action: Select one of your covered cards to shift';
                 case 'select_lane_for_shift':
                     return 'Action: Select a new lane for the card';
                 case 'select_opponent_card_to_flip':
@@ -271,6 +273,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select any other card to flip';
                 case 'select_card_to_return':
                     return 'Action: Select a card to return to its owner\'s hand';
+                case 'select_covered_card_to_flip_for_chaos_0':
+                    return 'Action: Select a covered card to flip in this lane';
                 case 'prompt_fire_3_discard':
                     return 'End Phase: Discard 1 card to flip 1 card?';
                 case 'select_card_to_flip_for_fire_3':

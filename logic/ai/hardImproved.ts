@@ -585,12 +585,20 @@ const getBestMove = (state: GameState): AIAction => {
 
         // Check if ANY card in hand can defend (reach >= player value)
         const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+
+        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+        const aiHasChaos3 = state.opponent.lanes.some((lane) => {
+            if (lane.length === 0) return false;
+            const uncoveredCard = lane[lane.length - 1];
+            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+        });
+
         const aiProtocol = state.opponent.protocols[laneIndex];
         const playerProtocol = state.player.protocols[laneIndex];
 
         for (const card of state.opponent.hand) {
             // Can play face-up?
-            const matchesProtocol = card.protocol === aiProtocol || card.protocol === playerProtocol || aiHasSpirit1;
+            const matchesProtocol = card.protocol === aiProtocol || card.protocol === playerProtocol || aiHasSpirit1 || aiHasChaos3;
             const faceUpValue = matchesProtocol && !playerHasPsychic1 ? card.value : 0;
 
             // Can play face-down (always possible unless Metal-2)
@@ -727,7 +735,15 @@ const getBestMove = (state: GameState): AIAction => {
             const matchesOwnProtocol = card.protocol === state.opponent.protocols[i];
             const matchesOpposingProtocol = card.protocol === state.player.protocols[i];
             const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-            const canPlayFaceUp = (matchesOwnProtocol || matchesOpposingProtocol || aiHasSpirit1) && !playerHasPsychic1;
+
+            // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+            const aiHasChaos3 = state.opponent.lanes.some((lane) => {
+                if (lane.length === 0) return false;
+                const uncoveredCard = lane[lane.length - 1];
+                return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+            });
+
+            const canPlayFaceUp = (matchesOwnProtocol || matchesOpposingProtocol || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1;
 
             if (canPlayFaceUp) {
                 // Skip Hate-2 face-up if it would suicide
@@ -1350,11 +1366,27 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_flip_for_fire_3':
         case 'select_card_to_flip_for_light_0':
         case 'select_any_other_card_to_flip_for_water_0':
+        case 'select_covered_card_to_flip_for_chaos_0':
         case 'select_covered_card_in_line_to_flip_optional': {
             const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
 
-            if (action.type === 'select_covered_card_in_line_to_flip_optional') {
-                // Special case: Only covered cards in a specific lane
+            if (action.type === 'select_covered_card_to_flip_for_chaos_0') {
+                // Chaos-0: Only covered cards in a specific lane
+                const { laneIndex } = action;
+                state.player.lanes[laneIndex].forEach((c, i, arr) => {
+                    if (i < arr.length - 1) { // Covered card
+                        const score = scoreCardForFlip(c, 'player', laneIndex, state);
+                        targets.push({ card: c, laneIndex, owner: 'player', score });
+                    }
+                });
+                state.opponent.lanes[laneIndex].forEach((c, i, arr) => {
+                    if (i < arr.length - 1) { // Covered card
+                        const score = scoreCardForFlip(c, 'opponent', laneIndex, state);
+                        targets.push({ card: c, laneIndex, owner: 'opponent', score });
+                    }
+                });
+            } else if (action.type === 'select_covered_card_in_line_to_flip_optional') {
+                // Darkness-2: Only covered cards in a specific lane
                 const { laneIndex } = action;
                 state.player.lanes[laneIndex].forEach((c, i, arr) => {
                     if (i < arr.length - 1) { // Covered card
@@ -2097,9 +2129,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 for (const laneIndex of playableLanes) {
                     // If forced face-down (Darkness-3), ONLY consider face-down plays
                     if (!isForcedFaceDown) {
-                        // Check if AI has Spirit-1 (allows playing any protocol face-up)
+                        // Check if AI has Spirit-1 or Chaos-3 (allows playing any protocol face-up)
                         const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-                        const canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex] || card.protocol === state.player.protocols[laneIndex] || aiHasSpirit1;
+
+                        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+                        const aiHasChaos3 = state.opponent.lanes.some((lane) => {
+                            if (lane.length === 0) return false;
+                            const uncoveredCard = lane[lane.length - 1];
+                            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+                        });
+
+                        const canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex] || card.protocol === state.player.protocols[laneIndex] || aiHasSpirit1 || aiHasChaos3;
 
                         if (canPlayFaceUp) {
                             const valueToAdd = card.value;
@@ -2635,6 +2675,37 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     return getCardThreat(b.card, 'player', state) - getCardThreat(a.card, 'player', state);
                 });
                 return { type: 'shiftCard', cardId: validTargets[0].card.id }; // FIX: shiftCard not deleteCard!
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_own_covered_card_to_shift': {
+            const validTargets: { card: PlayedCard; laneIndex: number }[] = [];
+            for (let i = 0; i < state.opponent.lanes.length; i++) {
+                const lane = state.opponent.lanes[i];
+                for (let j = 0; j < lane.length - 1; j++) {
+                    validTargets.push({ card: lane[j], laneIndex: i });
+                }
+            }
+            if (validTargets.length > 0) {
+                // Strategy: Shift cards from weak/unimportant lanes to stronger lanes
+                validTargets.sort((a, b) => {
+                    const aCompiled = state.opponent.compiled[a.laneIndex];
+                    const bCompiled = state.opponent.compiled[b.laneIndex];
+
+                    // Deprioritize compiled lanes (can't improve them further)
+                    if (aCompiled && !bCompiled) return 1;
+                    if (!aCompiled && bCompiled) return -1;
+
+                    // Shift from lanes with lower value (less important)
+                    const laneValueA = state.opponent.laneValues[a.laneIndex];
+                    const laneValueB = state.opponent.laneValues[b.laneIndex];
+                    if (laneValueA !== laneValueB) return laneValueA - laneValueB;
+
+                    // Lower threat cards are better to move
+                    return getCardThreat(a.card, 'opponent', state) - getCardThreat(b.card, 'opponent', state);
+                });
+                return { type: 'shiftCard', cardId: validTargets[0].card.id };
             }
             return { type: 'skip' };
         }

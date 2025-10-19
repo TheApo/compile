@@ -89,6 +89,47 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     if (metal6Result) return metal6Result;
 
     switch (prev.actionRequired.type) {
+        case 'select_covered_card_to_flip_for_chaos_0': { // Chaos-0
+            const { actor, sourceCardId, remainingLanes } = prev.actionRequired;
+            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
+
+            newState = internalResolveTargetedFlip(prev, targetCardId);
+
+            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
+                const result = handleOnFlipToFaceUp(newState, targetCardId);
+                newState = result.newState;
+                if (result.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: result.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => {
+                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
+                            return endTurnCb(s);
+                        }
+                    };
+                }
+            }
+
+            // Check if there are more lanes to process
+            if (remainingLanes.length > 0) {
+                const nextLane = remainingLanes[0];
+                const newRemainingLanes = remainingLanes.slice(1);
+                newState.actionRequired = {
+                    type: 'select_covered_card_to_flip_for_chaos_0',
+                    sourceCardId,
+                    laneIndex: nextLane,
+                    remainingLanes: newRemainingLanes,
+                    actor,
+                };
+                requiresTurnEnd = false;
+            } else {
+                // No more lanes, clear action
+                newState.actionRequired = null;
+                if (newState.queuedActions && newState.queuedActions.length > 0) {
+                    requiresTurnEnd = false;
+                }
+            }
+            break;
+        }
         case 'select_any_other_card_to_flip':
         case 'select_opponent_face_up_card_to_flip':
         case 'select_own_face_up_covered_card_to_flip':
@@ -108,7 +149,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 newState = log(newState, actor, `${sourceCardName}: Drawing ${draws} card(s).`);
                 newState = drawForPlayer(newState, actor, draws);
             }
-        
+
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const result = handleOnFlipToFaceUp(newState, targetCardId);
                 newState = result.newState;
@@ -122,7 +163,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     };
                 }
             }
-        
+
             if(newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
                 requiresTurnEnd = false;
             }
@@ -172,6 +213,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_card_to_shift_for_gravity_1':
         case 'shift_flipped_card_optional':
         case 'select_opponent_covered_card_to_shift':
+        case 'select_own_covered_card_to_shift':
         case 'select_face_down_card_to_shift_for_darkness_4':
         case 'select_any_opponent_card_to_shift': {
             // CRITICAL: For optional shift actions (like Darkness-1), validate that the source card still exists AND is face-up!
@@ -432,8 +474,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // 2. Determine the next step of the ORIGINAL multi-step delete action BEFORE uncovering
                     let nextStepOfDeleteAction: ActionRequired = null;
                     const sourceCardInfo = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
+                    const sourceIsUncovered = isCardUncovered(stateAfterTriggers, originalAction.sourceCardId);
 
-                    if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    // CRITICAL: Multi-step effects (like Hate-1) require the source to be UNCOVERED AND face-up
+                    if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                         if (originalAction.type === 'select_cards_to_delete' && originalAction.count > 1) {
                              nextStepOfDeleteAction = {
                                 type: 'select_cards_to_delete',
@@ -455,7 +499,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         }
                     } else if ('count' in originalAction && originalAction.count > 1) {
                         const sourceName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
-                        stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Remaining deletes from ${sourceName} were cancelled because the source is no longer active.`);
+                        const reason = !sourceCardInfo || !sourceCardInfo.card.isFaceUp
+                            ? "the source is no longer active"
+                            : "the source was covered";
+                        stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Remaining deletes from ${sourceName} were cancelled because ${reason}.`);
                     }
 
                     // 3. Handle uncovering with the pre-computed next delete action

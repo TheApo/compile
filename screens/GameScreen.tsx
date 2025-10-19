@@ -154,11 +154,38 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [debugModalPlayer, setDebugModalPlayer] = useState<Player | null>(null);
   const [showDebugButton, setShowDebugButton] = useState(false);
+  const [mainframeClickCount, setMainframeClickCount] = useState(0);
+  const mainframeResetTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const gameStateRef = useRef(gameState);
   useEffect(() => {
       gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Mainframe Debug Toggle: 5 clicks to toggle debug mode
+  const handleMainframeClick = () => {
+    const newCount = mainframeClickCount + 1;
+    setMainframeClickCount(newCount);
+
+    if (newCount >= 5) {
+      setShowDebugButton(prev => !prev);
+      setMainframeClickCount(0); // Reset counter
+      if (mainframeResetTimerRef.current) {
+        clearTimeout(mainframeResetTimerRef.current);
+        mainframeResetTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Reset counter after 2 seconds of inactivity
+    if (mainframeResetTimerRef.current) {
+      clearTimeout(mainframeResetTimerRef.current);
+    }
+    mainframeResetTimerRef.current = setTimeout(() => {
+      setMainframeClickCount(0);
+      mainframeResetTimerRef.current = null;
+    }, 2000);
+  };
 
   const lastPlayedCardInfo = useMemo(() => {
     if (gameState.lastPlayedCardId) {
@@ -284,8 +311,17 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     if (isPlayTarget) {
         const cardInHand = player.hand.find(c => c.id === selectedCard)!;
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+
+        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+        const playerHasChaosThree = player.lanes.some((lane, idx) => {
+            if (lane.length === 0) return false;
+            const uncoveredCard = lane[lane.length - 1];
+            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+        });
+
         const canPlayFaceUp = (
-            playerHasSpiritOne || 
+            playerHasSpiritOne ||
+            playerHasChaosThree ||
             cardInHand.protocol === player.protocols[laneIndex] ||
             cardInHand.protocol === opponent.protocols[laneIndex]
         ) && !opponentHasPsychic1;
@@ -515,7 +551,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         <button className="btn log-button" onClick={() => setShowLog(true)}>Log</button>
         <div className="game-screen-layout">
             <div className="game-preview-container">
-                <h2>Mainframe</h2>
+                <h2 onClick={handleMainframeClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Click 5 times to toggle debug mode">Mainframe</h2>
                 <GameInfoPanel
                     gameState={gameState}
                     turn={gameState.turn}

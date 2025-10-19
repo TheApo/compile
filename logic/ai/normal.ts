@@ -145,7 +145,15 @@ const getBestMove = (state: GameState): AIAction => {
 
             // FACE-UP PLAY (but not if Hate-2 would suicide)
             const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1) && !playerHasPsychic1 && !hate2WouldSuicide;
+
+            // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+            const aiHasChaos3 = state.opponent.lanes.some((lane) => {
+                if (lane.length === 0) return false;
+                const uncoveredCard = lane[lane.length - 1];
+                return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+            });
+
+            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1 && !hate2WouldSuicide;
             if (canPlayFaceUp) {
                 let score = 0;
                 let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}`;
@@ -430,9 +438,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     // If forced face-down (Darkness-3), ONLY consider face-down plays
                     if (!isForcedFaceDown) {
                         const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
+
+                        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+                        const aiHasChaos3 = state.opponent.lanes.some((lane) => {
+                            if (lane.length === 0) return false;
+                            const uncoveredCard = lane[lane.length - 1];
+                            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+                        });
+
                         const canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex]
                             || card.protocol === state.player.protocols[laneIndex]
-                            || aiHasSpirit1;
+                            || aiHasSpirit1
+                            || aiHasChaos3;
 
                         if (canPlayFaceUp) {
                             const valueToAdd = card.value;
@@ -823,11 +840,22 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_other_card_to_flip_for_water_0':
         case 'select_card_to_flip_for_fire_3':
         case 'select_card_to_flip_for_light_0':
+        case 'select_covered_card_to_flip_for_chaos_0':
         case 'select_covered_card_in_line_to_flip_optional': {
             const isOptional = 'optional' in action && action.optional;
             const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
             const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
             const requiresFaceDown = false; // None of these specific cases require face-down only
+
+            // Special case for Chaos-0: "In each line, flip 1 covered card."
+            if (action.type === 'select_covered_card_to_flip_for_chaos_0') {
+                const { laneIndex } = action;
+                const playerCovered = state.player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                if (playerCovered.length > 0) return { type: 'flipCard', cardId: playerCovered[0].id };
+                const opponentCovered = state.opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
+                if (opponentCovered.length > 0) return { type: 'flipCard', cardId: opponentCovered[0].id };
+                return { type: 'skip' };
+            }
 
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -1065,6 +1093,21 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (validTargets.length > 0) {
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 // Using 'deleteCard' as the action type to trigger resolveActionWithCard
+                return { type: 'deleteCard', cardId: randomTarget.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_own_covered_card_to_shift': {
+            const validTargets: PlayedCard[] = [];
+            for (const lane of state.opponent.lanes) {
+                // A card is covered if it's not the last one.
+                for (let i = 0; i < lane.length - 1; i++) {
+                    validTargets.push(lane[i]);
+                }
+            }
+            if (validTargets.length > 0) {
+                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
                 return { type: 'deleteCard', cardId: randomTarget.id };
             }
             return { type: 'skip' };

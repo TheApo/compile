@@ -41,7 +41,7 @@ type ActionDispatchers = {
     revealOpponentHand: (s: GameState) => GameState,
 }
 
-type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'revealOpponentHand' | 'resolveRearrangeProtocols'>;
+type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit3Prompt'>;
 
 
 type PhaseManager = {
@@ -115,6 +115,14 @@ export const resolveRequiredOpponentAction = (
 
         if (action.type === 'reveal_opponent_hand') {
             const newState = actions.revealOpponentHand(state);
+            return phaseManager.processEndOfAction(newState);
+        }
+
+        if (aiDecision.type === 'resolveSpirit3Prompt' && action.type === 'prompt_shift_for_spirit_3') {
+            const newState = actions.resolveSpirit3Prompt(state, aiDecision.accept);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') {
+                return newState;
+            }
             return phaseManager.processEndOfAction(newState);
         }
 

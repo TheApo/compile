@@ -151,11 +151,11 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   }, [step, isAnimating, onStartGame, playerProtocols, opponentProtocols]);
   
   const getCardClassName = (protocol: string) => {
-      let className = 'protocol-card';
-      if (currentSelection.includes(protocol)) className += ' selected';
-      if (chosenProtocols.has(protocol)) className += ' chosen';
-      if (scanningProtocol === protocol) className += ' is-scanning';
-      return className;
+      const classNames = ['protocol-card', `card-protocol-${protocol.toLowerCase()}`];
+      if (currentSelection.includes(protocol)) classNames.push('selected');
+      if (chosenProtocols.has(protocol)) classNames.push('chosen');
+      if (scanningProtocol === protocol) classNames.push('is-scanning');
+      return classNames.join(' ');
   };
 
   const getStatusMessage = () => {
@@ -177,7 +177,7 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
           <div className="player-protocols-area">
             <h3>Your Protocols</h3>
             {playerProtocols.map(p => (
-              <div key={p} className="protocol-display-card player">{p}</div>
+              <div key={p} className={`protocol-display-card player card-protocol-${p.toLowerCase()}`}>{p}</div>
             ))}
           </div>
           <div className="protocol-preview-area">
@@ -224,7 +224,7 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         <div className="opponent-protocols-area">
           <h3>Opponent Protocols</h3>
           {opponentProtocols.map(p => (
-            <div key={p} className="protocol-display-card opponent">{p}</div>
+            <div key={p} className={`protocol-display-card opponent card-protocol-${p.toLowerCase()}`}>{p}</div>
           ))}
         </div>
       </div>

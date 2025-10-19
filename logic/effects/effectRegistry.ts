@@ -10,6 +10,9 @@ import { execute as apathy1 } from './apathy/Apathy-1';
 import { execute as apathy3 } from './apathy/Apathy-3';
 import { execute as apathy4 } from './apathy/Apathy-4';
 import { execute as discardOne } from './common/discard-one';
+import { execute as chaos0 } from './chaos/Chaos-0';
+import { execute as chaos2 } from './chaos/Chaos-2';
+import { execute as chaos5 } from './chaos/Chaos-5';
 import { execute as darkness0 } from "./darkness/Darkness-0";
 import { execute as darkness1 } from "./darkness/Darkness-1";
 import { execute as darkness2 } from "./darkness/Darkness-2";
@@ -75,6 +78,9 @@ export const effectRegistry: Record<string, EffectExecutor> = {
     'Apathy-3': apathy3,
     'Apathy-4': apathy4,
     'Apathy-5': discardOne,
+    'Chaos-0': chaos0,
+    'Chaos-2': chaos2,
+    'Chaos-5': chaos5,
     'Darkness-0': darkness0,
     'Darkness-1': darkness1,
     'Darkness-2': darkness2,

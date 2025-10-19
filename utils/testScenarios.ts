@@ -800,6 +800,54 @@ export const scenario17_Hate2AIPlays: TestScenario = {
 };
 
 /**
+ * Szenario 17: Hate-2 AI spielt (Normal)
+ *
+ * Setup:
+ * - Opponent (AI) hat Hate-2 in Hand
+ * - Opponent hat Fire-5 (Lane 0), Metal-3 (Lane 1), Death-2 face-down (Lane 2)
+ * - Player hat Water-4 (Lane 0), Spirit-6 (Lane 1), Light-2 (Lane 2)
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: AI spielt Hate-2 → wählt eigene höchste (Fire-5) → wählt Players höchste (Spirit-6)
+ * Erwartet:
+ *   1. AI spielt Hate-2 in Lane 0 (Hate Protocol muss bei Opponent sein!)
+ *   2. AI wählt eigene höchste (Fire-5) automatisch
+ *   3. Fire-5 wird gelöscht
+ *   4. AI wählt Players höchste (Spirit-6) automatisch
+ *   5. Spirit-6 wird gelöscht
+ *   6. Turn endet
+ */
+export const scenario171_Hate2AIPlays: TestScenario = {
+    name: "Hate-2 AI spielt (Normal) mit Auswahl",
+    description: "🆕 AI spielt Hate-2 → AI wählt eigene & Players höchste automatisch",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Spirit', 'Light'],
+            ['Hate', 'Metal', 'Death'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent (AI): Hate-2 in Hand
+        newState.opponent.hand = [createCard('Hate', 2, true)];
+
+        // Opponent: Verschiedene Werte
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 5, true));  // Höchste!
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 3, true)); // Nicht höchste
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 2, false)); // Face-down (value 2)
+
+        // Player: Verschiedene Werte
+        newState = placeCard(newState, 'player', 0, createCard('Water', 4, true));  // Nicht höchste
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 5, true)); // Höchste!
+        newState = placeCard(newState, 'player', 2, createCard('Light', 5, true));  // Niedrig
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
  * Szenario 18: Hate-2 Selbst-Löschung (Player)
  *
  * Setup:
@@ -1030,6 +1078,47 @@ export const scenario22_Hate2AIPlaysOpen: TestScenario = {
     }
 };
 
+/**
+ * Szenario 23: Chaos-3 Protocol-Free Playing Test
+ *
+ * Setup:
+ * - Player has Chaos-3 (face-up, uncovered) in Lane 0
+ * - Player has Gravity-2 in hand
+ * - Protocols: player=Chaos, opponent=Spirit (Lane 0)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Player should be able to play Gravity-2 face-up in Lane 0 despite protocol mismatch
+ * Expected:
+ *   1. Player can play Gravity-2 face-up in ANY lane (because of Chaos-3)
+ *   2. No "Illegal Move" error in console
+ */
+const scenario23_Chaos3ProtocolFree: TestScenario = {
+    name: "Chaos-3 Protocol-Free Playing",
+    description: "Player with Chaos-3 can play any card face-up in any lane",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Chaos', 'Fire', 'Water'],
+            ['Spirit', 'Death', 'Metal'],
+            'player',
+            'action'
+        );
+
+        // Player: Chaos-3 (face-up, uncovered) in Lane 0
+        newState = placeCard(newState, 'player', 0, createCard('Chaos', 3, true));
+
+        // Player: Gravity-2 in Hand (should be playable face-up in ANY lane)
+        newState.player.hand = [
+            createCard('Gravity', 2, true),
+            createCard('Hate', 3, true),
+            createCard('Love', 1, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -1047,9 +1136,11 @@ export const allScenarios: TestScenario[] = [
     scenario15_Gravity2ShiftInterrupt,
     scenario16_Hate2PlayerPlays,
     scenario17_Hate2AIPlays,
+	scenario171_Hate2AIPlays,
     scenario18_Hate2SelfDelete,
     scenario19_Hate2MultipleTies,
     scenario20_Hate2FaceDown,
     scenario21_Hate2AIValidation,
     scenario22_Hate2AIPlaysOpen,
+    scenario23_Chaos3ProtocolFree,
 ];

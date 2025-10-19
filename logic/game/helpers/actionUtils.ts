@@ -350,21 +350,39 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc, coverContext);
     }
 
+    let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;
+    let allAnimations = [...(resultAfterOnCover.animationRequests || [])];
+
+    // If we removed the top card from the original lane, trigger uncover effect there
     if (isRemovingTopCard) {
-        const uncoverResult = handleUncoverEffect(resultAfterOnCover.newState, cardOwner, originalLaneIndex);
-        
-        const combinedAnimations = [
-            ...(resultAfterOnCover.animationRequests || []),
-            ...(uncoverResult.animationRequests || [])
-        ];
-        
+        const uncoverResult = handleUncoverEffect(stateAfterOriginalLaneUncover, cardOwner, originalLaneIndex);
+        stateAfterOriginalLaneUncover = uncoverResult.newState;
+        if (uncoverResult.animationRequests) {
+            allAnimations.push(...uncoverResult.animationRequests);
+        }
+    }
+
+    // CRITICAL FIX: If the shifted card is now uncovered and face-up in the target lane, trigger its middle command!
+    // This implements the rule: "When a card's text enters play by being played, flipped, or uncovered"
+    const targetLane = stateAfterOriginalLaneUncover[cardOwner].lanes[targetLaneIndex];
+    const shiftedCardIsNowUncovered = targetLane.length > 0 && targetLane[targetLane.length - 1].id === cardToShiftId;
+
+    if (shiftedCardIsNowUncovered && cardToShift.isFaceUp) {
+        const uncoverTargetResult = handleUncoverEffect(stateAfterOriginalLaneUncover, cardOwner, targetLaneIndex);
+        if (uncoverTargetResult.animationRequests) {
+            allAnimations.push(...uncoverTargetResult.animationRequests);
+        }
+
         return {
-            newState: uncoverResult.newState,
-            animationRequests: combinedAnimations.length > 0 ? combinedAnimations : undefined,
+            newState: uncoverTargetResult.newState,
+            animationRequests: allAnimations.length > 0 ? allAnimations : undefined,
         };
     }
 
-    return resultAfterOnCover;
+    return {
+        newState: stateAfterOriginalLaneUncover,
+        animationRequests: allAnimations.length > 0 ? allAnimations : undefined,
+    };
 }
 
 export const countValidDeleteTargets = (state: GameState, disallowedIds: string[], allowedLaneIndices?: number[]): number => {

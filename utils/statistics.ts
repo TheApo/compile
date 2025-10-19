@@ -71,9 +71,9 @@ export interface GameStatistics {
 }
 
 export function initializeStatistics(): GameStatistics {
-    // Initialize all 15 protocols with 0 usage so they appear in "Least Used Protocols"
+    // Initialize all 16 protocols with 0 usage so they appear in "Least Used Protocols"
     const allProtocols = [
-        'Apathy', 'Darkness', 'Death', 'Fire', 'Gravity',
+        'Apathy', 'Chaos', 'Darkness', 'Death', 'Fire', 'Gravity',
         'Hate', 'Life', 'Light', 'Love', 'Metal',
         'Plague', 'Psychic', 'Speed', 'Spirit', 'Water'
     ];
