@@ -184,7 +184,8 @@ export const selectHandCardForAction = (prevState: GameState, cardId: string): G
 
 export const skipAction = (prevState: GameState): GameState => {
     if (!prevState.actionRequired || !('optional' in prevState.actionRequired) || !prevState.actionRequired.optional) return prevState;
-    const actor = prevState.turn;
+    // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
+    const actor = 'actor' in prevState.actionRequired ? prevState.actionRequired.actor : prevState.turn;
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     let newState = { ...prevState, actionRequired: null };
     newState = log(newState, actor, `${actorName} skips the optional action.`);
@@ -193,8 +194,10 @@ export const skipAction = (prevState: GameState): GameState => {
 
 export const revealOpponentHand = (prevState: GameState): GameState => {
     if (prevState.actionRequired?.type !== 'reveal_opponent_hand') return prevState;
-    
-    const opponentId = prevState.turn === 'player' ? 'opponent' : 'player';
+
+    // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
+    const actor = prevState.actionRequired.actor;
+    const opponentId = actor === 'player' ? 'opponent' : 'player';
     let newState = { ...prevState };
     const opponent = { ...newState[opponentId] };
 
@@ -203,7 +206,7 @@ export const revealOpponentHand = (prevState: GameState): GameState => {
         newState[opponentId] = opponent;
         const sourceCard = findCardOnBoard(newState, prevState.actionRequired.sourceCardId);
         const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
-        newState = log(newState, prevState.turn, `${sourceName}: Opponent reveals their hand.`);
+        newState = log(newState, actor, `${sourceName}: Opponent reveals their hand.`);
     }
 
     newState.actionRequired = null;

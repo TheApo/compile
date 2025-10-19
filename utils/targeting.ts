@@ -120,15 +120,15 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_any_other_card_to_flip_for_water_0':
             return card.id !== actionRequired.sourceCardId && isUncovered;
         case 'select_own_card_to_return_for_water_4':
-            return owner === gameState.turn && isUncovered;
+            return owner === actionRequired.actor && isUncovered;
         case 'select_own_other_card_to_shift': // Speed-3 Middle
-            return owner === gameState.turn && card.id !== actionRequired.sourceCardId && isUncovered;
+            return owner === actionRequired.actor && card.id !== actionRequired.sourceCardId && isUncovered;
         case 'select_own_card_to_shift_for_speed_3': // Speed-3 End
-            return owner === gameState.turn && isUncovered;
+            return owner === actionRequired.actor && isUncovered;
         case 'select_opponent_face_down_card_to_shift': // Speed-4
-            return owner !== gameState.turn && !card.isFaceUp && isUncovered;
-        case 'select_any_opponent_card_to_shift':
-            return owner !== gameState.turn && isUncovered;
+            return owner !== actionRequired.actor && !card.isFaceUp && isUncovered;
+        case 'select_any_opponent_card_to_shift': // Psychic-3
+            return owner !== actionRequired.actor && isUncovered;
         case 'select_opponent_card_to_return':
             return owner === 'opponent' && isUncovered;
         case 'select_own_highest_card_to_delete_for_hate_2': {

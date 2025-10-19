@@ -211,8 +211,9 @@ export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard:
 export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): GameState => {
     if (prevState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_fire_4') return prevState;
 
-    const player = prevState.turn;
-    
+    // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
+    const player = prevState.actionRequired.actor;
+
     let newState = discardCards(prevState, cardIds, player);
 
     const amountToDraw = cardIds.length + 1;
