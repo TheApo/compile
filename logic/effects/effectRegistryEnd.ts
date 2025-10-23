@@ -11,6 +11,7 @@ import { execute as fire3 } from './fire/Fire-3-end';
 import { execute as speed3 } from './speed/Speed-3-end';
 import { execute as love1 } from './love/Love-1-end';
 import { execute as psychic4 } from './psychic/Psychic-4-end';
+import { execute as anarchy3end } from './anarchy/Anarchy-3-end';
 
 
 type EndEffectExecutor = (card: PlayedCard, state: GameState, context: EffectContext) => EffectResult;
@@ -23,4 +24,5 @@ export const effectRegistryEnd: Record<string, EndEffectExecutor> = {
     'Speed-3': speed3,
     'Love-1': love1,
     'Psychic-4': psychic4,
+    'Anarchy-3': anarchy3end,
 };

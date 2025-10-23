@@ -142,6 +142,23 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const highestCards = findAllHighestUncoveredCards(gameState, opponent);
             return highestCards.some(c => c.card.id === card.id);
         }
+        case 'select_card_to_delete_for_anarchy_2': {
+            // Anarchy-2: Can delete ANY card (covered or uncovered) if it's in a lane with matching protocol
+            const playerProtocolAtLane = gameState.player.protocols[laneIndex];
+            const opponentProtocolAtLane = gameState.opponent.protocols[laneIndex];
+            const cardProtocol = card.protocol;
+
+            // Card's protocol must match at least one protocol in its lane
+            return cardProtocol === playerProtocolAtLane || cardProtocol === opponentProtocolAtLane;
+        }
+        case 'select_card_to_shift_for_anarchy_1': {
+            // Anarchy-1: Can shift any uncovered card (validation happens in laneResolver)
+            return isUncovered;
+        }
+        case 'select_card_to_shift_for_anarchy_0': {
+            // Anarchy-0: Can shift any uncovered card (no restrictions)
+            return isUncovered;
+        }
 
         default:
             return false;

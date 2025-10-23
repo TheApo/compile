@@ -255,6 +255,18 @@ export type ActionRequired = {
     sourceLaneIndex: number;
     actor: Player;
 } | {
+    type: 'select_card_to_shift_for_anarchy_0';
+    sourceCardId: string;
+    actor: Player;
+} | {
+    type: 'select_card_to_shift_for_anarchy_1';
+    sourceCardId: string;
+    actor: Player;
+} | {
+    type: 'select_card_to_delete_for_anarchy_2';
+    sourceCardId: string;
+    actor: Player;
+} | {
     type: 'select_card_to_flip_and_shift_for_gravity_2';
     sourceCardId: string;
     targetLaneIndex: number;
@@ -345,6 +357,7 @@ export type ActionRequired = {
     target: Player;
     actor: Player;
     originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
+    disallowedProtocolForLane?: { laneIndex: number; protocol: string };
 } | {
     type: 'select_lane_for_water_3';
     sourceCardId: string;

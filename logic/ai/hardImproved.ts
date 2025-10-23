@@ -731,6 +731,7 @@ const getBestMove = (state: GameState): AIAction => {
             // 2. Opposing player's protocol in this lane (state.player.protocols[i]), OR
             // 3. AI has Spirit-1 face-up (allows playing any protocol face-up)
             // BLOCKER: Player has Psychic-1 (blocks all face-up plays)
+            // SPECIAL: Anarchy-1 INVERTS the rule (can only play if protocol does NOT match)
             // Compiled status has NOTHING to do with face-up play rules!
             const matchesOwnProtocol = card.protocol === state.opponent.protocols[i];
             const matchesOpposingProtocol = card.protocol === state.player.protocols[i];
@@ -743,7 +744,19 @@ const getBestMove = (state: GameState): AIAction => {
                 return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
             });
 
-            const canPlayFaceUp = (matchesOwnProtocol || matchesOpposingProtocol || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1;
+            // Check for Anarchy-1 on ANY player's field (affects both players)
+            const anyPlayerHasAnarchy1 = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
+                .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+            let canPlayFaceUp: boolean;
+            if (anyPlayerHasAnarchy1) {
+                // Anarchy-1 active: INVERTED rule - can only play if protocol does NOT match
+                const doesNotMatch = !matchesOwnProtocol && !matchesOpposingProtocol;
+                canPlayFaceUp = doesNotMatch && !playerHasPsychic1;
+            } else {
+                // Normal rule
+                canPlayFaceUp = (matchesOwnProtocol || matchesOpposingProtocol || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1;
+            }
 
             if (canPlayFaceUp) {
                 // Skip Hate-2 face-up if it would suicide
@@ -1166,6 +1179,49 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (targets.length === 0) return { type: 'skip' };
             targets.sort((a, b) => b.score - a.score);
             return { type: 'flipCard', cardId: targets[0].card.id };
+        }
+
+        case 'select_card_to_delete_for_anarchy_2': {
+            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
+            // UNIQUE: Can target ANY card (covered or uncovered), not just top cards
+            const targets: { card: PlayedCard; owner: Player; laneIndex: number; score: number }[] = [];
+
+            // Evaluate ALL player cards (covered and uncovered)
+            state.player.lanes.forEach((lane, laneIndex) => {
+                lane.forEach((card, cardIndexInLane) => {
+                    // Score based on card threat, lane value, and whether it's covered
+                    const isUncovered = cardIndexInLane === lane.length - 1;
+                    const baseThreat = getCardThreat(card, 'player', state);
+                    const laneValue = state.player.laneValues[laneIndex];
+                    const isCompileThreat = laneValue >= 10 && laneValue > state.opponent.laneValues[laneIndex];
+
+                    // Bonus for deleting uncovered cards (removes value immediately)
+                    // Covered cards are less valuable to delete but still disrupt
+                    let score = baseThreat + laneValue * 0.5 + (isCompileThreat ? 100 : 0);
+                    if (isUncovered) score += 50; // Prefer uncovered for immediate impact
+
+                    targets.push({ card, owner: 'player', laneIndex, score });
+                });
+            });
+
+            // Also consider own cards (fallback if no player cards available)
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                lane.forEach((card, cardIndexInLane) => {
+                    const isUncovered = cardIndexInLane === lane.length - 1;
+                    const baseThreat = getCardThreat(card, 'opponent', state);
+                    // Penalty for deleting own cards (negative score)
+                    let score = -baseThreat - 50;
+                    if (!isUncovered) score -= 20; // Extra penalty for deleting covered cards
+
+                    targets.push({ card, owner: 'opponent', laneIndex, score });
+                });
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+
+            // Pick highest score (cardResolver will validate matching protocol requirement)
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'deleteCard', cardId: targets[0].card.id };
         }
 
         case 'select_cards_to_delete':
@@ -1679,6 +1735,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 }
             }
 
+            // CRITICAL: Check if this is Anarchy-1 shift (must shift to NON-matching protocol lane)
+            if (sourceCard && sourceCard.protocol === 'Anarchy' && sourceCard.value === 1) {
+                // Filter out lanes where the card's protocol matches either protocol in the lane
+                possibleLanes = possibleLanes.filter(laneIndex => {
+                    const playerProtocol = state.player.protocols[laneIndex];
+                    const opponentProtocol = state.opponent.protocols[laneIndex];
+                    const cardProtocol = cardToShift.protocol;
+                    // Keep lane ONLY if card protocol does NOT match either protocol
+                    return cardProtocol !== playerProtocol && cardProtocol !== opponentProtocol;
+                });
+            }
+
             // Use universal scoring function
             const scoredLanes = possibleLanes.map(laneIndex => ({
                 laneIndex,
@@ -1791,24 +1859,50 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return handleControlRearrange(state, action);
 
         case 'prompt_swap_protocols': {
+            // Spirit-4: Swap own protocols (target = 'opponent')
+            // Anarchy-3: Swap opponent's protocols (target = 'player')
+            const { target } = action;
+            const targetProtocols = state[target].protocols;
+            const targetHand = state[target].hand;
+
             const possibleSwaps: [number, number][] = [[0, 1], [0, 2], [1, 2]];
             let bestSwap: [number, number] = [0, 1];
             let bestScore = -Infinity;
+
             for (const swap of possibleSwaps) {
                 const [i, j] = swap;
-                const newProtocols = [...state.opponent.protocols];
+                const newProtocols = [...targetProtocols];
                 [newProtocols[i], newProtocols[j]] = [newProtocols[j], newProtocols[i]];
                 let score = 0;
-                for (const card of state.opponent.hand) {
-                    const couldPlayBeforeI = card.protocol === state.opponent.protocols[i];
-                    const couldPlayBeforeJ = card.protocol === state.opponent.protocols[j];
-                    const canPlayNowI = card.protocol === newProtocols[i];
-                    const canPlayNowJ = card.protocol === newProtocols[j];
-                    if (canPlayNowI && !couldPlayBeforeI) score += calculateEffectBaseScore(card, state);
-                    if (canPlayNowJ && !couldPlayBeforeJ) score += calculateEffectBaseScore(card, state);
-                    if (!canPlayNowI && couldPlayBeforeI) score -= calculateEffectBaseScore(card, state);
-                    if (!canPlayNowJ && couldPlayBeforeJ) score -= calculateEffectBaseScore(card, state);
+
+                // Evaluate based on whose protocols we're swapping
+                if (target === 'opponent') {
+                    // Spirit-4: We're swapping our own protocols - maximize playability
+                    for (const card of targetHand) {
+                        const couldPlayBeforeI = card.protocol === targetProtocols[i];
+                        const couldPlayBeforeJ = card.protocol === targetProtocols[j];
+                        const canPlayNowI = card.protocol === newProtocols[i];
+                        const canPlayNowJ = card.protocol === newProtocols[j];
+                        if (canPlayNowI && !couldPlayBeforeI) score += calculateEffectBaseScore(card, state);
+                        if (canPlayNowJ && !couldPlayBeforeJ) score += calculateEffectBaseScore(card, state);
+                        if (!canPlayNowI && couldPlayBeforeI) score -= calculateEffectBaseScore(card, state);
+                        if (!canPlayNowJ && couldPlayBeforeJ) score -= calculateEffectBaseScore(card, state);
+                    }
+                } else {
+                    // Anarchy-3: We're swapping opponent's protocols - minimize their playability
+                    for (const card of targetHand) {
+                        const couldPlayBeforeI = card.protocol === targetProtocols[i];
+                        const couldPlayBeforeJ = card.protocol === targetProtocols[j];
+                        const canPlayNowI = card.protocol === newProtocols[i];
+                        const canPlayNowJ = card.protocol === newProtocols[j];
+                        // Inverted logic: we WANT to make their cards less playable
+                        if (canPlayNowI && !couldPlayBeforeI) score -= calculateEffectBaseScore(card, state);
+                        if (canPlayNowJ && !couldPlayBeforeJ) score -= calculateEffectBaseScore(card, state);
+                        if (!canPlayNowI && couldPlayBeforeI) score += calculateEffectBaseScore(card, state);
+                        if (!canPlayNowJ && couldPlayBeforeJ) score += calculateEffectBaseScore(card, state);
+                    }
                 }
+
                 if (score > bestScore) {
                     bestScore = score;
                     bestSwap = swap;
@@ -1817,11 +1911,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'resolveSwapProtocols', indices: bestSwap };
         }
 
-        case 'select_card_to_shift_for_gravity_1': {
-            // Gravity-1: "Shift 1 card either to or from this line"
-            // Use universal shift scoring logic
-            const { sourceLaneIndex } = action;
-
+        case 'select_card_to_shift_for_anarchy_0': {
+            // Anarchy-0: "Shift 1 card" - NO restrictions, any card can be shifted anywhere
             const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
 
             // Evaluate ALL cards (own + opponent) and pick the best to shift
@@ -1843,7 +1934,67 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             // Pick highest score
             targets.sort((a, b) => b.score - a.score);
-            return { type: 'shiftCard', cardId: targets[0].card.id }; // FIX: shiftCard not flipCard!
+            return { type: 'shiftCard', cardId: targets[0].card.id };
+        }
+
+        case 'select_card_to_shift_for_anarchy_1': {
+            // Anarchy-1: "Shift 1 other card to a line without a matching protocol"
+            // RESTRICTION: Cannot shift the Anarchy-1 card itself, and must shift to non-matching lane
+            const { sourceCardId } = action;
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            // Evaluate ALL OTHER cards (own + opponent) excluding the Anarchy-1 card itself
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                if (topCard.id === sourceCardId) return; // Skip Anarchy-1 itself
+                const score = scoreCardForShift(topCard, 'opponent', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                if (topCard.id === sourceCardId) return; // Skip Anarchy-1 itself
+                const score = scoreCardForShift(topCard, 'player', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+
+            // Pick highest score (laneResolver will validate non-matching protocol requirement)
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id };
+        }
+
+        case 'select_card_to_shift_for_gravity_1': {
+            // Gravity-1: "Shift 1 card either to or from this line"
+            // RESTRICTION: The shift must involve the Gravity-1's lane (either as source OR destination)
+            const { sourceLaneIndex } = action;
+
+            const targets: { card: PlayedCard; laneIndex: number; score: number }[] = [];
+
+            // Evaluate ALL cards (own + opponent) and pick the best to shift
+            // The laneResolver will validate that the shift involves sourceLaneIndex
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                const score = scoreCardForShift(topCard, 'opponent', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
+
+            state.player.lanes.forEach((lane, laneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+                const score = scoreCardForShift(topCard, 'player', laneIndex, state);
+                targets.push({ card: topCard, laneIndex, score });
+            });
+
+            if (targets.length === 0) return { type: 'skip' };
+
+            // Pick highest score
+            targets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: targets[0].card.id };
         }
 
         case 'select_card_to_flip_and_shift_for_gravity_2': {

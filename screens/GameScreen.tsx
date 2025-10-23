@@ -319,12 +319,24 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
         });
 
-        const canPlayFaceUp = (
-            playerHasSpiritOne ||
-            playerHasChaosThree ||
-            cardInHand.protocol === player.protocols[laneIndex] ||
-            cardInHand.protocol === opponent.protocols[laneIndex]
-        ) && !opponentHasPsychic1;
+        // Check for Anarchy-1 on ANY player's field (affects both players)
+        const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
+            .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+        let canPlayFaceUp: boolean;
+        if (anyPlayerHasAnarchy1) {
+            // Anarchy-1 active: INVERTED rule - can only play face-up if protocol does NOT match
+            const doesNotMatch = cardInHand.protocol !== player.protocols[laneIndex] && cardInHand.protocol !== opponent.protocols[laneIndex];
+            canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
+        } else {
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3 override)
+            canPlayFaceUp = (
+                playerHasSpiritOne ||
+                playerHasChaosThree ||
+                cardInHand.protocol === player.protocols[laneIndex] ||
+                cardInHand.protocol === opponent.protocols[laneIndex]
+            ) && !opponentHasPsychic1;
+        }
         playSelectedCard(laneIndex, canPlayFaceUp);
         setHoveredCard(null);
         return;

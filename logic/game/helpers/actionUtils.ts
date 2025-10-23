@@ -154,8 +154,11 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
 
     const uncoveredCard = lane[lane.length - 1];
 
-    // The effect only triggers if the newly uncovered card is FACE UP.
-    if (uncoveredCard.isFaceUp) {
+    // CRITICAL: The effect only triggers if the card is BOTH face-up AND still uncovered.
+    // Check again that the card is still on top (it might have been covered again by subsequent effects).
+    const isStillUncovered = isCardUncovered(state, uncoveredCard.id);
+
+    if (uncoveredCard.isFaceUp && isStillUncovered) {
         // Create a unique ID for this specific uncover event to prevent double-triggering.
         const eventId = `${uncoveredCard.id}-${laneIndex}`;
         if (state.processedUncoverEventIds?.includes(eventId)) {

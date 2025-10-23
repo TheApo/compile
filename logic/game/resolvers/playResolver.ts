@@ -37,11 +37,16 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // 2. Opposing protocol in this lane
     // EXCEPTION: Spirit-1 OR Chaos-3 allows playing face-up regardless of protocol
     // BLOCKER: Psychic-1 blocks all face-up plays
+    // INVERTER: Anarchy-1 inverts the rule - can only play face-up if protocol does NOT match
     // Compiled status does NOT bypass this rule!
     if (isFaceUp) {
         const playerProtocol = playerState.protocols[laneIndex];
         const opponentProtocol = prevState[opponent].protocols[laneIndex];
-        const playerHasPsychic1 = prevState[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+
+        // Check for modifiers on BOTH players' fields (these affect both players)
+        const anyPlayerHasPsychic1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+        const anyPlayerHasAnarchy1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
         const playerHasSpirit1 = prevState[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
         // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
@@ -51,10 +56,21 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
         });
 
-        const canPlayFaceUp = (cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol || playerHasSpirit1 || playerHasChaosThree) && !playerHasPsychic1;
+        let canPlayFaceUp: boolean;
+
+        if (anyPlayerHasAnarchy1) {
+            // Anarchy-1: INVERTED rule - can only play if protocol does NOT match
+            const doesNotMatch = cardToPlay.protocol !== playerProtocol && cardToPlay.protocol !== opponentProtocol;
+            canPlayFaceUp = doesNotMatch && !anyPlayerHasPsychic1;
+        } else {
+            // Normal rule: can only play if protocol DOES match (or Spirit-1/Chaos-3 override)
+            const doesMatch = cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol;
+            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree) && !anyPlayerHasPsychic1;
+        }
 
         if (!canPlayFaceUp) {
-            console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} face-up in lane ${laneIndex} (protocols: player=${playerProtocol}, opponent=${opponentProtocol})`);
+            const reason = anyPlayerHasAnarchy1 ? 'Anarchy-1 requires non-matching protocol' : 'matching protocol required';
+            console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} face-up in lane ${laneIndex} (${reason}, protocols: player=${playerProtocol}, opponent=${opponentProtocol})`);
             return { newState: prevState };
         }
     }

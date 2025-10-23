@@ -179,13 +179,23 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
 };
 
 export const resolveRearrangeProtocols = (
-    prevState: GameState, 
+    prevState: GameState,
     newOrder: string[],
     onEndGame: (winner: Player, finalState: GameState) => void
 ): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_rearrange_protocols') return prevState;
 
-    const { target, actor, originalAction, sourceCardId } = prevState.actionRequired;
+    const { target, actor, originalAction, sourceCardId, disallowedProtocolForLane } = prevState.actionRequired;
+
+    // CRITICAL VALIDATION for Anarchy-3 End Effect: "Anarchy cannot be on this line"
+    if (disallowedProtocolForLane) {
+        const { laneIndex, protocol } = disallowedProtocolForLane;
+        if (newOrder[laneIndex] === protocol) {
+            console.error(`Illegal rearrange: ${protocol} cannot be placed on lane ${laneIndex} due to Anarchy-3 restriction`);
+            return prevState; // Block the illegal rearrange
+        }
+    }
+
     let newState = { ...prevState };
     const targetState = { ...newState[target] };
 

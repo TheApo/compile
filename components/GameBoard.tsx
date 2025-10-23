@@ -63,12 +63,32 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         
         const opponentHasPsychic1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
-        
-        const isMatching = (
-            playerHasSpiritOne || 
-            card.protocol === player.protocols[laneIndex] ||
-            card.protocol === opponent.protocols[laneIndex]
-        ) && !opponentHasPsychic1;
+
+        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
+        const playerHasChaosThree = player.lanes.some((lane) => {
+            if (lane.length === 0) return false;
+            const uncoveredCard = lane[lane.length - 1];
+            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
+        });
+
+        // Check for Anarchy-1 on ANY player's field (affects both players)
+        const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
+            .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+        let isMatching: boolean;
+        if (anyPlayerHasAnarchy1) {
+            // Anarchy-1 active: INVERTED rule - can only play face-up if protocol does NOT match
+            const doesNotMatch = card.protocol !== player.protocols[laneIndex] && card.protocol !== opponent.protocols[laneIndex];
+            isMatching = doesNotMatch && !opponentHasPsychic1;
+        } else {
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3 override)
+            isMatching = (
+                playerHasSpiritOne ||
+                playerHasChaosThree ||
+                card.protocol === player.protocols[laneIndex] ||
+                card.protocol === opponent.protocols[laneIndex]
+            ) && !opponentHasPsychic1;
+        }
     
         const opponentHasMetalTwo = oppLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
         if (opponentHasMetalTwo && !isMatching) {

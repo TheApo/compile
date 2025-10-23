@@ -30,6 +30,46 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   const [scanningProtocol, setScanningProtocol] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
 
+  // Get all unique categories dynamically
+  const allCategories = useMemo(() => {
+    const categorySet = new Set(cards.map(card => card.category));
+    return Array.from(categorySet).sort();
+  }, []);
+
+  // Filter state - by default all categories are enabled
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));
+
+  // Update enabled categories when allCategories changes (shouldn't happen but for safety)
+  useEffect(() => {
+    setEnabledCategories(new Set(allCategories));
+  }, [allCategories]);
+
+  // Get category for a protocol
+  const getProtocolCategory = (protocol: string): string => {
+    const card = cards.find(c => c.protocol === protocol);
+    return card?.category || '';
+  };
+
+  // Filter protocols by enabled categories
+  const filteredProtocols = useMemo(() => {
+    return uniqueProtocols.filter(protocol => {
+      const category = getProtocolCategory(protocol);
+      return enabledCategories.has(category);
+    });
+  }, [enabledCategories]);
+
+  const toggleCategory = (category: string) => {
+    setEnabledCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
+  };
+
   const currentStepInfo = SELECTION_STEPS[step];
   const isPlayerTurn = currentStepInfo?.player === 'Player';
   const isOpponentTurn = currentStepInfo?.player === 'Opponent';
@@ -195,8 +235,23 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         
         <div className="protocol-grid-container">
           <p>{getStatusMessage()}</p>
+
+          {/* Category Filters */}
+          <div className="category-filters">
+            {allCategories.map(category => (
+              <label key={category} className="category-filter-item">
+                <input
+                  type="checkbox"
+                  checked={enabledCategories.has(category)}
+                  onChange={() => toggleCategory(category)}
+                />
+                <span>{category}</span>
+              </label>
+            ))}
+          </div>
+
           <div className="protocol-grid">
-            {uniqueProtocols.map((protocol) => (
+            {filteredProtocols.map((protocol) => (
               <div
                 key={protocol}
                 className={getCardClassName(protocol)}
@@ -206,7 +261,8 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
                 tabIndex={!chosenProtocols.has(protocol) && isPlayerTurn && !isAnimating ? 0 : -1}
                 onKeyPress={(e) => e.key === 'Enter' && handleSelectProtocol(protocol)}
               >
-                {protocol}
+                <span className="protocol-category-label">{getProtocolCategory(protocol)}</span>
+                <span className="protocol-name">{protocol}</span>
               </div>
             ))}
           </div>

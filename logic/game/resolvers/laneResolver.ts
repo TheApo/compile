@@ -13,6 +13,7 @@ import { playCard } from './playResolver';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
 import { executeOnCoverEffect } from '../../effectExecutor';
+import { handleAnarchyConditionalDraw } from '../../effects/anarchy/Anarchy-0';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -33,9 +34,33 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         case 'select_lane_for_shift': {
             const { cardToShiftId, cardOwner, actor, sourceEffect, originalLaneIndex, sourceCardId } = prev.actionRequired;
 
+            // RULE: Cannot shift to the same lane
+            if (targetLaneIndex === originalLaneIndex) {
+                console.error(`Illegal shift: Cannot shift to the same lane ${originalLaneIndex}`);
+                return { nextState: prev }; // Block the illegal move
+            }
+
+            // CRITICAL VALIDATION for Anarchy-1: "Shift 1 other card to a line without a matching protocol"
+            // The destination lane must NOT have a matching protocol for the card being shifted
+            const sourceCard = findCardOnBoard(prev, sourceCardId);
+            const cardToShift = findCardOnBoard(prev, cardToShiftId);
+
+            if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 1) {
+                if (cardToShift) {
+                    const playerProtocolAtTarget = prev.player.protocols[targetLaneIndex];
+                    const opponentProtocolAtTarget = prev.opponent.protocols[targetLaneIndex];
+                    const cardProtocol = cardToShift.card.protocol;
+
+                    // RULE: Card's protocol must NOT match either protocol in target lane
+                    if (cardProtocol === playerProtocolAtTarget || cardProtocol === opponentProtocolAtTarget) {
+                        console.error(`Illegal Anarchy-1 shift: ${cardProtocol}-${cardToShift.card.value} cannot be shifted to lane ${targetLaneIndex} (protocols: ${playerProtocolAtTarget}/${opponentProtocolAtTarget}) - matching protocol not allowed`);
+                        return { nextState: prev }; // Block the illegal move
+                    }
+                }
+            }
+
             // CRITICAL VALIDATION for Gravity-1: "Shift 1 card either to or from this line"
             // The shift must involve the Gravity-1's lane (either as source OR destination)
-            const sourceCard = findCardOnBoard(prev, sourceCardId);
             if (sourceCard && sourceCard.card.protocol === 'Gravity' && sourceCard.card.value === 1) {
                 // Find Gravity-1's lane
                 let gravity1LaneIndex = -1;
@@ -62,7 +87,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {
-                // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip after animations.
+                // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip and Anarchy-0's conditional draw after animations.
                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
@@ -73,6 +98,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             finalState = findAndFlipCards(new Set([speed3CardId]), finalState);
                             finalState.animationState = { type: 'flipCard', cardId: speed3CardId };
                         }
+                        // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
+                        const sourceCard = findCardOnBoard(prev, sourceCardId);
+                        if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
+                            finalState = handleAnarchyConditionalDraw(finalState, actor);
+                        }
                         return endTurnCb(finalState);
                     }
                 };
@@ -82,6 +112,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
                     newState = findAndFlipCards(new Set([speed3CardId]), newState);
                     newState.animationState = { type: 'flipCard', cardId: speed3CardId };
+                }
+                // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
+                const sourceCard = findCardOnBoard(prev, sourceCardId);
+                if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
+                    newState = handleAnarchyConditionalDraw(newState, actor);
                 }
             }
             break;

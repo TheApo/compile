@@ -4,6 +4,7 @@
  */
 
 import { Player, Difficulty, GameState } from '../types';
+import { uniqueProtocols } from '../data/cards';
 
 const STATS_KEY = 'compile_game_statistics';
 const STATS_VERSION = 1;
@@ -71,12 +72,8 @@ export interface GameStatistics {
 }
 
 export function initializeStatistics(): GameStatistics {
-    // Initialize all 16 protocols with 0 usage so they appear in "Least Used Protocols"
-    const allProtocols = [
-        'Apathy', 'Chaos', 'Darkness', 'Death', 'Fire', 'Gravity',
-        'Hate', 'Life', 'Light', 'Love', 'Metal',
-        'Plague', 'Psychic', 'Speed', 'Spirit', 'Water'
-    ];
+    // Initialize ALL protocols dynamically from cards.ts with 0 usage so they appear in "Least Used Protocols"
+    const allProtocols = uniqueProtocols; // Dynamically loaded from cards.ts
 
     const initialProtocols: { [key: string]: { timesUsed: number; wins: number; losses: number } } = {};
     allProtocols.forEach(protocol => {
@@ -141,12 +138,8 @@ export function loadStatistics(): GameStatistics {
         }
         const parsed = JSON.parse(stored) as any;
 
-        // Ensure all 15 protocols exist (migration for existing stats)
-        const allProtocols = [
-            'Apathy', 'Darkness', 'Death', 'Fire', 'Gravity',
-            'Hate', 'Life', 'Light', 'Love', 'Metal',
-            'Plague', 'Psychic', 'Speed', 'Spirit', 'Water'
-        ];
+        // Ensure ALL protocols exist (migration for existing stats) - dynamically loaded from cards.ts
+        const allProtocols = uniqueProtocols; // Automatically includes Anarchy and any future protocols
 
         const migratedProtocols = { ...(parsed.protocols || {}) };
         allProtocols.forEach(protocol => {

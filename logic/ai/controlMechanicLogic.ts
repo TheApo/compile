@@ -95,8 +95,35 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         // A safe fallback is to return an unchanged protocol order for the opponent.
         return { type: 'rearrangeProtocols', newOrder: [...state.opponent.protocols] };
     }
-    
+
     const targetPlayerKey = action.target;
+    const disallowedProtocolForLane = action.disallowedProtocolForLane;
+
+    // Helper function to check if a protocol arrangement is valid (respects Anarchy-3 restriction)
+    const isValidArrangement = (protocols: string[]): boolean => {
+        if (!disallowedProtocolForLane) return true;
+        const { laneIndex, protocol } = disallowedProtocolForLane;
+        return protocols[laneIndex] !== protocol;
+    };
+
+    // Helper function to safely return a rearrange action, respecting Anarchy-3 restrictions
+    const safeReturn = (newOrder: string[], originalOrder: string[]): AIAction => {
+        if (isValidArrangement(newOrder)) {
+            return { type: 'rearrangeProtocols', newOrder };
+        }
+        // If the proposed order is invalid, try to find a valid swap
+        for (let i = 0; i < 3; i++) {
+            for (let j = i + 1; j < 3; j++) {
+                const testOrder = [...originalOrder];
+                [testOrder[i], testOrder[j]] = [testOrder[j], testOrder[i]];
+                if (isValidArrangement(testOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder: testOrder };
+                }
+            }
+        }
+        // Ultimate fallback: return original order (even if invalid, let resolver handle it)
+        return { type: 'rearrangeProtocols', newOrder: originalOrder };
+    };
 
     // Check both players' win status to determine priority
     const aiState = state.opponent;
@@ -302,6 +329,26 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
     }
 
-    // Fallback
-    return { type: 'rearrangeProtocols', newOrder: [...state.opponent.protocols] };
+    // FALLBACK: No beneficial swap found - return current order
+    const fallbackOrder = targetPlayerKey === 'player' ? [...playerState.protocols] : [...aiState.protocols];
+
+    // CRITICAL: Validate the fallback order respects Anarchy-3 restriction
+    if (isValidArrangement(fallbackOrder)) {
+        return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
+    }
+
+    // If even the current order is invalid (shouldn't happen), find ANY valid arrangement
+    // This is a safety fallback for edge cases
+    for (let i = 0; i < 3; i++) {
+        for (let j = i + 1; j < 3; j++) {
+            const testOrder = [...fallbackOrder];
+            [testOrder[i], testOrder[j]] = [testOrder[j], testOrder[i]];
+            if (isValidArrangement(testOrder)) {
+                return { type: 'rearrangeProtocols', newOrder: testOrder };
+            }
+        }
+    }
+
+    // Ultimate fallback (should never reach here)
+    return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
 }

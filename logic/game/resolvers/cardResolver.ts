@@ -210,6 +210,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = false; // This action has a follow-up
             break;
         }
+        case 'select_card_to_shift_for_anarchy_0':
+        case 'select_card_to_shift_for_anarchy_1':
         case 'select_card_to_shift_for_gravity_1':
         case 'shift_flipped_card_optional':
         case 'select_opponent_covered_card_to_shift':
@@ -431,7 +433,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
         case 'select_low_value_card_to_delete':
-        case 'select_card_from_other_lanes_to_delete': {
+        case 'select_card_from_other_lanes_to_delete':
+        case 'select_card_to_delete_for_anarchy_2': {
             // Rule: An effect is cancelled if its source card is no longer active (face-up on the board).
             const { sourceCardId, actor } = prev.actionRequired;
             const sourceCardInfoCheck = findCardOnBoard(prev, sourceCardId);
@@ -445,6 +448,23 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
+
+            // CRITICAL VALIDATION for Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
+            if (prev.actionRequired.type === 'select_card_to_delete_for_anarchy_2') {
+                // Find which lane the card to delete is in
+                const cardLaneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+                if (cardLaneIndex !== -1) {
+                    const playerProtocolAtLane = prev.player.protocols[cardLaneIndex];
+                    const opponentProtocolAtLane = prev.opponent.protocols[cardLaneIndex];
+                    const cardProtocol = cardInfo.card.protocol;
+
+                    // RULE: Card's protocol MUST match at least one protocol in its lane
+                    if (cardProtocol !== playerProtocolAtLane && cardProtocol !== opponentProtocolAtLane) {
+                        console.error(`Illegal Anarchy-2 delete: ${cardProtocol}-${cardInfo.card.value} in lane ${cardLaneIndex} (protocols: ${playerProtocolAtLane}/${opponentProtocolAtLane}) - card must be in lane with matching protocol`);
+                        return { nextState: prev }; // Block the illegal delete
+                    }
+                }
+            }
 
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";

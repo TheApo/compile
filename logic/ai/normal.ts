@@ -153,7 +153,19 @@ const getBestMove = (state: GameState): AIAction => {
                 return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
             });
 
-            const canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1 && !hate2WouldSuicide;
+            // Check for Anarchy-1 on ANY player's field (affects both players)
+            const anyPlayerHasAnarchy1 = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
+                .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+            let canPlayFaceUp: boolean;
+            if (anyPlayerHasAnarchy1) {
+                // Anarchy-1 active: INVERTED rule - can only play if protocol does NOT match
+                const doesNotMatch = card.protocol !== state.opponent.protocols[i] && card.protocol !== state.player.protocols[i];
+                canPlayFaceUp = doesNotMatch && !playerHasPsychic1 && !hate2WouldSuicide;
+            } else {
+                // Normal rule
+                canPlayFaceUp = (card.protocol === state.opponent.protocols[i] || card.protocol === state.player.protocols[i] || aiHasSpirit1 || aiHasChaos3) && !playerHasPsychic1 && !hate2WouldSuicide;
+            }
             if (canPlayFaceUp) {
                 let score = 0;
                 let reason = `Play ${card.protocol}-${card.value} face-up in lane ${i}`;
@@ -315,6 +327,26 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: scored[0].cardId };
         }
 
+        case 'select_card_to_delete_for_anarchy_2': {
+            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
+            // Can target ANY card (covered or uncovered), prioritize player cards
+            const allPlayerCards = state.player.lanes.flat();
+            const allOpponentCards = state.opponent.lanes.flat();
+
+            if (allPlayerCards.length > 0) {
+                // Normal AI: Pick random player card (cardResolver will validate matching protocol)
+                const randomCard = allPlayerCards[Math.floor(Math.random() * allPlayerCards.length)];
+                return { type: 'deleteCard', cardId: randomCard.id };
+            }
+
+            if (allOpponentCards.length > 0) {
+                const randomCard = allOpponentCards[Math.floor(Math.random() * allOpponentCards.length)];
+                return { type: 'deleteCard', cardId: randomCard.id };
+            }
+
+            return { type: 'skip' };
+        }
+
         case 'select_cards_to_delete':
         case 'select_card_to_delete_for_death_1': {
             const disallowedIds = action.type === 'select_cards_to_delete' ? action.disallowedIds : [action.sourceCardId];
@@ -446,10 +478,22 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
                         });
 
-                        const canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex]
-                            || card.protocol === state.player.protocols[laneIndex]
-                            || aiHasSpirit1
-                            || aiHasChaos3;
+                        // Check for Anarchy-1 on ANY player's field (affects both players)
+                        const anyPlayerHasAnarchy1 = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
+                            .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+                        let canPlayFaceUp: boolean;
+                        if (anyPlayerHasAnarchy1) {
+                            // Anarchy-1 active: INVERTED rule - can only play if protocol does NOT match
+                            const doesNotMatch = card.protocol !== state.opponent.protocols[laneIndex] && card.protocol !== state.player.protocols[laneIndex];
+                            canPlayFaceUp = doesNotMatch;
+                        } else {
+                            // Normal rule
+                            canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex]
+                                || card.protocol === state.player.protocols[laneIndex]
+                                || aiHasSpirit1
+                                || aiHasChaos3;
+                        }
 
                         if (canPlayFaceUp) {
                             const valueToAdd = card.value;
@@ -584,26 +628,50 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return handleControlRearrange(state, action);
 
         case 'prompt_swap_protocols': {
+            // Spirit-4: Swap own protocols (target = 'opponent')
+            // Anarchy-3: Swap opponent's protocols (target = 'player')
+            const { target } = action;
+            const targetProtocols = state[target].protocols;
+            const targetHand = state[target].hand;
+
             const possibleSwaps: [number, number][] = [[0, 1], [0, 2], [1, 2]];
             let bestSwap: [number, number] = [0, 1];
             let bestScore = -Infinity;
 
             for (const swap of possibleSwaps) {
                 const [i, j] = swap;
-                const newProtocols = [...state.opponent.protocols];
+                const newProtocols = [...targetProtocols];
                 [newProtocols[i], newProtocols[j]] = [newProtocols[j], newProtocols[i]];
                 let score = 0;
 
-                for (const card of state.opponent.hand) {
-                    const couldPlayBeforeI = card.protocol === state.opponent.protocols[i];
-                    const couldPlayBeforeJ = card.protocol === state.opponent.protocols[j];
-                    const canPlayNowI = card.protocol === newProtocols[i];
-                    const canPlayNowJ = card.protocol === newProtocols[j];
+                // Evaluate based on whose protocols we're swapping
+                if (target === 'opponent') {
+                    // Spirit-4: We're swapping our own protocols - maximize playability
+                    for (const card of targetHand) {
+                        const couldPlayBeforeI = card.protocol === targetProtocols[i];
+                        const couldPlayBeforeJ = card.protocol === targetProtocols[j];
+                        const canPlayNowI = card.protocol === newProtocols[i];
+                        const canPlayNowJ = card.protocol === newProtocols[j];
 
-                    if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card);
-                    if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card);
-                    if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card);
-                    if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card);
+                        if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card);
+                        if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card);
+                        if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card);
+                        if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card);
+                    }
+                } else {
+                    // Anarchy-3: We're swapping opponent's protocols - minimize their playability
+                    for (const card of targetHand) {
+                        const couldPlayBeforeI = card.protocol === targetProtocols[i];
+                        const couldPlayBeforeJ = card.protocol === targetProtocols[j];
+                        const canPlayNowI = card.protocol === newProtocols[i];
+                        const canPlayNowJ = card.protocol === newProtocols[j];
+
+                        // Inverted logic: we WANT to make their cards less playable
+                        if (canPlayNowI && !couldPlayBeforeI) score -= getCardPower(card);
+                        if (canPlayNowJ && !couldPlayBeforeJ) score -= getCardPower(card);
+                        if (!canPlayNowI && couldPlayBeforeI) score += getCardPower(card);
+                        if (!canPlayNowJ && couldPlayBeforeJ) score += getCardPower(card);
+                    }
                 }
 
                 if (score > bestScore) {
@@ -642,6 +710,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         } else {
                             // Shifting TO Gravity lane - MUST go to Gravity lane only
                             possibleLanes = [gravityLaneIndex];
+                        }
+                    }
+                }
+
+                // CRITICAL: Check if this is Anarchy-1 shift (must shift to NON-matching protocol lane)
+                if (sourceCard && sourceCard.protocol === 'Anarchy' && sourceCard.value === 1) {
+                    // Get the card being shifted
+                    const cardToShiftId = 'cardToShiftId' in action ? action.cardToShiftId : null;
+                    if (cardToShiftId) {
+                        const cardToShift = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].find(c => c.id === cardToShiftId);
+                        if (cardToShift) {
+                            // Filter out lanes where the card's protocol matches
+                            possibleLanes = possibleLanes.filter(laneIndex => {
+                                const playerProtocol = state.player.protocols[laneIndex];
+                                const opponentProtocol = state.opponent.protocols[laneIndex];
+                                const cardProtocol = cardToShift.protocol;
+                                return cardProtocol !== playerProtocol && cardProtocol !== opponentProtocol;
+                            });
                         }
                     }
                 }
@@ -941,11 +1027,39 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_card_to_shift_for_gravity_1': {
+        case 'select_card_to_shift_for_anarchy_0': {
+            // Anarchy-0: "Shift 1 card" - NO restrictions
             const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
             if (allCards.length > 0) {
                 const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
+                return { type: 'shiftCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_card_to_shift_for_anarchy_1': {
+            // Anarchy-1: "Shift 1 other card to a line without a matching protocol"
+            // RESTRICTION: Cannot shift the Anarchy-1 card itself, and must shift to non-matching lane
+            const { sourceCardId } = action;
+            const allOtherCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
+                .filter(c => c.id !== sourceCardId);
+
+            if (allOtherCards.length > 0) {
+                // Normal AI: Pick a random card and let laneResolver validate destination
+                const randomCard = allOtherCards[Math.floor(Math.random() * allOtherCards.length)];
+                return { type: 'shiftCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_card_to_shift_for_gravity_1': {
+            // Gravity-1: "Shift 1 card either to or from this line"
+            // RESTRICTION: The shift must involve the Gravity-1's lane
+            // Normal AI doesn't optimize for this, just picks random (laneResolver validates)
+            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+            if (allCards.length > 0) {
+                const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
+                return { type: 'shiftCard', cardId: randomCard.id };
             }
             return { type: 'skip' };
         }

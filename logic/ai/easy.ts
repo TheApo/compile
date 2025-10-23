@@ -107,11 +107,25 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
             return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
         });
 
+        // Check for Anarchy-1 on ANY player's field (affects both players)
+        const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
+            .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
         for (let i = 0; i < 3; i++) {
             if (isLaneBlockedByPlague0(i)) continue;
             // Avoid playing in a lane the player is guaranteed to compile.
             if (canPlayerCompileLane(i)) continue;
-            if (cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1 || aiHasChaos3) {
+
+            let canPlayFaceUp: boolean;
+            if (anyPlayerHasAnarchy1) {
+                // Anarchy-1 active: INVERTED rule - can only play if protocol does NOT match
+                canPlayFaceUp = cardToPlay.protocol !== opponent.protocols[i] && cardToPlay.protocol !== player.protocols[i];
+            } else {
+                // Normal rule
+                canPlayFaceUp = cardToPlay.protocol === opponent.protocols[i] || cardToPlay.protocol === player.protocols[i] || aiHasSpirit1 || aiHasChaos3;
+            }
+
+            if (canPlayFaceUp) {
                 return { cardId: cardToPlay.id, laneIndex: i, isFaceUp: true };
             }
         }
@@ -171,6 +185,25 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Priority 2: Flip the highest-value face-up card.
             const faceUpTargets = opponentUncovered.filter(c => c.isFaceUp).sort((a, b) => b.value - a.value);
             return { type: 'flipCard', cardId: faceUpTargets[0].id };
+        }
+
+        case 'select_card_to_delete_for_anarchy_2': {
+            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
+            // Can target ANY card (covered or uncovered) in any lane, but card's protocol must match lane protocols
+            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+            if (allCards.length > 0) {
+                // Easy AI: Just pick first player card if available, else first opponent card
+                // (laneResolver will validate matching protocol requirement)
+                const playerCard = state.player.lanes.flat().find(c => c);
+                if (playerCard) {
+                    return { type: 'deleteCard', cardId: playerCard.id };
+                }
+                const opponentCard = state.opponent.lanes.flat().find(c => c);
+                if (opponentCard) {
+                    return { type: 'deleteCard', cardId: opponentCard.id };
+                }
+            }
+            return { type: 'skip' };
         }
 
         case 'select_cards_to_delete':
@@ -450,11 +483,39 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
         
-        case 'select_card_to_shift_for_gravity_1': {
+        case 'select_card_to_shift_for_anarchy_0': {
+            // Anarchy-0: "Shift 1 card" - NO restrictions
             const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
             if (allCards.length > 0) {
                 const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
+                return { type: 'shiftCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_card_to_shift_for_anarchy_1': {
+            // Anarchy-1: "Shift 1 other card to a line without a matching protocol"
+            // RESTRICTION: Cannot shift the Anarchy-1 card itself, and must shift to non-matching lane
+            const { sourceCardId } = action;
+            const allOtherCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
+                .filter(c => c.id !== sourceCardId);
+
+            if (allOtherCards.length > 0) {
+                // Easy AI: Just pick a random card and let laneResolver validate destination
+                const randomCard = allOtherCards[Math.floor(Math.random() * allOtherCards.length)];
+                return { type: 'shiftCard', cardId: randomCard.id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'select_card_to_shift_for_gravity_1': {
+            // Gravity-1: "Shift 1 card either to or from this line"
+            // RESTRICTION: The shift must involve the Gravity-1's lane
+            // Easy AI doesn't understand restrictions, just picks random (laneResolver validates)
+            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+            if (allCards.length > 0) {
+                const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
+                return { type: 'shiftCard', cardId: randomCard.id };
             }
             return { type: 'skip' };
         }
@@ -607,6 +668,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         } else {
                             // Shifting TO Gravity lane - MUST go to Gravity lane only
                             possibleLanes = [gravityLaneIndex];
+                        }
+                    }
+                }
+
+                // CRITICAL: Check if this is Anarchy-1 shift (must shift to NON-matching protocol lane)
+                if (sourceCard && sourceCard.protocol === 'Anarchy' && sourceCard.value === 1) {
+                    // Get the card being shifted
+                    const cardToShiftId = 'cardToShiftId' in action ? action.cardToShiftId : null;
+                    if (cardToShiftId) {
+                        const cardToShift = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()].find(c => c.id === cardToShiftId);
+                        if (cardToShift) {
+                            // Filter out lanes where the card's protocol matches
+                            possibleLanes = possibleLanes.filter(laneIndex => {
+                                const playerProtocol = state.player.protocols[laneIndex];
+                                const opponentProtocol = state.opponent.protocols[laneIndex];
+                                const cardProtocol = cardToShift.protocol;
+                                return cardProtocol !== playerProtocol && cardProtocol !== opponentProtocol;
+                            });
                         }
                     }
                 }
