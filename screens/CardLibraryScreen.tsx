@@ -16,6 +16,42 @@ interface CardLibraryScreenProps {
 export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
   const [previewCard, setPreviewCard] = useState<CardData>(cards[0]);
 
+  // Get all unique categories dynamically
+  const allCategories = useMemo(() => {
+    const categorySet = new Set(cards.map(card => card.category));
+    return Array.from(categorySet).sort();
+  }, []);
+
+  // Filter state - by default all categories are enabled
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));
+
+  // Toggle category filter
+  const toggleCategory = (category: string) => {
+    setEnabledCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
+  };
+
+  // Get category for a protocol
+  const getProtocolCategory = (protocol: string): string => {
+    const card = cards.find(c => c.protocol === protocol);
+    return card?.category || '';
+  };
+
+  // Filter protocols by enabled categories
+  const filteredProtocols = useMemo(() => {
+    return uniqueProtocols.filter(protocol => {
+      const category = getProtocolCategory(protocol);
+      return enabledCategories.has(category);
+    });
+  }, [enabledCategories]);
+
   const cardsByProtocol = useMemo(() => {
     const grouped: Record<string, CardData[]> = {};
     for (const card of cards) {
@@ -57,9 +93,26 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
           </div>
         </div>
         <div className="card-list-container">
-          {uniqueProtocols.map(protocol => (
+          {/* Category Filters */}
+          <div className="category-filters">
+            {allCategories.map(category => (
+              <label key={category} className="category-filter-item">
+                <input
+                  type="checkbox"
+                  checked={enabledCategories.has(category)}
+                  onChange={() => toggleCategory(category)}
+                />
+                <span>{category}</span>
+              </label>
+            ))}
+          </div>
+
+          {filteredProtocols.map(protocol => (
             <div key={protocol} className="protocol-group">
-              <h3>{protocol}</h3>
+              <h3>
+                {protocol}
+                <span className="protocol-category-label"> ({getProtocolCategory(protocol)})</span>
+              </h3>
               <div className="protocol-card-grid">
                 {cardsByProtocol[protocol].map(card => {
                   const cardForComponent: PlayedCard = {
