@@ -8,7 +8,8 @@ import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect }
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
 import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
-import { log } from '../utils/log';
+import { log, setLogSource, setLogPhase } from '../utils/log';
+import { handleAnarchyConditionalDraw } from '../effects/anarchy/Anarchy-0';
 
 const checkControlPhase = (state: GameState): GameState => {
     if (!state.useControlMechanic) {
@@ -38,8 +39,12 @@ const checkControlPhase = (state: GameState): GameState => {
 
     if (playerWins >= 2) {
         if (state.controlCardHolder !== player) {
+            // IMPORTANT: Clear effect context before logging control phase changes
+            let newState = setLogSource(state, undefined);
+            newState = setLogPhase(newState, undefined);
+
             const playerName = player === 'player' ? 'Player' : 'Opponent';
-            const newState = log(state, player, `${playerName} gains the Control Component.`);
+            newState = log(newState, player, `${playerName} gains the Control Component.`);
             return { ...newState, controlCardHolder: player };
         }
     }
@@ -208,6 +213,36 @@ export const processQueuedActions = (state: GameState): GameState => {
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+            }
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        if (nextAction.type === 'anarchy_0_conditional_draw') {
+            const { sourceCardId, actor } = nextAction as { type: 'anarchy_0_conditional_draw', sourceCardId: string, actor: Player };
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+            // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                mutableState = handleAnarchyConditionalDraw(mutableState, actor);
+            } else {
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
+                mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
+            }
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        if (nextAction.type === 'speed_3_self_flip_after_shift') {
+            const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+            // CRITICAL: Only execute if Speed-3 is still on the board and face-up
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+            } else {
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
                 mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
@@ -459,7 +494,37 @@ export const processEndOfAction = (state: GameState): GameState => {
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
             }
-            
+
+            if (nextAction.type === 'anarchy_0_conditional_draw') {
+                const { sourceCardId, actor } = nextAction as { type: 'anarchy_0_conditional_draw', sourceCardId: string, actor: Player };
+                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+                // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    mutableState = handleAnarchyConditionalDraw(mutableState, actor);
+                } else {
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
+                    mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
+                }
+                continue; // Action resolved (or cancelled), move to next in queue
+            }
+
+            if (nextAction.type === 'speed_3_self_flip_after_shift') {
+                const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
+                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+                // CRITICAL: Only execute if Speed-3 is still on the board and face-up
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                    mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                    mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
+                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
+                } else {
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                }
+                continue; // Action resolved (or cancelled), move to next in queue
+            }
+
             if (nextAction.type === 'reveal_opponent_hand') {
                 const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
                 const opponentState = { ...mutableState[opponentId] };

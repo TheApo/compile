@@ -7,7 +7,7 @@ import { GameState, PlayedCard, Player, EffectResult, EffectContext } from '../.
 import { refreshHandForPlayer } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 import { recalculateAllLaneValues } from '../stateManager';
-import { log } from '../../utils/log';
+import { log, setLogSource, setLogPhase } from '../../utils/log';
 
 export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player): EffectResult => {
     const playerState = { ...prevState[player] };
@@ -124,6 +124,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     stateAfterMove = recalculateAllLaneValues(stateAfterMove);
 
     // 3. Log the play action.
+    // IMPORTANT: Clear effect context before logging non-effect actions
+    stateAfterMove = setLogSource(stateAfterMove, undefined);
+    stateAfterMove = setLogPhase(stateAfterMove, undefined);
+
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     const protocolName = stateAfterMove[player].protocols[laneIndex];
     let logMessage: string;

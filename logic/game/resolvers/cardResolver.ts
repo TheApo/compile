@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
-import { log } from '../../utils/log';
+import { log, decreaseLogIndent } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { getEffectiveCardValue } from '../stateManager';
@@ -399,7 +399,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 onCompleteCallback: (s, endTurnCb) => {
                     let stateAfterDelete = checkForHate3Trigger(s, actor); // Trigger for target
                     stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor); // Trigger for self-delete
-                    
+
                     // --- Uncover Logic Execution ---
                     if (targetWasTopCard) {
                         const uncoverResult = handleUncoverEffect(stateAfterDelete, cardInfoToDelete.owner, targetLaneIndex);
@@ -409,6 +409,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         const uncoverResult = handleUncoverEffect(stateAfterDelete, sourceCardInfo.owner, sourceLaneIndex);
                         stateAfterDelete = uncoverResult.newState;
                     }
+
+                    // IMPORTANT: Decrease indent after uncover effects complete (from on-cover effects)
+                    // This closes the indentation from executeOnCoverEffect
+                    stateAfterDelete = decreaseLogIndent(stateAfterDelete);
 
                     // CRITICAL FIX: Don't clear actionRequired if uncover set one!
                     // If there's an actionRequired from uncover, return it immediately

@@ -9,14 +9,14 @@ import { effectRegistryStart } from "./effects/effectRegistryStart";
 import { effectRegistryEnd } from "./effects/effectRegistryEnd";
 import { effectRegistryOnCover } from "./effects/effectRegistryOnCover";
 import { recalculateAllLaneValues } from "./game/stateManager";
-import { log } from "./utils/log";
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "./utils/log";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
 export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult {
     // Rule: A card's middle effect only triggers if it is uncovered.
     // This applies whether it was just played or just flipped face-up.
-    const { cardOwner, opponent } = context;
+    const { cardOwner, opponent, triggerType } = context;
     const lane = state[cardOwner].lanes[laneIndex];
     const cardInLane = lane.find(c => c.id === card.id);
     if (!cardInLane) {
@@ -41,8 +41,32 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     const execute = effectRegistry[effectKey];
 
     if (execute) {
-        const result = execute(card, laneIndex, state, context);
-        const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
+        // Set logging context: card name and phase
+        const cardName = `${card.protocol}-${card.value}`;
+        let stateWithContext = setLogSource(state, cardName);
+
+        // Set phase context based on trigger type
+        const phaseContext = triggerType === 'uncover' ? 'uncover' : 'middle';
+        stateWithContext = setLogPhase(stateWithContext, phaseContext);
+
+        // If this is a nested effect (indentLevel > 0), increase indent
+        const isNestedEffect = triggerType === 'uncover' && stateWithContext._logIndentLevel && stateWithContext._logIndentLevel > 0;
+        if (isNestedEffect) {
+            stateWithContext = increaseLogIndent(stateWithContext);
+        }
+
+        const result = execute(card, laneIndex, stateWithContext, context);
+
+        // Decrease indent if we increased it
+        let finalState = result.newState;
+        if (isNestedEffect) {
+            finalState = decreaseLogIndent(finalState);
+        }
+
+        // NOTE: We don't clear context here because the effect might have queued actions
+        // that still need the context. Context is cleared before non-effect logs (like "plays card")
+
+        const stateWithRecalculatedValues = recalculateAllLaneValues(finalState);
         return {
             ...result,
             newState: stateWithRecalculatedValues,
@@ -66,7 +90,18 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     const execute = effectRegistryOnCover[effectKey];
 
     if (execute) {
-        const result = execute(coveredCard, laneIndex, state, context);
+        // Set logging context: card name and NO phase marker
+        // On-cover effects are bottom box (triggered) effects, not middle effects
+        const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
+        let stateWithContext = setLogSource(state, cardName);
+        stateWithContext = setLogPhase(stateWithContext, undefined); // No phase marker for on-cover
+        stateWithContext = increaseLogIndent(stateWithContext); // Indent on-cover effects
+
+        const result = execute(coveredCard, laneIndex, stateWithContext, context);
+
+        // NOTE: We don't decrease indent here because on-cover effects might trigger
+        // deletes/shifts that cause uncover events, which need to stay indented
+
         const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
         return {
             ...result,
@@ -126,8 +161,17 @@ function processTriggeredEffects(
         const effectKey = `${card.protocol}-${card.value}`;
         const execute = effectRegistry[effectKey];
         if (execute) {
+            // Set logging context: card name and phase
+            const cardName = `${card.protocol}-${card.value}`;
+            const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
+            newState = setLogSource(newState, cardName);
+            newState = setLogPhase(newState, phaseContext);
+
             // Log that the effect is triggering with Start/End marker
             newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
+
+            // Increase indent for effects triggered by Start/End
+            newState = increaseLogIndent(newState);
 
             // Build context for the effect
             const opponent = player === 'player' ? 'opponent' : 'player';
@@ -142,6 +186,11 @@ function processTriggeredEffects(
             // FIXED: Now calls execute with proper signature (card, state, context)
             const result = execute(card, newState, context);
             newState = recalculateAllLaneValues(result.newState);
+
+            // Decrease indent after effect completes
+            newState = decreaseLogIndent(newState);
+            newState = setLogSource(newState, undefined);
+            newState = setLogPhase(newState, undefined);
 
             const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
             newState[processedKey] = [...(newState[processedKey] || []), card.id];

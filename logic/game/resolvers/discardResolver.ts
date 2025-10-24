@@ -4,7 +4,7 @@
  */
 
 import { GameState, Player } from '../../../types';
-import { log } from '../../utils/log';
+import { log, setLogSource, setLogPhase } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
@@ -104,6 +104,11 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         },
         actionRequired: null 
     };
+
+    // IMPORTANT: Clear effect context before logging discard action
+    // (discard is the resolution of an effect, not part of the effect itself)
+    newState = setLogSource(newState, undefined);
+    newState = setLogPhase(newState, undefined);
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     let logMessage: string;

@@ -86,12 +86,51 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
+
+            // CRITICAL: Check if the shift created an interrupt (e.g., uncover effect)
+            const uncoverCreatedInterrupt = newState.actionRequired !== null;
+
             if (shiftResult.animationRequests) {
                 // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip and Anarchy-0's conditional draw after animations.
                 requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
                         let finalState = s;
+
+                        // CRITICAL: If uncover created an interrupt, we need to queue the follow-up effects
+                        if (uncoverCreatedInterrupt) {
+                            // Speed-3 or Anarchy-0 effects need to happen AFTER the interrupt resolves
+                            if (sourceEffect === 'speed_3_end') {
+                                const speed3CardId = prev.actionRequired.sourceCardId;
+                                const speed3FlipAction: ActionRequired = {
+                                    type: 'speed_3_self_flip_after_shift',
+                                    sourceCardId: speed3CardId,
+                                    actor: actor,
+                                };
+                                finalState.queuedActions = [
+                                    ...(finalState.queuedActions || []),
+                                    speed3FlipAction
+                                ];
+                            }
+
+                            const sourceCard = findCardOnBoard(prev, sourceCardId);
+                            if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
+                                const anarchyDrawAction: ActionRequired = {
+                                    type: 'anarchy_0_conditional_draw',
+                                    sourceCardId: sourceCardId,
+                                    actor: actor,
+                                };
+                                finalState.queuedActions = [
+                                    ...(finalState.queuedActions || []),
+                                    anarchyDrawAction
+                                ];
+                            }
+
+                            // Return state with interrupt and queued follow-up actions
+                            return finalState;
+                        }
+
+                        // No interrupt - execute follow-up effects immediately
                         if (sourceEffect === 'speed_3_end') {
                             const speed3CardId = prev.actionRequired.sourceCardId;
                             finalState = log(finalState, actor, `Speed-3: Flipping itself after shifting a card.`);
@@ -107,16 +146,46 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     }
                 };
             } else {
-                 if (sourceEffect === 'speed_3_end') {
-                    const speed3CardId = prev.actionRequired.sourceCardId;
-                    newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
-                    newState = findAndFlipCards(new Set([speed3CardId]), newState);
-                    newState.animationState = { type: 'flipCard', cardId: speed3CardId };
-                }
-                // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
-                const sourceCard = findCardOnBoard(prev, sourceCardId);
-                if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
-                    newState = handleAnarchyConditionalDraw(newState, actor);
+                // CRITICAL: If uncover created an interrupt, queue the follow-up effects
+                if (uncoverCreatedInterrupt) {
+                    if (sourceEffect === 'speed_3_end') {
+                        const speed3CardId = prev.actionRequired.sourceCardId;
+                        const speed3FlipAction: ActionRequired = {
+                            type: 'speed_3_self_flip_after_shift',
+                            sourceCardId: speed3CardId,
+                            actor: actor,
+                        };
+                        newState.queuedActions = [
+                            ...(newState.queuedActions || []),
+                            speed3FlipAction
+                        ];
+                    }
+
+                    const sourceCard = findCardOnBoard(prev, sourceCardId);
+                    if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
+                        const anarchyDrawAction: ActionRequired = {
+                            type: 'anarchy_0_conditional_draw',
+                            sourceCardId: sourceCardId,
+                            actor: actor,
+                        };
+                        newState.queuedActions = [
+                            ...(newState.queuedActions || []),
+                            anarchyDrawAction
+                        ];
+                    }
+                } else {
+                    // No interrupt - execute immediately
+                    if (sourceEffect === 'speed_3_end') {
+                        const speed3CardId = prev.actionRequired.sourceCardId;
+                        newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                        newState = findAndFlipCards(new Set([speed3CardId]), newState);
+                        newState.animationState = { type: 'flipCard', cardId: speed3CardId };
+                    }
+                    // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
+                    const sourceCard = findCardOnBoard(prev, sourceCardId);
+                    if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0) {
+                        newState = handleAnarchyConditionalDraw(newState, actor);
+                    }
                 }
             }
             break;

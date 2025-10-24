@@ -41,12 +41,12 @@ export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state
         return getEffectiveValue(current) < getEffectiveValue(lowest) ? current : lowest;
     });
 
-    const triggeringCardName = `${coveredCard.protocol}-${coveredCard.value}`;
     const deletedCardName = cardToDelete.card.isFaceUp ? `${cardToDelete.card.protocol}-${cardToDelete.card.value}` : 'a face-down card';
     const deletedOwnerName = cardToDelete.owner === 'player' ? "Player's" : "Opponent's";
 
     // The log should be attributed to the card's owner, who is performing the effect.
-    let newState = log(state, cardOwner, `${triggeringCardName} effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
+    // Note: Card name prefix is added automatically by the logging context
+    let newState = log(state, cardOwner, `Effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
 
     return {
         newState,

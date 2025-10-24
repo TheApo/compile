@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
-import { log } from "../../utils/log";
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 
@@ -165,7 +165,15 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             return { newState: state }; // This specific event has already been processed in this action chain.
         }
 
-        let newState = log(state, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
+        // Set logging context for uncover
+        const cardName = `${uncoveredCard.protocol}-${uncoveredCard.value}`;
+        let newState = setLogSource(state, cardName);
+        newState = setLogPhase(newState, 'uncover');
+
+        newState = log(newState, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
+
+        // Increase indent for nested uncover effects
+        newState = increaseLogIndent(newState);
 
         // Mark this event as processed before executing the effect.
         newState.processedUncoverEventIds = [...(newState.processedUncoverEventIds || []), eventId];
@@ -179,6 +187,11 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             triggerType: 'uncover'
         };
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, uncoverContext);
+
+        // Decrease indent after uncover effect completes
+        result.newState = decreaseLogIndent(result.newState);
+        result.newState = setLogSource(result.newState, undefined);
+        result.newState = setLogPhase(result.newState, undefined);
 
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
@@ -327,6 +340,10 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     const newOwnerState = { ...ownerState, lanes: lanesAfterAddition };
     let newState = { ...state, [cardOwner]: newOwnerState };
     
+    // IMPORTANT: Clear effect context before logging non-effect actions
+    newState = setLogSource(newState, undefined);
+    newState = setLogPhase(newState, undefined);
+
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
     const cardName = cardToShift.isFaceUp ? `${cardToShift.protocol}-${cardToShift.value}` : 'a card';

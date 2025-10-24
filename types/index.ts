@@ -413,6 +413,14 @@ export type ActionRequired = {
     type: 'flip_self_for_psychic_4';
     sourceCardId: string;
     actor: Player;
+} | {
+    type: 'anarchy_0_conditional_draw';
+    sourceCardId: string;
+    actor: Player;
+} | {
+    type: 'speed_3_self_flip_after_shift';
+    sourceCardId: string;
+    actor: Player;
 } | null;
 
 export type AnimationState = 
@@ -427,6 +435,9 @@ export type AnimationState =
 export interface LogEntry {
     player: Player;
     message: string;
+    indentLevel?: number; // Indentation level for effect chains (0 = top level)
+    sourceCard?: string; // Card that triggered this effect (e.g., "Fire-3")
+    phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile'; // Which phase/trigger caused this
 }
 
 export interface GameState {
@@ -450,6 +461,9 @@ export interface GameState {
     lastPlayedCardId?: string;
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
+    _logIndentLevel?: number; // Current indentation level for effect chains
+    _currentEffectSource?: string; // Current card causing effects (e.g., "Fire-3")
+    _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile'; // Current phase context
     stats: {
         player: PlayerStats,
         opponent: PlayerStats,
