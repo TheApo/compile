@@ -8,7 +8,7 @@ import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect }
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
 import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
-import { log, setLogSource, setLogPhase } from '../utils/log';
+import { log, setLogSource, setLogPhase, decreaseLogIndent } from '../utils/log';
 import { handleAnarchyConditionalDraw } from '../effects/anarchy/Anarchy-0';
 
 const checkControlPhase = (state: GameState): GameState => {
@@ -130,9 +130,12 @@ export const advancePhase = (state: GameState): GameState => {
             }
 
             if (playerState.hand.length > 5) {
+                const cardsToDiscard = playerState.hand.length - 5;
+                const playerName = turnPlayer === 'player' ? 'Player' : 'Opponent';
+                let stateWithLog = log(nextState, turnPlayer, `Check Cache: ${playerName} has ${playerState.hand.length} cards, must discard ${cardsToDiscard}.`);
                 return {
-                    ...nextState,
-                    actionRequired: { type: 'discard', actor: turnPlayer, count: playerState.hand.length - 5 }
+                    ...stateWithLog,
+                    actionRequired: { type: 'discard', actor: turnPlayer, count: cardsToDiscard }
                 };
             }
 
@@ -265,9 +268,13 @@ export const processQueuedActions = (state: GameState): GameState => {
             // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                 mutableState = handleAnarchyConditionalDraw(mutableState, actor);
+                // Decrease log indent after queued effect completes (was increased when effect started)
+                mutableState = decreaseLogIndent(mutableState);
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
                 mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
+                // Decrease log indent even when cancelled (was increased when effect started)
+                mutableState = decreaseLogIndent(mutableState);
             }
             continue; // Action resolved (or cancelled), move to next in queue
         }
@@ -548,9 +555,13 @@ export const processEndOfAction = (state: GameState): GameState => {
                 // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
                     mutableState = handleAnarchyConditionalDraw(mutableState, actor);
+                    // Decrease log indent after queued effect completes (was increased when effect started)
+                    mutableState = decreaseLogIndent(mutableState);
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
                     mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
+                    // Decrease log indent even when cancelled (was increased when effect started)
+                    mutableState = decreaseLogIndent(mutableState);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
             }

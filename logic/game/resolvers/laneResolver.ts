@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired, EffectContext } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
-import { log } from '../../utils/log';
+import { log, decreaseLogIndent } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
 import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
@@ -42,16 +42,18 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             // CRITICAL VALIDATION for Anarchy-1: "Shift 1 other card to a line without a matching protocol"
             // The destination lane must NOT have a matching protocol for the card being shifted
+            // IMPORTANT: This rule only applies to face-up cards. Face-down cards can be shifted to any lane.
             const sourceCard = findCardOnBoard(prev, sourceCardId);
             const cardToShift = findCardOnBoard(prev, cardToShiftId);
 
             if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 1) {
-                if (cardToShift) {
+                if (cardToShift && cardToShift.card.isFaceUp) {
                     const playerProtocolAtTarget = prev.player.protocols[targetLaneIndex];
                     const opponentProtocolAtTarget = prev.opponent.protocols[targetLaneIndex];
                     const cardProtocol = cardToShift.card.protocol;
 
-                    // RULE: Card's protocol must NOT match either protocol in target lane
+                    // RULE: Face-up card's protocol must NOT match either protocol in target lane
+                    // Face-down cards are exempt from this rule
                     if (cardProtocol === playerProtocolAtTarget || cardProtocol === opponentProtocolAtTarget) {
                         console.error(`Illegal Anarchy-1 shift: ${cardProtocol}-${cardToShift.card.value} cannot be shifted to lane ${targetLaneIndex} (protocols: ${playerProtocolAtTarget}/${opponentProtocolAtTarget}) - matching protocol not allowed`);
                         return { nextState: prev }; // Block the illegal move
@@ -136,6 +138,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             }
 
                             // Return state with interrupt and queued follow-up actions
+                            // NOTE: Do NOT decrease log indent here - the original effect is not complete yet
+                            // The indent will be decreased when the queued action executes
                             return finalState;
                         }
 
@@ -159,6 +163,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 finalState = log(finalState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
                             }
                         }
+                        // CRITICAL FIX: Decrease log indent and clear actionRequired before calling endTurnCb
+                        // Decrease indent if this shift was triggered by an effect (has sourceCardId)
+                        if (sourceCardId) {
+                            finalState = decreaseLogIndent(finalState);
+                        }
+                        finalState.actionRequired = null;
                         return endTurnCb(finalState);
                     }
                 };
@@ -198,6 +208,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             newState = log(newState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
                         }
                     }
+                    // NOTE: Do NOT decrease log indent here - the original effect is not complete yet
+                    // The indent will be decreased when the queued action executes
                 } else {
                     // No interrupt - execute immediately
                     if (sourceEffect === 'speed_3_end') {
@@ -219,6 +231,13 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             newState = log(newState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
                         }
                     }
+                    // CRITICAL FIX: Decrease log indent and clear actionRequired after completing follow-up effects
+                    // Without this, the game would softlock with the old 'select_card_to_shift' action still active
+                    // Decrease indent if this shift was triggered by an effect (has sourceCardId)
+                    if (sourceCardId) {
+                        newState = decreaseLogIndent(newState);
+                    }
+                    newState.actionRequired = null;
                 }
             }
             break;

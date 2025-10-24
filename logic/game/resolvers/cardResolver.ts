@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult } from '../../../types';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
-import { log, decreaseLogIndent } from '../../utils/log';
+import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards } from '../helpers/actionUtils';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { getEffectiveCardValue } from '../stateManager';
@@ -719,11 +719,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         stateAfterTriggers = uncoverResult.newState;
                     }
 
-                    // CRITICAL: Check if Hate-2 still exists after deletion (could have deleted itself!)
-                    const hate2StillExists = findCardOnBoard(stateAfterTriggers, sourceCardId);
+                    // CRITICAL: Only proceed to second clause if Hate-2 still exists, is face-up, and is uncovered
+                    const hate2CardInfo = findCardOnBoard(stateAfterTriggers, sourceCardId);
+                    const hate2IsUncovered = hate2CardInfo && isCardUncovered(stateAfterTriggers, sourceCardId);
 
-                    if (hate2StillExists) {
-                        // Hate-2 still exists → Second clause: Select opponent's highest card
+                    if (hate2CardInfo && hate2CardInfo.card.isFaceUp && hate2IsUncovered) {
+                        // Hate-2 still exists, is face-up, and is uncovered → Second clause: Select opponent's highest card
                         const opponent = actor === 'player' ? 'opponent' : 'player';
                         const nextAction: ActionRequired = {
                             type: 'select_opponent_highest_card_to_delete_for_hate_2',
@@ -743,8 +744,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         }
                         return stateAfterTriggers;
                     } else {
-                        // Hate-2 deleted itself → Effect ends here (second clause does not trigger)
-                        stateAfterTriggers = log(stateAfterTriggers, actor, `Hate-2 deleted itself, second clause does not trigger.`);
+                        // Hate-2 was deleted, covered, or flipped face-down → Effect ends here (second clause does not trigger)
+                        const reason = !hate2CardInfo ? 'deleted itself' :
+                                      !hate2CardInfo.card.isFaceUp ? 'was flipped face-down' :
+                                      'is now covered';
+                        stateAfterTriggers = log(stateAfterTriggers, actor, `Hate-2 ${reason}, second clause does not trigger.`);
                         return endTurnCb(stateAfterTriggers);
                     }
                 }
@@ -766,10 +770,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 return { nextState: prev };
             }
 
+            // CRITICAL: Set log context to Hate-2 to ensure correct source in logs
+            // This is especially important if this action was queued after an interrupt
+            newState = setLogSource(newState, 'Hate-2');
+            newState = setLogPhase(newState, 'middle');
+
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
-            newState = log(newState, actor, `Hate-2: ${actorName} deletes ${ownerName} highest value uncovered card (${cardName}).`);
+            newState = log(newState, actor, `${actorName} deletes ${ownerName} highest value uncovered card (${cardName}).`);
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
             const newPlayerState = { ...newState[actor], stats: newStats };
