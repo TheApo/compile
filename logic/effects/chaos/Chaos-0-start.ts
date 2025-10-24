@@ -44,10 +44,11 @@ export const execute = (card: PlayedCard, state: GameState, context: EffectConte
         drawnCard.id = uuidv4(); // New ID for tracking
         newState[opponent].hand.push(drawnCard);
 
+        // IMPORTANT: Do NOT reveal the card name when opponent draws (hidden information)
         newState = log(
             newState,
             opponent,
-            `${opponent === 'player' ? 'Player' : 'Opponent'} drew ${drawnCard.protocol}-${drawnCard.value} from ${cardOwner === 'player' ? 'Player' : 'Opponent'}'s deck via Chaos-0.`
+            `${opponent === 'player' ? 'Player' : 'Opponent'} drew 1 card from ${cardOwner === 'player' ? 'Player' : 'Opponent'}'s deck via Chaos-0.`
         );
     } else {
         newState = log(

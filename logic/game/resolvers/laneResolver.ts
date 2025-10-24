@@ -169,6 +169,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             finalState = decreaseLogIndent(finalState);
                         }
                         finalState.actionRequired = null;
+
+                        // CRITICAL: Process queued actions after shift completes
+                        // This ensures effects like anarchy_0_conditional_draw are executed automatically
+                        if (finalState.queuedActions && finalState.queuedActions.length > 0) {
+                            const nextAction = finalState.queuedActions[0];
+                            finalState.queuedActions = finalState.queuedActions.slice(1);
+                            finalState.actionRequired = nextAction;
+                        }
+
                         return endTurnCb(finalState);
                     }
                 };
@@ -238,6 +247,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         newState = decreaseLogIndent(newState);
                     }
                     newState.actionRequired = null;
+
+                    // CRITICAL: Process queued actions after shift completes
+                    // This ensures effects like anarchy_0_conditional_draw are executed automatically
+                    if (newState.queuedActions && newState.queuedActions.length > 0) {
+                        const nextAction = newState.queuedActions[0];
+                        newState.queuedActions = newState.queuedActions.slice(1);
+                        newState.actionRequired = nextAction;
+                    }
                 }
             }
             break;
