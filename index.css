@@ -2528,3 +2528,29 @@ p {
   margin: 1rem 0 2rem 0;
   text-shadow: 0 0 8px var(--danger-color);
 }
+
+/* Anarchy-3 Rearrange Restriction Styles */
+.rearrange-item.violation {
+  border: 2px solid var(--danger-color) !important;
+  box-shadow: 0 0 12px rgba(255, 85, 85, 0.7) !important;
+  background-color: rgba(255, 85, 85, 0.15) !important;
+}
+
+.warning-text {
+  color: #FFD700;
+  font-weight: 600;
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background-color: rgba(255, 215, 0, 0.1);
+  border: 1px solid #FFD700;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.error-text {
+  color: var(--danger-color);
+  font-weight: 600;
+  margin-top: 0.5rem;
+  text-align: center;
+  font-size: 0.95rem;
+}

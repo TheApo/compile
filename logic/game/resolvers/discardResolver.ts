@@ -4,7 +4,7 @@
  */
 
 import { GameState, Player } from '../../../types';
-import { log, setLogSource, setLogPhase } from '../../utils/log';
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
@@ -16,19 +16,27 @@ const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     const playerState = state[player];
     // Speed-1's effect is in the TOP box, so it doesn't need to be uncovered.
     const hasSpeed1 = playerState.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Speed' && c.value === 1);
-    
+
     if (hasSpeed1) {
         let newState = { ...state };
-        newState = log(newState, player, "Speed-1 triggers after clearing cache: Draw 1 card.");
+
+        // Set context for Speed-1 trigger (no phase marker - it's a triggered effect)
+        newState = setLogSource(newState, "Speed-1");
+        newState = setLogPhase(newState, undefined);
+
+        newState = log(newState, player, "Triggers after clearing cache: Draw 1 card.");
         newState = drawForPlayer(newState, player, 1);
         newState.processedSpeed1TriggerThisTurn = true;
-        
+
+        // Clear context after trigger
+        newState = setLogSource(newState, undefined);
+
         // After drawing, the hand limit check for this turn is definitively over.
         // Forcibly advance to the 'end' phase to prevent a loop.
         newState.phase = 'end';
         return newState;
     }
-    
+
     return state;
 };
 
@@ -105,10 +113,26 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         actionRequired: null 
     };
 
-    // IMPORTANT: Clear effect context before logging discard action
-    // (discard is the resolution of an effect, not part of the effect itself)
-    newState = setLogSource(newState, undefined);
-    newState = setLogPhase(newState, undefined);
+    // IMPORTANT: Set context from source card if this discard was caused by an effect
+    // Otherwise clear the context AND reset indent level
+    if (originalAction?.sourceCardId) {
+        const opponent = player === 'player' ? 'opponent' : 'player';
+        const sourceCard = newState.player.lanes.flat().find(c => c.id === originalAction.sourceCardId) ||
+                          newState.opponent.lanes.flat().find(c => c.id === originalAction.sourceCardId);
+        if (sourceCard) {
+            const cardName = `${sourceCard.protocol}-${sourceCard.value}`;
+            newState = setLogSource(newState, cardName);
+            newState = setLogPhase(newState, 'middle'); // Discard caused by an effect
+        } else {
+            newState = setLogSource(newState, undefined);
+            newState = setLogPhase(newState, undefined);
+            newState = { ...newState, _logIndentLevel: 0 }; // Reset indent for non-effect discards
+        }
+    } else {
+        newState = setLogSource(newState, undefined);
+        newState = setLogPhase(newState, undefined);
+        newState = { ...newState, _logIndentLevel: 0 }; // Reset indent for hand limit discards
+    }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     let logMessage: string;
@@ -120,6 +144,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         logMessage = `${playerName} discards ${discardedCards.length} ${cardText}.`;
     }
     newState = log(newState, player, logMessage);
+
+    // NOTE: We do NOT change indent here - it's inherited from the effect context
 
     const handleDiscardCompletion = (state: GameState, action: typeof originalAction) => {
         const isHandLimitDiscard = (prevState.phase === 'hand_limit' && !action?.sourceCardId);

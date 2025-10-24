@@ -18,7 +18,7 @@ const checkControlPhase = (state: GameState): GameState => {
 
     const player = state.turn;
     const opponent = player === 'player' ? 'opponent' : 'player';
-    
+
     const playerState = state[player];
     const opponentState = state[opponent];
 
@@ -42,13 +42,14 @@ const checkControlPhase = (state: GameState): GameState => {
             // IMPORTANT: Clear effect context before logging control phase changes
             let newState = setLogSource(state, undefined);
             newState = setLogPhase(newState, undefined);
+            newState = { ...newState, _logIndentLevel: 0 };
 
             const playerName = player === 'player' ? 'Player' : 'Opponent';
             newState = log(newState, player, `${playerName} gains the Control Component.`);
             return { ...newState, controlCardHolder: player };
         }
     }
-    
+
     return state;
 }
 
@@ -58,16 +59,32 @@ export const advancePhase = (state: GameState): GameState => {
     const turnPlayer = state.turn;
     let nextState = { ...state };
 
+    // CRITICAL: Clear ALL effect context (indent, source, phase) at EVERY phase boundary
+    // This ensures that phase-level logs are never indented or prefixed with card names
+    nextState = setLogSource(nextState, undefined);
+    nextState = setLogPhase(nextState, undefined);
+    nextState = { ...nextState, _logIndentLevel: 0 };
+
     switch (state.phase) {
         case 'start':
             nextState = executeStartPhaseEffects(nextState).newState;
             // If the start phase required an action, it will be set. Don't advance phase.
             if (nextState.actionRequired) return nextState;
+
+            // Clear context again before transitioning to control phase
+            nextState = setLogSource(nextState, undefined);
+            nextState = setLogPhase(nextState, undefined);
+            nextState = { ...nextState, _logIndentLevel: 0 };
             return { ...nextState, phase: 'control' };
 
         case 'control': {
             const stateAfterControl = checkControlPhase(nextState);
-            return { ...stateAfterControl, phase: 'compile' };
+
+            // Clear context again before transitioning to compile phase
+            let cleanState = setLogSource(stateAfterControl, undefined);
+            cleanState = setLogPhase(cleanState, undefined);
+            cleanState = { ...cleanState, _logIndentLevel: 0 };
+            return { ...cleanState, phase: 'compile' };
         }
 
         case 'compile': {
@@ -75,26 +92,40 @@ export const advancePhase = (state: GameState): GameState => {
             if (compilableLanes.length > 0) {
                 return { ...nextState, compilableLanes }; // Stay in compile phase, wait for input
             }
+
+            // Clear context again before transitioning to action phase
+            nextState = setLogSource(nextState, undefined);
+            nextState = setLogPhase(nextState, undefined);
+            nextState = { ...nextState, _logIndentLevel: 0 };
             return { ...nextState, phase: 'action', compilableLanes: [] }; // Move to action phase
         }
 
         case 'action':
              // This transition is triggered manually by other functions after an action is completed.
+             // Clear context again before transitioning to hand_limit phase
+             nextState = setLogSource(nextState, undefined);
+             nextState = setLogPhase(nextState, undefined);
+             nextState = { ...nextState, _logIndentLevel: 0 };
              return { ...nextState, phase: 'hand_limit' };
-        
+
         case 'hand_limit': {
             const playerState = nextState[turnPlayer];
 
             // Check for Spirit-0 (must be face-up and uncovered)
-            const hasSpirit0 = playerState.lanes.some(lane => 
-                lane.length > 0 && 
-                lane[lane.length - 1].isFaceUp && 
-                lane[lane.length - 1].protocol === 'Spirit' && 
+            const hasSpirit0 = playerState.lanes.some(lane =>
+                lane.length > 0 &&
+                lane[lane.length - 1].isFaceUp &&
+                lane[lane.length - 1].protocol === 'Spirit' &&
                 lane[lane.length - 1].value === 0
             );
 
             if (hasSpirit0) {
                 let stateWithLog = log(nextState, turnPlayer, "Spirit-0: Skipping Check Cache phase.");
+
+                // Clear context again before transitioning to end phase
+                stateWithLog = setLogSource(stateWithLog, undefined);
+                stateWithLog = setLogPhase(stateWithLog, undefined);
+                stateWithLog = { ...stateWithLog, _logIndentLevel: 0 };
                 return { ...stateWithLog, phase: 'end' };
             }
 
@@ -104,8 +135,12 @@ export const advancePhase = (state: GameState): GameState => {
                     actionRequired: { type: 'discard', actor: turnPlayer, count: playerState.hand.length - 5 }
                 };
             }
-            
+
             // Hand limit is fine, move to end phase.
+            // Clear context again before transitioning to end phase
+            nextState = setLogSource(nextState, undefined);
+            nextState = setLogPhase(nextState, undefined);
+            nextState = { ...nextState, _logIndentLevel: 0 };
             return { ...nextState, phase: 'end' };
         }
 
@@ -138,6 +173,11 @@ export const advancePhase = (state: GameState): GameState => {
             // we can reset their flag so they are able to compile on their *next* turn.
             const endingPlayerState = {...nextState[turnPlayer], cannotCompile: false};
 
+            // CRITICAL: Clear ALL context before transitioning to the next turn
+            nextState = setLogSource(nextState, undefined);
+            nextState = setLogPhase(nextState, undefined);
+            nextState = { ...nextState, _logIndentLevel: 0 };
+
             return {
                 ...nextState,
                 [turnPlayer]: endingPlayerState, // Apply the reset to the player whose turn just ended
@@ -154,7 +194,7 @@ export const advancePhase = (state: GameState): GameState => {
         }
     }
     return state; // Should not be reached
-}
+};
 
 /**
  * Process only the queued actions without advancing phases.
@@ -367,6 +407,12 @@ export const processEndOfAction = (state: GameState): GameState => {
                 // End the turn: switch turn and reset to start phase
                 const nextTurn: Player = restoredState.turn === 'player' ? 'opponent' : 'player';
                 const endingPlayerState = {...restoredState[restoredState.turn], cannotCompile: false};
+
+                // CRITICAL: Clear ALL context before transitioning to the next turn
+                restoredState = setLogSource(restoredState, undefined);
+                restoredState = setLogPhase(restoredState, undefined);
+                restoredState = { ...restoredState, _logIndentLevel: 0 };
+
                 return {
                     ...restoredState,
                     [restoredState.turn]: endingPlayerState,
@@ -389,12 +435,12 @@ export const processEndOfAction = (state: GameState): GameState => {
         // of their turn from this restored state, without returning early.
         state = restoredState;
     }
-    
+
     // If the original action that caused the control prompt is stored, execute it now.
     if (state.actionRequired?.type === 'prompt_rearrange_protocols' && state.actionRequired.originalAction) {
         const originalAction = state.actionRequired.originalAction;
         let stateAfterRearrange = { ...state, actionRequired: null, controlCardHolder: null }; // Reset control
-        
+
         if (originalAction.type === 'compile') {
             // Re-trigger the compile logic
             // Note: This part might need the compile function from useGameState, which isn't available here.
@@ -571,17 +617,17 @@ export const processEndOfAction = (state: GameState): GameState => {
             mutableState.queuedActions = queuedActions; // Update the state with the rest of the queue
             return mutableState; // Break loop and return to wait for user/AI input
         }
-        
+
         // All queued actions were auto-resolved or impossible.
         state = { ...mutableState, queuedActions: [], actionRequired: null };
     }
-    
+
     // If a resolver has already advanced the phase (e.g., Speed-1 trigger), respect it.
     // Otherwise, start the end-of-turn sequence from the hand_limit phase.
     const startingPhase = state.phase === 'action' ? 'hand_limit' : state.phase;
     // FIX: Explicitly type `nextState` to prevent a type inference mismatch.
     let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [] };
-    
+
     const originalTurn = state.turn;
 
     // This loop will process the rest of the current player's turn (hand_limit, end)
@@ -592,7 +638,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         const phaseBeforeAdvance = nextState.phase;
 
         nextState = advancePhase(nextState);
-        
+
         const actionAfterAdvance = nextState.actionRequired;
 
         // If advancePhase generated a new action that didn't exist before,
@@ -601,7 +647,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         if (actionAfterAdvance && actionAfterAdvance !== actionBeforeAdvance) {
             break;
         }
-        
+
         // Safety break to prevent infinite loops if advancePhase fails to change phase,
         // which can happen if it's waiting for an action that this loop doesn't account for.
         if (nextState.phase === phaseBeforeAdvance && nextState.turn === originalTurn) {
@@ -609,7 +655,7 @@ export const processEndOfAction = (state: GameState): GameState => {
              break;
         }
     }
-    
+
     return nextState;
 };
 
@@ -648,7 +694,7 @@ export const continueTurnProgression = (state: GameState): GameState => {
                 break;
             }
         }
-        
+
         const oldPhase = nextState.phase;
         nextState = advancePhase(nextState);
 
@@ -688,7 +734,7 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     if (nextState.phase !== 'control') {
         nextState = { ...nextState, phase: 'control' };
     }
-    
+
     nextState = advancePhase(nextState); // -> compile
     if(nextState.actionRequired) return nextState;
 
@@ -700,9 +746,9 @@ export const processStartOfTurn = (state: GameState): GameState => {
     if (state.winner) return state;
 
     let stateAfterStartEffects = { ...state, phase: 'start' as GamePhase };
-    
+
     stateAfterStartEffects = advancePhase(stateAfterStartEffects);
-    
+
     if (stateAfterStartEffects.actionRequired) {
         return stateAfterStartEffects;
     }

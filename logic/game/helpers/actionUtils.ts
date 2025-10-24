@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
-import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "../../utils/log";
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent, completeEffectAction } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 
@@ -41,6 +41,12 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
 
     // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
     newState.actionRequired = null;
+
+    // IMPORTANT: Decrease indent after the discard action is complete
+    // This closes the indentation from the middle effect
+    if (sourceCardId) {
+        newState = decreaseLogIndent(newState);
+    }
 
     // If there's no chained effect, we still need to process queued actions if they exist
     if (!sourceEffect || !sourceCardId) {
@@ -188,10 +194,13 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         };
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, uncoverContext);
 
-        // Decrease indent after uncover effect completes
-        result.newState = decreaseLogIndent(result.newState);
-        result.newState = setLogSource(result.newState, undefined);
-        result.newState = setLogPhase(result.newState, undefined);
+        // IMPORTANT: Only decrease indent and clear context if there's NO actionRequired
+        // If an action is pending, keep the indent and context active until the action completes
+        if (!result.newState.actionRequired) {
+            result.newState = decreaseLogIndent(result.newState);
+            result.newState = setLogSource(result.newState, undefined);
+            result.newState = setLogPhase(result.newState, undefined);
+        }
 
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
@@ -339,10 +348,13 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     
     const newOwnerState = { ...ownerState, lanes: lanesAfterAddition };
     let newState = { ...state, [cardOwner]: newOwnerState };
-    
-    // IMPORTANT: Clear effect context before logging non-effect actions
-    newState = setLogSource(newState, undefined);
-    newState = setLogPhase(newState, undefined);
+
+    // IMPORTANT: Only clear effect context if there is NO active effect
+    // If we have an active effect (sourceCard + phase), keep it for the shift log
+    if (!state._currentEffectSource || !state._currentPhaseContext) {
+        newState = setLogSource(newState, undefined);
+        newState = setLogPhase(newState, undefined);
+    }
 
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";

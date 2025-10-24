@@ -18,6 +18,11 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const dragItem = useRef<number | null>(null);
     const dragOverItem = useRef<number | null>(null);
 
+    // Extract Anarchy-3 restriction from actionRequired
+    const disallowedProtocolForLane = gameState.actionRequired?.type === 'prompt_rearrange_protocols'
+        ? gameState.actionRequired.disallowedProtocolForLane
+        : undefined;
+
     const protocolsHaveChanged = useMemo(() => {
         if (protocols.length !== initialProtocols.length) return false; // Should not happen
         for (let i = 0; i < protocols.length; i++) {
@@ -27,6 +32,13 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
         }
         return false;
     }, [protocols, initialProtocols]);
+
+    // Check if current arrangement violates Anarchy-3 restriction
+    const hasViolation = useMemo(() => {
+        if (!disallowedProtocolForLane) return false;
+        const { laneIndex, protocol } = disallowedProtocolForLane;
+        return protocols[laneIndex] === protocol;
+    }, [protocols, disallowedProtocolForLane]);
 
     const targetPlayerState = gameState[targetPlayer];
     const otherPlayer = targetPlayer === 'player' ? 'opponent' : 'player';
@@ -83,12 +95,18 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
             {protocols.map((protocol, index) => {
                 const data = originalProtocolData[protocol];
                 const hasChanged = protocol !== initialProtocols[index];
+
+                // Check if this slot violates the Anarchy-3 restriction
+                const isViolation = disallowedProtocolForLane
+                    && disallowedProtocolForLane.laneIndex === index
+                    && protocol === disallowedProtocolForLane.protocol;
+
                 const classList = getProtocolClass('protocol-display rearrange-item', data.compiled);
 
                 return (
                     <div
                         key={protocol}
-                        className={`${classList} ${hasChanged ? 'changed' : ''}`}
+                        className={`${classList} ${hasChanged ? 'changed' : ''} ${isViolation ? 'violation' : ''}`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, index)}
                         onDragEnter={(e) => handleDragEnter(e, index)}
@@ -120,6 +138,12 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                 <h2>{title}</h2>
                 <p>Drag and drop the protocols to reorder them. You must change the order to continue.</p>
 
+                {disallowedProtocolForLane && (
+                    <p className="warning-text">
+                        ⚠️ <strong>{disallowedProtocolForLane.protocol}</strong> cannot be placed on line <strong>{disallowedProtocolForLane.laneIndex}</strong> due to Anarchy-3's restriction.
+                    </p>
+                )}
+
                 <div className="rearrange-board-view">
                     <div className="protocol-bars-container">
                         {isPlayerTarget ? StaticBar : DraggableBar}
@@ -128,9 +152,16 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                 </div>
 
                 <div className="rearrange-actions">
-                    <button className="btn" onClick={() => onConfirm(protocols)} disabled={!protocolsHaveChanged}>
+                    <button
+                        className="btn"
+                        onClick={() => onConfirm(protocols)}
+                        disabled={!protocolsHaveChanged || hasViolation}
+                    >
                         Confirm Rearrangement
                     </button>
+                    {hasViolation && (
+                        <p className="error-text">Cannot confirm: {disallowedProtocolForLane!.protocol} is on line {disallowedProtocolForLane!.laneIndex}</p>
+                    )}
                 </div>
             </div>
         </div>

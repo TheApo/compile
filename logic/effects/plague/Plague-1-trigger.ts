@@ -5,7 +5,7 @@
 
 import { GameState, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../utils/log";
+import { log, setLogSource, setLogPhase } from "../../utils/log";
 
 /**
  * Plague-1 Trigger: After your opponent discards cards: Draw 1 card.
@@ -24,8 +24,17 @@ export const checkForPlague1Trigger = (state: GameState, discardingPlayer: Playe
     
     if (hasPlague1) {
         let newState = { ...state };
-        newState = log(newState, opponentOfDiscarder, "Plague-1 triggers after opponent discards: Draw 1 card.");
+
+        // Set context for Plague-1 trigger (no phase marker - it's a triggered effect)
+        newState = setLogSource(newState, "Plague-1");
+        newState = setLogPhase(newState, undefined);
+
+        newState = log(newState, opponentOfDiscarder, "Triggers after opponent discards: Draw 1 card.");
         newState = drawForPlayer(newState, opponentOfDiscarder, 1);
+
+        // Clear context after trigger
+        newState = setLogSource(newState, undefined);
+
         return newState;
     }
     

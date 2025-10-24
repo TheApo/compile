@@ -5,7 +5,7 @@
 
 import { GameState, Player, PlayedCard } from '../../../types';
 import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
-import { log } from '../../utils/log';
+import { log, setLogSource, setLogPhase } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 // FIX: Import internal helpers to be used by new functions.
@@ -68,6 +68,12 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         [nonCompiler]: nonCompilerState,
         stats: { ...newState.stats, [compiler]: newCompilerStats, [nonCompiler]: newNonCompilerStats }
     };
+
+    // IMPORTANT: Clear effect context before compile log
+    // Compile is not part of a card effect, it's a phase action
+    newState = setLogSource(newState, undefined);
+    newState = setLogPhase(newState, undefined);
+    newState = { ...newState, _logIndentLevel: 0 };
 
     const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
     const protocolName = compilerState.protocols[laneIndex];

@@ -184,6 +184,8 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
 
 /**
  * A helper for the 'Refresh' keyword - draws until the player has 5 cards.
+ * NOTE: This preserves the current effect context (indent, source, phase).
+ * For phase-level refreshes (like end phase), clear context before calling this.
  */
 export function refreshHandForPlayer(state: GameState, player: Player): GameState {
     const playerState = state[player];

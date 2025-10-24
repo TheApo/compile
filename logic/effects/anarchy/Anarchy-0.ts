@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../utils/log";
+import { log, setLogSource, setLogPhase } from "../../utils/log";
 
 /**
  * Anarchy-0: Shift 1 card. For each line that contains a face-up card without matching protocol, draw 1 card.
@@ -47,6 +47,12 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
  */
 export const handleAnarchyConditionalDraw = (state: GameState, cardOwner: 'player' | 'opponent'): GameState => {
     let newState = { ...state };
+
+    // IMPORTANT: Set context for Anarchy-0 effect
+    // This ensures the logs are properly indented and prefixed
+    newState = setLogSource(newState, 'Anarchy-0');
+    newState = setLogPhase(newState, 'middle');
+
     let cardsToDraw = 0;
 
     // Check all 3 lines
@@ -72,10 +78,14 @@ export const handleAnarchyConditionalDraw = (state: GameState, cardOwner: 'playe
     if (cardsToDraw > 0) {
         newState = drawForPlayer(newState, cardOwner, cardsToDraw);
         const playerName = cardOwner === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, cardOwner, `Anarchy-0: ${playerName} draws ${cardsToDraw} card(s) from non-matching protocols.`);
+        newState = log(newState, cardOwner, `${playerName} draws ${cardsToDraw} card(s) from non-matching protocols.`);
     } else {
-        newState = log(newState, cardOwner, "Anarchy-0: No non-matching face-up cards found. No draw.");
+        newState = log(newState, cardOwner, "No non-matching face-up cards found. No draw.");
     }
+
+    // Clear context after the effect completes
+    newState = setLogSource(newState, undefined);
+    newState = setLogPhase(newState, undefined);
 
     return newState;
 };

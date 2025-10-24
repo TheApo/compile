@@ -4,7 +4,7 @@
  */
 
 import { GameState, Player, GamePhase, PlayedCard } from '../../../types';
-import { log } from '../../utils/log';
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { findAndFlipCards, drawForPlayer } from '../../../utils/gameStateModifiers';
 import { findCardOnBoard, handleOnFlipToFaceUp } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
@@ -59,19 +59,28 @@ export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameS
 
 export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player: Player): GameState => {
     if (prevState.actionRequired?.type !== 'plague_4_player_flip_optional') return prevState;
-    
+
     let newState = { ...prevState, actionRequired: null };
+
+    // Set context for Plague-4 (indent is already set by the End effect)
+    newState = setLogSource(newState, 'Plague-4');
+    newState = setLogPhase(newState, 'end');
 
     if (accept) {
         const { sourceCardId } = prevState.actionRequired;
         const actorName = player === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, player, `Plague-4: ${actorName} chooses to flip the card.`);
+        newState = log(newState, player, `${actorName} chooses to flip the card.`);
         newState = findAndFlipCards(new Set([sourceCardId]), newState);
         newState.animationState = { type: 'flipCard', cardId: sourceCardId };
     } else {
         const actorName = player === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, player, `Plague-4: ${actorName} skips flipping the card.`);
+        newState = log(newState, player, `${actorName} skips flipping the card.`);
     }
+
+    // Clear context and decrease indent (closing the End effect)
+    newState = setLogSource(newState, undefined);
+    newState = setLogPhase(newState, undefined);
+    newState = decreaseLogIndent(newState);
 
     return newState;
 };

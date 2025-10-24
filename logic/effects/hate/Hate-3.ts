@@ -5,7 +5,7 @@
 
 import { GameState, Player } from "../../../types";
 import { drawForPlayer } from "../../../utils/gameStateModifiers";
-import { log } from "../../../logic/utils/log";
+import { log, setLogSource, setLogPhase } from "../../utils/log";
 
 /**
  * Hate-3: After you delete cards: Draw 1 card.
@@ -17,10 +17,19 @@ export const checkForHate3Trigger = (state: GameState, deletingPlayer: Player): 
 
     if (hasHate3) {
         let newState = { ...state };
-        newState = log(newState, deletingPlayer, "Hate-3 triggers: Draw 1 card.");
+
+        // Set context for Hate-3 trigger (no phase marker - it's a triggered effect)
+        newState = setLogSource(newState, "Hate-3");
+        newState = setLogPhase(newState, undefined);
+
+        newState = log(newState, deletingPlayer, "Triggers after deleting cards: Draw 1 card.");
         newState = drawForPlayer(newState, deletingPlayer, 1);
+
+        // Clear context after trigger
+        newState = setLogSource(newState, undefined);
+
         return newState;
     }
-    
+
     return state;
 };
