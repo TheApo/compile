@@ -40,24 +40,21 @@ export const useGameState = (
     // Scenario version counter - increments on each scenario change to invalidate old timers
     const scenarioVersionRef = useRef<number>(0);
 
-    // Update turn when startingPlayer changes (from coin flip)
+    // Add protocol logs after game start
     useEffect(() => {
-        if (gameState.log.length <= 1 && gameState.turn !== startingPlayer) {
-            setGameState(prev => {
-                const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+        // Check if protocol logs are missing (log has "Game Started" but not protocol info)
+        const hasProtocolLogs = gameState.log.some(entry => entry.message.includes("protocols:"));
 
+        if (!hasProtocolLogs && gameState.log.length > 0) {
+            setGameState(prev => {
                 // Build protocol info for logging
                 const playerProtocolsText = prev.player.protocols.join(' | ');
                 const opponentProtocolsText = prev.opponent.protocols.join(' | ');
 
                 return {
                     ...prev,
-                    turn: startingPlayer,
                     log: [
-                        {
-                            player: 'player',
-                            message: `Game Started. ${starterName} goes first.`
-                        },
+                        ...prev.log,
                         {
                             player: 'player',
                             message: `Player's protocols: ${playerProtocolsText}`
@@ -70,7 +67,7 @@ export const useGameState = (
                 };
             });
         }
-    }, [startingPlayer]);
+    }, [gameState.log.length]);
 
     const getTurnProgressionCallback = useCallback((phase: GamePhase): ((s: GameState) => GameState) => {
         switch (phase) {

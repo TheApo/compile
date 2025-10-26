@@ -17,6 +17,9 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const [protocols, setProtocols] = useState([...gameState[targetPlayer].protocols]);
     const dragItem = useRef<number | null>(null);
     const dragOverItem = useRef<number | null>(null);
+    const touchStartY = useRef<number>(0);
+    const touchItem = useRef<number | null>(null);
+    const touchCurrentY = useRef<number>(0);
 
     // Extract Anarchy-3 restriction from actionRequired
     const disallowedProtocolForLane = gameState.actionRequired?.type === 'prompt_rearrange_protocols'
@@ -87,6 +90,47 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
         e.preventDefault();
     };
 
+    // Touch handlers for iPad support
+    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, index: number) => {
+        touchItem.current = index;
+        touchStartY.current = e.touches[0].clientY;
+        touchCurrentY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+        if (touchItem.current === null) return;
+
+        touchCurrentY.current = e.touches[0].clientY;
+
+        // Find which protocol element we're currently over
+        const touch = e.touches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        if (element) {
+            const protocolDiv = element.closest('.rearrange-item');
+            if (protocolDiv) {
+                const allItems = Array.from(protocolDiv.parentElement?.children || []);
+                const overIndex = allItems.indexOf(protocolDiv);
+                if (overIndex !== -1 && overIndex !== touchItem.current) {
+                    dragOverItem.current = overIndex;
+                }
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (touchItem.current !== null && dragOverItem.current !== null && touchItem.current !== dragOverItem.current) {
+            const newProtocols = [...protocols];
+            const touchedItemContent = newProtocols.splice(touchItem.current, 1)[0];
+            newProtocols.splice(dragOverItem.current, 0, touchedItemContent);
+            setProtocols(newProtocols);
+        }
+        touchItem.current = null;
+        dragOverItem.current = null;
+        touchStartY.current = 0;
+        touchCurrentY.current = 0;
+    };
+
     const isPlayerTarget = targetPlayer === 'player';
     const title = isPlayerTarget ? "Rearrange Your Protocols" : "Rearrange Opponent's Protocols";
 
@@ -111,6 +155,9 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                         onDragStart={(e) => handleDragStart(e, index)}
                         onDragEnter={(e) => handleDragEnter(e, index)}
                         onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleTouchStart(e, index)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                     >
                         <span className="protocol-name">{protocol}</span>
                         <span className="protocol-value">{data.value}</span>

@@ -17,6 +17,28 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
 
     let newState = { ...prevState };
+
+    // CHECK FIRST: If compiler has control, prompt for rearrange BEFORE deleting cards
+    const compilerHadControl = newState.useControlMechanic && newState.controlCardHolder === compiler;
+
+    if (compilerHadControl) {
+        const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
+        newState = setLogSource(newState, undefined);
+        newState = setLogPhase(newState, undefined);
+        newState = { ...newState, _logIndentLevel: 0 };
+        newState = log(newState, compiler, `${compilerName} has Control and may rearrange protocols before compiling.`);
+
+        newState.actionRequired = {
+            type: 'prompt_use_control_mechanic',
+            sourceCardId: 'CONTROL_MECHANIC',
+            actor: compiler,
+            originalAction: { type: 'compile' as const, laneIndex },
+        };
+        newState.controlCardHolder = null;
+        return newState;
+    }
+
+    // If no control or after rearrange, proceed with compile
     let compilerState = { ...newState[compiler] };
     let nonCompilerState = { ...newState[nonCompiler] };
 
@@ -114,38 +136,8 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         };
     });
 
-    const compilerHadControl = newState.useControlMechanic && newState.controlCardHolder === compiler;
-
-    // CRITICAL: Check if we're in an interrupt before handling control mechanic
-    const wasInterrupted = newState._interruptedTurn !== undefined;
-    const originalTurnBeforeInterrupt = newState._interruptedTurn;
-    const originalPhaseBeforeInterrupt = newState._interruptedPhase;
-
-    if (compilerHadControl) {
-        newState = log(newState, compiler, `${compiler === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols after compiling.`);
-
-        // If we were interrupted, preserve that information in originalAction
-        // CRITICAL FIX: Create a deep copy of queuedSpeed2Actions to prevent mutation issues
-        const queuedSpeed2ActionsCopy = queuedSpeed2Actions.map(action => ({ ...action }));
-        const originalAction = wasInterrupted
-            ? { type: 'resume_interrupted_turn' as const, interruptedTurn: originalTurnBeforeInterrupt!, interruptedPhase: originalPhaseBeforeInterrupt!, queuedSpeed2Actions: queuedSpeed2ActionsCopy }
-            : { type: 'continue_turn' as const, queuedSpeed2Actions: queuedSpeed2ActionsCopy };
-
-        newState.actionRequired = {
-            type: 'prompt_use_control_mechanic',
-            sourceCardId: 'CONTROL_MECHANIC',
-            actor: compiler,
-            originalAction,
-        };
-        newState.controlCardHolder = null;
-        newState.queuedActions = [];
-
-        // Clear interrupt flags temporarily - they'll be restored after control mechanic
-        if (wasInterrupted) {
-            delete newState._interruptedTurn;
-            delete newState._interruptedPhase;
-        }
-    } else if (queuedSpeed2Actions.length > 0) {
+    // Handle Speed-2 actions if any
+    if (queuedSpeed2Actions.length > 0) {
         const firstAction = queuedSpeed2Actions.shift()!;
         newState.actionRequired = firstAction;
         newState.queuedActions = queuedSpeed2Actions;

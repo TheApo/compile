@@ -7,14 +7,15 @@
  */
 
 /* ===========================
-   TABLET LANDSCAPE MODE (1180px - 1400px)
+   TABLET LANDSCAPE MODE (1180px - 1600px)
    iPad Pro 12.9" Landscape (1366px)
    iPad Pro 11" Landscape (1194px)
    iPad Air 11" Landscape (1180px)
    LOTS of horizontal space!
+   Desktop (1920px+) is excluded!
    =========================== */
 
-@media (min-width: 1180px) {
+@media (min-width: 1180px) and (max-width: 1600px) {
 
   /* === Global Font Scaling === */
   :root {

@@ -272,16 +272,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                         </div>
                     </div>
                 )}
-                <div className="protocol-bar opponent-bar">
-                    {opponent.protocols.map((p, i) => 
+                <div className={`protocol-bar opponent-bar ${turn === 'opponent' ? 'active-turn' : ''}`}>
+                    {opponent.protocols.map((p, i) =>
                         <div key={`opp-proto-${p}-${i}`} className={getProtocolClass('protocol-display', opponent.compiled[i], i)}>
                             <span className="protocol-name">{p}</span>
                             <span className="protocol-value">{opponent.laneValues[i]}</span>
                         </div>
                     )}
                 </div>
-                <div className="protocol-bar player-bar">
-                    {player.protocols.map((p, i) => 
+                <div className={`protocol-bar player-bar ${turn === 'player' ? 'active-turn' : ''}`}>
+                    {player.protocols.map((p, i) =>
                         <div key={`player-proto-${p}-${i}`} className={getProtocolClass('protocol-display', player.compiled[i], i)}>
                             <span className="protocol-name">{p}</span>
                             <span className="protocol-value">{player.laneValues[i]}</span>

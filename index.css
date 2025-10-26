@@ -497,7 +497,8 @@ p {
   display: grid;
   grid-template-columns: 280px 1fr 280px;
   gap: 2rem;
-  width: 100%;
+  max-width: 1400px;  /* Limit width on desktop */
+  margin: 0 auto;      /* Center the layout */
   align-items: flex-start;
   flex-grow: 1;
   min-height: 0; /* Prevents grid content from overflowing and pushing siblings */
@@ -1088,6 +1089,18 @@ p {
 }
 .opponent-bar .protocol-display .protocol-name {
     color: var(--danger-color);
+}
+
+/* Active turn glow for protocol bars */
+.protocol-bar.player-bar.active-turn {
+    box-shadow: 0 0 15px var(--primary-color);
+    border: 2px solid var(--primary-color);
+    border-radius: 4px;
+}
+.protocol-bar.opponent-bar.active-turn {
+    box-shadow: 0 0 15px var(--danger-color);
+    border: 2px solid var(--danger-color);
+    border-radius: 4px;
 }
 
 @keyframes compile-glow {
@@ -2551,9 +2564,9 @@ p {
   color: var(--danger-color);
   font-weight: 600;
   margin-top: 0.5rem;
-  text-align: center;
-  font-size: 0.95rem;
-}/**
+}
+
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -2562,14 +2575,15 @@ p {
  */
 
 /* ===========================
-   TABLET LANDSCAPE MODE (1180px - 1400px)
+   TABLET LANDSCAPE MODE (1180px - 1600px)
    iPad Pro 12.9" Landscape (1366px)
    iPad Pro 11" Landscape (1194px)
    iPad Air 11" Landscape (1180px)
    LOTS of horizontal space!
+   Desktop (1920px+) is excluded!
    =========================== */
 
-@media (min-width: 1180px) {
+@media (min-width: 1180px) and (max-width: 1600px) {
 
   /* === Global Font Scaling === */
   :root {
