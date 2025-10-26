@@ -1,0 +1,95 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* --- Card Library Screen --- */
+.card-library-screen {
+  max-width: none;
+  padding: 1rem;
+  padding-top: 6rem; /* Space for header */
+  justify-content: flex-start;
+}
+
+.card-library-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 2rem;
+  max-width: 1400px;
+}
+
+.card-library-layout .game-preview-container {
+  flex-basis: 350px; /* Wider preview */
+  flex-shrink: 0;
+  height: fit-content;
+}
+
+.card-library-layout .preview-card-area .card-component {
+  width: 100%;
+  font-size: 1.1rem;
+}
+
+.card-library-layout .preview-card-area .card-rule-box {
+  font-size: 1.05em; /* Increased from 0.85em for better readability */
+  padding: 4px 8px; /* Added padding for spacing */
+}
+
+.card-list-container {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  background: var(--surface-color);
+  border: 1px solid var(--surface-hover);
+  border-radius: 8px;
+}
+
+/* Scrollbar styling for card list */
+.card-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+.card-list-container::-webkit-scrollbar-track {
+  background: var(--background-color);
+}
+.card-list-container::-webkit-scrollbar-thumb {
+  background-color: var(--secondary-color);
+  border-radius: 4px;
+  border: 2px solid var(--background-color);
+}
+
+.protocol-group {
+  margin-bottom: 2.5rem;
+}
+.protocol-group:last-child {
+  margin-bottom: 0;
+}
+
+.protocol-group h3 {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--surface-hover);
+  padding-bottom: 0.5rem;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+}
+
+.protocol-group h3 .protocol-category-label {
+  font-size: 0.65em;
+  opacity: 0.6;
+  font-weight: 400;
+  text-transform: none;
+  font-family: 'Poppins', sans-serif;
+}
+
+.protocol-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 1.5rem;
+}
+
+.protocol-card-grid .card-component.in-hand {
+  cursor: pointer;
+}
+
+/* --- Toaster Notification --- */

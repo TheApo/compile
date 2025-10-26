@@ -1,0 +1,139 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Base Styles: CSS Variables, Reset, Typography
+ */
+
+/* ===========================
+   CSS Variables
+   =========================== */
+
+:root {
+  --background-color: #0A051A;   /* Deep space blue/purple */
+  --surface-color: #1A113B;      /* Dark violet surface */
+  --surface-hover: #2c1d63;    /* Brighter violet for hover */
+  --primary-color: #61EFFF;      /* Bright cyan accent */
+  --secondary-color: #8A79E8;    /* Muted lavender */
+  --text-color: #F0F0F0;         /* Off-white text */
+  --danger-color: #ff5555;       /* Keep modern red */
+  --success-color: var(--primary-color);
+  --lane-divider: var(--surface-hover);
+}
+
+/* ===========================
+   Reset & Base Elements
+   =========================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ===========================
+   Typography
+   =========================== */
+
+h1, h2 {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--text-color);
+  text-shadow: none;
+  text-align: center;
+  font-weight: 700;
+}
+
+h1 {
+  font-size: 3rem;
+  letter-spacing: 2px;
+  color: var(--primary-color);
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+p {
+  max-width: 60ch;
+  text-align: center;
+  line-height: 1.6;
+  color: var(--secondary-color);
+}
+
+/* ===========================
+   Screens Base
+   =========================== */
+
+.screen {
+  width: 100%;
+  max-width: 1200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  background-color: rgba(0,0,0,0.2);
+  animation: fadeIn 0.5s ease-in-out;
+  position: relative;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===========================
+   App Header
+   =========================== */
+
+.app-header {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  right: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.app-header h2 {
+  margin: 0;
+  text-align: center;
+}
+
+.app-header .btn-back {
+  position: absolute;
+  right: 0;
+}
+
+/* ===========================
+   Version Info
+   =========================== */
+
+.version-info {
+    font-size: 0.7rem;
+    color: var(--secondary-color);
+    opacity: 0.6;
+    margin-top: 0.5rem;
+}

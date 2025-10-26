@@ -2553,4 +2553,623 @@ p {
   margin-top: 0.5rem;
   text-align: center;
   font-size: 0.95rem;
+}/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Responsive Styles for Tablets (12-13.3 inch / iPad / iPad Pro)
+ * Breakpoints: 1024px-1200px (landscape), 768px-1023px (portrait)
+ */
+
+/* ===========================
+   TABLET LANDSCAPE MODE (1180px - 1400px)
+   iPad Pro 12.9" Landscape (1366px)
+   iPad Pro 11" Landscape (1194px)
+   iPad Air 11" Landscape (1180px)
+   LOTS of horizontal space!
+   =========================== */
+
+@media (min-width: 1180px) {
+
+  /* === Global Font Scaling === */
+  :root {
+    font-size: 14px;
+  }
+
+  h1 {
+    font-size: 2.8rem;
+  }
+
+  h2 {
+    font-size: 1.8rem;
+  }
+
+  /* === Buttons === */
+  .btn {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+
+  /* === Main Menu === */
+  .main-menu h1 {
+    font-size: 3.5rem;
+    letter-spacing: 3px;
+  }
+
+  .main-menu-preview {
+    width: 220px;
+    height: 308px;
+  }
+
+  .main-menu-actions-container {
+    gap: 2rem;
+  }
+
+  .main-menu-start-group, .main-menu-other-actions {
+    width: 220px;
+  }
+
+  /* HIDE Card Ticker on ALL tablets (performance!) */
+  .card-ticker-container {
+    display: none !important;
+  }
+
+  /* === Protocol Selection - LANDSCAPE optimized === */
+  .protocol-selection-screen {
+    max-width: 100%;
+    padding-top: 5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .protocol-selection-layout {
+    grid-template-columns: 240px 1fr 240px !important; /* Balanced sidebars in landscape */
+    gap: 1.2rem !important;
+  }
+
+  .player-protocols-area, .opponent-protocols-area {
+    height: 260px;
+    padding: 0.75rem;
+  }
+
+  .protocol-preview-area {
+    padding: 0.75rem;
+  }
+
+  .protocol-preview-area .card-component {
+    font-size: 0.9rem !important;
+  }
+
+  .protocol-grid {
+    grid-template-columns: repeat(5, 106px) !important; /* 5 columns in landscape */
+    gap: 0.75rem !important;
+    justify-content: center !important;
+    max-width: 600px !important; /* Fits 5 columns + gaps */
+    margin: 0 auto !important;
+  }
+
+  .protocol-card {
+    font-size: 0.77em !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    width: 106px !important;
+    max-width: 106px !important;
+  }
+
+  .protocol-card .protocol-category-label {
+    font-size: 0.41em !important;
+  }
+}
+
+/* ===========================
+   TABLET PORTRAIT MODE (820px - 1179px)
+   iPad Pro Portrait (1024px)
+   iPad Air Portrait (834px)
+   iPad 10.2" Portrait (810px)
+   Limited horizontal space
+   =========================== */
+
+@media (max-width: 1179px) and (min-width: 820px) {
+
+  /* === Global Font Scaling === */
+  :root {
+    font-size: 14px;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+  }
+
+  h2 {
+    font-size: 1.6rem;
+  }
+
+  /* === Buttons === */
+  .btn {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+
+  /* === Main Menu === */
+  .main-menu h1 {
+    font-size: 3.2rem;
+    letter-spacing: 3px;
+  }
+
+  .main-menu-preview {
+    width: 200px;
+    height: 280px;
+  }
+
+  .main-menu-actions-container {
+    gap: 2rem;
+  }
+
+  .main-menu-start-group, .main-menu-other-actions {
+    width: 200px;
+  }
+
+  /* HIDE Card Ticker on ALL tablets (performance!) */
+  .card-ticker-container {
+    display: none !important;
+  }
+
+  /* === Protocol Selection - PORTRAIT optimized === */
+  .protocol-selection-screen {
+    max-width: 100%;
+    padding-top: 5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .protocol-selection-layout {
+    grid-template-columns: 220px 1fr 220px !important; /* Narrower sidebars for portrait */
+    gap: 0.9rem !important;
+  }
+
+  .player-protocols-area, .opponent-protocols-area {
+    height: 240px;
+    padding: 0.6rem;
+  }
+
+  .protocol-preview-area {
+    padding: 0.6rem;
+  }
+
+  .protocol-preview-area .card-component {
+    font-size: 0.8rem !important;
+  }
+
+  .protocol-grid {
+    grid-template-columns: repeat(4, 105px) !important; /* 4 columns in portrait */
+    gap: 0.7rem !important;
+    justify-content: center !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+  }
+
+  .protocol-card {
+    font-size: 0.75em !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    width: 105px !important;
+    max-width: 105px !important;
+  }
+
+  .protocol-card .protocol-category-label {
+    font-size: 0.4em !important;
+  }
+
+  /* === Game Screen === */
+  .game-screen {
+    padding: 0.75rem 0.75rem 5px;
+  }
+
+  .log-button {
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .game-preview-container {
+    flex-basis: 220px; /* Reduced from 280px */
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .game-preview-container h2 {
+    font-size: 1.3rem; /* Reduced from 1.5rem */
+  }
+
+  .preview-card-area .card-component {
+    font-size: 0.85rem; /* Reduced from 1.1rem */
+  }
+
+  /* === Game Board === */
+  .lane {
+    width: 130px; /* Reduced from 160px */
+  }
+
+  .lane-stack .card-component {
+    width: 85px; /* Reduced from 100px */
+    height: 119px; /* Reduced from 140px */
+    top: calc(var(--i) * 50px); /* Reduced overlap from 64px */
+  }
+
+  .btn-play-facedown {
+    padding: 0.7rem 0.6rem;
+    font-size: 0.7rem;
+    top: -40px;
+  }
+
+  /* === Protocol Bars === */
+  .protocol-bars-container {
+    gap: 0.2rem;
+    padding: 0.2rem;
+    margin: 0.4rem 0;
+  }
+
+  .protocol-display {
+    padding: 0.2rem 0.6rem;
+  }
+
+  .protocol-display .protocol-name {
+    font-size: 0.8rem; /* Reduced from 0.9rem */
+  }
+
+  .protocol-display .protocol-value {
+    font-size: 1rem; /* Reduced from 1.2rem */
+  }
+
+  /* === Control Coin === */
+  .control-coin {
+    width: 35px; /* Reduced from 40px */
+    height: 35px;
+    font-size: 1.6rem; /* Reduced from 1.8rem */
+  }
+
+  .control-coin-label {
+    font-size: 0.6rem; /* Reduced from 0.7rem */
+  }
+
+  /* === Hand Areas === */
+  .player-hand-area .card-component.in-hand {
+    width: 70px; /* Reduced from 100px */
+    height: 98px; /* Reduced from 140px */
+  }
+
+  .opponent-hand-area .card-component.in-hand {
+    width: 60px; /* Reduced from 85px */
+    height: 84px; /* Reduced from 119px */
+  }
+
+  /* === Phase Controller === */
+  .phase-controller {
+    padding: 0.75rem; /* Reduced from 1rem */
+  }
+
+  .phase-controller-text {
+    font-size: 0.85rem; /* Reduced from 1rem */
+  }
+
+  /* === Card Library === */
+  .card-library-layout {
+    gap: 1rem; /* Reduced from 2rem */
+  }
+
+  .card-library-layout .game-preview-container {
+    flex-basis: 280px; /* Reduced from 350px */
+  }
+
+  .protocol-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); /* Reduced from 100px */
+    gap: 1rem; /* Reduced from 1.5rem */
+  }
+
+  /* === Modals === */
+  .modal-content {
+    padding: 1.5rem 2rem; /* Reduced from 2rem 3rem */
+    max-width: 700px; /* Reduced from 800px */
+  }
+
+  .log-modal-content {
+    width: 70%; /* Increased from 60% for better use of space */
+    max-width: 600px;
+  }
+
+  /* === Results Screen === */
+  .results-screen-content {
+    padding: 2rem; /* Reduced from 2.5rem */
+    max-width: 750px; /* Reduced from 900px */
+  }
+
+  .results-header h1 {
+    font-size: 3rem; /* Reduced from 4rem */
+  }
+
+  /* === Coin Flip Modal === */
+  .coin-flip-modal-content {
+    padding: 2rem; /* Reduced from 3rem */
+    max-width: 500px; /* Reduced from 600px */
+  }
+
+  .coin-flip-choices {
+    gap: 1.5rem; /* Reduced from 2rem */
+  }
+
+  .coin-flip-choice-btn {
+    padding: 1.5rem 2rem; /* Reduced from 2rem 3rem */
+    min-width: 120px; /* Reduced from 150px */
+  }
+
+  .coin-choice-icon {
+    font-size: 2.5rem; /* Reduced from 3rem */
+  }
+}
+
+/* ===========================
+   SMALLER TABLETS (under 900px)
+   iPad 10.2", iPad Mini, smaller 11" tablets in portrait
+   =========================== */
+
+@media (max-width: 900px) {
+
+  /* === Global === */
+  :root {
+    font-size: 13px; /* Further reduce */
+  }
+
+  h1 {
+    font-size: 2rem; /* Further reduced */
+  }
+
+  h2 {
+    font-size: 1.4rem;
+  }
+
+  .screen {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  /* === Main Menu === */
+  .main-menu h1 {
+    font-size: 2.5rem;
+    letter-spacing: 2px;
+  }
+
+  .main-menu-layout {
+    gap: 1rem;
+    transform: translateY(-30px);
+  }
+
+  .main-menu-preview {
+    width: 160px;
+    height: 224px;
+  }
+
+  .main-menu-actions-container {
+    gap: 1.5rem;
+  }
+
+  .main-menu-start-group, .main-menu-other-actions {
+    width: 180px;
+  }
+
+  .card-ticker-container {
+    display: none; /* Hide ticker on narrow screens */
+  }
+
+  /* === Protocol Selection === */
+  .protocol-selection-layout {
+    grid-template-columns: 190px 1fr 190px; /* Reduced for smaller tablets */
+    gap: 0.75rem;
+  }
+
+  .player-protocols-area, .opponent-protocols-area {
+    height: 220px;
+    padding: 0.6rem;
+  }
+
+  .protocol-preview-area {
+    padding: 0.5rem;
+  }
+
+  .protocol-preview-area .card-component {
+    font-size: 0.7rem;
+  }
+
+  .protocol-grid {
+    grid-template-columns: repeat(4, 100px) !important; /* FIXED 4 columns for smaller tablets */
+    gap: 0.6rem !important;
+    justify-content: center !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+  }
+
+  .protocol-card {
+    font-size: 0.7em !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    width: 100px !important;
+    max-width: 100px !important;
+  }
+
+  .category-filters {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  /* === Game Screen === */
+  .game-preview-container {
+    flex-basis: 180px; /* Further reduced */
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .game-preview-container h2 {
+    font-size: 1.1rem;
+  }
+
+  .preview-card-area .card-component {
+    font-size: 0.7rem;
+  }
+
+  /* === Game Board === */
+  .lane {
+    width: 110px; /* Further reduced */
+  }
+
+  .lane-stack .card-component {
+    width: 70px; /* Further reduced */
+    height: 98px;
+    top: calc(var(--i) * 42px); /* Less overlap */
+  }
+
+  .btn-play-facedown {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.65rem;
+    top: -36px;
+  }
+
+  /* === Protocol Bars === */
+  .protocol-display .protocol-name {
+    font-size: 0.7rem;
+  }
+
+  .protocol-display .protocol-value {
+    font-size: 0.9rem;
+  }
+
+  /* === Control Coin === */
+  .control-coin {
+    width: 30px;
+    height: 30px;
+    font-size: 1.4rem;
+  }
+
+  .control-coin-label {
+    font-size: 0.55rem;
+  }
+
+  /* === Hand Areas === */
+  .player-hand-area .card-component.in-hand {
+    width: 60px;
+    height: 84px;
+  }
+
+  .opponent-hand-area .card-component.in-hand {
+    width: 50px;
+    height: 70px;
+  }
+
+  /* === Modals === */
+  .modal-content {
+    padding: 1rem 1.5rem;
+    max-width: 600px;
+    max-height: 85vh;
+  }
+
+  .log-modal-content {
+    width: 80%;
+    max-width: 500px;
+  }
+
+  .log-list {
+    font-size: 0.85rem;
+  }
+
+  /* === Results Screen === */
+  .results-screen-content {
+    padding: 1.5rem;
+    max-width: 650px;
+    gap: 2rem;
+  }
+
+  .results-header h1 {
+    font-size: 2.5rem;
+  }
+
+  .results-body {
+    gap: 1.5rem;
+  }
+
+  .stats-grid {
+    gap: 0.75rem 1.5rem;
+  }
+
+  /* === Card Library === */
+  .card-library-layout {
+    gap: 0.75rem;
+  }
+
+  .card-library-layout .game-preview-container {
+    flex-basis: 240px;
+  }
+
+  .protocol-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
+    gap: 0.75rem;
+  }
+
+  /* === Coin Flip === */
+  .coin-flip-modal-content {
+    padding: 1.5rem;
+    max-width: 450px;
+  }
+
+  .coin-flip-choices {
+    gap: 1rem;
+  }
+
+  .coin-flip-choice-btn {
+    padding: 1.2rem 1.5rem;
+    min-width: 100px;
+  }
+
+  .coin-choice-icon {
+    font-size: 2rem;
+  }
+
+  .coin-choice-label {
+    font-size: 1rem;
+  }
+}
+
+/* ===========================
+   SMALL TABLETS / LARGE PHONES (under 768px)
+   Optional: für sehr kleine Tablets
+   =========================== */
+
+@media (max-width: 767px) {
+  /* Bei Bedarf weitere Anpassungen für sehr kleine Geräte */
+
+  .game-screen-layout {
+    flex-direction: column; /* Stack layout vertically if needed */
+  }
+
+  .game-preview-container {
+    flex-basis: auto;
+    width: 100%;
+    order: -1; /* Move to top */
+  }
+
+  .protocol-selection-layout {
+    grid-template-columns: 1fr; /* Single column on very small screens */
+    grid-template-rows: auto auto auto;
+  }
+
+  .protocol-selection-sidebar:first-child {
+    order: 1;
+  }
+
+  .protocol-grid-container {
+    order: 2;
+  }
+
+  .protocol-selection-sidebar:last-child {
+    order: 3;
+  }
 }

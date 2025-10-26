@@ -1,0 +1,1219 @@
+/* --- Components --- */
+.btn {
+  font-family: 'Orbitron', sans-serif;
+  background-color: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.btn:hover, .btn.active {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+}
+
+.btn:disabled {
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: not-allowed;
+    opacity: 0.5;
+    background-color: transparent;
+}
+
+.btn-back {
+  border-color: var(--secondary-color);
+  color: var(--secondary-color);
+}
+
+.btn-back:hover {
+  background-color: var(--secondary-color);
+  color: var(--background-color);
+}
+/* --- Rules Modal & Log Modal --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(10, 5, 26, 0.8);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.modal-content {
+  background: var(--surface-color);
+  padding: 2rem 3rem;
+  border: 1px solid var(--secondary-color);
+  border-radius: 8px;
+  box-shadow: none;
+  max-width: 800px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  text-align: left;
+}
+.modal-content h2, .modal-content h3 {
+    text-align: left;
+    margin-bottom: 1rem;
+}
+.modal-content h3 {
+    color: var(--primary-color);
+    margin-top: 1.5rem;
+}
+.modal-content p, .modal-content li {
+    text-align: left;
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+    color: var(--text-color);
+}
+.modal-content ol {
+    padding-left: 2rem;
+}
+.modal-content strong {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+.modal-close-btn {
+  position: sticky;
+  top: -2rem; /* Counteract parent padding */
+  float: right;
+  margin-right: -2rem; /* Counteract parent padding */
+  z-index: 2;
+  padding: 0.5rem 0.75rem;
+}
+
+.log-modal-content {
+    width: 60%;
+    max-width: 700px;
+    overflow-y: auto;
+}
+
+.log-list {
+    list-style: none;
+    padding-left: 0;
+    counter-reset: log-counter;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.9rem;
+}
+
+.log-entry {
+    counter-increment: log-counter;
+    margin-bottom: 0.5rem;
+    padding-left: 2.5rem;
+    position: relative;
+    line-height: 1.5;
+}
+
+.log-entry::before {
+    content: counter(log-counter) ".";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-weight: 700;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--secondary-color);
+    width: 2rem;
+    text-align: right;
+    margin-right: 0.5rem;
+}
+
+.log-modal-content .log-entry.log-entry-player {
+    color: var(--primary-color);
+}
+
+.log-modal-content .log-entry.log-entry-opponent {
+    color: var(--danger-color);
+}
+
+/* Log entry hover effect */
+.log-entry:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.card-component {
+  width: 250px;
+  height: 350px;
+  perspective: 1000px; /* For 3D flip */
+  background-color: transparent;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-color);
+  line-height: 1.4;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.card-component.is-discarding {
+    animation: discard-animation 0.5s ease-out forwards;
+}
+
+@keyframes discard-animation {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(40px) scale(0.8);
+    }
+}
+
+.card-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.card-front {
+  background-color: var(--surface-color);
+  border: 1px solid hsla(253, 91%, 63%, 0.5);
+  padding: 10px;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  border: 1px solid var(--secondary-color);
+  background-color: var(--surface-color);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(0,0,0,0.2),
+    rgba(0,0,0,0.2) 8px,
+    rgba(138, 121, 232, 0.1) 8px,
+    rgba(138, 121, 232, 0.1) 10px
+  );
+  position: relative;
+}
+
+.card-back-value {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+    text-shadow: 0 0 8px var(--primary-color);
+    opacity: 0.8;
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    font-size: 2em;
+    font-weight: 700;
+}
+
+
+.card-component.selected .card-front {
+    border-color: var(--primary-color);
+    box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 10px var(--primary-color);
+}
+.card-component.selected, .card-component.in-hand:hover {
+    transform: translateY(-10px);
+    z-index: 50;
+}
+
+.card-component.multi-selected .card-front {
+    border-color: #FFD700; /* Gold */
+    box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 10px #FFD700;
+}
+
+
+.card-component.in-hand:hover .card-front,
+.lane-stack .card-component:hover .card-front {
+    border-color: var(--primary-color);
+    box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 10px var(--primary-color);
+}
+
+
+.card-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.card-protocol, .card-value {
+  background: rgba(10, 5, 26, 0.7);
+  border: 1px solid transparent;
+  padding: 2px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-protocol {
+  font-size: 1.1em;
+  justify-content: flex-start;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0% 100%);
+}
+.card-value {
+  font-size: 1.8em;
+  min-width: 40px;
+  color: var(--primary-color);
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0% 100%);
+  border-left: 1px solid var(--secondary-color);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  gap: 2px;
+  min-height: 0;
+}
+
+.card-rule-box {
+  background-color: rgba(10, 5, 26, 0.6);
+  backdrop-filter: blur(2px);
+  padding: 2px 2px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  min-height: 0;
+  overflow: hidden;
+  line-height: 1.3;
+  font-size: 0.85em;
+  color: var(--secondary-color);
+  position: relative;
+  border-radius: 2px;
+}
+
+/* Tech-frame border effect for rule boxes */
+.card-rule-box::before, .card-rule-box::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--primary-color);
+  border-style: solid;
+}
+.card-rule-box::before {
+  top: 2px;
+  left: 2px;
+  border-width: 1px 0 0 1px;
+}
+.card-rule-box::after {
+  bottom: 2px;
+  right: 2px;
+  border-width: 0 1px 1px 0;
+}
+
+.card-rule-box:not(:empty) {
+    color: var(--text-color);
+}
+.card-rule-box .emphasis {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* --- Protocol Card Styles --- */
+.card-protocol-anarchy .card-front {
+    border-color: hsl(15, 85%, 60%);
+    background-image:
+        radial-gradient(at 50% 50%, hsla(15, 85%, 60%, 0.25) 0%, transparent 50%),
+        repeating-linear-gradient(45deg, transparent, transparent 8px, hsla(15, 85%, 50%, 0.08) 8px, hsla(15, 85%, 50%, 0.08) 16px),
+        repeating-linear-gradient(-45deg, transparent, transparent 8px, hsla(10, 90%, 55%, 0.06) 8px, hsla(10, 90%, 55%, 0.06) 16px);
+}
+.card-protocol-apathy .card-front {
+    border-color: hsl(240, 5%, 60%);
+    background-image:
+        radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
+}
+.card-protocol-chaos .card-front {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
+.card-protocol-darkness .card-front {
+    border-color: hsl(270, 50%, 70%);
+    background-image:
+        radial-gradient(at 10% 20%, hsla(270, 50%, 70%, 0.2), transparent 60%),
+        radial-gradient(at 90% 80%, hsla(250, 60%, 60%, 0.2), transparent 70%);
+}
+.card-protocol-death .card-front {
+    border-color: hsl(0, 70%, 65%);
+    background-image:
+        radial-gradient(at 50% 100%, hsla(0, 70%, 55%, 0.25), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%);
+}
+.card-protocol-fire .card-front {
+    border-color: hsl(20, 90%, 65%);
+    background-image:
+        radial-gradient(at 50% 110%, hsla(25, 90%, 60%, 0.3), transparent 60%),
+        radial-gradient(at 10% 10%, hsla(35, 100%, 70%, 0.15), transparent 50%);
+}
+.card-protocol-gravity .card-front {
+    border-color: hsl(230, 60%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(230, 60%, 70%, 0.2) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+.card-protocol-hate .card-front {
+    border-color: hsl(350, 60%, 60%);
+    background-image:
+        radial-gradient(at 0% 100%, hsla(350, 60%, 50%, 0.25), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, hsla(350, 60%, 60%, 0.05) 15px, hsla(350, 60%, 60%, 0.05) 30px);
+}
+.card-protocol-life .card-front {
+    border-color: hsl(140, 70%, 60%);
+    background-image:
+        radial-gradient(at 50% 0%, hsla(140, 70%, 60%, 0.2), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%2361efb5' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.card-protocol-light .card-front {
+    border-color: hsl(50, 100%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(50, 100%, 75%, 0.25) 0%, transparent 60%);
+}
+.card-protocol-love .card-front {
+    border-color: hsl(320, 80%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(320, 80%, 75%, 0.1) 0%, hsla(320, 80%, 75%, 0.15) 40%, transparent 70%);
+}
+.card-protocol-metal .card-front {
+    border-color: hsl(210, 15%, 75%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(210, 15%, 85%, 0.2), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, hsla(210, 15%, 75%, 0.05) 1px, hsla(210, 15%, 75%, 0.05) 2px);
+}
+.card-protocol-plague .card-front {
+    border-color: hsl(80, 60%, 55%);
+    background-image:
+        radial-gradient(at 90% 20%, hsla(80, 60%, 55%, 0.2), transparent 50%),
+        radial-gradient(at 30% 85%, hsla(90, 50%, 45%, 0.15), transparent 60%);
+}
+.card-protocol-psychic .card-front {
+    border-color: hsl(280, 70%, 70%);
+    background-image:
+        radial-gradient(ellipse at 50% 100%, hsla(280, 70%, 70%, 0.2), transparent 70%);
+}
+.card-protocol-speed .card-front {
+    border-color: hsl(180, 80%, 60%);
+    background-image:
+        linear-gradient(0deg, transparent 40%, hsla(180, 80%, 60%, 0.1) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, hsla(180, 80%, 60%, 0.2) 50%, transparent 52%);
+}
+.card-protocol-spirit .card-front {
+    border-color: hsl(170, 60%, 65%);
+    background-image:
+        radial-gradient(at 0% 0%, hsla(170, 60%, 65%, 0.2), transparent 50%),
+        radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
+}
+.card-protocol-water .card-front {
+    border-color: hsl(210, 80%, 65%);
+    background-image:
+        radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- Protocol Selection Card Styles (Protocol Grid) --- */
+.protocol-card.card-protocol-anarchy {
+    border-color: hsl(15, 85%, 60%);
+    background-image:
+        radial-gradient(at 50% 50%, hsla(15, 85%, 60%, 0.25) 0%, transparent 50%),
+        repeating-linear-gradient(45deg, transparent, transparent 8px, hsla(15, 85%, 50%, 0.08) 8px, hsla(15, 85%, 50%, 0.08) 16px),
+        repeating-linear-gradient(-45deg, transparent, transparent 8px, hsla(10, 90%, 55%, 0.06) 8px, hsla(10, 90%, 55%, 0.06) 16px);
+}
+.protocol-card.card-protocol-apathy {
+    border-color: hsl(240, 5%, 60%);
+    background-image:
+        radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
+}
+.protocol-card.card-protocol-chaos {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
+.protocol-card.card-protocol-darkness {
+    border-color: hsl(270, 50%, 70%);
+    background-image:
+        radial-gradient(at 10% 20%, hsla(270, 50%, 70%, 0.2), transparent 60%),
+        radial-gradient(at 90% 80%, hsla(250, 60%, 60%, 0.2), transparent 70%);
+}
+.protocol-card.card-protocol-death {
+    border-color: hsl(0, 70%, 65%);
+    background-image:
+        radial-gradient(at 50% 100%, hsla(0, 70%, 55%, 0.25), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%);
+}
+.protocol-card.card-protocol-fire {
+    border-color: hsl(20, 90%, 65%);
+    background-image:
+        radial-gradient(at 50% 110%, hsla(25, 90%, 60%, 0.3), transparent 60%),
+        radial-gradient(at 10% 10%, hsla(35, 100%, 70%, 0.15), transparent 50%);
+}
+.protocol-card.card-protocol-gravity {
+    border-color: hsl(230, 60%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(230, 60%, 70%, 0.2) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+.protocol-card.card-protocol-hate {
+    border-color: hsl(350, 60%, 60%);
+    background-image:
+        radial-gradient(at 0% 100%, hsla(350, 60%, 50%, 0.25), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, hsla(350, 60%, 60%, 0.05) 15px, hsla(350, 60%, 60%, 0.05) 30px);
+}
+.protocol-card.card-protocol-life {
+    border-color: hsl(140, 70%, 60%);
+    background-image:
+        radial-gradient(at 50% 0%, hsla(140, 70%, 60%, 0.2), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%2361efb5' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.protocol-card.card-protocol-light {
+    border-color: hsl(50, 100%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(50, 100%, 75%, 0.25) 0%, transparent 60%);
+}
+.protocol-card.card-protocol-love {
+    border-color: hsl(320, 80%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(320, 80%, 75%, 0.1) 0%, hsla(320, 80%, 75%, 0.15) 40%, transparent 70%);
+}
+.protocol-card.card-protocol-metal {
+    border-color: hsl(210, 15%, 75%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(210, 15%, 85%, 0.2), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, hsla(210, 15%, 75%, 0.05) 1px, hsla(210, 15%, 75%, 0.05) 2px);
+}
+.protocol-card.card-protocol-plague {
+    border-color: hsl(80, 60%, 55%);
+    background-image:
+        radial-gradient(at 90% 20%, hsla(80, 60%, 55%, 0.2), transparent 50%),
+        radial-gradient(at 30% 85%, hsla(90, 50%, 45%, 0.15), transparent 60%);
+}
+.protocol-card.card-protocol-psychic {
+    border-color: hsl(280, 70%, 70%);
+    background-image:
+        radial-gradient(ellipse at 50% 100%, hsla(280, 70%, 70%, 0.2), transparent 70%);
+}
+.protocol-card.card-protocol-speed {
+    border-color: hsl(180, 80%, 60%);
+    background-image:
+        linear-gradient(0deg, transparent 40%, hsla(180, 80%, 60%, 0.1) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, hsla(180, 80%, 60%, 0.2) 50%, transparent 52%);
+}
+.protocol-card.card-protocol-spirit {
+    border-color: hsl(170, 60%, 65%);
+    background-image:
+        radial-gradient(at 0% 0%, hsla(170, 60%, 65%, 0.2), transparent 50%),
+        radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
+}
+.protocol-card.card-protocol-water {
+    border-color: hsl(210, 80%, 65%);
+    background-image:
+        radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- Protocol Display Card Styles (Selected Protocols Sidebar) --- */
+.protocol-display-card.card-protocol-anarchy {
+    border-color: hsl(15, 85%, 60%);
+    background-image:
+        radial-gradient(at 50% 50%, hsla(15, 85%, 60%, 0.25) 0%, transparent 50%),
+        repeating-linear-gradient(45deg, transparent, transparent 8px, hsla(15, 85%, 50%, 0.08) 8px, hsla(15, 85%, 50%, 0.08) 16px),
+        repeating-linear-gradient(-45deg, transparent, transparent 8px, hsla(10, 90%, 55%, 0.06) 8px, hsla(10, 90%, 55%, 0.06) 16px);
+}
+.protocol-display-card.card-protocol-apathy {
+    border-color: hsl(240, 5%, 60%);
+    background-image:
+        radial-gradient(at 80% 80%, hsla(240, 5%, 60%, 0.1), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px);
+}
+.protocol-display-card.card-protocol-chaos {
+    border-color: hsl(300, 80%, 60%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%);
+}
+.protocol-display-card.card-protocol-darkness {
+    border-color: hsl(270, 50%, 70%);
+    background-image:
+        radial-gradient(at 10% 20%, hsla(270, 50%, 70%, 0.2), transparent 60%),
+        radial-gradient(at 90% 80%, hsla(250, 60%, 60%, 0.2), transparent 70%);
+}
+.protocol-display-card.card-protocol-death {
+    border-color: hsl(0, 70%, 65%);
+    background-image:
+        radial-gradient(at 50% 100%, hsla(0, 70%, 55%, 0.25), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%);
+}
+.protocol-display-card.card-protocol-fire {
+    border-color: hsl(20, 90%, 65%);
+    background-image:
+        radial-gradient(at 50% 110%, hsla(25, 90%, 60%, 0.3), transparent 60%),
+        radial-gradient(at 10% 10%, hsla(35, 100%, 70%, 0.15), transparent 50%);
+}
+.protocol-display-card.card-protocol-gravity {
+    border-color: hsl(230, 60%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(230, 60%, 70%, 0.2) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 20px 20px, 20px 20px;
+}
+.protocol-display-card.card-protocol-hate {
+    border-color: hsl(350, 60%, 60%);
+    background-image:
+        radial-gradient(at 0% 100%, hsla(350, 60%, 50%, 0.25), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, hsla(350, 60%, 60%, 0.05) 15px, hsla(350, 60%, 60%, 0.05) 30px);
+}
+.protocol-display-card.card-protocol-life {
+    border-color: hsl(140, 70%, 60%);
+    background-image:
+        radial-gradient(at 50% 0%, hsla(140, 70%, 60%, 0.2), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%2361efb5' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.protocol-display-card.card-protocol-light {
+    border-color: hsl(50, 100%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(50, 100%, 75%, 0.25) 0%, transparent 60%);
+}
+.protocol-display-card.card-protocol-love {
+    border-color: hsl(320, 80%, 75%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(320, 80%, 75%, 0.1) 0%, hsla(320, 80%, 75%, 0.15) 40%, transparent 70%);
+}
+.protocol-display-card.card-protocol-metal {
+    border-color: hsl(210, 15%, 75%);
+    background-image:
+        radial-gradient(at 10% 10%, hsla(210, 15%, 85%, 0.2), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, hsla(210, 15%, 75%, 0.05) 1px, hsla(210, 15%, 75%, 0.05) 2px);
+}
+.protocol-display-card.card-protocol-plague {
+    border-color: hsl(80, 60%, 55%);
+    background-image:
+        radial-gradient(at 90% 20%, hsla(80, 60%, 55%, 0.2), transparent 50%),
+        radial-gradient(at 30% 85%, hsla(90, 50%, 45%, 0.15), transparent 60%);
+}
+.protocol-display-card.card-protocol-psychic {
+    border-color: hsl(280, 70%, 70%);
+    background-image:
+        radial-gradient(ellipse at 50% 100%, hsla(280, 70%, 70%, 0.2), transparent 70%);
+}
+.protocol-display-card.card-protocol-speed {
+    border-color: hsl(180, 80%, 60%);
+    background-image:
+        linear-gradient(0deg, transparent 40%, hsla(180, 80%, 60%, 0.1) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, hsla(180, 80%, 60%, 0.2) 50%, transparent 52%);
+}
+.protocol-display-card.card-protocol-spirit {
+    border-color: hsl(170, 60%, 65%);
+    background-image:
+        radial-gradient(at 0% 0%, hsla(170, 60%, 65%, 0.2), transparent 50%),
+        radial-gradient(at 100% 100%, hsla(190, 50%, 55%, 0.2), transparent 50%);
+}
+.protocol-display-card.card-protocol-water {
+    border-color: hsl(210, 80%, 65%);
+    background-image:
+        radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- In-Game Card Overrides --- */
+.lane-stack .card-component,
+.player-hand-area .card-component.in-hand,
+.card-ticker-track .card-component.in-hand,
+.protocol-card-grid .card-component.in-hand,
+.selected-protocol-cards-container .card-component.in-hand,
+.debug-card-grid .card-component.in-hand {
+    font-size: 0.6rem;
+}
+.lane-stack .card-front,
+.player-hand-area .card-front,
+.card-ticker-track .card-front,
+.protocol-card-grid .card-front,
+.selected-protocol-cards-container .card-front,
+.debug-card-grid .card-front {
+    padding: 2px;
+}
+
+.lane-stack .card-component .card-header,
+.player-hand-area .card-component.in-hand .card-header,
+.card-ticker-track .card-component.in-hand .card-header,
+.protocol-card-grid .card-component.in-hand .card-header,
+.selected-protocol-cards-container .card-component.in-hand .card-header,
+.debug-card-grid .card-component.in-hand .card-header {
+    margin-bottom: 4px;
+    gap: 4px;
+}
+
+.lane-stack .card-component .card-protocol,
+.player-hand-area .card-component.in-hand .card-protocol,
+.card-ticker-track .card-component.in-hand .card-protocol,
+.protocol-card-grid .card-component.in-hand .card-protocol,
+.selected-protocol-cards-container .card-component.in-hand .card-protocol,
+.debug-card-grid .card-component.in-hand .card-protocol {
+    padding: 1px 6px;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0% 100%);
+}
+
+.lane-stack .card-component .card-value,
+.player-hand-area .card-component.in-hand .card-value,
+.card-ticker-track .card-component.in-hand .card-value,
+.protocol-card-grid .card-component.in-hand .card-value,
+.selected-protocol-cards-container .card-component.in-hand .card-value,
+.debug-card-grid .card-component.in-hand .card-value {
+    padding: 1px 6px;
+    clip-path: polygon(6px 0, 100% 0, 100% 100%, 0% 100%);
+    min-width: 30px;
+}
+
+.lane-stack .card-component .card-body,
+.player-hand-area .card-component.in-hand .card-body,
+.card-ticker-track .card-component.in-hand .card-body,
+.protocol-card-grid .card-component.in-hand .card-body,
+.selected-protocol-cards-container .card-component.in-hand .card-body,
+.debug-card-grid .card-component.in-hand .card-body {
+    gap: 2px;
+}
+
+.lane-stack .card-component .card-rule-box,
+.player-hand-area .card-component.in-hand .card-rule-box,
+.card-ticker-track .card-component.in-hand .card-rule-box,
+.protocol-card-grid .card-component.in-hand .card-rule-box,
+.selected-protocol-cards-container .card-component.in-hand .card-rule-box,
+.debug-card-grid .card-component.in-hand .card-rule-box {
+    padding: 1px 3px;
+    font-size: 0.9em;
+    line-height: 1.25;
+}
+
+.lane-stack .card-component .card-rule-box::before,
+.lane-stack .card-component .card-rule-box::after,
+.player-hand-area .card-component.in-hand .card-rule-box::before,
+.player-hand-area .card-component.in-hand .card-rule-box::after,
+.card-ticker-track .card-component.in-hand .card-rule-box::before,
+.card-ticker-track .card-component.in-hand .card-rule-box::after,
+.protocol-card-grid .card-component.in-hand .card-rule-box::before,
+.protocol-card-grid .card-component.in-hand .card-rule-box::after,
+.selected-protocol-cards-container .card-component.in-hand .card-rule-box::before,
+.selected-protocol-cards-container .card-component.in-hand .card-rule-box::after,
+.debug-card-grid .card-component.in-hand .card-rule-box::before,
+.debug-card-grid .card-component.in-hand .card-rule-box::after {
+    width: 6px;
+    height: 6px;
+}
+
+.opponent-hand-area .card-component.in-hand {
+    font-size: 0.5rem;
+    
+    margin-bottom: -3.5rem;
+}
+
+/* --- Phase Controller --- */
+.phase-controller {
+    display: flex;
+    flex-direction: column;
+.toaster-container {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toaster {
+  background-color: var(--surface-color);
+  padding: 1rem 2rem;
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  animation: fadeInOut 5s ease-in-out forwards;
+  text-align: center;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-20px); }
+  10% { opacity: 1; transform: translateY(0); }
+  90% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-20px); }
+}
+
+.toaster.toaster-player {
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    box-shadow: 0 4px 20px hsla(188, 100%, 69%, 0.3);
+}
+
+.toaster.toaster-opponent {
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    box-shadow: 0 4px 20px hsla(360, 100%, 67%, 0.3);
+}
+
+/* --- Rearrange Protocols Modal --- */
+.rearrange-modal-content {
+    width: 60%;
+    max-width: 800px;
+}
+
+.rearrange-board-view {
+    margin: 2rem 0;
+    padding: 1rem;
+    border: 1px dashed var(--surface-hover);
+    border-radius: 8px;
+    background-color: var(--background-color);
+}
+
+.rearrange-board-view .protocol-bars-container {
+    border: none;
+    padding: 0;
+    gap: 0.5rem;
+}
+
+.rearrange-board-view .protocol-bar {
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.rearrange-board-view .protocol-display {
+    border-right: 1px solid var(--surface-color);
+    background-color: var(--surface-hover);
+}
+.rearrange-board-view .protocol-display:last-child {
+    border-right: none;
+}
+
+.rearrange-item {
+  cursor: grab;
+  transition: all 0.2s ease;
+}
+
+.rearrange-item.selected {
+  background-color: var(--primary-color);
+}
+
+.rearrange-item.changed {
+  border: 1px solid #FFD700;
+  box-shadow: 0 0 8px hsla(51, 100%, 50%, 0.5);
+}
+
+.rearrange-item.selected .protocol-name,
+.rearrange-item.selected .protocol-value {
+  color: var(--background-color);
+  text-shadow: none;
+}
+
+.rearrange-item:active {
+  cursor: grabbing;
+  background-color: var(--primary-color);
+  opacity: 0.8;
+}
+
+.rearrange-item:active .protocol-name,
+.rearrange-item:active .protocol-value {
+    color: var(--background-color);
+    text-shadow: none;
+}
+
+.rearrange-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+/* --- Debug Modal --- */
+.debug-modal-content {
+    width: 80%;
+    max-width: 1200px;
+}
+
+.debug-modal-content h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--surface-hover);
+    padding-bottom: 0.5rem;
+}
+
+.debug-card-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: var(--background-color);
+    border-radius: 4px;
+    min-height: 150px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.debug-card-grid .card-component.in-hand {
+    flex-shrink: 0;
+}
+
+.debug-card-grid::-webkit-scrollbar {
+  width: 8px;
+}
+.debug-card-grid::-webkit-scrollbar-track {
+  background: var(--surface-color);
+}
+.debug-card-grid::-webkit-scrollbar-thumb {
+  background-color: var(--secondary-color);
+  border-radius: 4px;
+  border: 2px solid var(--surface-color);
+}
+
+.debug-modal-content .no-cards {
+    color: var(--secondary-color);
+    padding: 2rem;
+    text-align: center;
+}
+
+/* --- Results Screen --- */
+.results-screen-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    padding: 2.5rem;
+    background-color: var(--surface-color);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.results-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.results-header h1 {
+    font-size: 4rem;
+    margin-bottom: 0.5rem;
+}
+.results-header p {
+    font-size: 1.1rem;
+    text-align: center;
+}
+
+.results-screen.victory .results-header h1 {
+    color: var(--primary-color);
+    text-shadow: 0 0 15px var(--primary-color);
+}
+
+.results-screen.defeat .results-header h1 {
+    color: var(--danger-color);
+    text-shadow: 0 0 15px var(--danger-color);
+}
+
+.results-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+}
+
+.final-score-section, .stats-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.results-body h3 {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--secondary-color);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--surface-hover);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.final-score-section .protocol-bars-container {
+    border: none;
+    padding: 0;
+}
+
+.results-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.final-score-section .results-opponent-label {
+    color: var(--danger-color);
+    margin-bottom: 0.5rem;
+}
+
+.final-score-section .results-player-label {
+    color: var(--primary-color);
+    margin-top: 0.5rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 2rem;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.stat-item-label {
+    font-size: 0.9rem;
+    color: var(--secondary-color);
+}
+
+.stat-item-value {
+    font-size: 1.5rem;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+}
+
+.stat-item-value.player {
+    color: var(--primary-color);
+}
+.stat-item-value.opponent {
+    color: var(--danger-color);
+}
+
+/* --- Coin Flip Modal --- */
+.coin-flip-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+}
+
+.coin-flip-modal-content {
+  max-width: 600px;
+  text-align: center;
+  padding: 3rem;
+}
+
+.coin-flip-modal-content h2 {
+  margin-bottom: 1.5rem;
+  color: var(--primary-color);
+}
+
+.coin-flip-modal-content p {
+  color: var(--text-color);
+  margin-bottom: 2rem;
+}
+
+.coin-flip-choices {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.coin-flip-choice-btn {
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 3rem;
+  min-width: 150px;
+  background-color: var(--surface-hover);
+  border: 2px solid var(--secondary-color);
+}
+
+.coin-flip-choice-btn:hover {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(97, 239, 255, 0.4);
+}
+
+.coin-choice-icon {
+  font-size: 3rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.coin-flip-choice-btn:hover .coin-choice-icon {
+  color: var(--background-color);
+}
+
+.coin-choice-label {
+  font-size: 1.2rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+
+.coin-flip-choice-btn:hover .coin-choice-label {
+  color: var(--background-color);
+}
+
+.coin-flip-highlight {
+  color: var(--primary-color);
+  font-weight: 700;
+  text-shadow: 0 0 5px var(--primary-color);
+}
+
+.coin-flip-animation-container {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1000px;
+  margin: 2rem 0;
+}
+
+.coin-3d {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s;
+}
+
+.coin-3d.is-flipping {
+  animation: coin-flip 2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes coin-flip {
+  0% {
+    transform: rotateY(0deg) rotateX(0deg);
+  }
+  25% {
+    transform: rotateY(360deg) rotateX(180deg);
+  }
+  50% {
+    transform: rotateY(720deg) rotateX(360deg);
+  }
+  75% {
+    transform: rotateY(1080deg) rotateX(540deg);
+  }
+  100% {
+    transform: rotateY(1440deg) rotateX(720deg);
+  }
+}
+
+.coin-3d.result-heads {
+  transform: rotateY(1440deg);
+}
+
+.coin-3d.result-tails {
+  transform: rotateY(1620deg);
+}
+
+.coin-face {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: var(--surface-color);
+  border: 3px solid var(--primary-color);
+  box-shadow: 0 0 20px var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-shadow: 0 0 10px var(--primary-color);
+  backface-visibility: hidden;
+}
+
+.coin-heads {
+  transform: rotateY(0deg);
+}
+
+.coin-tails {
+  transform: rotateY(180deg);
+}
+
+.coin-flip-result-text {
+  font-size: 1.2rem;
+  margin: 1.5rem 0;
+}
+
+.coin-flip-winner-text {
+  color: var(--primary-color);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 1rem 0 2rem 0;
+  text-shadow: 0 0 8px var(--primary-color);
+}
+
+.coin-flip-loser-text {
+  color: var(--danger-color);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 1rem 0 2rem 0;
+  text-shadow: 0 0 8px var(--danger-color);
+}
+
+/* Anarchy-3 Rearrange Restriction Styles */
+.rearrange-item.violation {
+  border: 2px solid var(--danger-color) !important;
+  box-shadow: 0 0 12px rgba(255, 85, 85, 0.7) !important;
+  background-color: rgba(255, 85, 85, 0.15) !important;
+}
+
+.warning-text {
+  color: #FFD700;
+  font-weight: 600;
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background-color: rgba(255, 215, 0, 0.1);
+  border: 1px solid #FFD700;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.error-text {
+  color: var(--danger-color);
+  font-weight: 600;
+  margin-top: 0.5rem;
+  text-align: center;
+  font-size: 0.95rem;
+}

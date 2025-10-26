@@ -1,0 +1,502 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* --- Game Screen --- */
+.game-screen {
+    max-width: none;
+    padding: 1rem 1rem 5px;
+    justify-content: flex-start;
+}
+
+.log-button {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    z-index: 100;
+}
+
+.game-screen-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 1rem;
+}
+
+.game-preview-container {
+    flex-basis: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--surface-hover);
+    background: var(--surface-color);
+    border-radius: 8px;
+}
+.game-preview-container h2 {
+  font-size: 1.5rem;
+}
+
+.preview-card-area {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--background-color);
+    border-radius: 4px;
+}
+.preview-card-area .card-component {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2.5 / 3.5;
+    font-size: 1.1rem;
+}
+
+.game-main-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.compile-prompt-container {
+    padding: 0.75rem;
+    text-align: center;
+    background: var(--surface-color);
+    border-bottom: 2px solid var(--primary-color);
+    box-shadow: 0 4px 15px hsla(188, 100%, 69%, 0.2);
+    width: 100%;
+    flex-shrink: 0;
+    animation: fadeIn 0.3s ease-out;
+}
+.compile-prompt-container h3 {
+    color: var(--primary-color);
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+}
+
+/* --- Game Board --- */
+.game-board {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.player-side {
+    height: 42%;
+}
+.opponent-side {
+    transform: rotate(180deg);
+}
+
+.player-side.active-turn .lanes {
+    background-color: hsla(188, 100%, 69%, 0.04);
+}
+
+.opponent-side.active-turn .lanes {
+    background-color: hsla(360, 100%, 67%, 0.04);
+}
+
+.opponent-side .lanes {
+    flex-direction: row-reverse;
+}
+
+.lanes {
+    display: flex;
+    justify-content: space-around;
+    height: 100%;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-radius: 10px;
+    transition: background-color 0.4s ease-in-out;
+}
+
+.lane {
+    width: 160px;
+    border: 1px solid var(--surface-hover);
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    position: relative;
+    transition: all 0.2s ease-in-out;
+}
+.lane.playable {
+    cursor: pointer;
+    border-color: var(--secondary-color);
+    background-color: hsla(249, 68%, 69%, 0.05);
+}
+.lane.playable.matching-protocol {
+    border-color: var(--primary-color);
+    background-color: hsla(188, 100%, 69%, 0.1);
+}
+
+.lane.compilable, .lane.effect-target {
+    cursor: pointer;
+    border: 2px solid var(--success-color);
+    box-shadow: 0 0 15px var(--success-color);
+    background-color: hsla(188, 100%, 69%, 0.15);
+}
+
+.lane.shift-target {
+    cursor: pointer;
+    border: 2px solid #FFD700; /* Gold color for target */
+    box-shadow: 0 0 15px #FFD700;
+    background-color: hsla(51, 100%, 50%, 0.15);
+}
+
+
+.lane-stack {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.btn-play-facedown {
+    position: absolute;
+    top: -44px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    padding: 0.9rem 0.7rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    background-color: var(--surface-color);
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.9;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.btn-play-facedown:hover {
+    background-color: var(--secondary-color);
+    color: var(--background-color);
+    border-color: var(--secondary-color);
+    opacity: 1;
+    transform: translateX(-50%) scale(1.05);
+}
+
+
+.lane-stack .card-component {
+    position: absolute;
+    top: calc(var(--i) * 64px);
+    width: 100px;
+    height: 140px;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.card-component.is-targetable {
+    cursor: crosshair;
+    box-shadow: 0 0 20px 5px var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
+
+.card-component.is-source-of-effect .card-front {
+    border-color: #FFD700; /* Gold */
+    box-shadow: 0 0 15px 2px hsla(51, 100%, 50%, 0.7);
+}
+
+
+/* --- Card Animations --- */
+@keyframes play-card-player {
+  from {
+    opacity: 0;
+    transform: translateY(100px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.lane-stack .card-component.is-entering-player {
+    animation: play-card-player 0.5s ease-out forwards;
+}
+
+/* For opponent, the parent is rotated 180 degrees. translateY will go "up" relative to the screen. */
+.opponent-side .lane-stack .card-component.is-entering-opponent {
+    animation: play-card-player 0.5s ease-out forwards;
+}
+
+@keyframes delete-animation-player {
+    to {
+        opacity: 0;
+        transform: translateX(-200px) rotate(-15deg) scale(0.8);
+    }
+}
+
+@keyframes delete-animation-opponent {
+    /* The opponent side is rotated 180 degrees, so we move in the positive X direction */
+    to {
+        opacity: 0;
+        transform: translateX(200px) rotate(15deg) scale(0.8);
+    }
+}
+
+.is-deleting-player {
+    animation: delete-animation-player 0.5s ease-in forwards;
+}
+
+.opponent-side .is-deleting-opponent {
+    animation: delete-animation-opponent 0.5s ease-in forwards;
+}
+
+@keyframes draw-card-player {
+  from {
+    opacity: 0;
+    transform: translateY(50px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.card-component.is-drawing {
+    animation: draw-card-player 0.5s ease-out;
+}
+
+
+/* --- Central Protocol Bars Redesign --- */
+.protocol-bars-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background-color: transparent;
+    border: 1px solid var(--surface-hover);
+    border-left: none;
+    border-right: none;
+    margin: 0.5rem 0;
+    height: auto;
+    position: relative; /* For centering the coin */
+}
+.protocol-bar {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.5rem;
+}
+.protocol-display {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    position: relative;
+    border-right: 1px solid var(--surface-hover);
+}
+.protocol-display:last-child {
+    border-right: none;
+}
+
+.protocol-display.compiled {
+    background-color: hsla(188, 100%, 69%, 0.15);
+    box-shadow: 0 0 8px hsla(188, 100%, 69%, 0.4) inset;
+}
+
+.protocol-display.compiled .protocol-name,
+.protocol-display.compiled .protocol-value {
+    color: var(--primary-color);
+    opacity: 1;
+    text-shadow: 0 0 5px var(--primary-color);
+}
+
+.protocol-display .protocol-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-shadow: none;
+}
+.protocol-display .protocol-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--text-color);
+}
+.player-bar .protocol-display .protocol-name {
+    color: var(--primary-color);
+}
+.opponent-bar .protocol-display .protocol-name {
+    color: var(--danger-color);
+}
+
+@keyframes compile-glow {
+    0% {
+        box-shadow: 0 0 8px hsla(188, 100%, 69%, 0.4) inset, 0 0 5px var(--primary-color);
+    }
+    50% {
+        box-shadow: 0 0 16px hsla(188, 100%, 69%, 0.8) inset, 0 0 15px var(--primary-color);
+    }
+    100% {
+        box-shadow: 0 0 8px hsla(188, 100%, 69%, 0.4) inset, 0 0 5px var(--primary-color);
+    }
+}
+
+.protocol-display.is-compiling {
+    animation: compile-glow 1s ease-in-out;
+}
+
+/* --- Control Coin --- */
+.control-coin-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.control-coin {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  background-color: var(--surface-color);
+  transition: all 0.4s ease-in-out;
+  animation-duration: 2.5s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  pointer-events: auto; /* Allow hover */
+  cursor: help;
+}
+
+.control-coin.neutral {
+  border: 2px solid var(--secondary-color);
+  color: var(--secondary-color);
+  animation-name: control-pulse-neutral;
+}
+
+.control-coin.player-controlled {
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  animation-name: control-pulse-player;
+}
+
+.control-coin.opponent-controlled {
+  border: 2px solid var(--danger-color);
+  color: var(--danger-color);
+  animation-name: control-pulse-opponent;
+}
+
+@keyframes control-pulse-neutral {
+  0% { box-shadow: 0 0 10px var(--secondary-color); }
+  50% { box-shadow: 0 0 20px var(--secondary-color); }
+  100% { box-shadow: 0 0 10px var(--secondary-color); }
+}
+@keyframes control-pulse-player {
+  0% { box-shadow: 0 0 15px var(--primary-color); }
+  50% { box-shadow: 0 0 25px var(--primary-color); }
+  100% { box-shadow: 0 0 15px var(--primary-color); }
+}
+@keyframes control-pulse-opponent {
+  0% { box-shadow: 0 0 15px var(--danger-color); }
+  50% { box-shadow: 0 0 25px var(--danger-color); }
+  100% { box-shadow: 0 0 15px var(--danger-color); }
+}
+
+.control-coin-label {
+  font-size: 0.7rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  font-weight: 600;
+  transition: color 0.4s ease-in-out;
+}
+
+.control-coin-label.neutral {
+  color: var(--secondary-color);
+}
+
+.control-coin-label.player-controlled {
+  color: var(--primary-color);
+}
+
+.control-coin-label.opponent-controlled {
+  color: var(--danger-color);
+}
+
+
+/* --- Hand Areas --- */
+.player-action-area {
+    flex-shrink: 0;
+    margin-top: auto;
+    position: relative; /* Add positioning context for the hand */
+}
+
+.player-hand-area, .opponent-hand-area {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem;
+}
+
+.player-hand-area {
+    gap: -40px;
+    position: absolute;
+    z-index: 20;
+    bottom: -35px; /* Cards are 140px tall, this leaves ~35px visible */
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 140px; /* Explicit height for positioning */
+    pointer-events: none; /* Make container non-interactive */
+}
+
+.player-hand-area.hand-in-background {
+    z-index: 5; /* Lower than phase controller to allow button clicks */
+}
+
+.card-component.in-hand {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    width: 100px;
+    height: 140px;
+}
+
+.player-hand-area .card-component.in-hand {
+    pointer-events: auto; /* Make cards interactive again */
+}
+
+.player-hand-area.hand-in-background .card-component.in-hand {
+    pointer-events: none; /* Prevent clicks on cards when an action prompt is active */
+}
+
+.opponent-hand-area {
+    height: 40px;
+    gap: -40px;
+    overflow: hidden;
+
+}
+
+.opponent-hand-area .card-component.in-hand {
+    width: 80px;
+    height: 112px;
+    transform: rotate(180deg) translateY(68px);
+}
+
+.opponent-hand-area .card-component.in-hand:hover {
+  transform: rotate(180deg) translateY(68px); /* Keep original transform to prevent upward shift */
+}
+
+.opponent-hand-area .card-component.in-hand:hover .card-front {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 10px var(--primary-color);
+}
+
+/* --- Card Component --- FUTURISTIC REDESIGN --- */

@@ -46,6 +46,12 @@ Diese Datei beschreibt die optimale Reihenfolge zum Einlesen des Projekts für s
    - **Warum wichtig:** Nützlich zum Testen von Fixes
    - **Lesen:** Optional, bei Bedarf
 
+7. **`CSS_STRUCTURE.md`** ⭐ (MD-Datei)
+   - Enthält: CSS-Organisation, Responsive-Design, Tablet-Optimierung, wo man was findet
+   - **Warum wichtig:** CSS ist modular aufgeteilt + enthält Tablet-Responsive Regeln
+   - **Lesen:** Bei CSS/Layout-Änderungen - hat komplette Dokumentation aller Screens
+   - **Besonders wichtig:** Tablet Media Queries (Breakpoints, Grid-Dimensionen)
+
 ---
 
 ### Phase 3: Code-Struktur (NUR BEI BEDARF!)
@@ -132,6 +138,7 @@ Beim Start einer neuen Programmier-Session:
 | **Karten-Effekte** | `data/cards.ts` → `logic/effects/{protocol}/{Card}.ts` |
 | **Logging-Regeln** | `LOGGING_SYSTEM.md` ⭐ |
 | **Targeting-Regeln** | `CARD_TARGETING_RULES.md` |
+| **CSS-Struktur** | `CSS_STRUCTURE.md` ⭐ (Layouts, Responsive, Tablet) |
 | **Phase-Management** | `logic/game/phaseManager.ts` |
 | **Shift-Logic** | `logic/game/resolvers/laneResolver.ts` |
 | **Delete/Flip/Return** | `logic/game/resolvers/cardResolver.ts` |
@@ -163,6 +170,12 @@ Beim Start einer neuen Programmier-Session:
 
 ### Karte targetiert falsch (covered statt uncovered)
 → **Check:** `CARD_TARGETING_RULES.md`, dann AI-Handler oder Resolver
+
+### Layout/CSS kaputt auf Tablet
+→ **Check:** `CSS_STRUCTURE.md`, dann `styles/responsive/tablet.css`, Media Query Breakpoints prüfen
+
+### Protocol Grid zu breit/Cards falsche Größe
+→ **Check:** `CSS_STRUCTURE.md` → "Troubleshooting", dann `tablet.css` Grid-Dimensionen
 
 ---
 
@@ -233,6 +246,8 @@ Wenn etwas nicht funktioniert:
 - ❌ `dist/` oder `docs/` (Build-Artifacts)
 - ❌ `logic/ai/hard.ts` (veraltet, benutze `hardImproved.ts`)
 - ❌ UI-Code (`screens/`, `components/`) außer bei UI-Bugs
+- ❌ `styles/` Module (benutze stattdessen `CSS_STRUCTURE.md` + `index.css`)
+- ❌ `index.css.backup` (falls vorhanden - ist nur Backup)
 
 ### Nützliche Grep-Patterns
 ```bash

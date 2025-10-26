@@ -86,6 +86,12 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   const handleSelectProtocol = (protocol: string) => {
     if (!isPlayerTurn || isAnimating) return;
 
+    // UPDATE PREVIEW: Show first card of selected protocol (for touch devices!)
+    const protocolCards = cards.filter(c => c.protocol === protocol).sort((a, b) => a.value - b.value);
+    if (protocolCards.length > 0) {
+      setPreviewCard(protocolCards[0]);
+    }
+
     setCurrentSelection(prev => {
       // If the clicked protocol is already selected, deselect it.
       if (prev.includes(protocol)) {
@@ -294,9 +300,9 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
                   card={{ ...card, id: `selection-${card.protocol}-${card.value}`, isFaceUp: true }}
                   isFaceUp={true}
                   additionalClassName="in-hand"
-                  // FIX: Changed onMouseEnter to onPointerEnter to match CardComponent props.
+                  // UPDATE: Also set preview on click for touch devices!
+                  onClick={() => setPreviewCard(card)}
                   onPointerEnter={() => setPreviewCard(card)}
-                  // FIX: Changed onMouseLeave to onPointerLeave to match CardComponent props.
                   onPointerLeave={() => setPreviewCard(null)}
                 />
               ))}
