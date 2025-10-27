@@ -128,6 +128,20 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
 
     const { card, owner } = cardInfo;
 
+    // RULE: Frost-1 Top Effect blocks all face-down→face-up flips
+    if (!card.isFaceUp) {
+        const frost1IsActive = [state.player, state.opponent].some(playerState =>
+            playerState.lanes.some(lane => {
+                const topCard = lane[lane.length - 1];
+                return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
+            })
+        );
+        if (frost1IsActive) {
+            console.log(`Frost-1 blocks face-down→face-up flip of ${card.protocol}-${card.value}`);
+            return state; // Block the flip
+        }
+    }
+
     // CRITICAL FIX: Use the actor from actionRequired if available, otherwise fall back to state.turn
     // This prevents actor confusion during interrupts (e.g., when Fire-0 is uncovered during Death-0's turn)
     const actor = (state.actionRequired && 'actor' in state.actionRequired)
@@ -306,6 +320,7 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
 }
 
 export function internalShiftCard(state: GameState, cardToShiftId: string, cardOwner: Player, targetLaneIndex: number, actor: Player): EffectResult {
+    console.log('[DEBUG internalShiftCard] Attempting to shift card', cardToShiftId, 'to lane', targetLaneIndex, 'owner:', cardOwner);
     const cardToShiftInfo = findCardOnBoard(state, cardToShiftId);
     if (!cardToShiftInfo || cardToShiftInfo.owner !== cardOwner) return { newState: state };
     const { card: cardToShift } = cardToShiftInfo;
@@ -321,6 +336,29 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     }
 
     if (originalLaneIndex === -1) return { newState: state };
+
+    console.log('[DEBUG internalShiftCard] Shifting from lane', originalLaneIndex, 'to lane', targetLaneIndex);
+
+    // RULE: Frost-3 Top Effect blocks shifts from or to its line
+    // Top-Box effects are ALWAYS active when card is face-up, even if covered!
+    // Check if ANY face-up Frost-3 is in the original lane (shifting FROM)
+    const checkOriginalLane = state[cardOwner].lanes[originalLaneIndex];
+    const frost3BlocksFromOriginalLane = checkOriginalLane.some(card =>
+        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
+    );
+
+    // Check if ANY face-up Frost-3 is in the target lane (shifting TO)
+    const checkTargetLane = state[cardOwner].lanes[targetLaneIndex];
+    const frost3BlocksToTargetLane = checkTargetLane.some(card =>
+        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
+    );
+
+    console.log('[DEBUG internalShiftCard] Frost-3 on original lane?', frost3BlocksFromOriginalLane, 'Frost-3 on target lane?', frost3BlocksToTargetLane);
+
+    if (frost3BlocksFromOriginalLane || frost3BlocksToTargetLane) {
+        console.log(`[FROST-3 BLOCK] Blocking shift from lane ${originalLaneIndex} to lane ${targetLaneIndex}`);
+        return { newState: state }; // Block the shift
+    }
     
     // Snapshot before removal from original lane
     const laneBeforeRemoval = state[cardOwner].lanes[originalLaneIndex];

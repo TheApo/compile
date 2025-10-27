@@ -109,8 +109,12 @@ export const resolveRequiredOpponentAction = (
                 trackPlayerRearrange(action.actor);
             }
 
+            console.log('[DEBUG aiManager] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
             const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-            return phaseManager.processEndOfAction(newState);
+            console.log('[DEBUG aiManager] After resolveRearrangeProtocols, actor hand:', newState[action.actor].hand.length);
+            const finalState = phaseManager.processEndOfAction(newState);
+            console.log('[DEBUG aiManager] After processEndOfAction, actor hand:', finalState[action.actor].hand.length);
+            return finalState;
         }
 
         if (action.type === 'reveal_opponent_hand') {
@@ -318,8 +322,12 @@ const handleRequiredAction = (
             trackPlayerRearrange(action.actor);
         }
 
+        console.log('[DEBUG aiManager 2] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
         const nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-        return phaseManager.processEndOfAction(nextState);
+        console.log('[DEBUG aiManager 2] After resolveRearrangeProtocols, actor hand:', nextState[action.actor].hand.length);
+        const finalState = phaseManager.processEndOfAction(nextState);
+        console.log('[DEBUG aiManager 2] After processEndOfAction, actor hand:', finalState[action.actor].hand.length);
+        return finalState;
     }
 
     if (aiDecision.type === 'selectLane' && (

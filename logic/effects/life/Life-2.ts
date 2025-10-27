@@ -15,6 +15,19 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     let newState = drawForPlayer(state, cardOwner, 1);
     newState = log(newState, cardOwner, "Life-2: Draw 1 card.");
 
+    // Check if Frost-1 is active (blocks all face-down→face-up flips)
+    const frost1IsActive = [newState.player, newState.opponent].some(playerState =>
+        playerState.lanes.some(lane => {
+            const topCard = lane[lane.length - 1];
+            return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
+        })
+    );
+
+    if (frost1IsActive) {
+        newState = log(newState, cardOwner, "Life-2: Cannot flip face-down cards (Frost-1 is active).");
+        return { newState };
+    }
+
     const allFaceDownCards = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()].filter(c => !c.isFaceUp);
 
     if (allFaceDownCards.length > 0) {

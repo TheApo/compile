@@ -9,6 +9,7 @@ import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../t
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
+import { isFrost1Active } from '../effects/common/frost1Check';
 
 // AI MEMORY: Tracks known information about cards
 interface AIMemory {
@@ -1265,12 +1266,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_card_to_flip':
         case 'select_any_other_card_to_flip': {
             // Love-4, Plague-3, etc: Flip any uncovered card
+            const frost1Active = isFrost1Active(state);
             const targets: { card: PlayedCard; laneIndex: number; owner: Player; score: number }[] = [];
             const sourceCardId = action.type === 'select_any_other_card_to_flip' ? action.sourceCardId : null;
 
             state.player.lanes.forEach((lane, laneIndex) => {
                 if (lane.length > 0) {
                     const topCard = lane[lane.length - 1];
+                    // If Frost-1 is active, skip face-down cards
+                    if (frost1Active && !topCard.isFaceUp) return;
                     if (topCard.id !== sourceCardId) {
                         const score = scoreCardForFlip(topCard, 'player', laneIndex, state);
                         targets.push({ card: topCard, laneIndex, owner: 'player', score });
@@ -1281,6 +1285,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             state.opponent.lanes.forEach((lane, laneIndex) => {
                 if (lane.length > 0) {
                     const topCard = lane[lane.length - 1];
+                    // If Frost-1 is active, skip face-down cards
+                    if (frost1Active && !topCard.isFaceUp) return;
                     if (topCard.id !== sourceCardId) {
                         const score = scoreCardForFlip(topCard, 'opponent', laneIndex, state);
                         targets.push({ card: topCard, laneIndex, owner: 'opponent', score });

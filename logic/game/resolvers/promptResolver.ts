@@ -196,6 +196,18 @@ export const resolveRearrangeProtocols = (
 
     const { target, actor, originalAction, sourceCardId, disallowedProtocolForLane } = prevState.actionRequired;
 
+    // RULE: Frost-1 Bottom Effect blocks all protocol rearrangement
+    const frost1IsActive = [prevState.player, prevState.opponent].some(playerState =>
+        playerState.lanes.some(lane => {
+            const topCard = lane[lane.length - 1];
+            return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
+        })
+    );
+    if (frost1IsActive) {
+        console.log(`Frost-1 blocks protocol rearrangement`);
+        return { ...prevState, actionRequired: null }; // Block the rearrangement and clear the action
+    }
+
     // CRITICAL VALIDATION for Anarchy-3 End Effect: "Anarchy cannot be on this line"
     if (disallowedProtocolForLane) {
         const { laneIndex, protocol } = disallowedProtocolForLane;
@@ -245,12 +257,17 @@ export const resolveRearrangeProtocols = (
     let stateAfterRecalc = recalculateAllLaneValues(newState);
 
     if (originalAction) {
+        console.log('[DEBUG resolveRearrangeProtocols] originalAction:', originalAction);
         if (originalAction.type === 'compile') {
             stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Compile action...`);
             return performCompile(stateAfterRecalc, originalAction.laneIndex, onEndGame);
         } else if (originalAction.type === 'fill_hand') {
+            console.log('[DEBUG resolveRearrangeProtocols] Calling performFillHand for actor:', actor, 'hand before:', stateAfterRecalc[actor].hand.length);
             stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
-            return performFillHand(stateAfterRecalc, actor);
+            const stateAfterFill = performFillHand(stateAfterRecalc, actor);
+            console.log('[DEBUG resolveRearrangeProtocols] After performFillHand, hand length:', stateAfterFill[actor].hand.length);
+            console.log('[DEBUG resolveRearrangeProtocols] RETURNING state with', stateAfterFill[actor].hand.length, 'cards');
+            return stateAfterFill;
         } else if (originalAction.type === 'continue_turn') {
             // After compile + control rearrange, the turn should END (unless there are Speed-2 actions)
             if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {

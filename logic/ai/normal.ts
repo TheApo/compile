@@ -13,6 +13,7 @@ import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../t
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
+import { isFrost1Active } from '../effects/common/frost1Check';
 
 type ScoredMove = {
     move: AIAction;
@@ -385,6 +386,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_other_card_to_flip':
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_any_card_to_flip_optional': {
+            const frost1Active = isFrost1Active(state);
             const getUncovered = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                 .filter((c): c is PlayedCard => c !== null);
@@ -398,18 +400,20 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             playerUncovered.forEach(c => {
                 if (c.isFaceUp) {
                     targets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) + 10 });
-                } else {
-                    // Face-down: only flip if we're curious (low score)
+                } else if (!frost1Active) {
+                    // Face-down: only flip if we're curious (low score) and Frost-1 is NOT active
                     targets.push({ cardId: c.id, score: 3 });
                 }
             });
 
-            // Own face-down cards (flip to activate)
-            opponentUncovered.forEach(c => {
-                if (!c.isFaceUp) {
-                    targets.push({ cardId: c.id, score: c.value + 8 });
-                }
-            });
+            // Own face-down cards (flip to activate) - Only if Frost-1 is NOT active
+            if (!frost1Active) {
+                opponentUncovered.forEach(c => {
+                    if (!c.isFaceUp) {
+                        targets.push({ cardId: c.id, score: c.value + 8 });
+                    }
+                });
+            }
 
             if (targets.length === 0) return { type: 'skip' };
 

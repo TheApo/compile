@@ -1119,6 +1119,53 @@ const scenario23_Chaos3ProtocolFree: TestScenario = {
     }
 };
 
+/**
+ * Szenario 24: Frost-3 Blocks Shifts (Covered)
+ *
+ * Setup:
+ * - Opponent has Frost-3 (face-up, COVERED) in Lane 0
+ * - Opponent has Metal-2 (face-down) on top of Frost-3
+ * - Player has Gravity-1 in hand (shift effect)
+ * - Player has Water-2 (face-up) in Lane 1
+ * - Player's Turn, Action Phase
+ *
+ * Test: Frost-3 should block shifts even when covered (Top-Box effect)
+ * Expected:
+ *   1. Player plays Gravity-1 in Lane 1 (covering Water-2)
+ *   2. Player should NOT be able to shift Gravity-1 to Lane 0 (Frost-3 blocks even when covered!)
+ *   3. Console shows "[FROST-3 BLOCK] Blocking shift..."
+ */
+const scenario24_Frost3BlocksShift: TestScenario = {
+    name: "Frost-3 Blocks Shifts (Covered)",
+    description: "Frost-3 should prevent shifts even when covered (Top-Box effect always active)",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Gravity', 'Water', 'Fire'],
+            ['Frost', 'Metal', 'Death'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Frost-3 (face-up, covered) in Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Frost', 3, true));
+        // Opponent: Metal-2 (face-down) on top of Frost-3
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, false));
+
+        // Player: Water-2 (face-up, uncovered) in Lane 1
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true));
+
+        // Player: Gravity-1 in Hand (has shift effect)
+        newState.player.hand = [
+            createCard('Gravity', 1, true),
+            createCard('Fire', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -1143,4 +1190,5 @@ export const allScenarios: TestScenario[] = [
     scenario21_Hate2AIValidation,
     scenario22_Hate2AIPlaysOpen,
     scenario23_Chaos3ProtocolFree,
+    scenario24_Frost3BlocksShift,
 ];

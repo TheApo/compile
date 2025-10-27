@@ -4,6 +4,8 @@
  */
 
 import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
+import { log } from "../../utils/log";
+import { isFrost1Active } from "../common/frost1Check";
 
 /**
  * Chaos-0 Middle Command: "In each line, flip 1 covered card."
@@ -14,17 +16,28 @@ import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../.
  */
 export const execute = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext): EffectResult => {
     const { cardOwner } = context;
+    const frost1Active = isFrost1Active(state);
 
-    // Helper function to check if a lane has covered cards
+    // Helper function to check if a lane has covered cards (considering Frost-1)
     const hasCoveredCards = (laneIdx: number): boolean => {
         const playerLane = state.player.lanes[laneIdx];
         const opponentLane = state.opponent.lanes[laneIdx];
 
-        // A lane has covered cards if any lane has more than 1 card
-        return (playerLane.length > 1) || (opponentLane.length > 1);
+        // Get all covered cards in this lane
+        const coveredCards = [
+            ...playerLane.filter((c, idx) => idx < playerLane.length - 1),
+            ...opponentLane.filter((c, idx) => idx < opponentLane.length - 1)
+        ];
+
+        // If Frost-1 is active, only count face-up covered cards
+        const validTargets = frost1Active
+            ? coveredCards.filter(c => c.isFaceUp)
+            : coveredCards;
+
+        return validTargets.length > 0;
     };
 
-    // Find all lanes that have covered cards
+    // Find all lanes that have valid covered cards to flip
     const lanesWithCoveredCards = [0, 1, 2].filter(i => hasCoveredCards(i));
 
     if (lanesWithCoveredCards.length > 0) {
@@ -46,6 +59,9 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
         };
     }
 
-    // No covered cards in any lane -> effect ends
-    return { newState: state };
+    // No valid covered cards in any lane -> effect ends
+    let newState = log(state, cardOwner, frost1Active
+        ? "Chaos-0: Cannot flip face-down covered cards (Frost-1 is active)."
+        : "Chaos-0: No covered cards to flip.");
+    return { newState };
 }

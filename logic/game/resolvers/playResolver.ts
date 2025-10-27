@@ -194,13 +194,16 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 };
 
 export const performFillHand = (prevState: GameState, player: Player): GameState => {
+    console.log('[DEBUG performFillHand] Called for player:', player, 'Current hand length:', prevState[player].hand.length);
     // IMPORTANT: Clear effect context before filling hand at phase level
     // This is a phase action, not part of a card effect
     let newState = setLogSource(prevState, undefined);
     newState = setLogPhase(newState, undefined);
     newState = { ...newState, _logIndentLevel: 0 };
 
-    return refreshHandForPlayer(newState, player);
+    const result = refreshHandForPlayer(newState, player);
+    console.log('[DEBUG performFillHand] After refresh, hand length:', result[player].hand.length);
+    return result;
 }
 
 export const fillHand = (prevState: GameState, player: Player): GameState => {

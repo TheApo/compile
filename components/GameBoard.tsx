@@ -117,6 +117,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const getLaneShiftTargetability = (targetLaneIndex: number, targetOwner: Player): boolean => {
         if (!actionRequired || actionRequired.actor !== 'player') return false;
 
+        // RULE: Frost-3 blocks shifts to/from its LINE (entire vertical column, both players)
+        // Top-Box effect is ALWAYS active when card is face-up, even if covered!
+        const hasFrost3InLine =
+            gameState.player.lanes[targetLaneIndex].some(card => card.isFaceUp && card.protocol === 'Frost' && card.value === 3) ||
+            gameState.opponent.lanes[targetLaneIndex].some(card => card.isFaceUp && card.protocol === 'Frost' && card.value === 3);
+
+        if (hasFrost3InLine) {
+            return false; // Cannot shift to line with Frost-3
+        }
+
         switch (actionRequired.type) {
             case 'select_lane_for_shift': {
                 // Target lane must belong to the card's owner and not be the original lane.

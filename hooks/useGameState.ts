@@ -40,34 +40,29 @@ export const useGameState = (
     // Scenario version counter - increments on each scenario change to invalidate old timers
     const scenarioVersionRef = useRef<number>(0);
 
-    // Add protocol logs after game start
-    useEffect(() => {
-        // Check if protocol logs are missing (log has "Game Started" but not protocol info)
-        const hasProtocolLogs = gameState.log.some(entry => entry.message.includes("protocols:"));
 
-        if (!hasProtocolLogs && gameState.log.length > 0) {
+
+    // Update turn when startingPlayer changes (from coin flip)
+    useEffect(() => {
+        // Fix the turn if it doesn't match the coin flip winner
+        // This happens because useState initializes with the default 'player' before coin flip
+        if (gameState.turn !== startingPlayer && gameState.log.length <= 1) {
             setGameState(prev => {
-                // Build protocol info for logging
-                const playerProtocolsText = prev.player.protocols.join(' | ');
-                const opponentProtocolsText = prev.opponent.protocols.join(' | ');
+                const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
 
                 return {
                     ...prev,
+                    turn: startingPlayer,  // CRITICAL: Set turn to whoever won the coin flip
                     log: [
-                        ...prev.log,
                         {
                             player: 'player',
-                            message: `Player's protocols: ${playerProtocolsText}`
-                        },
-                        {
-                            player: 'player',
-                            message: `Opponent's protocols: ${opponentProtocolsText}`
+                            message: `Game Started. ${starterName} goes first.`
                         }
                     ]
                 };
             });
         }
-    }, [gameState.log.length]);
+    }, [startingPlayer, gameState.turn, gameState.log.length]);
 
     const getTurnProgressionCallback = useCallback((phase: GamePhase): ((s: GameState) => GameState) => {
         switch (phase) {
@@ -489,13 +484,17 @@ export const useGameState = (
             }
 
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            console.log('[DEBUG useGameState resolveRearrangeProtocols] Before resolvers.resolveRearrangeProtocols, hand:', prev.opponent.hand.length);
             const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
+            console.log('[DEBUG useGameState resolveRearrangeProtocols] After resolvers.resolveRearrangeProtocols, hand:', nextState.opponent.hand.length);
 
             if (nextState.winner) {
                 return nextState;
             }
 
-            return turnProgressionCb(nextState);
+            const finalState = turnProgressionCb(nextState);
+            console.log('[DEBUG useGameState resolveRearrangeProtocols] After turnProgressionCb, hand:', finalState.opponent.hand.length);
+            return finalState;
         });
     }, [getTurnProgressionCallback, onEndGame, trackPlayerRearrange]);
     

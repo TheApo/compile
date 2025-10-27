@@ -1573,6 +1573,14 @@ p {
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
         radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
 }
+.card-protocol-frost .card-front {
+    border-color: hsl(195, 75%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(195, 75%, 70%, 0.2) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, hsla(195, 80%, 80%, 0.08) 10px, hsla(195, 80%, 80%, 0.08) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, hsla(190, 70%, 75%, 0.08) 10px, hsla(190, 70%, 75%, 0.08) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, hsla(200, 75%, 70%, 0.05) 8px, hsla(200, 75%, 70%, 0.05) 9px);
+}
 
 /* --- Protocol Selection Card Styles (Protocol Grid) --- */
 .protocol-card.card-protocol-anarchy {
@@ -1679,6 +1687,14 @@ p {
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
         radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
 }
+.protocol-card.card-protocol-frost {
+    border-color: hsl(195, 75%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(195, 75%, 70%, 0.2) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, hsla(195, 80%, 80%, 0.08) 10px, hsla(195, 80%, 80%, 0.08) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, hsla(190, 70%, 75%, 0.08) 10px, hsla(190, 70%, 75%, 0.08) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, hsla(200, 75%, 70%, 0.05) 8px, hsla(200, 75%, 70%, 0.05) 9px);
+}
 
 /* --- Protocol Display Card Styles (Selected Protocols Sidebar) --- */
 .protocol-display-card.card-protocol-anarchy {
@@ -1784,6 +1800,14 @@ p {
     background-image:
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
         radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+.protocol-display-card.card-protocol-frost {
+    border-color: hsl(195, 75%, 70%);
+    background-image:
+        radial-gradient(circle at 50% 50%, hsla(195, 75%, 70%, 0.2) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, hsla(195, 80%, 80%, 0.08) 10px, hsla(195, 80%, 80%, 0.08) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, hsla(190, 70%, 75%, 0.08) 10px, hsla(190, 70%, 75%, 0.08) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, hsla(200, 75%, 70%, 0.05) 8px, hsla(200, 75%, 70%, 0.05) 9px);
 }
 
 /* --- In-Game Card Overrides --- */

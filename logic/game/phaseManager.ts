@@ -368,12 +368,14 @@ export const processQueuedActions = (state: GameState): GameState => {
 };
 
 export const processEndOfAction = (state: GameState): GameState => {
+    console.log('[DEBUG processEndOfAction] Called with actionRequired:', state.actionRequired?.type, 'turn:', state.turn, 'opponent hand:', state.opponent.hand.length);
     if (state.winner) return state;
 
     // This is the crucial check. If an action is required, the turn cannot end.
     // This handles both actions for the current turn player (which the AI manager will loop on)
     // and interrupt actions for the other player (which the useGameState hook will trigger the AI for).
     if (state.actionRequired) {
+        console.log('[DEBUG processEndOfAction] Action still required, returning state unchanged');
         return state;
     }
 
@@ -445,6 +447,8 @@ export const processEndOfAction = (state: GameState): GameState => {
 
     // If the original action that caused the control prompt is stored, execute it now.
     if (state.actionRequired?.type === 'prompt_rearrange_protocols' && state.actionRequired.originalAction) {
+        console.log('[DEBUG processEndOfAction] FALLBACK HANDLER TRIGGERED - This should NOT happen if resolveRearrangeProtocols was called!');
+        console.log('[DEBUG processEndOfAction] originalAction:', state.actionRequired.originalAction);
         const originalAction = state.actionRequired.originalAction;
         let stateAfterRearrange = { ...state, actionRequired: null, controlCardHolder: null }; // Reset control
 
@@ -456,7 +460,9 @@ export const processEndOfAction = (state: GameState): GameState => {
         } else if (originalAction.type === 'fill_hand') {
             // Re-trigger the fill hand logic
             // FIX: Access hand.length to get the number of cards, not length on the PlayerState object.
+            console.log('[DEBUG processEndOfAction] Using fallback drawForPlayer, hand before:', stateAfterRearrange[stateAfterRearrange.turn].hand.length);
             const stateAfterFill = drawForPlayer(stateAfterRearrange, stateAfterRearrange.turn, 5 - stateAfterRearrange[stateAfterRearrange.turn].hand.length);
+            console.log('[DEBUG processEndOfAction] After fallback drawForPlayer, hand:', stateAfterFill[stateAfterFill.turn].hand.length);
             return continueTurnProgression(stateAfterFill);
         }
     }
@@ -667,6 +673,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         }
     }
 
+    console.log('[DEBUG processEndOfAction] RETURNING with opponent hand:', nextState.opponent.hand.length, 'turn:', nextState.turn);
     return nextState;
 };
 

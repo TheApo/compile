@@ -7,6 +7,7 @@ import { GameState, ActionRequired, AIAction, Player, PlayedCard } from '../../t
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { shuffleDeck } from '../../utils/gameLogic';
 import { handleControlRearrange } from './controlMechanicLogic';
+import { isFrost1Active } from '../effects/common/frost1Check';
 
 const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: number, isFaceUp: boolean } | null => {
     const { opponent, player } = state;
@@ -366,6 +367,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_covered_card_to_flip_for_chaos_0':
         case 'select_covered_card_in_line_to_flip_optional': {
+            const frost1Active = isFrost1Active(state);
             const isOptional = 'optional' in action && action.optional;
             const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
             const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
@@ -409,12 +411,18 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
 
             // Priority 2: Flip OWN face-down card to face-up to get points on the board (strengthens us).
-            const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
-            if (ownFaceDown.length > 0) return { type: 'flipCard', cardId: ownFaceDown[0].id };
+            // But only if Frost-1 is NOT active
+            if (!frost1Active) {
+                const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
+                if (ownFaceDown.length > 0) return { type: 'flipCard', cardId: ownFaceDown[0].id };
+            }
 
             // Priority 3: Flip PLAYER's face-down card to see it.
-            const opponentFaceDown = allUncoveredPlayer.filter(c => !c.isFaceUp);
-            if (opponentFaceDown.length > 0) return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+            // But only if Frost-1 is NOT active
+            if (!frost1Active) {
+                const opponentFaceDown = allUncoveredPlayer.filter(c => !c.isFaceUp);
+                if (opponentFaceDown.length > 0) return { type: 'flipCard', cardId: opponentFaceDown[0].id };
+            }
 
             // Priority 4: Flip OWN face-up card (BAD move - only if compiled or mandatory).
             if (!requiresFaceDown) {

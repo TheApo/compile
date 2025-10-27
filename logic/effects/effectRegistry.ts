@@ -75,6 +75,9 @@ import { execute as anarchy0 } from './anarchy/Anarchy-0';
 import { execute as anarchy1 } from './anarchy/Anarchy-1';
 import { execute as anarchy2 } from './anarchy/Anarchy-2';
 import { execute as anarchy3 } from './anarchy/Anarchy-3';
+import { execute as frost0 } from './frost/Frost-0';
+import { execute as frost2 } from './frost/Frost-2';
+import { execute as frost4 } from './frost/Frost-4';
 
 type EffectExecutor = (card: PlayedCard, laneIndex: number, state: GameState, context: EffectContext) => EffectResult;
 
@@ -163,4 +166,8 @@ export const effectRegistry: Record<string, EffectExecutor> = {
     'Water-3': water3,
     'Water-4': water4,
     'Water-5': discardOne,
+    'Frost-0': frost0,
+    'Frost-2': frost2,
+    'Frost-4': frost4,
+    'Frost-5': discardOne,
 };
