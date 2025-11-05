@@ -484,319 +484,6 @@ p {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* --- Protocol Selection --- */
-.protocol-selection-screen {
-  width: 100%;
-  max-width: 1400px;
-  justify-content: flex-start;
-  padding-top: 6rem; /* for header */
-  gap: 1rem;
-}
-
-.protocol-selection-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr 280px;
-  gap: 2rem;
-  max-width: 1400px;  /* Limit width on desktop */
-  margin: 0 auto;      /* Center the layout */
-  align-items: flex-start;
-  flex-grow: 1;
-  min-height: 0; /* Prevents grid content from overflowing and pushing siblings */
-}
-
-.protocol-selection-sidebar {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-
-.player-protocols-area, .opponent-protocols-area {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--surface-hover);
-  background-color: var(--surface-color);
-  border-radius: 8px;
-  height: 290px;
-  overflow-y: auto;
-}
-
-.protocol-preview-area {
-    margin-top: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--background-color);
-    border-radius: 8px;
-    border: 1px solid var(--surface-hover);
-    padding: 1rem;
-    flex-grow: 1; /* Fills remaining space in the sidebar */
-}
-
-.protocol-preview-area .card-component {
-    width: 100%;
-    font-size: 1.1rem;
-}
-
-.protocol-preview-area .card-rule-box {
-    font-size: 1.05em;
-    padding: 4px 8px;
-}
-
-.player-protocols-area h3, .opponent-protocols-area h3 {
-  text-align: center;
-  margin-bottom: 1rem;
-  text-transform: uppercase;
-  font-family: 'Orbitron', sans-serif;
-  position: sticky;
-  top: -1rem; /* Adjust for padding */
-  background: var(--surface-color);
-  padding: 0.5rem 0;
-  z-index: 1;
-}
-
-.player-protocols-area h3 { color: var(--primary-color); }
-.opponent-protocols-area h3 {
-  color: var(--danger-color);
-  font-size: 1rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.protocol-display-card {
-  /* Card-like appearance matching protocol cards */
-  border: 1px solid hsla(253, 91%, 63%, 0.5);
-  padding: 1rem;
-  text-align: center;
-  background-color: var(--surface-color);
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 700;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  animation: reveal 0.5s ease-out forwards;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  position: relative;
-}
-
-.protocol-display-card.player {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 8px var(--primary-color);
-}
-.protocol-display-card.opponent {
-  border-color: var(--danger-color);
-  color: var(--danger-color);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 8px var(--danger-color);
-}
-
-.protocol-grid-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  height: 100%;
-  gap: 0.5rem;
-}
-
-.category-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.4rem 1rem;
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-}
-
-.category-filter-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  user-select: none;
-  font-size: 0.9rem;
-  color: var(--text-color);
-}
-
-.category-filter-item input[type="checkbox"] {
-  cursor: pointer;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--primary-color);
-}
-
-.category-filter-item:hover {
-  color: var(--primary-color);
-}
-
-/* Scrollable wrapper for protocol grid - max 3 rows visible */
-.protocol-grid-scroll-wrapper {
-  width: 100%;
-  max-width: 900px;
-  max-height: calc(3 * (60px + 1rem)); /* Exactly 3 rows of cards + gaps */
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 0.5rem;
-  border-radius: 8px;
-  background-color: rgba(0, 0, 0, 0.2);
-}
-
-/* Custom scrollbar styling */
-.protocol-grid-scroll-wrapper::-webkit-scrollbar {
-  width: 10px;
-}
-
-.protocol-grid-scroll-wrapper::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 5px;
-}
-
-.protocol-grid-scroll-wrapper::-webkit-scrollbar-thumb {
-  background: var(--primary-color);
-  border-radius: 5px;
-  transition: background 0.3s ease;
-}
-
-.protocol-grid-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-  background: var(--primary-hover);
-}
-
-.protocol-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 1rem;
-  width: 100%;
-}
-
-.protocol-card {
-  /* Card-like appearance with protocol colors */
-  border: 1px solid hsla(253, 91%, 63%, 0.5);
-  padding: 0.25rem 0.5rem 0.5rem 0.5rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s ease-in-out;
-  background-color: var(--surface-color);
-  color: var(--text-color);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 700;
-  font-size: 1em;
-  position: relative;
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  justify-items: center;
-  min-height: 60px;
-  height: 60px;
-}
-
-.protocol-card .protocol-category-label {
-  font-size: 0.45em;
-  font-weight: 400;
-  opacity: 0.5;
-  text-transform: none;
-  letter-spacing: 0;
-  font-family: 'Poppins', sans-serif;
-  line-height: 1;
-  margin: 0;
-  padding: 0;
-  align-self: start;
-}
-
-.protocol-card .protocol-name {
-  font-size: 1em;
-  margin: 0;
-  padding: 0;
-  align-self: center;
-}
-
-.protocol-card:hover:not([aria-disabled="true"]) {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 10px var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.protocol-card.selected {
-  border-color: var(--primary-color);
-  box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 15px var(--primary-color);
-  transform: translateY(-5px) scale(1.05);
-}
-
-.protocol-card.chosen {
-  opacity: 0.15;
-  pointer-events: none;
-}
-
-.protocol-card[aria-disabled="true"] {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
-.selected-protocol-cards-container {
-    width: 100%;
-    max-width: 1400px;
-    padding: 0.5rem 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 150px;
-    height: auto;
-    flex-shrink: 0;
-}
-
-.protocol-card-row {
-    display: flex;
-    justify-content: center;
-    height: 140px;
-    width: 100%;
-    gap: 0.5rem;
-}
-
-.selected-protocol-cards-container .card-component.in-hand {
-    transition: all 0.2s ease-in-out;
-}
-
-.selected-protocol-cards-container .card-component.in-hand:hover {
-    transform: translateY(-10px);
-    z-index: 50;
-}
-
-
-@keyframes reveal {
-  from { opacity: 0; transform: scale(0.8) translateY(20px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-@keyframes scan-opponent {
-    0% {
-        box-shadow: 0 0 0 0 transparent;
-    }
-    25%, 75% {
-        box-shadow: 0 0 20px 5px var(--danger-color);
-        border-color: var(--danger-color);
-        color: var(--danger-color);
-    }
-    100% {
-        box-shadow: 0 0 0 0 transparent;
-        border-color: var(--surface-hover);
-        color: var(--text-color);
-    }
-}
-
-.protocol-card.is-scanning {
-    animation: scan-opponent 1s ease-in-out;
-}
-
-
 /* --- Game Screen --- */
 .game-screen {
     max-width: none;
@@ -2710,19 +2397,21 @@ p {
   }
 
   .protocol-grid {
-    grid-template-columns: repeat(5, 106px) !important; /* 5 columns in landscape */
+    /* Allow flexible grid on desktop - as many columns as fit */
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
     gap: 0.75rem !important;
-    justify-content: center !important;
-    max-width: 600px !important; /* Fits 5 columns + gaps */
-    margin: 0 auto !important;
+    width: 100% !important;
+  }
+
+  .protocol-grid-scroll-wrapper {
+    /* Adjust max-height for smaller cards in this breakpoint */
+    max-height: calc(3 * (48px + 0.75rem)) !important;
   }
 
   .protocol-card {
     font-size: 0.77em !important;
     height: 48px !important;
     min-height: 48px !important;
-    width: 106px !important;
-    max-width: 106px !important;
   }
 
   .protocol-card .protocol-category-label {
@@ -2810,19 +2499,20 @@ p {
   }
 
   .protocol-grid {
-    grid-template-columns: repeat(4, 105px) !important; /* 4 columns in portrait */
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)) !important;
     gap: 0.7rem !important;
-    justify-content: center !important;
-    max-width: 500px !important;
-    margin: 0 auto !important;
+    width: 100% !important;
+  }
+
+  .protocol-grid-scroll-wrapper {
+    /* Adjust max-height for smaller cards in this breakpoint */
+    max-height: calc(3 * (46px + 0.7rem)) !important;
   }
 
   .protocol-card {
     font-size: 0.75em !important;
     height: 46px !important;
     min-height: 46px !important;
-    width: 105px !important;
-    max-width: 105px !important;
   }
 
   .protocol-card .protocol-category-label {
@@ -3050,19 +2740,20 @@ p {
   }
 
   .protocol-grid {
-    grid-template-columns: repeat(4, 100px) !important; /* FIXED 4 columns for smaller tablets */
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
     gap: 0.6rem !important;
-    justify-content: center !important;
-    max-width: 500px !important;
-    margin: 0 auto !important;
+    width: 100% !important;
+  }
+
+  .protocol-grid-scroll-wrapper {
+    /* Adjust max-height for smaller cards in this breakpoint */
+    max-height: calc(3 * (42px + 0.6rem)) !important;
   }
 
   .protocol-card {
     font-size: 0.7em !important;
     height: 42px !important;
     min-height: 42px !important;
-    width: 100px !important;
-    max-width: 100px !important;
   }
 
   .category-filters {

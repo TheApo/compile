@@ -154,18 +154,16 @@
   color: var(--primary-color);
 }
 
-/* Scrollable wrapper for protocol grid - adaptive to viewport size */
+/* Scrollable wrapper for protocol grid - max 3 rows visible */
 .protocol-grid-scroll-wrapper {
   width: 100%;
-  max-width: 900px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0.5rem;
   border-radius: 8px;
   background-color: rgba(0, 0, 0, 0.2);
-  /* Dynamically sized based on viewport height - leaves room for button */
-  /* On small screens ~3 rows, on larger screens more rows visible */
-  max-height: calc(100vh - 450px);
+  /* Limit to 3 rows of cards + gaps */
+  max-height: calc(3 * (60px + 1rem));
   min-height: 200px; /* Ensure minimum usable space */
 }
 

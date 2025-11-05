@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '../components/Header';
 import { uniqueProtocols, cards, Card as CardData } from '../data/cards';
 import { CardComponent } from '../components/Card';
+import '../styles/layouts/protocol-selection.css';
 
 
 interface ProtocolSelectionProps {
