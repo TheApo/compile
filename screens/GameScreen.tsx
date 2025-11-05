@@ -623,13 +623,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                   />
                   <div className={`player-hand-area ${handBackgroundClass}`}>
                     {gameState.player.hand.map((card) => (
-                      <CardComponent 
-                        key={card.id} 
+                      <CardComponent
+                        key={card.id}
                         card={card}
                         isFaceUp={true}
                         onPointerDown={() => handleHandCardPointerDown(card)}
                         onPointerEnter={() => handleHandCardPointerEnter(card)}
-                        onPointerLeave={handleHandCardPointerLeave}
                         isSelected={card.id === selectedCard}
                         isMultiSelected={multiSelectedCardIds.includes(card.id)}
                         animationState={gameState.animationState}

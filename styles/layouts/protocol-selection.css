@@ -54,7 +54,7 @@
 
 .protocol-preview-area .card-component {
     width: 100%;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
 }
 
 .protocol-preview-area .card-rule-box {
@@ -264,9 +264,10 @@
     width: 100%;
     max-width: 1400px;
     padding: 0.5rem 0;
+    padding-left: calc(280px + 2rem); /* Start neben der linken Sidebar */
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
     min-height: 150px;
     height: auto;
@@ -275,7 +276,7 @@
 
 .protocol-card-row {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     height: 140px;
     width: 100%;
     gap: 0.5rem;

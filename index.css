@@ -2317,6 +2317,17 @@ p {
  */
 
 /* ===========================
+   LARGE DESKTOP (> 1600px)
+   Full HD, 2K, 4K displays
+   =========================== */
+
+@media (min-width: 1601px) {
+  .protocol-preview-area .card-rule-box {
+    font-size: 0.85em !important;
+  }
+}
+
+/* ===========================
    TABLET LANDSCAPE MODE (1180px - 1600px)
    iPad Pro 12.9" Landscape (1366px)
    iPad Pro 11" Landscape (1194px)
@@ -2416,6 +2427,10 @@ p {
 
   .protocol-card .protocol-category-label {
     font-size: 0.41em !important;
+  }
+
+  .selected-protocol-cards-container {
+    padding-left: calc(240px + 1.2rem) !important;
   }
 }
 
@@ -2517,6 +2532,10 @@ p {
 
   .protocol-card .protocol-category-label {
     font-size: 0.4em !important;
+  }
+
+  .selected-protocol-cards-container {
+    padding-left: calc(220px + 0.9rem) !important;
   }
 
   /* === Game Screen === */
@@ -2762,6 +2781,10 @@ p {
     gap: 0.5rem;
   }
 
+  .selected-protocol-cards-container {
+    padding-left: calc(190px + 0.75rem) !important;
+  }
+
   /* === Game Screen === */
   .game-preview-container {
     flex-basis: 180px; /* Further reduced */
@@ -2931,5 +2954,14 @@ p {
 
   .protocol-selection-sidebar:last-child {
     order: 3;
+  }
+
+  .selected-protocol-cards-container {
+    padding-left: 0 !important;
+    align-items: center !important;
+  }
+
+  .protocol-card-row {
+    justify-content: center !important;
   }
 }

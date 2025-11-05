@@ -68,7 +68,6 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                                 onCardPointerDown(card);
                             }}
                             onPointerEnter={() => onCardPointerEnter(card)}
-                            onPointerLeave={() => onCardPointerLeave(card)}
                             animationState={animationState}
                             isTargetable={isCardTargetable(card)}
                             isSourceOfEffect={card.id === sourceCardId}

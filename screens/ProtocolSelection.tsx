@@ -304,10 +304,8 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
                   card={{ ...card, id: `selection-${card.protocol}-${card.value}`, isFaceUp: true }}
                   isFaceUp={true}
                   additionalClassName="in-hand"
-                  // UPDATE: Also set preview on click for touch devices!
                   onClick={() => setPreviewCard(card)}
                   onPointerEnter={() => setPreviewCard(card)}
-                  onPointerLeave={() => setPreviewCard(null)}
                 />
               ))}
             </div>

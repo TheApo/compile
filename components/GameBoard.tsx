@@ -235,7 +235,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                         isFaceUp={card.isRevealed || false}
                         additionalClassName="in-hand"
                         onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
-                        onPointerLeave={onOpponentHandCardPointerLeave}
                     />
                 ))}
             </div>
