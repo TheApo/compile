@@ -1,0 +1,774 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Custom Protocol Creator - Using Game Design System
+ * Optimized for landscape mode with scrollable areas
+ */
+
+/* ========== MAIN CONTAINER ========== */
+
+.custom-protocol-creator {
+    width: 100%;
+    max-width: 1200px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    overflow: hidden;
+    padding: 2rem;
+    box-sizing: border-box;
+}
+
+/* ========== PROTOCOL LIST VIEW ========== */
+
+.protocol-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 1.5rem;
+}
+
+.protocol-list .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.protocol-list h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin: 0;
+}
+
+.protocol-list .header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.protocol-list .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--surface-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 8px;
+    padding: 3rem;
+}
+
+.protocol-list .empty-state p {
+    color: var(--secondary-color);
+    font-size: 1.1rem;
+    margin: 0.5rem 0;
+}
+
+.protocols-grid {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 0.5rem;
+}
+
+.protocols-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.protocols-grid::-webkit-scrollbar-track {
+    background: var(--surface-color);
+}
+
+.protocols-grid::-webkit-scrollbar-thumb {
+    background-color: var(--secondary-color);
+    border-radius: 4px;
+}
+
+.protocol-card {
+    background-color: var(--surface-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.protocol-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+    border-color: var(--primary-color);
+}
+
+.protocol-card .protocol-header {
+    padding: 1rem;
+    text-align: center;
+    background-color: var(--surface-hover);
+}
+
+.protocol-card .protocol-header h3 {
+    margin: 0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.3rem;
+    color: var(--text-color);
+}
+
+.protocol-card .protocol-body {
+    flex: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.protocol-card .description {
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    min-height: 2.5rem;
+}
+
+.protocol-card .protocol-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--secondary-color);
+    opacity: 0.7;
+}
+
+.card-preview-mini {
+    display: flex;
+    gap: 0.4rem;
+    justify-content: center;
+    padding: 0.5rem 0;
+}
+
+.mini-card {
+    width: 32px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background-color: var(--surface-hover);
+    border: 1px solid var(--secondary-color);
+    font-weight: bold;
+    font-size: 1rem;
+    color: var(--text-color);
+    font-family: 'Orbitron', sans-serif;
+}
+
+.protocol-card .protocol-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background-color: var(--background-color);
+}
+
+.protocol-card .protocol-actions button {
+    flex: 1;
+}
+
+/* ========== PROTOCOL WIZARD ========== */
+
+.protocol-wizard {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--surface-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    overflow: hidden;
+}
+
+.wizard-header {
+    flex-shrink: 0;
+    margin-bottom: 1.5rem;
+}
+
+.wizard-header h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.8rem;
+    color: var(--primary-color);
+    text-align: center;
+    margin: 0 0 1rem 0;
+}
+
+.wizard-progress {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.wizard-progress .step {
+    padding: 0.5rem 1rem;
+    background-color: var(--background-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.85rem;
+    color: var(--secondary-color);
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+
+.wizard-progress .step.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--background-color);
+}
+
+.wizard-progress .step.done {
+    background-color: var(--surface-hover);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.wizard-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 0;
+}
+
+.wizard-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.wizard-content::-webkit-scrollbar-track {
+    background: var(--background-color);
+}
+
+.wizard-content::-webkit-scrollbar-thumb {
+    background-color: var(--secondary-color);
+    border-radius: 4px;
+}
+
+.wizard-step {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.wizard-step h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.3rem;
+    color: var(--primary-color);
+    margin: 0 0 1rem 0;
+}
+
+.wizard-step label {
+    display: block;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.wizard-step input[type="text"],
+.wizard-step textarea {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+}
+
+.wizard-step input:focus,
+.wizard-step textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.wizard-step textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Color Step */
+.color-preview {
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 1.8rem;
+    font-weight: bold;
+    font-family: 'Orbitron', sans-serif;
+    color: white;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+    border: 2px solid var(--primary-color);
+}
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.color-option {
+    aspect-ratio: 1;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: white;
+}
+
+.color-option:hover {
+    transform: scale(1.1);
+    border-color: var(--text-color);
+}
+
+.color-option.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 12px var(--primary-color);
+}
+
+.custom-color {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.custom-color input[type="color"] {
+    width: 60px;
+    height: 40px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.custom-color input[type="text"] {
+    flex: 1;
+}
+
+/* Pattern Step */
+.pattern-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.pattern-option {
+    background-color: var(--background-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 8px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.pattern-option:hover {
+    border-color: var(--primary-color);
+}
+
+.pattern-option.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 12px rgba(97, 239, 255, 0.3);
+}
+
+.pattern-preview {
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    font-weight: bold;
+    font-family: 'Orbitron', sans-serif;
+    color: white;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.pattern-preview.gradient {
+    background: linear-gradient(135deg, currentColor, rgba(0, 0, 0, 0.4));
+}
+
+.pattern-preview.diagonal {
+    background-image: repeating-linear-gradient(
+        45deg,
+        currentColor,
+        currentColor 8px,
+        rgba(0, 0, 0, 0.3) 8px,
+        rgba(0, 0, 0, 0.3) 16px
+    );
+}
+
+.pattern-preview.dots {
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.4) 2px, transparent 2px);
+    background-size: 16px 16px;
+}
+
+.pattern-option h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.1rem;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--text-color);
+}
+
+.pattern-option p {
+    margin: 0;
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.selected-badge {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background-color: var(--primary-color);
+    color: var(--background-color);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 0.75rem;
+    font-family: 'Orbitron', sans-serif;
+}
+
+/* ========== CARD EDITOR ========== */
+
+.card-editor-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    height: 100%;
+}
+
+.card-preview {
+    background-color: var(--background-color);
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.card-preview::-webkit-scrollbar {
+    width: 6px;
+}
+
+.card-preview::-webkit-scrollbar-track {
+    background: var(--surface-color);
+}
+
+.card-preview::-webkit-scrollbar-thumb {
+    background-color: var(--secondary-color);
+    border-radius: 3px;
+}
+
+.card-preview .card-header {
+    padding: 0.75rem;
+    text-align: center;
+    background-color: var(--surface-hover);
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.card-preview .card-header h3 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 1.3rem;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.card-box {
+    padding: 0.75rem;
+    border: 1px solid var(--surface-hover);
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    background-color: var(--surface-color);
+}
+
+.card-box h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+}
+
+.card-box .box-description {
+    font-size: 0.75rem;
+    color: var(--secondary-color);
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+}
+
+.card-box .effects-list {
+    min-height: 40px;
+    margin-bottom: 0.75rem;
+}
+
+.card-box .effect-item {
+    background-color: var(--background-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.4rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.card-box .effect-item:hover {
+    border-color: var(--primary-color);
+}
+
+.card-box .effect-item span {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.card-box .effect-item strong {
+    color: var(--primary-color);
+    margin-right: 0.5rem;
+}
+
+.card-box .effect-item button {
+    background-color: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    transition: background-color 0.2s;
+}
+
+.card-box .effect-item button:hover {
+    background-color: #ff3333;
+}
+
+.card-box .empty-box {
+    color: var(--secondary-color);
+    font-style: italic;
+    font-size: 0.85rem;
+    opacity: 0.6;
+}
+
+.card-box select {
+    width: 100%;
+    padding: 0.5rem;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: 'Poppins', sans-serif;
+}
+
+.card-box select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.bottom-effect-add {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.bottom-effect-add select {
+    flex: 1;
+    font-size: 0.8rem;
+}
+
+/* Effect Parameter Editor */
+.effect-parameter-editor {
+    background-color: var(--background-color);
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.effect-parameter-editor::-webkit-scrollbar {
+    width: 6px;
+}
+
+.effect-parameter-editor::-webkit-scrollbar-track {
+    background: var(--surface-color);
+}
+
+.effect-parameter-editor::-webkit-scrollbar-thumb {
+    background-color: var(--secondary-color);
+    border-radius: 3px;
+}
+
+.effect-parameter-editor h3 {
+    margin-top: 0;
+    color: var(--primary-color);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+}
+
+.param-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.param-editor h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+}
+
+.param-editor h5 {
+    margin: 0.75rem 0 0.4rem 0;
+    color: var(--text-color);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.param-editor label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.param-editor input[type="number"],
+.param-editor input[type="text"],
+.param-editor select {
+    padding: 0.5rem;
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'Poppins', sans-serif;
+}
+
+.param-editor input:focus,
+.param-editor select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.param-editor input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.param-editor label:has(input[type="checkbox"]) {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.effect-preview {
+    background-color: var(--surface-color);
+    border-left: 3px solid var(--primary-color);
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-top: 0.75rem;
+}
+
+.effect-preview strong {
+    color: var(--primary-color);
+    margin-right: 0.5rem;
+}
+
+.effect-parameter-editor .btn {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+/* Wizard Actions */
+.wizard-actions {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--surface-hover);
+    margin-top: 1rem;
+}
+
+.wizard-actions button {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.5rem;
+}
+
+/* Button variants */
+.btn-delete {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+.btn-delete:hover {
+    background-color: var(--danger-color);
+    color: var(--background-color);
+}
+
+/* Responsive adjustments for smaller landscapes */
+@media (max-width: 1200px) {
+    .card-editor-container {
+        grid-template-columns: 1fr;
+    }
+
+    .pattern-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .color-grid {
+        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    }
+}
+
+@media (max-height: 700px) {
+    .custom-protocol-creator {
+        padding: 1rem;
+    }
+
+    .wizard-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .wizard-progress .step {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    .card-box {
+        padding: 0.5rem;
+    }
+
+    .wizard-step h3 {
+        font-size: 1.1rem;
+    }
+}
