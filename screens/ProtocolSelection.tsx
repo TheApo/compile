@@ -256,26 +256,29 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
             ))}
           </div>
 
-          <div className="protocol-grid">
-            {filteredProtocols.map((protocol) => (
-              <div
-                key={protocol}
-                className={getCardClassName(protocol)}
-                onClick={() => handleSelectProtocol(protocol)}
-                role="button"
-                aria-disabled={chosenProtocols.has(protocol) || !isPlayerTurn || isAnimating}
-                tabIndex={!chosenProtocols.has(protocol) && isPlayerTurn && !isAnimating ? 0 : -1}
-                onKeyPress={(e) => e.key === 'Enter' && handleSelectProtocol(protocol)}
-              >
-                <span className="protocol-category-label">{getProtocolCategory(protocol)}</span>
-                <span className="protocol-name">{protocol}</span>
-              </div>
-            ))}
+          {/* Scrollable wrapper for protocol grid - max 3 rows visible */}
+          <div className="protocol-grid-scroll-wrapper">
+            <div className="protocol-grid">
+              {filteredProtocols.map((protocol) => (
+                <div
+                  key={protocol}
+                  className={getCardClassName(protocol)}
+                  onClick={() => handleSelectProtocol(protocol)}
+                  role="button"
+                  aria-disabled={chosenProtocols.has(protocol) || !isPlayerTurn || isAnimating}
+                  tabIndex={!chosenProtocols.has(protocol) && isPlayerTurn && !isAnimating ? 0 : -1}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSelectProtocol(protocol)}
+                >
+                  <span className="protocol-category-label">{getProtocolCategory(protocol)}</span>
+                  <span className="protocol-name">{protocol}</span>
+                </div>
+              ))}
+            </div>
           </div>
           {isPlayerTurn && (
-              <button 
-                className="btn" 
-                onClick={confirmSelection} 
+              <button
+                className="btn"
+                onClick={confirmSelection}
                 disabled={isAnimating || currentSelection.length !== currentStepInfo?.picks}
               >
                 Confirm Selection

@@ -20,14 +20,49 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     const { cardOwner } = context;
     let newState = { ...state };
 
-    // Get all OTHER cards on board (not Anarchy-1 itself)
-    const allOtherCards = [
-        ...newState.player.lanes.flat(),
-        ...newState.opponent.lanes.flat()
-    ].filter(c => c.id !== card.id);
+    // CRITICAL FIX: Get all UNCOVERED cards (standard targeting rule) except Anarchy-1 itself
+    const uncoveredCards: Array<{ card: PlayedCard, currentLane: number }> = [];
+    for (const player of ['player', 'opponent'] as const) {
+        for (let i = 0; i < newState[player].lanes.length; i++) {
+            const lane = newState[player].lanes[i];
+            if (lane.length > 0) {
+                const topCard = lane[lane.length - 1];
+                if (topCard.id !== card.id) {
+                    uncoveredCards.push({ card: topCard, currentLane: i });
+                }
+            }
+        }
+    }
 
-    if (allOtherCards.length === 0) {
-        newState = log(newState, cardOwner, "Anarchy-1: No other cards to shift.");
+    if (uncoveredCards.length === 0) {
+        newState = log(newState, cardOwner, "Anarchy-1: No other uncovered cards to shift.");
+        return { newState };
+    }
+
+    // CRITICAL FIX: Check if ANY card has at least ONE valid destination (lane without matching protocol)
+    let hasValidTarget = false;
+    for (const { card: cardToCheck, currentLane } of uncoveredCards) {
+        const cardProtocol = cardToCheck.protocol;
+
+        // Check all 3 lanes (except current lane)
+        for (let targetLane = 0; targetLane < 3; targetLane++) {
+            if (targetLane === currentLane) continue; // Can't shift to same lane
+
+            const playerProtocol = newState.player.protocols[targetLane];
+            const opponentProtocol = newState.opponent.protocols[targetLane];
+
+            // Valid destination = card's protocol does NOT match either protocol in target lane
+            if (cardProtocol !== playerProtocol && cardProtocol !== opponentProtocol) {
+                hasValidTarget = true;
+                break;
+            }
+        }
+
+        if (hasValidTarget) break; // At least one card has a valid destination
+    }
+
+    if (!hasValidTarget) {
+        newState = log(newState, cardOwner, "Anarchy-1: No valid targets (all cards match protocols in all other lanes).");
         return { newState };
     }
 

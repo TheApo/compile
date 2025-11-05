@@ -46,19 +46,24 @@ export const useGameState = (
     useEffect(() => {
         // Fix the turn if it doesn't match the coin flip winner
         // This happens because useState initializes with the default 'player' before coin flip
-        if (gameState.turn !== startingPlayer && gameState.log.length <= 1) {
+        // Log length is now 4 because of protocol logging in createInitialState
+        if (gameState.turn !== startingPlayer && gameState.log.length <= 4) {
             setGameState(prev => {
+                // Update the last log entry to reflect the correct starting player
                 const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+                const updatedLog = [...prev.log];
+                if (updatedLog.length > 0) {
+                    // Replace the last "goes first" message
+                    updatedLog[updatedLog.length - 1] = {
+                        player: 'player',
+                        message: `${starterName} goes first.`
+                    };
+                }
 
                 return {
                     ...prev,
                     turn: startingPlayer,  // CRITICAL: Set turn to whoever won the coin flip
-                    log: [
-                        {
-                            player: 'player',
-                            message: `Game Started. ${starterName} goes first.`
-                        }
-                    ]
+                    log: updatedLog
                 };
             });
         }

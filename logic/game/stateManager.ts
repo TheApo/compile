@@ -60,8 +60,18 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
             opponent: opponentState.stats,
         }
     };
-     const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
-     return log(initialState, 'player', `Game Started. ${starterName} goes first.`);
+
+    // Log game start and protocols
+    const starterName = startingPlayer === 'player' ? 'Player' : 'Opponent';
+    const playerProtocolsList = playerProtocols.join(', ');
+    const opponentProtocolsList = opponentProtocols.join(', ');
+
+    let stateWithLogs = log(initialState, 'player', `Game Started.`);
+    stateWithLogs = log(stateWithLogs, 'player', `Player protocols: ${playerProtocolsList}`);
+    stateWithLogs = log(stateWithLogs, 'opponent', `Opponent protocols: ${opponentProtocolsList}`);
+    stateWithLogs = log(stateWithLogs, 'player', `${starterName} goes first.`);
+
+    return stateWithLogs;
 }
 
 export const getEffectiveCardValue = (card: PlayedCard, lane: PlayedCard[]): number => {

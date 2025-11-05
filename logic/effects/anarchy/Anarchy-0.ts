@@ -22,11 +22,19 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     const { cardOwner } = context;
     let newState = { ...state };
 
-    // Check if there are any cards on board to shift
-    const allCardsOnBoard = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+    // CRITICAL FIX: Check if there are any UNCOVERED cards to shift (standard targeting rule)
+    const uncoveredCards: PlayedCard[] = [];
+    for (const player of ['player', 'opponent'] as const) {
+        for (const lane of newState[player].lanes) {
+            if (lane.length > 0) {
+                uncoveredCards.push(lane[lane.length - 1]); // Only top card is uncovered
+            }
+        }
+    }
 
-    if (allCardsOnBoard.length === 0) {
-        // No cards to shift, skip directly to conditional draw
+    if (uncoveredCards.length === 0) {
+        // No uncovered cards to shift, skip directly to conditional draw
+        newState = log(newState, cardOwner, "Anarchy-0: No uncovered cards to shift. Skipping to conditional draw.");
         newState = handleAnarchyConditionalDraw(newState, cardOwner);
         return { newState };
     }

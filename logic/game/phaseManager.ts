@@ -229,17 +229,21 @@ export const processQueuedActions = (state: GameState): GameState => {
         if (nextAction.type === 'flip_self_for_water_0') {
             const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-            // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+            // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
+            // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
-                // If the card was removed or flipped by an intermediate effect, cancel this part of the action.
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                const reason = !sourceCardInfo ? 'deleted' :
+                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                              'now covered';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
         }
@@ -247,16 +251,21 @@ export const processQueuedActions = (state: GameState): GameState => {
         if (nextAction.type === 'flip_self_for_psychic_4') {
             const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-            // FIX: Auto-resolve Psychic-4 self-flip after interrupt (e.g., from uncover effect)
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+            // CRITICAL: Only execute if Psychic-4 is still on the board, face-up AND uncovered
+            // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Psychic-4 is covered
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
-                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                const reason = !sourceCardInfo ? 'deleted' :
+                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                              'now covered';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
         }
@@ -282,15 +291,20 @@ export const processQueuedActions = (state: GameState): GameState => {
         if (nextAction.type === 'speed_3_self_flip_after_shift') {
             const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-            // CRITICAL: Only execute if Speed-3 is still on the board and face-up
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+            // CRITICAL: Only execute if Speed-3 is still on the board, face-up AND uncovered
+            // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Speed-3 is covered
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
-                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                const reason = !sourceCardInfo ? 'deleted' :
+                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                              'now covered';
+                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
         }
@@ -522,17 +536,21 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_water_0') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+                const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-                // CRITICAL CHECK: Ensure Water-0 is still on the board and face-up before it flips itself.
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
+                // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                     mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
-                    // If the card was removed or flipped by an intermediate effect, cancel this part of the action.
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                    const reason = !sourceCardInfo ? 'deleted' :
+                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                                  'now covered';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
             }
@@ -540,16 +558,21 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'flip_self_for_psychic_4') {
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+                const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-                // FIX: Auto-resolve Psychic-4 self-flip after interrupt (e.g., from uncover effect)
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                // CRITICAL: Only execute if Psychic-4 is still on the board, face-up AND uncovered
+                // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Psychic-4 is covered
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                     mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
-                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                    const reason = !sourceCardInfo ? 'deleted' :
+                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                                  'now covered';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
             }
@@ -575,15 +598,20 @@ export const processEndOfAction = (state: GameState): GameState => {
             if (nextAction.type === 'speed_3_self_flip_after_shift') {
                 const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+                const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-                // CRITICAL: Only execute if Speed-3 is still on the board and face-up
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                // CRITICAL: Only execute if Speed-3 is still on the board, face-up AND uncovered
+                // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Speed-3 is covered
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                     mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
-                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                    const reason = !sourceCardInfo ? 'deleted' :
+                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                                  'now covered';
+                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
             }

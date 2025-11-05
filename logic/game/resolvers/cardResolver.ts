@@ -996,9 +996,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         
             // 3. Perform the self-flip. If an interrupt occurred, queue it. Otherwise execute immediately.
             if (stateAfterInterrupt.actionRequired) {
-                // Interrupt occurred - queue the self-flip
+                // Interrupt occurred - queue the self-flip ONLY if Water-0 is still uncovered
                 const sourceCardInfo = findCardOnBoard(stateAfterInterrupt, sourceCardId);
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                const sourceIsUncovered = isCardUncovered(stateAfterInterrupt, sourceCardId);
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const selfFlipAction: ActionRequired = {
                         type: 'flip_self_for_water_0',
                         sourceCardId: sourceCardId,
@@ -1008,19 +1009,31 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         ...(stateAfterInterrupt.queuedActions || []),
                         selfFlipAction
                     ];
+                } else {
+                    // Water-0 was covered, deleted, or flipped during the interrupt - cancel self-flip
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
+                    const reason = !sourceCardInfo ? 'deleted' :
+                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                                  'now covered';
+                    stateAfterInterrupt = log(stateAfterInterrupt, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
             } else {
-                // No interrupt - execute self-flip immediately
+                // No interrupt - execute self-flip immediately ONLY if Water-0 is still uncovered
                 const sourceCardInfo = findCardOnBoard(stateAfterInterrupt, sourceCardId);
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
+                const sourceIsUncovered = isCardUncovered(stateAfterInterrupt, sourceCardId);
+                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     stateAfterInterrupt = log(stateAfterInterrupt, actor, `${cardName}: Flips itself.`);
                     stateAfterInterrupt = findAndFlipCards(new Set([sourceCardId]), stateAfterInterrupt);
                     // Overwrite animation state to show the second flip
                     stateAfterInterrupt.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
+                    // Water-0 was covered, deleted, or flipped - cancel self-flip
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                    stateAfterInterrupt = log(stateAfterInterrupt, actor, `The self-flip effect from ${cardName} was cancelled because the source is no longer active.`);
+                    const reason = !sourceCardInfo ? 'deleted' :
+                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                                  'now covered';
+                    stateAfterInterrupt = log(stateAfterInterrupt, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
             }
         

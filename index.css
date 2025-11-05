@@ -635,12 +635,43 @@ p {
   color: var(--primary-color);
 }
 
+/* Scrollable wrapper for protocol grid - max 3 rows visible */
+.protocol-grid-scroll-wrapper {
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(3 * (60px + 1rem)); /* Exactly 3 rows of cards + gaps */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Custom scrollbar styling */
+.protocol-grid-scroll-wrapper::-webkit-scrollbar {
+  width: 10px;
+}
+
+.protocol-grid-scroll-wrapper::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 5px;
+}
+
+.protocol-grid-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 5px;
+  transition: background 0.3s ease;
+}
+
+.protocol-grid-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-hover);
+}
+
 .protocol-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 1rem;
   width: 100%;
-  max-width: 900px;
 }
 
 .protocol-card {

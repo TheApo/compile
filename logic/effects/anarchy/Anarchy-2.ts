@@ -21,14 +21,29 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     const { cardOwner } = context;
     let newState = { ...state };
 
-    // Get all cards on board (covered and uncovered)
-    const allCardsOnBoard = [
-        ...newState.player.lanes.flat(),
-        ...newState.opponent.lanes.flat()
-    ];
+    // CRITICAL FIX: Find all valid targets - cards in lanes where their protocol matches at least one lane protocol
+    const validTargets: PlayedCard[] = [];
+    for (let i = 0; i < newState.player.lanes.length; i++) {
+        const playerProtocol = newState.player.protocols[i];
+        const opponentProtocol = newState.opponent.protocols[i];
 
-    if (allCardsOnBoard.length === 0) {
-        newState = log(newState, cardOwner, "Anarchy-2: No cards to delete.");
+        // Check player's cards in this lane
+        for (const cardInLane of newState.player.lanes[i]) {
+            if (cardInLane.protocol === playerProtocol || cardInLane.protocol === opponentProtocol) {
+                validTargets.push(cardInLane);
+            }
+        }
+
+        // Check opponent's cards in this lane
+        for (const cardInLane of newState.opponent.lanes[i]) {
+            if (cardInLane.protocol === playerProtocol || cardInLane.protocol === opponentProtocol) {
+                validTargets.push(cardInLane);
+            }
+        }
+    }
+
+    if (validTargets.length === 0) {
+        newState = log(newState, cardOwner, "Anarchy-2: No valid targets (no cards in lanes with matching protocols).");
         return { newState };
     }
 
