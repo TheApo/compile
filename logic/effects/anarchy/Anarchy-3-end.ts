@@ -5,6 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, EffectContext } from "../../../types";
 import { log } from "../../utils/log";
+import { isFrost1BottomActive } from "../common/frost1Check";
 
 /**
  * Anarchy-3 End Effect: "Rearrange your protocols. Anarchy cannot be on this line."
@@ -16,6 +17,13 @@ import { log } from "../../utils/log";
  */
 export const execute = (card: PlayedCard, state: GameState, context: EffectContext): EffectResult => {
     const { cardOwner } = context;
+
+    // Check if Frost-1 Bottom effect is active (blocks protocol rearrangement)
+    if (isFrost1BottomActive(state)) {
+        const targetName = cardOwner === 'player' ? "Player's" : "Opponent's";
+        const newState = log(state, cardOwner, `Frost-1 blocks protocol rearrangement. ${targetName} protocols remain unchanged.`);
+        return { newState };
+    }
 
     // Find which lane this Anarchy-3 card is in
     let anarchyLaneIndex = -1;

@@ -86,6 +86,26 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 }
             }
 
+            // CRITICAL VALIDATION: Check for Frost-3 in SOURCE or DESTINATION lane
+            // Frost-3 Top effect: "Cards cannot shift from or to this line" (affects BOTH sides of the lane)
+            const hasFrost3InSourceLane =
+                prev.player.lanes[originalLaneIndex].some(c => c.isFaceUp && c.protocol === 'Frost' && c.value === 3) ||
+                prev.opponent.lanes[originalLaneIndex].some(c => c.isFaceUp && c.protocol === 'Frost' && c.value === 3);
+
+            const hasFrost3InDestination =
+                prev.player.lanes[targetLaneIndex].some(c => c.isFaceUp && c.protocol === 'Frost' && c.value === 3) ||
+                prev.opponent.lanes[targetLaneIndex].some(c => c.isFaceUp && c.protocol === 'Frost' && c.value === 3);
+
+            if (hasFrost3InSourceLane) {
+                console.error(`Illegal shift: Cannot shift from lane ${originalLaneIndex} - blocked by Frost-3`);
+                return { nextState: prev }; // Block the illegal move
+            }
+
+            if (hasFrost3InDestination) {
+                console.error(`Illegal shift: Cannot shift to lane ${targetLaneIndex} - blocked by Frost-3`);
+                return { nextState: prev }; // Block the illegal move
+            }
+
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
 

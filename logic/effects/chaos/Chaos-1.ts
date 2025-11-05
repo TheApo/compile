@@ -5,6 +5,7 @@
 
 import { GameState, PlayedCard, EffectResult, EffectContext, Player } from "../../../types";
 import { log } from "../../utils/log";
+import { isFrost1BottomActive } from "../common/frost1Check";
 
 /**
  * Chaos-1 Middle Command: "Rearrange your protocols. Rearrange your opponent's protocols."
@@ -18,6 +19,12 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
     const opponent: Player = cardOwner === 'player' ? 'opponent' : 'player';
 
     let newState = log(state, cardOwner, `${cardOwner === 'player' ? 'Player' : 'Opponent'}'s Chaos-1 triggers.`);
+
+    // Check if Frost-1 Bottom effect is active (blocks protocol rearrangement)
+    if (isFrost1BottomActive(newState)) {
+        newState = log(newState, cardOwner, `Frost-1 blocks protocol rearrangement. All protocols remain unchanged.`);
+        return { newState };
+    }
 
     // First action: Rearrange own protocols
     newState.actionRequired = {

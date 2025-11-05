@@ -196,17 +196,10 @@ export const resolveRearrangeProtocols = (
 
     const { target, actor, originalAction, sourceCardId, disallowedProtocolForLane } = prevState.actionRequired;
 
-    // RULE: Frost-1 Bottom Effect blocks all protocol rearrangement
-    const frost1IsActive = [prevState.player, prevState.opponent].some(playerState =>
-        playerState.lanes.some(lane => {
-            const topCard = lane[lane.length - 1];
-            return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
-        })
-    );
-    if (frost1IsActive) {
-        console.log(`Frost-1 blocks protocol rearrangement`);
-        return { ...prevState, actionRequired: null }; // Block the rearrangement and clear the action
-    }
+    // NOTE: Frost-1 Bottom Effect is checked in the effect files (Water-2, Chaos-1, Anarchy-3)
+    // This fallback check is kept for safety in case an action somehow reaches here despite Frost-1
+    // (e.g., from queued actions or edge cases)
+    // This check should normally not trigger since effects check BEFORE creating the action
 
     // CRITICAL VALIDATION for Anarchy-3 End Effect: "Anarchy cannot be on this line"
     if (disallowedProtocolForLane) {

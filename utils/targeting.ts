@@ -7,13 +7,19 @@ import { GameState, PlayedCard, Player } from "../types";
 import { findAllHighestUncoveredCards } from "../logic/game/helpers/actionUtils";
 
 /**
- * Helper: Check if Frost-3 is in a lane (blocks shifts to/from that lane)
+ * Helper: Check if Frost-3 is in a lane (blocks shifts to/from that LINE)
+ * "Cards cannot shift from or to this line" - affects BOTH sides of the lane (player AND opponent)
  * Top-Box effects are ALWAYS active when card is face-up, even if covered!
  */
-const hasFrost3InLane = (gameState: GameState, owner: Player, laneIndex: number): boolean => {
-    return gameState[owner].lanes[laneIndex].some(card =>
+const hasFrost3InLane = (gameState: GameState, laneIndex: number): boolean => {
+    // Check BOTH sides of the lane (player and opponent)
+    const playerHasFrost3 = gameState.player.lanes[laneIndex].some(card =>
         card.isFaceUp && card.protocol === 'Frost' && card.value === 3
     );
+    const opponentHasFrost3 = gameState.opponent.lanes[laneIndex].some(card =>
+        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
+    );
+    return playerHasFrost3 || opponentHasFrost3;
 };
 
 export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolean => {
@@ -62,13 +68,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const cardIndex = lane.findIndex(c => c.id === card.id);
             const opponentOfTurnPlayer = gameState.turn === 'player' ? 'opponent' : 'player';
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner === opponentOfTurnPlayer && cardIndex < lane.length - 1;
         }
         case 'select_own_covered_card_to_shift': { // Chaos-2
             const cardIndex = lane.findIndex(c => c.id === card.id);
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner === actionRequired.actor && cardIndex < lane.length - 1;
         }
         case 'select_covered_card_in_line_to_flip_optional': { // Darkness-2
@@ -85,7 +91,7 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         // Rule: Keywords like "that card" override the default.
         case 'shift_flipped_card_optional': // Darkness-1 (Part 2)
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return card.id === actionRequired.cardId;
 
         // Default targeting rules apply to the following:
@@ -93,7 +99,7 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner === 'opponent' && isUncovered;
         case 'select_face_down_card_to_shift_for_darkness_4': // Darkness-4
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return !card.isFaceUp && isUncovered;
         case 'select_cards_to_delete':
             return !actionRequired.disallowedIds.includes(card.id) && isUncovered;
@@ -122,15 +128,15 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return isUncovered;
         case 'select_card_to_shift_for_gravity_1':
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         case 'select_card_to_flip_and_shift_for_gravity_2':
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         case 'select_face_down_card_to_shift_for_gravity_4':
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return !card.isFaceUp && laneIndex !== actionRequired.targetLaneIndex && isUncovered;
         case 'select_any_card_to_flip':
         case 'select_any_card_to_flip_optional':
@@ -147,19 +153,19 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner === actionRequired.actor && isUncovered;
         case 'select_own_other_card_to_shift': // Speed-3 Middle
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner === actionRequired.actor && card.id !== actionRequired.sourceCardId && isUncovered;
         case 'select_own_card_to_shift_for_speed_3': // Speed-3 End
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner === actionRequired.actor && isUncovered;
         case 'select_opponent_face_down_card_to_shift': // Speed-4
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner !== actionRequired.actor && !card.isFaceUp && isUncovered;
         case 'select_any_opponent_card_to_shift': // Psychic-3
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner !== actionRequired.actor && isUncovered;
         case 'select_opponent_card_to_return':
             return owner === 'opponent' && isUncovered;
@@ -186,13 +192,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_card_to_shift_for_anarchy_1': {
             // Anarchy-1: Can shift any uncovered card (validation happens in laneResolver)
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         }
         case 'select_card_to_shift_for_anarchy_0': {
             // Anarchy-0: Can shift any uncovered card (no restrictions)
             // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, owner, laneIndex)) return false;
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         }
 
