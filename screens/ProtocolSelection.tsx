@@ -5,8 +5,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '../components/Header';
-import { uniqueProtocols, cards, Card as CardData } from '../data/cards';
+import { uniqueProtocols as baseUniqueProtocols, cards as baseCards, Card as CardData } from '../data/cards';
 import { CardComponent } from '../components/Card';
+import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
+import { invalidateCardCache } from '../utils/gameLogic';
 import '../styles/layouts/protocol-selection.css';
 
 
@@ -31,11 +33,38 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   const [scanningProtocol, setScanningProtocol] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
 
+  // Refresh tracker to force cards reload
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Invalidate card cache on mount to load latest custom protocols
+  useEffect(() => {
+    invalidateCardCache();
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
+  // Merge base cards with custom protocol cards
+  // Depends on refreshKey to reload when custom protocols change
+  const cards = useMemo(() => {
+    console.log('[Protocol Selection] Loading cards, refreshKey:', refreshKey);
+    const customCards = getAllCustomProtocolCards();
+    const merged = [...baseCards, ...customCards];
+    console.log('[Protocol Selection] Total cards loaded:', merged.length, '(base:', baseCards.length, ', custom:', customCards.length, ')');
+    return merged;
+  }, [refreshKey]);
+
+  // Get unique protocols from merged cards
+  const uniqueProtocols = useMemo(() => {
+    const protocolSet = new Set(cards.map(card => card.protocol));
+    const protocols = Array.from(protocolSet).sort();
+    console.log('[Protocol Selection] Unique protocols:', protocols);
+    return protocols;
+  }, [cards]);
+
   // Get all unique categories dynamically
   const allCategories = useMemo(() => {
     const categorySet = new Set(cards.map(card => card.category));
     return Array.from(categorySet).sort();
-  }, []);
+  }, [cards]);
 
   // Filter state - by default all categories are enabled
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));

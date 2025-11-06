@@ -17,7 +17,7 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             <h4>Draw Effect Parameters</h4>
 
             <label>
-                Anzahl Karten
+                Card Count
                 <input
                     type="number"
                     min={1}
@@ -28,18 +28,18 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             </label>
 
             <label>
-                Ziel
+                Target
                 <select value={params.target} onChange={e => onChange({ ...params, target: e.target.value as any })}>
-                    <option value="self">Selbst</option>
-                    <option value="opponent">Gegner</option>
+                    <option value="self">Self</option>
+                    <option value="opponent">Opponent</option>
                 </select>
             </label>
 
             <label>
-                Quelle
+                Source
                 <select value={params.source} onChange={e => onChange({ ...params, source: e.target.value as any })}>
-                    <option value="own_deck">Eigenes Deck</option>
-                    <option value="opponent_deck">Gegner Deck</option>
+                    <option value="own_deck">Own Deck</option>
+                    <option value="opponent_deck">Opponent's Deck</option>
                 </select>
             </label>
 
@@ -49,11 +49,11 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                     checked={params.preAction === 'refresh'}
                     onChange={e => onChange({ ...params, preAction: e.target.checked ? 'refresh' : undefined })}
                 />
-                Refresh hand vorher (Hand zurück ins Deck, mischen, neu ziehen)
+                Refresh hand first (shuffle hand into deck, then draw)
             </label>
 
             <label>
-                Konditional
+                Conditional
                 <select
                     value={params.conditional?.type || 'none'}
                     onChange={e => {
@@ -65,15 +65,15 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                         }
                     }}
                 >
-                    <option value="none">Keine</option>
-                    <option value="count_face_down">1 pro face-down Karte (alle auf dem Board)</option>
-                    <option value="is_covering">Nur wenn diese Karte eine andere bedeckt</option>
-                    <option value="non_matching_protocols">1 pro Line mit non-matching Protokoll</option>
+                    <option value="none">None</option>
+                    <option value="count_face_down">1 per face-down card (all on board)</option>
+                    <option value="is_covering">Only if this card is covering another</option>
+                    <option value="non_matching_protocols">1 per line with non-matching protocol</option>
                 </select>
             </label>
 
             <div className="effect-preview">
-                <strong>Vorschau:</strong> {generateDrawText(params)}
+                <strong>Preview:</strong> {generateDrawText(params)}
             </div>
         </div>
     );

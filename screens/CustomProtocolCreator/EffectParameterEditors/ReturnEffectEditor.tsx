@@ -24,6 +24,20 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                     <option value="all">Alle</option>
                 </select>
             </label>
+
+            <div className="effect-preview">
+                <strong>Preview:</strong> {generateReturnText(params)}
+            </div>
         </div>
     );
+};
+
+const generateReturnText = (params: ReturnEffectParams): string => {
+    if (params.targetFilter?.valueEquals !== undefined) {
+        return `Return all value ${params.targetFilter.valueEquals} cards to hand.`;
+    }
+
+    const countText = params.count === 'all' ? 'all cards' : params.count === 1 ? '1 card' : `${params.count} cards`;
+
+    return `Return ${countText} to hand.`;
 };

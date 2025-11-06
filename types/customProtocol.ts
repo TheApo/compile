@@ -21,7 +21,8 @@ export type EffectActionType =
     | 'rearrange_protocols'
     | 'swap_protocols'
     | 'reveal'
-    | 'give';
+    | 'give'
+    | 'take';
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 export type EffectTrigger = 'on_play' | 'start' | 'end' | 'on_cover';
@@ -163,6 +164,16 @@ export interface RevealEffectParams {
 }
 
 /**
+ * Take Effect Parameters
+ */
+export interface TakeEffectParams {
+    action: 'take';
+    source: 'opponent_hand';
+    count: number;  // 1-6
+    random: boolean;  // true = random, false = choose
+}
+
+/**
  * Union of all effect parameter types
  */
 export type EffectParams =
@@ -174,7 +185,8 @@ export type EffectParams =
     | ReturnEffectParams
     | PlayEffectParams
     | ProtocolEffectParams
-    | RevealEffectParams;
+    | RevealEffectParams
+    | TakeEffectParams;
 
 /**
  * Effect Definition - Single effect with parameters
@@ -194,7 +206,7 @@ export interface EffectDefinition {
  * Custom Card Definition - One card in a custom protocol
  */
 export interface CustomCardDefinition {
-    value: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+    value: -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6;
     topEffects: EffectDefinition[];     // Top box (passive, always active when face-up)
     middleEffects: EffectDefinition[];  // Middle box (on play / when uncovered)
     bottomEffects: EffectDefinition[];  // Bottom box (start/end/on-cover triggers)
@@ -203,7 +215,20 @@ export interface CustomCardDefinition {
 /**
  * Card Pattern Types
  */
-export type CardPattern = 'solid' | 'gradient' | 'diagonal' | 'dots';
+export type CardPattern =
+    | 'solid'
+    | 'radial'
+    | 'dual-radial'
+    | 'multi-radial'
+    | 'chaos'
+    | 'grid'
+    | 'diagonal-lines'
+    | 'cross-diagonal'
+    | 'horizontal-lines'
+    | 'vertical-lines'
+    | 'cross'
+    | 'hexagons'
+    | 'stripes';
 
 /**
  * Custom Protocol Definition - Complete protocol set (6 cards)

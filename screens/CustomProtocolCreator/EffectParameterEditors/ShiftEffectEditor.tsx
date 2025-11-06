@@ -14,6 +14,23 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
         <div className="param-editor">
             <h4>Shift Effect</h4>
             <label>
+                Count/Scope
+                <select
+                    value={(params as any).count === 'all' ? 'all' : '1'}
+                    onChange={e => {
+                        if (e.target.value === 'all') {
+                            onChange({ ...params, count: 'all' as any });
+                        } else {
+                            const { count, ...rest } = params as any;
+                            onChange(rest);
+                        }
+                    }}
+                >
+                    <option value="1">1 card</option>
+                    <option value="all">All matching cards</option>
+                </select>
+            </label>
+            <label>
                 Target Owner
                 <select
                     value={params.targetFilter.owner}
@@ -22,8 +39,34 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                     }
                 >
                     <option value="any">Any</option>
-                    <option value="own">Eigene</option>
-                    <option value="opponent">Gegner</option>
+                    <option value="own">Own</option>
+                    <option value="opponent">Opponent</option>
+                </select>
+            </label>
+            <label>
+                Position
+                <select
+                    value={params.targetFilter.position}
+                    onChange={e =>
+                        onChange({ ...params, targetFilter: { ...params.targetFilter, position: e.target.value as any } })
+                    }
+                >
+                    <option value="any">Any</option>
+                    <option value="uncovered">Uncovered</option>
+                    <option value="covered">Covered</option>
+                </select>
+            </label>
+            <label>
+                Face State
+                <select
+                    value={params.targetFilter.faceState}
+                    onChange={e =>
+                        onChange({ ...params, targetFilter: { ...params.targetFilter, faceState: e.target.value as any } })
+                    }
+                >
+                    <option value="any">Any</option>
+                    <option value="face_up">Face-up</option>
+                    <option value="face_down">Face-down</option>
                 </select>
             </label>
             <label>
@@ -40,10 +83,39 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                     }}
                 >
                     <option value="any">Any line</option>
+                    <option value="to_another_line">To another line</option>
                     <option value="non_matching_protocol">Non-matching protocol</option>
-                    <option value="specific_lane">This line</option>
+                    <option value="specific_lane">This line (within)</option>
                 </select>
             </label>
+
+            <div className="effect-preview">
+                <strong>Preview:</strong> {generateShiftText(params)}
+            </div>
         </div>
     );
+};
+
+const generateShiftText = (params: ShiftEffectParams): string => {
+    let targetDesc = '';
+
+    if (params.targetFilter.owner === 'opponent') targetDesc += "opponent's ";
+    if (params.targetFilter.position === 'covered') targetDesc += 'covered ';
+    if (params.targetFilter.position === 'uncovered') targetDesc += 'uncovered ';
+    if (params.targetFilter.faceState === 'face_down') targetDesc += 'face-down ';
+    if (params.targetFilter.faceState === 'face_up') targetDesc += 'face-up ';
+
+    const count = (params as any).count === 'all' ? 'all' : '1';
+    const cardWord = count === '1' ? 'card' : 'cards';
+    let text = `Shift ${count} ${targetDesc}${cardWord}`;
+
+    if (params.destinationRestriction?.type === 'non_matching_protocol') {
+        text += ' to a non-matching protocol';
+    } else if (params.destinationRestriction?.type === 'specific_lane') {
+        text += ' within this line';
+    } else if (params.destinationRestriction?.type === 'to_another_line') {
+        text += ' to another line';
+    }
+
+    return text + '.';
 };

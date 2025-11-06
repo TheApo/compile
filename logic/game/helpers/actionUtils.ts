@@ -39,6 +39,9 @@ export function isCardUncovered(state: GameState, cardId: string | undefined): b
 export function handleChainedEffectsOnDiscard(state: GameState, player: Player, sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start', sourceCardId?: string): GameState {
     let newState = { ...state };
 
+    // Save followUpEffect from custom effects before clearing actionRequired
+    const followUpEffect = (state.actionRequired as any)?.followUpEffect;
+
     // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
     newState.actionRequired = null;
 
@@ -46,6 +49,32 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     // This closes the indentation from the middle effect
     if (sourceCardId) {
         newState = decreaseLogIndent(newState);
+    }
+
+    // Handle custom effect conditional follow-ups
+    if (followUpEffect && sourceCardId) {
+        const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
+        if (sourceCardInfo) {
+            console.log('[Custom Effect] Executing conditional follow-up effect after discard');
+            // Dynamically import and execute the follow-up effect
+            const { executeCustomEffect } = require('../../customProtocols/effectInterpreter');
+            const context: EffectContext = {
+                cardOwner: sourceCardInfo.owner,
+                opponent: sourceCardInfo.owner === 'player' ? ('opponent' as Player) : ('player' as Player),
+            };
+            // Find lane index
+            let laneIndex = -1;
+            for (let i = 0; i < newState[sourceCardInfo.owner].lanes.length; i++) {
+                if (newState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                    laneIndex = i;
+                    break;
+                }
+            }
+            if (laneIndex !== -1) {
+                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
+                return result.newState;
+            }
+        }
     }
 
     // If there's no chained effect, we still need to process queued actions if they exist

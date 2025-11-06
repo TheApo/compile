@@ -11,6 +11,7 @@ import {
     addCustomProtocol,
     deleteCustomProtocol,
 } from '../logic/customProtocols/storage';
+import { invalidateCardCache } from '../utils/gameLogic';
 import { ProtocolList } from './CustomProtocolCreator/ProtocolList';
 import { ProtocolWizard } from './CustomProtocolCreator/ProtocolWizard';
 import '../styles/custom-protocol-creator.css';
@@ -41,20 +42,30 @@ export const CustomProtocolCreator: React.FC<CustomProtocolCreatorProps> = ({ on
     };
 
     const handleEdit = (protocol: CustomProtocolDefinition) => {
+        console.log('handleEdit called with protocol:', protocol);
         setEditingProtocol(protocol);
         setView('edit');
+        console.log('View set to edit, editingProtocol:', protocol);
     };
 
     const handleDelete = (id: string) => {
         deleteCustomProtocol(id);
+        invalidateCardCache(); // Clear cache so Protocol Selection reloads
         loadProtocols();
     };
 
     const handleSave = (protocol: CustomProtocolDefinition) => {
         addCustomProtocol(protocol);
+        invalidateCardCache(); // Clear cache so Protocol Selection reloads
         loadProtocols();
         setView('list');
         setEditingProtocol(undefined);
+    };
+
+    const handleImport = (protocol: CustomProtocolDefinition) => {
+        addCustomProtocol(protocol);
+        invalidateCardCache(); // Clear cache so Protocol Selection reloads
+        loadProtocols();
     };
 
     const handleCancel = () => {
@@ -70,6 +81,7 @@ export const CustomProtocolCreator: React.FC<CustomProtocolCreatorProps> = ({ on
                     onCreateNew={handleCreateNew}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onImport={handleImport}
                     onBack={onBack}
                 />
             )}

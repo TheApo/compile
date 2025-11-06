@@ -17,14 +17,26 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <h4>Flip Effect Parameters</h4>
 
             <label>
-                Anzahl Karten
-                <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    value={params.count}
-                    onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
-                />
+                Card Count/Scope
+                <select
+                    value={params.count === 'all' ? 'all' : params.count === 'each' ? 'each' : params.count.toString()}
+                    onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'all') {
+                            onChange({ ...params, count: 'all' as any });
+                        } else if (val === 'each') {
+                            onChange({ ...params, count: 'each' as any });
+                        } else {
+                            onChange({ ...params, count: parseInt(val) });
+                        }
+                    }}
+                >
+                    <option value="1">1 card</option>
+                    <option value="2">2 cards</option>
+                    <option value="3">3 cards</option>
+                    <option value="all">All matching cards</option>
+                    <option value="each">Each matching card</option>
+                </select>
             </label>
 
             <label>
@@ -33,8 +45,21 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     checked={params.optional}
                     onChange={e => onChange({ ...params, optional: e.target.checked })}
                 />
-                Optional ("May flip" statt "Flip")
+                Optional ("May flip" instead of "Flip")
             </label>
+
+            {(params.count === 'each') && (
+                <label>
+                    Each Line Scope
+                    <select
+                        value={(params as any).eachLineScope || 'all_lines'}
+                        onChange={e => onChange({ ...params, eachLineScope: e.target.value as any })}
+                    >
+                        <option value="all_lines">Each card on board</option>
+                        <option value="each_line">1 card in each line</option>
+                    </select>
+                </label>
+            )}
 
             <label>
                 <input
@@ -42,7 +67,7 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     checked={params.selfFlipAfter || false}
                     onChange={e => onChange({ ...params, selfFlipAfter: e.target.checked })}
                 />
-                Danach diese Karte flippen
+                Then flip this card
             </label>
 
             <h5>Target Filter</h5>
@@ -56,8 +81,8 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     }
                 >
                     <option value="any">Any</option>
-                    <option value="own">Eigene</option>
-                    <option value="opponent">Gegner</option>
+                    <option value="own">Own</option>
+                    <option value="opponent">Opponent</option>
                 </select>
             </label>
 
@@ -102,7 +127,7 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             </label>
 
             <div className="effect-preview">
-                <strong>Vorschau:</strong> {generateFlipText(params)}
+                <strong>Preview:</strong> {generateFlipText(params)}
             </div>
         </div>
     );
@@ -119,8 +144,23 @@ const generateFlipText = (params: FlipEffectParams): string => {
     if (params.targetFilter.faceState === 'face_up') targetDesc += 'face-up ';
     if (params.targetFilter.excludeSelf) targetDesc += 'other ';
 
-    const cardWord = params.count === 1 ? 'card' : 'cards';
-    let text = `${may} ${params.count} ${targetDesc}${cardWord}.`;
+    let countText = '';
+    if (params.count === 'all') {
+        countText = 'all';
+    } else if (params.count === 'each') {
+        const eachScope = (params as any).eachLineScope;
+        if (eachScope === 'each_line') {
+            countText = '1';
+            targetDesc = targetDesc + '(in each line) ';
+        } else {
+            countText = 'each';
+        }
+    } else {
+        countText = params.count.toString();
+    }
+
+    const cardWord = (params.count === 1) ? 'card' : 'cards';
+    let text = `${may} ${countText} ${targetDesc}${cardWord}.`;
 
     if (params.selfFlipAfter) {
         text += ' Then flip this card.';
