@@ -53,6 +53,10 @@
     aspect-ratio: 2.5 / 3.5;
     font-size: 1.1rem;
 }
+.preview-card-area .card-rule-box {
+    font-size: 1.1em; /* Increased from base 0.85em for better readability in preview */
+    line-height: 1.35;
+}
 
 .game-main-area {
     flex-grow: 1;

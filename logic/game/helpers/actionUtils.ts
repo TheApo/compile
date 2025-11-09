@@ -97,6 +97,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
 
     // Save followUpEffect from custom effects before clearing actionRequired
     const followUpEffect = (state.actionRequired as any)?.followUpEffect;
+    const conditionalType = (state.actionRequired as any)?.conditionalType; // "if_executed" or "then"
 
     // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
     newState.actionRequired = null;
@@ -111,12 +112,21 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     if (followUpEffect && sourceCardId) {
         const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
         if (sourceCardInfo) {
-            console.log('[Custom Effect] Executing conditional follow-up effect after discard');
-
-            // NEW: Calculate discarded count from previous action
+            // NEW: Check if we should execute the follow-up based on conditional type
             const previousHandSize = (state.actionRequired as any)?.previousHandSize || 0;
             const currentHandSize = newState[player].hand.length;
             const discardedCount = Math.max(0, previousHandSize - currentHandSize);
+
+            // CRITICAL: For "if_executed", only execute if at least one card was discarded
+            // For "then", always execute
+            const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+            if (!shouldExecute) {
+                console.log(`[Custom Effect] Skipping follow-up effect - conditional type: ${conditionalType}, discarded: ${discardedCount}`);
+                return newState;
+            }
+
+            console.log(`[Custom Effect] Executing conditional follow-up effect after discard (type: ${conditionalType})`);
 
             const context: EffectContext = {
                 cardOwner: sourceCardInfo.owner,
@@ -141,9 +151,11 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
                 return result.newState;
             }
         }
+        // FIXED: Custom protocol effect was handled, return now
+        return newState;
     }
 
-    // If there's no chained effect, we still need to process queued actions if they exist
+    // If there's no chained effect from custom protocols, check original effects
     if (!sourceEffect || !sourceCardId) {
         return newState; // No chained effect, but actionRequired is now cleared
     }

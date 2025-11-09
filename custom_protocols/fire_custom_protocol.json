@@ -1,0 +1,196 @@
+{
+  "id": "fire-custom-001",
+  "name": "Fire_custom",
+  "description": "Fire protocol - discard cards to fuel powerful effects",
+  "author": "System",
+  "createdAt": "2025-11-09T00:00:00.000Z",
+  "color": "#F06838",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fire-0-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "excludeSelf": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "fire-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 2
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "fire-0-oncover-draw",
+          "params": {
+            "action": "draw",
+            "count": 1
+          },
+          "position": "bottom",
+          "trigger": "on_cover",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "fire-0-oncover-flip",
+              "params": {
+                "action": "flip",
+                "count": 1,
+                "targetFilter": {
+                  "excludeSelf": true
+                }
+              },
+              "position": "bottom",
+              "trigger": "on_cover"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fire-1-discard",
+          "params": {
+            "action": "discard",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "fire-1-delete",
+              "params": {
+                "action": "delete",
+                "count": 1
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fire-2-discard",
+          "params": {
+            "action": "discard",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "fire-2-return",
+              "params": {
+                "action": "return",
+                "count": 1
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "fire-3-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "optional": true
+          },
+          "position": "bottom",
+          "trigger": "end",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "fire-3-flip",
+              "params": {
+                "action": "flip",
+                "count": 1
+              },
+              "position": "bottom",
+              "trigger": "end"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fire-4-discard-variable",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "variableCount": true
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "fire-4-draw-based-on-discard",
+              "params": {
+                "action": "draw",
+                "countType": "equal_to_discarded",
+                "countOffset": 1
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fire-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

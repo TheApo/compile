@@ -28,6 +28,7 @@ type ActionDispatchers = {
     resolvePlague2Discard: (s: GameState, cardIds: string[]) => GameState,
     resolvePlague4Flip: (s: GameState, a: boolean, p: Player) => GameState,
     resolveFire3Prompt: (s: GameState, a: boolean) => GameState,
+    resolveOptionalDiscardCustomPrompt: (s: GameState, a: boolean) => GameState,
     resolveSpeed3Prompt: (s: GameState, a: boolean) => GameState,
     resolveFire4Discard: (s: GameState, cardIds: string[]) => GameState,
     resolveHate1Discard: (s: GameState, cardIds: string[]) => GameState,
@@ -269,7 +270,19 @@ const handleRequiredAction = (
         if (nextState.actionRequired) return nextState; // New action (discard), re-run processor
         return phaseManager.processEndOfAction(nextState); // Skipped, so end turn
     }
-    
+
+    if (aiDecision.type === 'resolveOptionalDiscardCustomPrompt' && action.type === 'prompt_optional_discard_custom') {
+        const nextState = actions.resolveOptionalDiscardCustomPrompt(state, aiDecision.accept);
+        if (nextState.actionRequired) return nextState; // New action (discard), re-run processor
+        return phaseManager.processEndOfAction(nextState); // Skipped, so end turn
+    }
+
+    if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_effect') {
+        const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
+        if (nextState.actionRequired) return nextState; // New action created, re-run processor
+        return phaseManager.processEndOfAction(nextState); // Skipped or completed
+    }
+
     if (aiDecision.type === 'resolveSpeed3Prompt' && action.type === 'prompt_shift_for_speed_3') {
         const nextState = actions.resolveSpeed3Prompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action (select card), re-run

@@ -729,7 +729,7 @@ Use this checklist to track progress:
 - [ ] Chaos
 - [ ] Darkness
 - [ ] Death ✅ (Example completed)
-- [ ] Fire
+- [ ] Fire ✅
 - [ ] Frost
 - [ ] Gravity
 - [ ] Hate

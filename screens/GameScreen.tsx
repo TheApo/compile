@@ -126,6 +126,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolvePlague2Discard,
     resolvePlague4Flip,
     resolveFire3Prompt,
+    resolveOptionalDiscardCustomPrompt,
+    resolveOptionalEffectPrompt,
     resolveFire4Discard,
     resolveHate1Discard,
     resolveLight2Prompt,
@@ -221,7 +223,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   }, [gameState.log]);
 
   useEffect(() => {
-    if (gameState.actionRequired?.type !== 'plague_2_player_discard' && gameState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_fire_4' && gameState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_hate_1') {
+    const isVariableDiscard = gameState.actionRequired?.type === 'discard' && gameState.actionRequired?.variableCount;
+    if (!isVariableDiscard && gameState.actionRequired?.type !== 'plague_2_player_discard' && gameState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_fire_4' && gameState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_hate_1') {
         setMultiSelectedCardIds([]);
     }
   }, [gameState.actionRequired]);
@@ -371,9 +374,22 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     if (currentState.animationState) return;
 
     if (currentState.actionRequired) {
+      // Check for variable-count discard (Fire_custom-4, Plague-2)
       if (currentState.actionRequired.type === 'discard' && currentState.actionRequired.actor === 'player') {
-        discardCardFromHand(card.id);
-        return;
+        if (currentState.actionRequired.variableCount) {
+          // Multi-select mode for variable discard
+          setMultiSelectedCardIds(prev => {
+            if (prev.includes(card.id)) {
+              return prev.filter(id => id !== card.id);
+            }
+            return [...prev, card.id];
+          });
+          return;
+        } else {
+          // Single discard
+          discardCardFromHand(card.id);
+          return;
+        }
       }
       if (currentState.actionRequired.type === 'select_card_from_hand_to_play') {
         selectHandCardForAction(card.id);
@@ -615,6 +631,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onResolvePlague2Discard={resolvePlague2Discard}
                     onResolvePlague4Flip={resolvePlague4Flip}
                     onResolveFire3Prompt={resolveFire3Prompt}
+                    onResolveOptionalDiscardCustomPrompt={resolveOptionalDiscardCustomPrompt}
+                    onResolveOptionalEffectPrompt={resolveOptionalEffectPrompt}
                     onResolveSpeed3Prompt={resolveSpeed3Prompt}
                     onResolveFire4Discard={resolveFire4Discard}
                     onResolveHate1Discard={resolveHate1Discard}

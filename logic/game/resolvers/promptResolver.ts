@@ -135,7 +135,7 @@ export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player
 
 export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_fire_3_discard') return prevState;
-    
+
     const { actor } = prevState.actionRequired;
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
@@ -154,6 +154,88 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
         newState.actionRequired = null;
     }
     return newState;
+};
+
+export const resolveOptionalDiscardCustomPrompt = (prevState: GameState, accept: boolean): GameState => {
+    if (prevState.actionRequired?.type !== 'prompt_optional_discard_custom') return prevState;
+
+    const { actor, count, sourceCardId } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    let newState = { ...prevState };
+
+    // CRITICAL: Save followUpEffect AND conditionalType before clearing
+    const followUpEffect = (prevState.actionRequired as any)?.followUpEffect;
+    const conditionalType = (prevState.actionRequired as any)?.conditionalType;
+
+    if (accept) {
+        newState = log(newState, actor, `${actorName} chooses to discard ${count} card(s).`);
+        newState.actionRequired = {
+            type: 'discard',
+            actor: actor,
+            count: count,
+            sourceCardId: sourceCardId,
+            followUpEffect: followUpEffect, // Pass through followUpEffect
+            conditionalType: conditionalType, // CRITICAL: Pass through conditionalType for if_executed
+            previousHandSize: newState[actor].hand.length,
+        } as any;
+    } else {
+        newState = log(newState, actor, `${actorName} skips the discard.`);
+        newState.actionRequired = null;
+    }
+    return newState;
+};
+
+/**
+ * GENERIC optional effect prompt resolver
+ * Works for ALL optional effects (flip, delete, shift, return, discard, etc.)
+ */
+export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolean): GameState => {
+    if (prevState.actionRequired?.type !== 'prompt_optional_effect') return prevState;
+
+    const { actor, sourceCardId, effectDef, laneIndex } = prevState.actionRequired as any;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    let newState = { ...prevState };
+
+    if (accept) {
+        // User accepts the optional effect - execute it now
+        const action = effectDef.params.action;
+        newState = log(newState, actor, `${actorName} chooses to execute the optional ${action} effect.`);
+
+        // Find the card and execute the effect
+        const sourceCard = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()]
+            .find(c => c.id === sourceCardId);
+
+        if (!sourceCard) {
+            console.error('[Optional Effect] Source card not found!');
+            newState.actionRequired = null;
+            return newState;
+        }
+
+        const context = {
+            cardOwner: actor,
+            opponent: actor === 'player' ? 'opponent' as const : 'player' as const,
+            currentTurn: newState.turn,
+            actor: actor,
+        };
+
+        // Execute the effect (without optional flag to avoid recursion)
+        const effectToExecute = {
+            ...effectDef,
+            params: { ...effectDef.params, optional: false }
+        };
+
+        const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
+        return result.newState;
+    } else {
+        // User declines the optional effect
+        const action = effectDef.params.action;
+        newState = log(newState, actor, `${actorName} skips the optional ${action} effect.`);
+
+        // CRITICAL: If there's an if_executed conditional, it should NOT execute
+        // The effect was declined, so followUp is skipped
+        newState.actionRequired = null;
+        return newState;
+    }
 };
 
 export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): GameState => {

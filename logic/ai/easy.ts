@@ -189,21 +189,44 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_delete_for_anarchy_2': {
-            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
-            // Can target ANY card (covered or uncovered) in any lane, but card's protocol must match lane protocols
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) {
-                // Easy AI: Just pick first player card if available, else first opponent card
-                // (laneResolver will validate matching protocol requirement)
-                const playerCard = state.player.lanes.flat().find(c => c);
-                if (playerCard) {
-                    return { type: 'deleteCard', cardId: playerCard.id };
-                }
-                const opponentCard = state.opponent.lanes.flat().find(c => c);
-                if (opponentCard) {
-                    return { type: 'deleteCard', cardId: opponentCard.id };
-                }
+            // Anarchy-2: "Delete a covered or uncovered FACE-UP card in a line with a matching protocol"
+            // CRITICAL: Only FACE-UP cards can be selected (covered or uncovered)
+            // Card's protocol must match the lane protocol
+
+            // Helper to check if card's protocol matches the lane protocol
+            const hasMatchingProtocol = (card: PlayedCard, owner: Player, laneIndex: number): boolean => {
+                const laneProtocol = state[owner].protocols[laneIndex];
+                return card.protocol === laneProtocol;
+            };
+
+            // Get all face-up player cards with matching protocol
+            const validPlayerCards: PlayedCard[] = [];
+            state.player.lanes.forEach((lane, laneIndex) => {
+                lane.forEach(card => {
+                    if (card.isFaceUp && hasMatchingProtocol(card, 'player', laneIndex)) {
+                        validPlayerCards.push(card);
+                    }
+                });
+            });
+
+            if (validPlayerCards.length > 0) {
+                return { type: 'deleteCard', cardId: validPlayerCards[0].id };
             }
+
+            // Fallback: Get all face-up opponent cards with matching protocol
+            const validOpponentCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                lane.forEach(card => {
+                    if (card.isFaceUp && hasMatchingProtocol(card, 'opponent', laneIndex)) {
+                        validOpponentCards.push(card);
+                    }
+                });
+            });
+
+            if (validOpponentCards.length > 0) {
+                return { type: 'deleteCard', cardId: validOpponentCards[0].id };
+            }
+
             return { type: 'skip' };
         }
 

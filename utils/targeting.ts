@@ -64,9 +64,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const targetFilter = (actionRequired as any).targetFilter || {};
             const cardIndex = lane.findIndex(c => c.id === card.id);
 
-            // Check position filter
-            if (targetFilter.position === 'uncovered' && !isUncovered) return false;
-            if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+            // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
+            // This matches the game rules: "flip 1 card" means "flip 1 uncovered card"
+            const position = targetFilter.position || 'uncovered';
+
+            // Check position filter (using default 'uncovered' if not specified)
+            if (position === 'uncovered' && !isUncovered) return false;
+            if (position === 'covered' && cardIndex >= lane.length - 1) return false;
 
             // Check owner filter
             if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
@@ -133,9 +137,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             if (targetFilter) {
                 const cardIndex = lane.findIndex(c => c.id === card.id);
 
-                // Check position filter
-                if (targetFilter.position === 'uncovered' && !isUncovered) return false;
-                if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+                // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
+                const position = targetFilter.position || 'uncovered';
+
+                // Check position filter (using default 'uncovered' if not specified)
+                if (position === 'uncovered' && !isUncovered) return false;
+                if (position === 'covered' && cardIndex >= lane.length - 1) return false;
                 // position 'any' allows both covered and uncovered
 
                 // Check face state filter
@@ -189,8 +196,20 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
         case 'select_any_other_card_to_flip':
             return card.id !== actionRequired.sourceCardId && isUncovered;
-        case 'select_card_to_return':
+        case 'select_card_to_return': {
+            // Check if owner filter is specified (for custom protocols)
+            const targetOwner = (actionRequired as any).targetOwner || 'any';
+            const actor = actionRequired.actor;
+
+            // Filter by owner if specified
+            if (targetOwner === 'own') {
+                return owner === actor && isUncovered;
+            } else if (targetOwner === 'opponent') {
+                return owner !== actor && isUncovered;
+            }
+            // Default: any card (own or opponent)
             return isUncovered;
+        }
         case 'select_card_to_flip_for_fire_3':
             return isUncovered;
         case 'select_card_to_shift_for_gravity_1':

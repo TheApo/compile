@@ -13,6 +13,8 @@ interface PhaseControllerProps {
     onResolvePlague2Discard: (cardIds: string[]) => void;
     onResolvePlague4Flip: (accept: boolean) => void;
     onResolveFire3Prompt: (accept: boolean) => void;
+    onResolveOptionalDiscardCustomPrompt: (accept: boolean) => void;
+    onResolveOptionalEffectPrompt: (accept: boolean) => void;
     onResolveSpeed3Prompt: (accept: boolean) => void;
     onResolveFire4Discard: (cardIds: string[]) => void;
     onResolveHate1Discard: (cardIds: string[]) => void;
@@ -31,7 +33,8 @@ interface PhaseControllerProps {
 
 export const PhaseController: React.FC<PhaseControllerProps> = ({
     gameState, onFillHand, onSkipAction,
-    onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt,
+    onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt, onResolveOptionalDiscardCustomPrompt,
+    onResolveOptionalEffectPrompt,
     onResolveSpeed3Prompt,
     onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
@@ -105,7 +108,28 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 </>
             );
         }
-        
+
+        if (actionRequired?.type === 'prompt_optional_discard_custom') {
+             return (
+                <>
+                    <button className="btn" onClick={() => onResolveOptionalDiscardCustomPrompt(true)}>Discard {actionRequired.count} Card(s)</button>
+                    <button className="btn btn-back" onClick={() => onResolveOptionalDiscardCustomPrompt(false)}>Skip</button>
+                </>
+            );
+        }
+
+        if (actionRequired?.type === 'prompt_optional_effect') {
+            const effectAction = (actionRequired as any).effectDef?.params?.action || 'effect';
+            const effectCount = (actionRequired as any).effectDef?.params?.count;
+            const actionLabel = effectCount ? `${effectAction} ${effectCount}` : effectAction;
+             return (
+                <>
+                    <button className="btn" onClick={() => onResolveOptionalEffectPrompt(true)}>Execute ({actionLabel})</button>
+                    <button className="btn btn-back" onClick={() => onResolveOptionalEffectPrompt(false)}>Skip</button>
+                </>
+            );
+        }
+
         if (actionRequired?.type === 'prompt_shift_for_speed_3') {
              return (
                 <>
@@ -152,6 +176,19 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
+        // NEW: Handle variable-count discard for custom protocols (Fire_custom-4)
+        if (actionRequired?.type === 'discard' && (actionRequired as any).variableCount && actionRequired.actor === 'player') {
+            return (
+                <button
+                    className="btn"
+                    onClick={() => onResolveFire4Discard(multiSelectedCardIds)}
+                    disabled={multiSelectedCardIds.length < 1}
+                >
+                    Confirm Discard ({multiSelectedCardIds.length})
+                </button>
+            );
+        }
+
         if (actionRequired?.type === 'plague_2_player_discard' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_hate_1') {
             let handler;
             let requiredCount = 0;
@@ -167,8 +204,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             }
 
             return (
-                <button 
-                    className="btn" 
+                <button
+                    className="btn"
                     onClick={() => handler(multiSelectedCardIds)}
                     disabled={multiSelectedCardIds.length < requiredCount}
                 >
@@ -225,6 +262,10 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             switch (actionRequired.type) {
                 case 'discard':
                     if (actionRequired.actor === 'player') {
+                        // NEW: Variable count discard (Fire_custom-4)
+                        if ((actionRequired as any).variableCount) {
+                            return 'Action: Select 1 or more cards to discard';
+                        }
                         return `Action: Discard ${actionRequired.count} card(s) from your hand`;
                     } else {
                         return 'Waiting for Opponent to discard...';
@@ -293,6 +334,13 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a covered card to flip in this lane';
                 case 'prompt_fire_3_discard':
                     return 'End Phase: Discard 1 card to flip 1 card?';
+                case 'prompt_optional_discard_custom':
+                    return `Optional: Discard ${actionRequired.count} card(s) to continue?`;
+                case 'prompt_optional_effect': {
+                    const effectAction = (actionRequired as any).effectDef?.params?.action || 'effect';
+                    const effectCount = (actionRequired as any).effectDef?.params?.count;
+                    return `Optional: Execute ${effectAction}${effectCount ? ` ${effectCount}` : ''}?`;
+                }
                 case 'select_card_to_flip_for_fire_3':
                     return 'Action: Select a card to flip';
                 case 'prompt_shift_for_speed_3':

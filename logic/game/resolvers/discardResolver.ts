@@ -109,14 +109,27 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const newStats = { ...playerState.stats, cardsDiscarded: playerState.stats.cardsDiscarded + discardedCards.length };
     const newPlayerState = { ...playerState, hand: newHand, discard: newDiscard, stats: newStats };
 
-    let newState = { 
-        ...prevState, 
-        [player]: newPlayerState, 
-        stats: { 
-            ...prevState.stats, 
+    // CRITICAL: Preserve followUpEffect and conditionalType from originalAction before clearing
+    // They will be needed by handleChainedEffectsOnDiscard later
+    const followUpEffect = (originalAction as any)?.followUpEffect;
+    const conditionalType = (originalAction as any)?.conditionalType;
+    const previousHandSize = (originalAction as any)?.previousHandSize;
+
+    let newState = {
+        ...prevState,
+        [player]: newPlayerState,
+        stats: {
+            ...prevState.stats,
             [player]: newStats,
         },
-        actionRequired: null 
+        actionRequired: followUpEffect ? {
+            type: 'discard_completed',
+            followUpEffect,
+            conditionalType,
+            previousHandSize,
+            sourceCardId: originalAction?.sourceCardId,
+            actor: player,
+        } as any : null
     };
 
     // IMPORTANT: Set context from source card if this discard was caused by an effect
@@ -267,13 +280,24 @@ export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard:
 };
 
 export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): GameState => {
-    if (prevState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_fire_4') return prevState;
+    // Handle both original Fire-4 and custom protocol variable discard
+    const isCustomProtocol = prevState.actionRequired?.type === 'discard' && (prevState.actionRequired as any)?.variableCount;
+    const isOriginalFire4 = prevState.actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4';
+
+    if (!isCustomProtocol && !isOriginalFire4) return prevState;
 
     // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
     const player = prevState.actionRequired.actor;
+    const sourceCardId = prevState.actionRequired.sourceCardId;
 
     let newState = discardCards(prevState, cardIds, player);
 
+    // For custom protocols, use handleChainedEffectsOnDiscard to process followUpEffect
+    if (isCustomProtocol && sourceCardId) {
+        return handleChainedEffectsOnDiscard(newState, player, undefined, sourceCardId);
+    }
+
+    // Original Fire-4 logic
     const amountToDraw = cardIds.length + 1;
     newState = log(newState, player, `Fire-4: Drawing ${amountToDraw} card(s).`);
     newState = drawForPlayer(newState, player, amountToDraw);

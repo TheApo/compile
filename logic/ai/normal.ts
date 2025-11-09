@@ -329,20 +329,46 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_delete_for_anarchy_2': {
-            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
-            // Can target ANY card (covered or uncovered), prioritize player cards
-            const allPlayerCards = state.player.lanes.flat();
-            const allOpponentCards = state.opponent.lanes.flat();
+            // Anarchy-2: "Delete a covered or uncovered FACE-UP card in a line with a matching protocol"
+            // CRITICAL: Only FACE-UP cards can be selected (covered or uncovered)
+            // Card's protocol must match the lane protocol
 
-            if (allPlayerCards.length > 0) {
-                // Normal AI: Pick random player card (cardResolver will validate matching protocol)
-                const randomCard = allPlayerCards[Math.floor(Math.random() * allPlayerCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
+            // Helper to check if card's protocol matches the lane protocol
+            const hasMatchingProtocol = (card: PlayedCard, owner: Player, laneIndex: number): boolean => {
+                const laneProtocol = state[owner].protocols[laneIndex];
+                return card.protocol === laneProtocol;
+            };
+
+            // Get all face-up player cards with matching protocol
+            const validPlayerCards: PlayedCard[] = [];
+            state.player.lanes.forEach((lane, laneIndex) => {
+                lane.forEach(card => {
+                    if (card.isFaceUp && hasMatchingProtocol(card, 'player', laneIndex)) {
+                        validPlayerCards.push(card);
+                    }
+                });
+            });
+
+            if (validPlayerCards.length > 0) {
+                // Normal AI: Pick a somewhat strategic card (highest value)
+                const sorted = validPlayerCards.sort((a, b) => b.value - a.value);
+                return { type: 'deleteCard', cardId: sorted[0].id };
             }
 
-            if (allOpponentCards.length > 0) {
-                const randomCard = allOpponentCards[Math.floor(Math.random() * allOpponentCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
+            // Fallback: Get all face-up opponent cards with matching protocol
+            const validOpponentCards: PlayedCard[] = [];
+            state.opponent.lanes.forEach((lane, laneIndex) => {
+                lane.forEach(card => {
+                    if (card.isFaceUp && hasMatchingProtocol(card, 'opponent', laneIndex)) {
+                        validOpponentCards.push(card);
+                    }
+                });
+            });
+
+            if (validOpponentCards.length > 0) {
+                // Pick lowest value to minimize self-damage
+                const sorted = validOpponentCards.sort((a, b) => a.value - b.value);
+                return { type: 'deleteCard', cardId: sorted[0].id };
             }
 
             return { type: 'skip' };

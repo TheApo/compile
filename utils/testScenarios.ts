@@ -1375,6 +1375,269 @@ const scenario28_Darkness1FlipSpeed3: TestScenario = {
     }
 };
 
+/**
+ * Szenario 29: Fire_custom-1 und Fire_custom-2 Conditional Test
+ *
+ * Setup:
+ * - Player has Fire_custom protocol in Lane 0
+ * - Player has Fire_custom-1 and Fire_custom-2 in hand
+ * - Player has extra cards to discard
+ * - Opponent has at least one card in each lane (face-up for targeting)
+ * - Player's Turn, Action Phase
+ *
+ * Test: Fire_custom-1 and Fire_custom-2 "if_executed" conditional logic
+ * Expected for Fire_custom-1:
+ *   1. Player plays Fire_custom-1 in Lane 0
+ *   2. [Middle Effect] "Discard 1 card. If you did, delete 1 uncovered card."
+ *   3. Player discards a card
+ *   4. Because discard succeeded, player can delete 1 uncovered card
+ *   5. Player selects and deletes an opponent's card
+ *
+ * Expected for Fire_custom-2:
+ *   1. Player plays Fire_custom-2 in Lane 0
+ *   2. [Middle Effect] "Discard 1 card. If you did, return 1 uncovered card to its owner's hand."
+ *   3. Player discards a card
+ *   4. Because discard succeeded, player can return 1 uncovered card
+ *   5. Player selects and returns an opponent's card
+ */
+export const scenario29_FireCustomConditional: TestScenario = {
+    name: "Fire_custom-1 & Fire_custom-2 Conditional Test",
+    description: "🆕 Fire_custom-1 (discard -> delete) & Fire_custom-2 (discard -> return) if_executed logic",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: Fire_custom-1, Fire_custom-2 in hand + cards to discard
+        newState.player.hand = [
+            createCard('Fire_custom', 1, true),
+            createCard('Fire_custom', 2, true),
+            createCard('Fire_custom', 0, true),  // Discard target 1
+            createCard('Fire_custom', 3, true), // Discard target 2
+            createCard('Fire_custom', 4, true),  // Extra card
+            createCard('Fire_custom', 5, true),  // Extra card
+        ];
+
+        // Opponent: At least one card in each lane (face-up for targeting)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+
+        // Add some covered cards too (for more realistic test)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 1, true)); // On top of Metal-3
+
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 30: Anarchy_custom Test Playground
+ *
+ * Setup:
+ * - Player has Anarchy_custom protocol in Lane 0
+ * - Player has all Anarchy_custom cards in hand (0, 1, 2, 3, 5, 6)
+ * - Opponent has cards on board for testing
+ * - Player's Turn, Action Phase
+ */
+export const scenario30_AnarchyCustomPlayground: TestScenario = {
+    name: "Anarchy_custom Test Playground",
+    description: "🆕 All Anarchy_custom cards on hand for testing",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Anarchy_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Anarchy_custom cards in hand
+        newState.player.hand = [
+            createCard('Anarchy_custom', 0, true),
+            createCard('Anarchy_custom', 1, true),
+            createCard('Anarchy_custom', 2, true),
+            createCard('Anarchy_custom', 3, true),
+            createCard('Anarchy_custom', 5, true),
+            createCard('Anarchy_custom', 6, true),
+        ];
+
+        // Opponent: At least one card in each lane (mixed face-up/down for testing)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, false)); // Face-down
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+
+        // Add some covered cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 1, true)); // On top of Metal-3
+
+        // Player cards on board for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 31: Dark_cust Test Playground
+ *
+ * Setup:
+ * - Player has Dark_cust protocol in Lane 0
+ * - Player has all Dark_cust cards in hand (0, 1, 2, 3, 4, 5)
+ * - Opponent has cards on board for testing
+ * - Player's Turn, Action Phase
+ */
+export const scenario31_DarkCustPlayground: TestScenario = {
+    name: "Dark_cust Test Playground",
+    description: "🆕 All Dark_cust cards on hand for testing",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Dark_cust', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Dark_cust cards in hand
+        newState.player.hand = [
+            createCard('Dark_cust', 0, true),
+            createCard('Dark_cust', 1, true),
+            createCard('Dark_cust', 2, true),
+            createCard('Dark_cust', 3, true),
+            createCard('Dark_cust', 4, true),
+            createCard('Dark_cust', 5, true),
+        ];
+
+        // Opponent: At least one card in each lane (mixed face-up/down for testing)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, false)); // Face-down
+
+        // Add some covered cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 1, true)); // On top of Metal-3
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, false)); // Face-down covered
+
+        // Player cards on board for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 32: Apathy_custom Test Playground
+ *
+ * Setup:
+ * - Player has Apathy_custom protocol in Lane 0
+ * - Player has all Apathy_custom cards in hand (0, 1, 2, 3, 4, 5)
+ * - Opponent has cards on board for testing
+ * - Player's Turn, Action Phase
+ */
+export const scenario32_ApathyCustomPlayground: TestScenario = {
+    name: "Apathy_custom Test Playground",
+    description: "🆕 All Apathy_custom cards on hand for testing",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Apathy_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Apathy_custom cards in hand
+        newState.player.hand = [
+            createCard('Apathy_custom', 0, true),
+            createCard('Apathy_custom', 1, true),
+            createCard('Apathy_custom', 2, true),
+            createCard('Apathy_custom', 3, true),
+            createCard('Apathy_custom', 4, true),
+            createCard('Apathy_custom', 5, true),
+        ];
+
+        // Opponent: At least one card in each lane (mixed face-up/down for testing)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+
+        // Add some covered cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 1, true)); // On top of Metal-3
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 1, false)); // Face-down covered
+
+        // Player cards on board for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 33: Death_custom Test Playground
+ *
+ * Setup:
+ * - Player has Death_custom protocol in Lane 0
+ * - Player has all Death_custom cards in hand (0, 1, 2, 3, 4, 5)
+ * - Opponent has cards on board for testing (including value 0-1 for Death-4)
+ * - Player's Turn, Action Phase
+ */
+export const scenario33_DeathCustomPlayground: TestScenario = {
+    name: "Death_custom Test Playground",
+    description: "🆕 All Death_custom cards on hand for testing",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Death_cust', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Death_custom cards in hand
+        newState.player.hand = [
+            createCard('Death_cust', 0, true),
+            createCard('Death_cust', 1, true),
+            createCard('Death_cust', 2, true),
+            createCard('Death_cust', 3, true),
+            createCard('Death_cust', 4, true),
+            createCard('Death_cust', 5, true),
+        ];
+
+        // Opponent: At least one card in each lane (including value 0-1 for Death-4 testing)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 0, true)); // Value 0 for Death-4
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 1, true)); // Value 1 for Death-4
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 3, true));
+
+        // Add some covered cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, true)); // On top of Metal-0
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, false)); // Face-down covered
+
+        // Player cards on board for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -1404,4 +1667,9 @@ export const allScenarios: TestScenario[] = [
     scenario26_DarkCust1FlipShift,
     scenario27_DarkCust1FlipSpeed3,
     scenario28_Darkness1FlipSpeed3,
+    scenario29_FireCustomConditional,
+    scenario30_AnarchyCustomPlayground,
+    scenario31_DarkCustPlayground,
+    scenario32_ApathyCustomPlayground,
+    scenario33_DeathCustomPlayground,
 ];

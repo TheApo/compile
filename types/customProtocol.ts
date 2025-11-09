@@ -167,11 +167,12 @@ export interface DiscardEffectParams {
 export interface ReturnEffectParams {
     action: 'return';
     count: number | 'all';  // 1-6 or all
-    targetFilter: {
+    targetFilter?: {
         valueEquals?: number;  // Return all cards with value X
         position?: 'any';
+        owner?: 'own' | 'opponent' | 'any';  // NEW: whose cards to return (default: 'any')
     };
-    scope: {
+    scope?: {
         type: 'any_card' | 'cards_in_lane';
         laneSelection?: 'prompt';
     };

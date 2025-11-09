@@ -122,7 +122,7 @@
             "action": "rearrange_protocols",
             "target": "own",
             "restriction": {
-              "disallowedProtocol": "Anarchy",
+              "disallowedProtocol": "Anarchy_custom",
               "laneIndex": "current"
             }
           },

@@ -470,6 +470,28 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
+    const resolveOptionalDiscardCustomPrompt = useCallback((accept: boolean) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveOptionalDiscardCustomPrompt(prev, accept);
+            if (!accept) {
+                return turnProgressionCb(nextState);
+            }
+            return nextState;
+        });
+    }, [getTurnProgressionCallback]);
+
+    const resolveOptionalEffectPrompt = useCallback((accept: boolean) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveOptionalEffectPrompt(prev, accept);
+            if (!accept) {
+                return turnProgressionCb(nextState);
+            }
+            return nextState;
+        });
+    }, [getTurnProgressionCallback]);
+
     const resolveSpeed3Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
@@ -483,7 +505,12 @@ export const useGameState = (
 
     const resolveFire4Discard = useCallback((cardIds: string[]) => {
         setGameState(prev => {
-            if (prev.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_fire_4') return prev;
+            // Support both original Fire-4 and custom protocol variable discard
+            const isOriginalFire4 = prev.actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4';
+            const isCustomProtocol = prev.actionRequired?.type === 'discard' && (prev.actionRequired as any)?.variableCount;
+
+            if (!isOriginalFire4 && !isCustomProtocol) return prev;
+
              return {
                 ...prev,
                 animationState: { type: 'discardCard', owner: 'player', cardIds: cardIds, originalAction: prev.actionRequired }
@@ -899,6 +926,7 @@ export const useGameState = (
                     resolvePlague4Flip: (s, a) => resolvers.resolvePlague4Flip(s, a, 'opponent'),
                     resolvePlague2Discard: resolvers.resolvePlague2OpponentDiscard,
                     resolveFire3Prompt: resolvers.resolveFire3Prompt,
+                    resolveOptionalDiscardCustomPrompt: resolvers.resolveOptionalDiscardCustomPrompt,
                     resolveSpeed3Prompt: resolvers.resolveSpeed3Prompt,
                     resolveFire4Discard: resolvers.resolveFire4Discard,
                     resolveHate1Discard: resolvers.resolveHate1Discard,
@@ -988,11 +1016,11 @@ export const useGameState = (
         });
     }, [gameState.turn, gameState.phase]);
 
-    return { 
-        gameState, selectedCard, setSelectedCard, playSelectedCard, fillHand, 
+    return {
+        gameState, selectedCard, setSelectedCard, playSelectedCard, fillHand,
         discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane,
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
-        resolvePlague4Flip, resolveFire3Prompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
+        resolvePlague4Flip, resolveFire3Prompt, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
         resolveRearrangeProtocols, resolveSpeed3Prompt, resolveOptionalDrawPrompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
         resolveControlMechanicPrompt,

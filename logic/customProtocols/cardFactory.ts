@@ -45,6 +45,28 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 text = 'Refresh your hand. ';
             }
 
+            // NEW: Handle dynamic count types (Fire-4, Chaos-4)
+            if (params.countType === 'equal_to_discarded') {
+                const offset = params.countOffset || 0;
+                if (offset === 1) {
+                    text += 'Draw the amount discarded plus 1.';
+                } else if (offset === 0) {
+                    text += 'Draw the amount discarded.';
+                } else {
+                    text += `Draw the amount discarded plus ${offset}.`;
+                }
+                mainText = text;
+                break;
+            } else if (params.countType === 'equal_to_card_value') {
+                text += "Draw cards equal to that card's value.";
+                mainText = text;
+                break;
+            } else if (params.countType === 'hand_size') {
+                text += 'Draw the same amount of cards.';
+                mainText = text;
+                break;
+            }
+
             // NEW: Handle optional draw (Death-1: "You may draw...")
             const optionalPrefix = params.optional ? 'You may ' : '';
 
@@ -279,10 +301,13 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 countText = `${params.count} ${cardWord}`;
             }
 
+            // NEW: Handle optional discard (Fire-3: "You may discard 1 card")
+            const mayPrefix = params.optional ? 'You may discard' : 'Discard';
+
             if (params.actor === 'opponent') {
                 mainText = `Opponent discards ${countText}.`;
             } else {
-                mainText = `Discard ${countText}.`;
+                mainText = `${mayPrefix} ${countText}.`;
             }
             break;
         }
@@ -300,8 +325,16 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             const countText = params.count === 'all' ? 'all cards' : params.count === 1 ? '1 card' : `${params.count} cards`;
+            const owner = params.targetFilter?.owner || 'any';
 
-            mainText = `Return ${countText} to hand.`;
+            let ownerText = '';
+            if (owner === 'own') {
+                ownerText = ' of your own';
+            } else if (owner === 'opponent') {
+                ownerText = " of opponent's";
+            }
+
+            mainText = `Return ${countText}${ownerText} to hand.`;
             break;
         }
 

@@ -1183,13 +1183,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_card_to_delete_for_anarchy_2': {
-            // Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
-            // UNIQUE: Can target ANY card (covered or uncovered), not just top cards
+            // Anarchy-2: "Delete a covered or uncovered FACE-UP card in a line with a matching protocol"
+            // CRITICAL: Only FACE-UP cards can be selected (covered or uncovered)
+            // Card's protocol must match the lane protocol
+
+            // Helper to check if card's protocol matches the lane protocol
+            const hasMatchingProtocol = (card: PlayedCard, owner: Player, laneIndex: number): boolean => {
+                const laneProtocol = state[owner].protocols[laneIndex];
+                return card.protocol === laneProtocol;
+            };
+
             const targets: { card: PlayedCard; owner: Player; laneIndex: number; score: number }[] = [];
 
-            // Evaluate ALL player cards (covered and uncovered)
+            // Evaluate ALL FACE-UP player cards with matching protocol (covered and uncovered)
             state.player.lanes.forEach((lane, laneIndex) => {
                 lane.forEach((card, cardIndexInLane) => {
+                    // CRITICAL: Only face-up cards with matching protocol
+                    if (!card.isFaceUp || !hasMatchingProtocol(card, 'player', laneIndex)) return;
+
                     // Score based on card threat, lane value, and whether it's covered
                     const isUncovered = cardIndexInLane === lane.length - 1;
                     const baseThreat = getCardThreat(card, 'player', state);
@@ -1205,9 +1216,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 });
             });
 
-            // Also consider own cards (fallback if no player cards available)
+            // Also consider own FACE-UP cards with matching protocol (fallback)
             state.opponent.lanes.forEach((lane, laneIndex) => {
                 lane.forEach((card, cardIndexInLane) => {
+                    // CRITICAL: Only face-up cards with matching protocol
+                    if (!card.isFaceUp || !hasMatchingProtocol(card, 'opponent', laneIndex)) return;
+
                     const isUncovered = cardIndexInLane === lane.length - 1;
                     const baseThreat = getCardThreat(card, 'opponent', state);
                     // Penalty for deleting own cards (negative score)

@@ -46,6 +46,25 @@ export function executeCustomEffect(
             return { newState: state };
         }
     }
+
+    // CRITICAL: Handle optional effects BEFORE executing them
+    // If params.optional === true, create a prompt instead of executing directly
+    // This works for ALL effect types (discard, flip, delete, shift, return, etc.)
+    if (params.optional === true) {
+        console.log(`[Custom Effect] Optional effect detected (${action}) - creating prompt`);
+        let newState = { ...state };
+        newState.actionRequired = {
+            type: 'prompt_optional_effect',
+            actor: context.cardOwner,
+            sourceCardId: card.id,
+            // Store the complete effect definition for later execution
+            effectDef: effectDef,
+            // Store laneIndex for later execution
+            laneIndex: laneIndex,
+        } as any;
+        return { newState };
+    }
+
     let result: EffectResult;
 
     switch (action) {
@@ -104,23 +123,22 @@ export function executeCustomEffect(
     // Handle conditional follow-up effects
     if (effectDef.conditional && effectDef.conditional.thenEffect) {
         const { newState } = result;
-        console.log('[Custom Effect] Effect has conditional follow-up:', effectDef.id, 'Action created?', !!newState.actionRequired);
+        console.log('[Custom Effect] Effect has conditional follow-up:', effectDef.id, 'Conditional type:', effectDef.conditional.type, 'Action created?', !!newState.actionRequired);
 
         if (newState.actionRequired) {
             // Store the conditional for later execution (after user completes the action)
             console.log('[Custom Effect] Storing follow-up effect for later execution:', effectDef.conditional.thenEffect.id);
 
-            // DEBUG: Add visible log message for Death-1
-            let debugState = newState;
-            if (effectDef.id === 'death-1-optional-draw' || effectDef.id === 'death-1-delete-other') {
-                debugState = log(newState, context.actor, `[DEBUG] Storing followUp: ${effectDef.conditional.thenEffect.id}`);
-            }
-
-            debugState.actionRequired = {
-                ...debugState.actionRequired,
-                followUpEffect: effectDef.conditional.thenEffect,
-            } as any;
-            result = { newState: debugState };
+            // CRITICAL: Store conditional type so we know if it's if_executed or then
+            const stateWithFollowUp = {
+                ...newState,
+                actionRequired: {
+                    ...newState.actionRequired,
+                    followUpEffect: effectDef.conditional.thenEffect,
+                    conditionalType: effectDef.conditional.type, // NEW: Store conditional type (if_executed or then)
+                } as any
+            };
+            result = { newState: stateWithFollowUp };
         } else {
             // Effect completed immediately, execute conditional now
             console.log('[Custom Effect] Executing conditional follow-up effect immediately');
@@ -421,6 +439,11 @@ function executeFlipEffect(
     // Standard flip (select target)
     const targetFilter = params.targetFilter || {};
 
+    // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
+    // This matches the game rules: "flip 1 card" means "flip 1 uncovered card"
+    // Only if explicitly set to 'any' or 'covered' should covered cards be included
+    const position = targetFilter.position || 'uncovered';
+
     // CRITICAL: Check if there are any valid targets before setting actionRequired
     // This prevents softlocks when no valid targets exist
     const validTargets: string[] = [];
@@ -440,9 +463,9 @@ function executeFlipEffect(
                 // Check owner
                 if (targetFilter.owner === 'own' && player !== cardOwner) continue;
                 if (targetFilter.owner === 'opponent' && player === cardOwner) continue;
-                // Check position
-                if (targetFilter.position === 'uncovered' && !isUncovered) continue;
-                if (targetFilter.position === 'covered' && isUncovered) continue;
+                // Check position (using default 'uncovered' if not specified)
+                if (position === 'uncovered' && !isUncovered) continue;
+                if (position === 'covered' && isUncovered) continue;
                 // Check faceState
                 if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
                 if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
@@ -513,6 +536,9 @@ function executeDeleteEffect(
 
     // CRITICAL: Check if there are any valid targets before setting actionRequired
     const targetFilter = params.targetFilter || {};
+    // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
+    const position = targetFilter.position || 'uncovered';
+
     const validTargets: string[] = [];
     for (const player of ['player', 'opponent'] as const) {
         for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
@@ -526,9 +552,9 @@ function executeDeleteEffect(
                 // Check owner
                 if (targetFilter.owner === 'own' && player !== actor) continue;
                 if (targetFilter.owner === 'opponent' && player === actor) continue;
-                // Check position
-                if (targetFilter.position === 'uncovered' && !isUncovered) continue;
-                if (targetFilter.position === 'covered' && isUncovered) continue;
+                // Check position (using default 'uncovered' if not specified)
+                if (position === 'uncovered' && !isUncovered) continue;
+                if (position === 'covered' && isUncovered) continue;
                 // Check faceState
                 if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
                 if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
@@ -702,6 +728,9 @@ function executeDiscardEffect(
         return { newState: state };
     }
 
+    // NOTE: Optional handling is now done centrally in executeCustomEffect
+    // No need for special optional logic here anymore
+
     let newState = { ...state };
     newState.actionRequired = {
         type: 'discard',
@@ -856,23 +885,34 @@ function executeReturnEffect(
     context: EffectContext,
     params: any
 ): EffectResult {
-    const { cardOwner } = context;
+    const { cardOwner, opponent } = context;
     const count = params.count === 'all' ? 99 : (params.count || 1);
+    const owner = params.targetFilter?.owner || 'any';
 
-    // CRITICAL: Check if player has any cards on board to return
-    const playerCardsOnBoard = state[cardOwner].lanes.flat();
-    if (playerCardsOnBoard.length === 0) {
+    // CRITICAL: Check if there are cards on board matching the owner filter
+    let availableCards: PlayedCard[] = [];
+    if (owner === 'own') {
+        availableCards = state[cardOwner].lanes.flat();
+    } else if (owner === 'opponent') {
+        availableCards = state[opponent].lanes.flat();
+    } else { // 'any'
+        availableCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+    }
+
+    if (availableCards.length === 0) {
         let newState = log(state, cardOwner, `No cards on board to return. Effect skipped.`);
         return { newState };
     }
 
     let newState = log(state, cardOwner, `[Custom Return effect - selecting ${count} card(s) to return]`);
 
+    // FIX: Use 'select_card_to_return' (same as Fire-2)
+    // Pass owner filter so UI can restrict clickable cards
     newState.actionRequired = {
-        type: 'select_own_cards_to_return',
-        count,
+        type: 'select_card_to_return',
         sourceCardId: card.id,
         actor: cardOwner,
+        targetOwner: owner, // NEW: Pass owner filter to UI
     } as any;
 
     return { newState };
