@@ -148,6 +148,96 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
         });
     };
 
+    const handleToggleNestedConditional = (enabled: boolean) => {
+        if (!effect.conditional) return;
+        if (enabled) {
+            const nestedThenEffect: EffectDefinition = {
+                id: uuidv4(),
+                params: createDefaultParams('delete'),
+                position: effect.position,
+                trigger: effect.trigger,
+            };
+            onChange({
+                ...effect,
+                conditional: {
+                    ...effect.conditional,
+                    thenEffect: {
+                        ...effect.conditional.thenEffect,
+                        conditional: {
+                            type: 'then',
+                            thenEffect: nestedThenEffect,
+                        },
+                    },
+                },
+            });
+        } else {
+            const { conditional: nestedConditional, ...rest } = effect.conditional.thenEffect;
+            onChange({
+                ...effect,
+                conditional: {
+                    ...effect.conditional,
+                    thenEffect: rest as EffectDefinition,
+                },
+            });
+        }
+    };
+
+    const handleNestedConditionalTypeChange = (newType: 'then' | 'if_executed') => {
+        if (!effect.conditional?.thenEffect.conditional) return;
+        onChange({
+            ...effect,
+            conditional: {
+                ...effect.conditional,
+                thenEffect: {
+                    ...effect.conditional.thenEffect,
+                    conditional: {
+                        ...effect.conditional.thenEffect.conditional,
+                        type: newType,
+                    },
+                },
+            },
+        });
+    };
+
+    const handleNestedConditionalEffectChange = (updatedNestedEffect: EffectDefinition) => {
+        if (!effect.conditional?.thenEffect.conditional) return;
+        onChange({
+            ...effect,
+            conditional: {
+                ...effect.conditional,
+                thenEffect: {
+                    ...effect.conditional.thenEffect,
+                    conditional: {
+                        ...effect.conditional.thenEffect.conditional,
+                        thenEffect: updatedNestedEffect,
+                    },
+                },
+            },
+        });
+    };
+
+    const handleNestedConditionalActionChange = (action: EffectActionType) => {
+        if (!effect.conditional?.thenEffect.conditional) return;
+        const newParams = createDefaultParams(action);
+        const updatedNestedEffect: EffectDefinition = {
+            ...effect.conditional.thenEffect.conditional.thenEffect,
+            params: newParams,
+        };
+        onChange({
+            ...effect,
+            conditional: {
+                ...effect.conditional,
+                thenEffect: {
+                    ...effect.conditional.thenEffect,
+                    conditional: {
+                        ...effect.conditional.thenEffect.conditional,
+                        thenEffect: updatedNestedEffect,
+                    },
+                },
+            },
+        });
+    };
+
     const renderEffectParams = (effectToRender: EffectDefinition, onChange: (params: any) => void) => {
         switch (effectToRender.params.action) {
             case 'draw':
@@ -279,6 +369,84 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                             {renderEffectParams(
                                 effect.conditional.thenEffect,
                                 (newParams) => handleConditionalEffectChange({ ...effect.conditional!.thenEffect, params: newParams })
+                            )}
+                        </div>
+
+                        {/* Nested Follow-Up Effect (2nd level) */}
+                        <div className="nested-conditional-section" style={{ marginTop: '15px', borderTop: '1px solid rgba(97, 239, 255, 0.2)', paddingTop: '15px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={!!effect.conditional.thenEffect.conditional}
+                                    onChange={(e) => handleToggleNestedConditional(e.target.checked)}
+                                />
+                                <strong>Add 2nd follow-up effect</strong>
+                            </label>
+
+                            {effect.conditional.thenEffect.conditional && (
+                                <div className="nested-follow-up-effect" style={{ marginLeft: '10px', padding: '10px', backgroundColor: '#1A113B', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.2)' }}>
+                                    <h5 style={{ marginTop: 0, fontSize: '0.9rem' }}>2nd Follow-Up Effect</h5>
+
+                                    <label>
+                                        Connection Type
+                                        <select
+                                            value={effect.conditional.thenEffect.conditional.type || 'then'}
+                                            onChange={(e) => handleNestedConditionalTypeChange(e.target.value as 'then' | 'if_executed')}
+                                            style={{
+                                                width: '100%',
+                                                padding: '6px',
+                                                marginTop: '5px',
+                                                marginBottom: '10px',
+                                                backgroundColor: '#0D0825',
+                                                color: '#F0F0F0',
+                                                border: '1px solid rgba(97, 239, 255, 0.3)',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer',
+                                                fontSize: '0.9rem'
+                                            }}
+                                        >
+                                            <option value="then">Then (always executes)</option>
+                                            <option value="if_executed">If you do (only if first effect succeeds)</option>
+                                        </select>
+                                    </label>
+
+                                    <label>
+                                        Effect Type
+                                        <select
+                                            value={effect.conditional.thenEffect.conditional.thenEffect.params.action}
+                                            onChange={(e) => handleNestedConditionalActionChange(e.target.value as EffectActionType)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '6px',
+                                                marginTop: '5px',
+                                                backgroundColor: '#0D0825',
+                                                color: '#F0F0F0',
+                                                border: '1px solid rgba(97, 239, 255, 0.3)',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer',
+                                                fontSize: '0.9rem'
+                                            }}
+                                        >
+                                            <option value="draw">Draw Cards</option>
+                                            <option value="flip">Flip Cards</option>
+                                            <option value="shift">Shift Card</option>
+                                            <option value="delete">Delete Cards</option>
+                                            <option value="discard">Discard Cards</option>
+                                            <option value="return">Return to Hand</option>
+                                            <option value="play">Play from Hand/Deck</option>
+                                            <option value="reveal">Reveal Hand</option>
+                                            <option value="give">Give Cards</option>
+                                            <option value="take">Take from Hand</option>
+                                        </select>
+                                    </label>
+
+                                    <div style={{ marginTop: '10px' }}>
+                                        {renderEffectParams(
+                                            effect.conditional.thenEffect.conditional.thenEffect,
+                                            (newParams) => handleNestedConditionalEffectChange({ ...effect.conditional!.thenEffect.conditional!.thenEffect, params: newParams })
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

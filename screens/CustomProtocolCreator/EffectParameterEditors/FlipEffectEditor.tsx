@@ -12,6 +12,9 @@ interface FlipEffectEditorProps {
 }
 
 export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onChange }) => {
+    // Ensure targetFilter exists
+    const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'any', excludeSelf: false };
+
     return (
         <div className="param-editor flip-effect-editor">
             <h4>Flip Effect Parameters</h4>
@@ -127,9 +130,9 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 Owner
                 <select
-                    value={params.targetFilter.owner}
+                    value={targetFilter.owner}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, owner: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, owner: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -141,9 +144,9 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 Position
                 <select
-                    value={params.targetFilter.position}
+                    value={targetFilter.position}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, position: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, position: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -156,9 +159,9 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 Face State
                 <select
-                    value={params.targetFilter.faceState}
+                    value={targetFilter.faceState}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, faceState: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, faceState: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -170,9 +173,9 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 <input
                     type="checkbox"
-                    checked={params.targetFilter.excludeSelf}
+                    checked={targetFilter.excludeSelf}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, excludeSelf: e.target.checked } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, excludeSelf: e.target.checked } })
                     }
                 />
                 Exclude self ("other cards")
@@ -199,15 +202,18 @@ const generateFlipText = (params: FlipEffectParams): string => {
         return text;
     }
 
+    // Ensure targetFilter exists
+    const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'any', excludeSelf: false };
+
     const may = params.optional ? 'May flip' : 'Flip';
     let targetDesc = '';
 
-    if (params.targetFilter.owner === 'opponent') targetDesc = "opponent's ";
-    if (params.targetFilter.position === 'covered') targetDesc += 'covered ';
-    if (params.targetFilter.position === 'uncovered') targetDesc += 'uncovered ';
-    if (params.targetFilter.faceState === 'face_down') targetDesc += 'face-down ';
-    if (params.targetFilter.faceState === 'face_up') targetDesc += 'face-up ';
-    if (params.targetFilter.excludeSelf) targetDesc += 'other ';
+    if (targetFilter.owner === 'opponent') targetDesc = "opponent's ";
+    if (targetFilter.position === 'covered') targetDesc += 'covered ';
+    if (targetFilter.position === 'uncovered') targetDesc += 'uncovered ';
+    if (targetFilter.faceState === 'face_down') targetDesc += 'face-down ';
+    if (targetFilter.faceState === 'face_up') targetDesc += 'face-up ';
+    if (targetFilter.excludeSelf) targetDesc += 'other ';
 
     let countText = '';
     if (params.count === 'all') {

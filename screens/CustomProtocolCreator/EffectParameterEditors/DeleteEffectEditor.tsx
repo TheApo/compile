@@ -12,6 +12,9 @@ interface DeleteEffectEditorProps {
 }
 
 export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, onChange }) => {
+    // Ensure targetFilter exists
+    const targetFilter = params.targetFilter || { position: 'uncovered', faceState: 'any' };
+
     return (
         <div className="param-editor delete-effect-editor">
             <h4>Delete Effect Parameters</h4>
@@ -35,7 +38,16 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                     checked={params.excludeSelf}
                     onChange={e => onChange({ ...params, excludeSelf: e.target.checked })}
                 />
-                Exclude self (kann sich selbst nicht löschen)
+                Exclude self (other cards only)
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.deleteSelf || false}
+                    onChange={e => onChange({ ...params, deleteSelf: e.target.checked })}
+                />
+                Delete this card (ignores all other settings)
             </label>
 
             <h5>Target Filter</h5>
@@ -43,9 +55,9 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             <label>
                 Position
                 <select
-                    value={params.targetFilter.position}
+                    value={targetFilter.position}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, position: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, position: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -57,9 +69,9 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             <label>
                 Face State
                 <select
-                    value={params.targetFilter.faceState}
+                    value={targetFilter.faceState}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, faceState: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, faceState: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -71,10 +83,10 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             <label>
                 Owner
                 <select
-                    value={params.targetFilter.owner || 'any'}
+                    value={targetFilter.owner || 'any'}
                     onChange={e => {
                         const val = e.target.value;
-                        const newFilter = { ...params.targetFilter };
+                        const newFilter = { ...targetFilter };
                         if (val === 'any') {
                             delete newFilter.owner;
                         } else {
@@ -92,10 +104,10 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             <label>
                 Calculation
                 <select
-                    value={params.targetFilter.calculation || 'none'}
+                    value={targetFilter.calculation || 'none'}
                     onChange={e => {
                         const val = e.target.value;
-                        const newFilter = { ...params.targetFilter };
+                        const newFilter = { ...targetFilter };
                         if (val === 'none') {
                             delete newFilter.calculation;
                         } else {
@@ -113,10 +125,10 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             <label>
                 Value Range (specific values to target)
                 <select
-                    value={params.targetFilter.valueRange ? `${params.targetFilter.valueRange.min}-${params.targetFilter.valueRange.max}` : 'none'}
+                    value={targetFilter.valueRange ? `${targetFilter.valueRange.min}-${targetFilter.valueRange.max}` : 'none'}
                     onChange={e => {
                         const val = e.target.value;
-                        const newFilter = { ...params.targetFilter };
+                        const newFilter = { ...targetFilter };
                         if (val === 'none') {
                             delete newFilter.valueRange;
                         } else if (val === '0-1') {
@@ -231,25 +243,28 @@ const generateDeleteText = (params: DeleteEffectParams): string => {
         text += `${params.count} `;
     }
 
-    if (params.targetFilter.calculation === 'highest_value') {
+    // Ensure targetFilter exists
+    const targetFilter = params.targetFilter || { position: 'uncovered', faceState: 'any' };
+
+    if (targetFilter.calculation === 'highest_value') {
         text += 'highest value ';
-    } else if (params.targetFilter.calculation === 'lowest_value') {
+    } else if (targetFilter.calculation === 'lowest_value') {
         text += 'lowest value ';
     }
 
-    if (params.targetFilter.valueRange) {
-        text += `value ${params.targetFilter.valueRange.min}-${params.targetFilter.valueRange.max} `;
+    if (targetFilter.valueRange) {
+        text += `value ${targetFilter.valueRange.min}-${targetFilter.valueRange.max} `;
     }
 
-    if (params.targetFilter.position === 'covered') {
+    if (targetFilter.position === 'covered') {
         text += 'covered ';
-    } else if (params.targetFilter.position === 'uncovered') {
+    } else if (targetFilter.position === 'uncovered') {
         text += 'uncovered ';
     }
 
-    if (params.targetFilter.faceState === 'face_down') {
+    if (targetFilter.faceState === 'face_down') {
         text += 'face-down ';
-    } else if (params.targetFilter.faceState === 'face_up') {
+    } else if (targetFilter.faceState === 'face_up') {
         text += 'face-up ';
     }
 
@@ -270,9 +285,9 @@ const generateDeleteText = (params: DeleteEffectParams): string => {
     }
 
     // Add owner info
-    if (params.targetFilter.owner === 'own') {
+    if (targetFilter.owner === 'own') {
         text += ' (your cards)';
-    } else if (params.targetFilter.owner === 'opponent') {
+    } else if (targetFilter.owner === 'opponent') {
         text += ' (opponent\'s cards)';
     }
 

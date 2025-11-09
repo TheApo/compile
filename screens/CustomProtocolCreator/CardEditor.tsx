@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomCardDefinition, EffectDefinition, EffectActionType, CardPattern } from '../../types/customProtocol';
 import { v4 as uuidv4 } from 'uuid';
 import { EffectEditor } from './EffectEditor';
@@ -33,6 +33,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
     } | null>(null);
 
     const [showValidationModal, setShowValidationModal] = useState(false);
+
+    // Close effect editor when card changes
+    useEffect(() => {
+        setEditingEffect(null);
+    }, [card.value]);
 
     const handleAddEffect = (box: BoxType, action: EffectActionType, trigger: 'passive' | 'on_play' | 'start' | 'end' | 'on_cover') => {
         const newEffect: EffectDefinition = {
@@ -174,12 +179,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     text = 'Refresh your hand. ';
                 }
 
+                const mayPrefix = params.optional ? 'You may ' : '';
                 if (params.source === 'opponent_deck') {
-                    text += `Draw ${params.count} card${params.count !== 1 ? 's' : ''} from opponent's deck.`;
+                    text += `${mayPrefix}draw ${params.count} card${params.count !== 1 ? 's' : ''} from opponent's deck`;
                 } else if (params.target === 'opponent') {
-                    text += `Opponent draws ${params.count} card${params.count !== 1 ? 's' : ''}.`;
+                    text += `Opponent ${params.optional ? 'may draw' : 'draws'} ${params.count} card${params.count !== 1 ? 's' : ''}`;
                 } else {
-                    text += `Draw ${params.count} card${params.count !== 1 ? 's' : ''}.`;
+                    text += `${mayPrefix}draw ${params.count} card${params.count !== 1 ? 's' : ''}`;
                 }
 
                 mainText = text;
@@ -266,6 +272,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
             }
 
             case 'delete': {
+                // Special case: deleteSelf
+                if (params.deleteSelf) {
+                    mainText = 'delete this card';
+                    break;
+                }
+
                 // Match DeleteEffectEditor's generateDeleteText
                 let text = 'Delete ';
 
@@ -283,6 +295,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
 
                 if (params.targetFilter?.valueRange) {
                     text += `value ${params.targetFilter.valueRange.min}-${params.targetFilter.valueRange.max} `;
+                }
+
+                // Add "other" if excludeSelf is true
+                if (params.excludeSelf) {
+                    text += 'other ';
                 }
 
                 if (params.targetFilter?.position === 'covered') {
@@ -308,11 +325,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     text += ' from each other line';
                 }
 
-                if (params.excludeSelf) {
-                    text += ' (excluding self)';
-                }
-
-                mainText = text + '.';
+                mainText = text;
                 break;
             }
 
@@ -508,19 +521,34 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
             }
 
             case 'value_modifier': {
-                const modifierType = params.modifier?.type || 'add_per_condition';
-                const value = params.modifier?.value || 0;
-                const target = params.modifier?.target || 'own_total';
+                const mod = params.modifier;
+                const modifierType = mod?.type || 'add_per_condition';
 
                 switch (modifierType) {
-                    case 'add_per_condition':
-                        mainText = value >= 0 ? `+${value} value per condition` : `${value} value per condition`;
+                    case 'add_per_condition': {
+                        const scopeText = mod.scope === 'this_lane' ? 'in this line' : '';
+                        const targetText = mod.target === 'own_total' ? 'Your total value' :
+                                          mod.target === 'opponent_total' ? "Opponent's total value" :
+                                          'Total value';
+
+                        let conditionText = '';
+                        if (mod.condition === 'per_face_down_card') {
+                            conditionText = 'for each face-down card';
+                        } else if (mod.condition === 'per_face_up_card') {
+                            conditionText = 'for each face-up card';
+                        } else if (mod.condition === 'per_card') {
+                            conditionText = 'for each card';
+                        }
+
+                        const sign = mod.value >= 0 ? '+' : '';
+                        mainText = `${targetText} ${scopeText} is increased by ${sign}${mod.value} ${conditionText} ${scopeText}.`.replace(/\s+/g, ' ');
                         break;
+                    }
                     case 'set_to_fixed':
-                        mainText = `Set cards to value ${value}`;
+                        mainText = `Set cards to value ${mod?.value || 0}`;
                         break;
                     case 'add_to_total':
-                        mainText = value >= 0 ? `+${value} to total` : `${value} to total`;
+                        mainText = (mod?.value || 0) >= 0 ? `+${mod?.value || 0} to total` : `${mod?.value || 0} to total`;
                         break;
                     default:
                         mainText = 'Value modifier active';

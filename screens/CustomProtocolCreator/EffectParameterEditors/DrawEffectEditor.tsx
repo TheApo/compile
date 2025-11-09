@@ -91,6 +91,15 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             </label>
 
             <label>
+                <input
+                    type="checkbox"
+                    checked={params.optional || false}
+                    onChange={e => onChange({ ...params, optional: e.target.checked })}
+                />
+                Optional ("You may draw" instead of "Draw")
+            </label>
+
+            <label>
                 Conditional
                 <select
                     value={params.conditional?.type || 'none'}
