@@ -52,6 +52,8 @@ export const CustomProtocolCreator: React.FC<CustomProtocolCreatorProps> = ({ on
         deleteCustomProtocol(id);
         invalidateCardCache(); // Clear cache so Protocol Selection reloads
         loadProtocols();
+        setView('list');
+        setEditingProtocol(undefined);
     };
 
     const handleSave = (protocol: CustomProtocolDefinition) => {
@@ -87,7 +89,12 @@ export const CustomProtocolCreator: React.FC<CustomProtocolCreatorProps> = ({ on
             )}
 
             {(view === 'create' || view === 'edit') && (
-                <ProtocolWizard onSave={handleSave} onCancel={handleCancel} initialProtocol={editingProtocol} />
+                <ProtocolWizard
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                    onDelete={handleDelete}
+                    initialProtocol={editingProtocol}
+                />
             )}
         </div>
     );

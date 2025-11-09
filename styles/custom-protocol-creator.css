@@ -684,13 +684,18 @@
     background-color: var(--surface-hover);
     border-radius: 6px;
     margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .card-preview .card-header h3 {
     margin: 0;
+    padding: 0;
     color: var(--text-color);
     font-size: 1.3rem;
     font-family: 'Orbitron', sans-serif;
+    line-height: 1.2;
 }
 
 .card-box {

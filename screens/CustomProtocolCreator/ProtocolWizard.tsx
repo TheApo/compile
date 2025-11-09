@@ -162,6 +162,7 @@ const getPatternPreviewStyle = (pattern: CardPattern, color: string): React.CSSP
 interface ProtocolWizardProps {
     onSave: (protocol: CustomProtocolDefinition) => void;
     onCancel: () => void;
+    onDelete?: (protocolId: string) => void;
     initialProtocol?: CustomProtocolDefinition;
 }
 
@@ -204,11 +205,12 @@ const CARD_PATTERNS = [
     { name: 'Stripes', value: 'stripes', description: 'Diagonal stripe pattern' },
 ];
 
-export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel, initialProtocol }) => {
+export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel, onDelete, initialProtocol }) => {
     const [step, setStep] = useState<WizardStep>('name');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportJson, setExportJson] = useState('');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     console.log('ProtocolWizard render - initialProtocol:', initialProtocol);
 
@@ -283,6 +285,13 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
         };
 
         onSave(protocol);
+    };
+
+    const handleDelete = () => {
+        if (initialProtocol && onDelete) {
+            onDelete(initialProtocol.id);
+        }
+        setShowDeleteModal(false);
     };
 
     const handleExport = () => {
@@ -498,36 +507,46 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                         Cancel
                     </button>
 
-                    {step !== 'name' && step !== 'cards' && (
-                        <button onClick={handlePreviousStep} className="btn btn-back">
-                            Back
-                        </button>
-                    )}
-
-                    {step === 'cards' && (
-                        <button onClick={handlePreviousStep} className="btn btn-back">
-                            Back to Pattern
+                    {initialProtocol && onDelete && (
+                        <button onClick={() => setShowDeleteModal(true)} className="btn btn-delete">
+                            Delete Protocol
                         </button>
                     )}
                 </div>
 
                 <div className="wizard-actions-right">
-                    {step === 'cards' && (
-                        <button onClick={handleExport} className="btn btn-export">
-                            Export JSON
-                        </button>
+                    {/* For existing protocols: always show Export JSON and Save */}
+                    {initialProtocol && (
+                        <>
+                            <button onClick={handleExport} className="btn btn-export">
+                                Export JSON
+                            </button>
+                            <button onClick={handleFinish} className="btn">
+                                Save
+                            </button>
+                        </>
                     )}
 
-                    {step !== 'cards' && (
-                        <button onClick={handleNextStep} className="btn">
-                            Next
-                        </button>
-                    )}
+                    {/* For new protocols: show Next until cards step, then Save */}
+                    {!initialProtocol && (
+                        <>
+                            {step !== 'cards' && (
+                                <button onClick={handleNextStep} className="btn">
+                                    Next
+                                </button>
+                            )}
 
-                    {step === 'cards' && (
-                        <button onClick={handleFinish} className="btn">
-                            Finish
-                        </button>
+                            {step === 'cards' && (
+                                <>
+                                    <button onClick={handleExport} className="btn btn-export">
+                                        Export JSON
+                                    </button>
+                                    <button onClick={handleFinish} className="btn">
+                                        Save
+                                    </button>
+                                </>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -553,6 +572,28 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                             </button>
                             <button onClick={handleCopyJson} className="btn">
                                 Copy to Clipboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Protocol Modal */}
+            {showDeleteModal && (
+                <div className="custom-protocol-modal-overlay" onClick={() => setShowDeleteModal(false)}>
+                    <div className="custom-protocol-modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h3>Delete Protocol</h3>
+                        <p>Are you sure you want to delete "{protocolName}"?</p>
+                        <p style={{ color: 'var(--danger-color)', fontSize: '0.9rem' }}>
+                            This action cannot be undone.
+                        </p>
+
+                        <div className="custom-protocol-modal-actions">
+                            <button onClick={() => setShowDeleteModal(false)} className="btn btn-back">
+                                Cancel
+                            </button>
+                            <button onClick={handleDelete} className="btn btn-delete">
+                                Delete
                             </button>
                         </div>
                     </div>

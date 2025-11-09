@@ -140,6 +140,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
 
         switch (params.action) {
             case 'draw': {
+                // Handle dynamic count types (Fire-4)
+                if (params.countType === 'equal_to_discarded') {
+                    const offset = params.countOffset || 0;
+                    if (offset === 0) {
+                        mainText = 'draw the amount discarded';
+                    } else if (offset > 0) {
+                        mainText = `draw the amount discarded plus ${offset}`;
+                    } else {
+                        mainText = `draw the amount discarded minus ${Math.abs(offset)}`;
+                    }
+                    break;
+                }
+
                 // Match DrawEffectEditor's generateDrawText
                 if (params.conditional) {
                     switch (params.conditional.type) {
@@ -524,7 +537,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
         // Handle conditional follow-up effects
         if (effect.conditional && effect.conditional.thenEffect) {
             const followUpText = getEffectSummary(effect.conditional.thenEffect);
-            mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
+
+            // Distinguish between "then" (sequential) and "if_executed" (conditional)
+            if (effect.conditional.type === 'then') {
+                mainText = `${mainText} Then ${followUpText.toLowerCase()}`;
+            } else if (effect.conditional.type === 'if_executed') {
+                mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
+            } else {
+                // Default fallback
+                mainText = `${mainText} ${followUpText}`;
+            }
         }
 
         return mainText;

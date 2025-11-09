@@ -99,7 +99,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
             onChange({
                 ...effect,
                 conditional: {
-                    type: 'if_you_do',
+                    type: 'then', // Default to 'then'
                     thenEffect,
                 },
             });
@@ -108,6 +108,17 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
             const { conditional, ...rest } = effect;
             onChange(rest as EffectDefinition);
         }
+    };
+
+    const handleConditionalTypeChange = (newType: 'then' | 'if_executed') => {
+        if (!effect.conditional) return;
+        onChange({
+            ...effect,
+            conditional: {
+                ...effect.conditional,
+                type: newType,
+            },
+        });
     };
 
     const handleConditionalEffectChange = (updatedThenEffect: EffectDefinition) => {
@@ -205,12 +216,34 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                         checked={!!effect.conditional}
                         onChange={(e) => handleToggleConditional(e.target.checked)}
                     />
-                    <strong>Add follow-up effect (If you do)</strong>
+                    <strong>Add follow-up effect</strong>
                 </label>
 
                 {effect.conditional && (
                     <div className="follow-up-effect" style={{ marginLeft: '20px', padding: '10px', backgroundColor: '#2c1d63', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.2)' }}>
                         <h4 style={{ marginTop: 0 }}>Follow-Up Effect</h4>
+
+                        <label>
+                            Connection Type
+                            <select
+                                value={effect.conditional.type || 'then'}
+                                onChange={(e) => handleConditionalTypeChange(e.target.value as 'then' | 'if_executed')}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px',
+                                    marginTop: '5px',
+                                    marginBottom: '15px',
+                                    backgroundColor: '#1A113B',
+                                    color: '#F0F0F0',
+                                    border: '1px solid rgba(97, 239, 255, 0.3)',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="then">Then (always executes)</option>
+                                <option value="if_executed">If you do (only if first effect succeeds)</option>
+                            </select>
+                        </label>
 
                         <label>
                             Effect Type
