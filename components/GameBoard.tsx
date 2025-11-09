@@ -8,6 +8,8 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
+import { hasRequireNonMatchingProtocolRule } from '../logic/game/passiveRuleChecker';
+import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface GameBoardProps {
     gameState: GameState;
@@ -75,9 +77,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
             .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
 
+        // NEW: Check for custom cards with require_non_matching_protocol passive rule
+        const hasCustomNonMatchingRule = hasRequireNonMatchingProtocolRule(gameState);
+
         let isMatching: boolean;
-        if (anyPlayerHasAnarchy1) {
-            // Anarchy-1 active: INVERTED rule - can only play face-up if protocol does NOT match
+        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+            // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = card.protocol !== player.protocols[laneIndex] && card.protocol !== opponent.protocols[laneIndex];
             isMatching = doesNotMatch && !opponentHasPsychic1;
         } else {
@@ -94,13 +99,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         if (opponentHasMetalTwo && !isMatching) {
             return { isPlayable: false, isMatching: false, isCompilable };
         }
-    
+
+        // CRITICAL: Force face-down play if required by effect (e.g., Darkness-3, Dark_cust-3)
+        if (isPlayFromEffect && (actionRequired.isFaceDown || (actionRequired as any).faceDown)) {
+            return { isPlayable: true, isMatching: false, isCompilable };
+        }
+
         return { isPlayable: true, isMatching, isCompilable };
     }
 
     const getLaneEffectTargetability = (targetLaneIndex: number): boolean => {
         if (!actionRequired || actionRequired.actor !== 'player') return false;
         switch (actionRequired.type) {
+            case 'select_lane_for_delete':
             case 'select_lane_for_death_2':
             case 'select_lane_for_water_3':
                 return true;
@@ -202,10 +213,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         return classes.join(' ');
     }
 
-    const getFaceDownValue = (lane: PlayedCard[]): number => {
-        const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
-        return hasDarkness2 ? 4 : 2;
-    };
 
     const getControlCoinClass = () => {
         if (controlCardHolder === 'player') return 'player-controlled';
@@ -243,22 +250,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             <div className={`player-side opponent-side ${turn === 'opponent' ? 'active-turn' : ''}`}>
                 <div className="lanes">
                     {opponent.lanes.map((laneCards, i) => {
-                        const faceDownValue = getFaceDownValue(laneCards);
-                        return <Lane 
-                            key={`opp-lane-${i}`} 
-                            cards={laneCards} 
-                            isPlayable={false} 
-                            isCompilable={false} 
+                        return <Lane
+                            key={`opp-lane-${i}`}
+                            cards={laneCards}
+                            isPlayable={false}
+                            isCompilable={false}
                             isShiftTarget={getLaneShiftTargetability(i, 'opponent')}
                             isEffectTarget={getLaneEffectTargetability(i)}
                             onLanePointerDown={() => onLanePointerDown(i)}
-                            onCardPointerDown={(card) => onCardPointerDown(card, 'opponent', i)} 
-                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')} 
-                            onCardPointerLeave={() => onCardPointerLeave()} 
-                            owner="opponent" 
+                            onCardPointerDown={(card) => onCardPointerDown(card, 'opponent', i)}
+                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')}
+                            onCardPointerLeave={() => onCardPointerLeave()}
+                            owner="opponent"
                             animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
-                            faceDownValue={faceDownValue}
+                            laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
                         />
@@ -304,24 +310,23 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 <div className="lanes">
                     {player.lanes.map((laneCards, i) => {
                         const { isPlayable, isMatching, isCompilable } = getLanePlayability(i);
-                        const faceDownValue = getFaceDownValue(laneCards);
-                        return <Lane 
-                            key={`player-lane-${i}`} 
-                            cards={laneCards} 
-                            isPlayable={isPlayable} 
-                            isMatching={isMatching} 
-                            isCompilable={isCompilable} 
+                        return <Lane
+                            key={`player-lane-${i}`}
+                            cards={laneCards}
+                            isPlayable={isPlayable}
+                            isMatching={isMatching}
+                            isCompilable={isCompilable}
                             isShiftTarget={getLaneShiftTargetability(i, 'player')}
                             isEffectTarget={getLaneEffectTargetability(i)}
-                            onLanePointerDown={() => onLanePointerDown(i)} 
+                            onLanePointerDown={() => onLanePointerDown(i)}
                             onPlayFaceDown={() => onPlayFaceDown(i)}
-                            onCardPointerDown={(card) => onCardPointerDown(card, 'player', i)} 
-                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')} 
-                            onCardPointerLeave={() => onCardPointerLeave()} 
-                            owner="player" 
+                            onCardPointerDown={(card) => onCardPointerDown(card, 'player', i)}
+                            onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')}
+                            onCardPointerLeave={() => onCardPointerLeave()}
+                            owner="player"
                             animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
-                            faceDownValue={faceDownValue}
+                            laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
                         />

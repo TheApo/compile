@@ -70,6 +70,58 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 Then flip this card
             </label>
 
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.flipSelf || false}
+                    onChange={e => onChange({ ...params, flipSelf: e.target.checked })}
+                />
+                Flip this card (instead of selecting target)
+            </label>
+
+            <h5>Advanced Conditional</h5>
+
+            <label>
+                Conditional Type
+                <select
+                    value={params.advancedConditional?.type || ''}
+                    onChange={e => {
+                        if (e.target.value === '') {
+                            const { advancedConditional, ...rest } = params;
+                            onChange(rest as FlipEffectParams);
+                        } else {
+                            onChange({
+                                ...params,
+                                advancedConditional: { type: e.target.value as any }
+                            });
+                        }
+                    }}
+                >
+                    <option value="">None</option>
+                    <option value="protocol_match">Only if in specific protocol line</option>
+                </select>
+            </label>
+
+            {params.advancedConditional?.type === 'protocol_match' && (
+                <label>
+                    Required Protocol
+                    <input
+                        type="text"
+                        value={params.advancedConditional.protocol || ''}
+                        onChange={e =>
+                            onChange({
+                                ...params,
+                                advancedConditional: {
+                                    ...params.advancedConditional!,
+                                    protocol: e.target.value
+                                }
+                            })
+                        }
+                        placeholder="e.g., Anarchy, Fire, Death"
+                    />
+                </label>
+            )}
+
             <h5>Target Filter</h5>
 
             <label>
@@ -134,6 +186,19 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
 };
 
 const generateFlipText = (params: FlipEffectParams): string => {
+    // NEW: Flip self mode
+    if (params.flipSelf) {
+        let text = params.optional ? 'May flip this card' : 'Flip this card';
+
+        // Add conditional
+        if (params.advancedConditional?.type === 'protocol_match') {
+            text += `, if this card is in the line with the ${params.advancedConditional.protocol || '[Protocol]'} protocol`;
+        }
+
+        text += '.';
+        return text;
+    }
+
     const may = params.optional ? 'May flip' : 'Flip';
     let targetDesc = '';
 

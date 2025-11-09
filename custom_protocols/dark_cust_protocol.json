@@ -1,0 +1,194 @@
+{
+  "id": "dark_cust_v2",
+  "name": "Dark_cust",
+  "description": "Custom Darkness protocol - manipulate face-down cards, flip and shift",
+  "author": "System",
+  "createdAt": "2025-01-08T00:00:00Z",
+  "color": "#1a0033",
+  "pattern": "grid",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "dark-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 3,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "dark-0-shift",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "covered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "dark-1-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": false,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "dark-1-shift",
+          "params": {
+            "action": "shift",
+            "optional": true,
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "useCardFromPreviousEffect": true
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "dark-2-value-modifier",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "set_to_fixed",
+              "value": 4,
+              "target": "own_cards",
+              "scope": "this_lane",
+              "filter": {
+                "faceState": "face_down",
+                "position": "any"
+              }
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "dark-2-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "scope": "this_lane",
+            "targetFilter": {
+              "owner": "any",
+              "position": "covered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "dark-3-play",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "other_lines",
+              "excludeCurrentLane": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "dark-4-shift",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "face_down",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "dark-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

@@ -11,6 +11,54 @@ import { recalculateAllLaneValues } from '../stateManager';
 import { performCompile } from './miscResolver';
 import { performFillHand } from './playResolver';
 import * as phaseManager from '../phaseManager';
+import { canRearrangeProtocols } from '../passiveRuleChecker';
+import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+
+// NEW: Generic optional draw prompt resolver (composable for any card)
+export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean): GameState => {
+    if (prevState.actionRequired?.type !== 'prompt_optional_draw') return prevState;
+
+    const { sourceCardId, actor, count, drawingPlayer } = prevState.actionRequired as any;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    let newState = { ...prevState };
+
+    if (accept) {
+        newState = log(newState, actor, `${actorName} chooses to draw ${count} card${count !== 1 ? 's' : ''}.`);
+        // Execute the draw
+        newState = drawForPlayer(newState, drawingPlayer || actor, count);
+
+        // Check if there's a follow-up effect from conditional chaining
+        const followUpEffect = (prevState.actionRequired as any).followUpEffect;
+        if (followUpEffect) {
+            // DEBUG: Add visible log
+            newState = log(newState, actor, `[DEBUG] Draw accepted, executing followUp: ${followUpEffect.id}`);
+
+            // Execute the follow-up effect (e.g., delete other card)
+            const sourceCard = findCardOnBoard(newState, sourceCardId);
+            if (sourceCard) {
+                const laneIndex = newState[sourceCard.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
+                const opponent = actor === 'player' ? 'opponent' : 'player';
+                const context = {
+                    cardOwner: actor,
+                    actor,
+                    currentTurn: newState.turn,
+                    opponent,
+                    triggerType: 'start' as const
+                };
+                const result = executeCustomEffect(sourceCard.card, laneIndex, newState, context, followUpEffect);
+                newState = result.newState;
+            } else {
+                newState.actionRequired = null;
+            }
+        } else {
+            newState.actionRequired = null;
+        }
+    } else {
+        newState = log(newState, actor, `${actorName} skips the draw.`);
+        newState.actionRequired = null;
+    }
+    return newState;
+};
 
 export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
@@ -194,12 +242,14 @@ export const resolveRearrangeProtocols = (
 ): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_rearrange_protocols') return prevState;
 
-    const { target, actor, originalAction, sourceCardId, disallowedProtocolForLane } = prevState.actionRequired;
+    // NEW: Check passive rules for protocol rearrangement restrictions (Frost-1, custom cards)
+    const rearrangeCheck = canRearrangeProtocols(prevState);
+    if (!rearrangeCheck.allowed) {
+        console.error(`Protocol rearrangement blocked: ${rearrangeCheck.reason}`);
+        return prevState; // Block the rearrange
+    }
 
-    // NOTE: Frost-1 Bottom Effect is checked in the effect files (Water-2, Chaos-1, Anarchy-3)
-    // This fallback check is kept for safety in case an action somehow reaches here despite Frost-1
-    // (e.g., from queued actions or edge cases)
-    // This check should normally not trigger since effects check BEFORE creating the action
+    const { target, actor, originalAction, sourceCardId, disallowedProtocolForLane } = prevState.actionRequired;
 
     // CRITICAL VALIDATION for Anarchy-3 End Effect: "Anarchy cannot be on this line"
     if (disallowedProtocolForLane) {

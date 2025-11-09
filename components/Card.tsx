@@ -43,6 +43,12 @@ export const CardComponent: React.FC<CardProps> = ({ card, onPointerDown, onPoin
   if (card.protocol) {
     classNames.push(`card-protocol-${card.protocol.toLowerCase()}`);
   }
+  if (card.color) {
+    classNames.push('has-custom-color');
+  }
+  if (card.pattern) {
+    classNames.push(`card-pattern-${card.pattern}`);
+  }
   if (isSelected) classNames.push('selected');
   if (isMultiSelected) classNames.push('multi-selected');
   if (isDiscarding) classNames.push('is-discarding');
@@ -53,20 +59,27 @@ export const CardComponent: React.FC<CardProps> = ({ card, onPointerDown, onPoin
   if (isDrawing) classNames.push('is-drawing');
   if (additionalClassName) classNames.push(additionalClassName);
 
+  // Create inline styles for custom protocol colors
+  const customStyle: React.CSSProperties = { ...style };
+  if (card.color) {
+    // Set CSS variable without quotes for proper color parsing
+    (customStyle as any)['--card-custom-color'] = card.color;
+  }
+
   return (
-    <div 
-      className={classNames.join(' ')} 
-      onPointerDown={onPointerDown} 
+    <div
+      className={classNames.join(' ')}
+      onPointerDown={onPointerDown}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
-      role="button" 
+      role="button"
       tabIndex={onPointerDown ? 0 : -1}
-      style={style}
+      style={customStyle}
     >
       <div className={`card-inner ${!isFaceUp ? 'is-flipped' : ''}`}>
         <div className="card-face card-front">
           <div className="card-header">
-            <span className="card-protocol">{card.protocol}</span>
+            <span className={`card-protocol ${card.protocol.length <= 8 ? 'short-protocol' : ''}`}>{card.protocol.slice(0, 8)}</span>
             <span className="card-value">{card.value}</span>
           </div>
           <div className="card-body">

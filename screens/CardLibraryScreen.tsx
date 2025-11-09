@@ -3,27 +3,62 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Header } from '../components/Header';
 import { CardComponent } from '../components/Card';
-import { cards, Card as CardData, uniqueProtocols } from '../data/cards';
+import { cards as baseCards, Card as CardData, uniqueProtocols as baseUniqueProtocols } from '../data/cards';
 import { PlayedCard } from '../types';
+import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
+import { invalidateCardCache } from '../utils/gameLogic';
+import { isCustomProtocolEnabled } from '../utils/customProtocolSettings';
 
 interface CardLibraryScreenProps {
   onBack: () => void;
 }
 
 export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
-  const [previewCard, setPreviewCard] = useState<CardData>(cards[0]);
+  // Refresh tracker to force cards reload when custom protocols change
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Invalidate card cache on mount to load latest custom protocols
+  useEffect(() => {
+    invalidateCardCache();
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
+  // Merge base cards with custom protocol cards (only if enabled)
+  const cards = useMemo(() => {
+    console.log('[Card Library] Loading cards, refreshKey:', refreshKey);
+    const customEnabled = isCustomProtocolEnabled();
+    const customCards = customEnabled ? getAllCustomProtocolCards() : [];
+    const merged = [...baseCards, ...customCards];
+    console.log('[Card Library] Total cards:', merged.length, '(base:', baseCards.length, ', custom:', customCards.length, ', enabled:', customEnabled, ')');
+    return merged;
+  }, [refreshKey]);
+
+  // Get unique protocols from merged cards
+  const uniqueProtocols = useMemo(() => {
+    const protocolSet = new Set(cards.map(card => card.protocol));
+    return Array.from(protocolSet).sort();
+  }, [cards]);
+
+  const [previewCard, setPreviewCard] = useState<CardData | null>(null);
 
   // Get all unique categories dynamically
   const allCategories = useMemo(() => {
     const categorySet = new Set(cards.map(card => card.category));
     return Array.from(categorySet).sort();
-  }, []);
+  }, [cards]);
 
   // Filter state - by default all categories are enabled
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));
+
+  // Initialize preview card when cards are loaded
+  useEffect(() => {
+    if (cards.length > 0 && !previewCard) {
+      setPreviewCard(cards[0]);
+    }
+  }, [cards, previewCard]);
 
   // Toggle category filter
   const toggleCategory = (category: string) => {
@@ -50,7 +85,7 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
       const category = getProtocolCategory(protocol);
       return enabledCategories.has(category);
     });
-  }, [enabledCategories]);
+  }, [uniqueProtocols, enabledCategories, cards]);
 
   const cardsByProtocol = useMemo(() => {
     const grouped: Record<string, CardData[]> = {};
@@ -65,7 +100,7 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
         grouped[protocol].sort((a, b) => a.value - b.value);
     }
     return grouped;
-  }, []);
+  }, [cards]);
 
   const handleCardInteraction = (card: CardData) => {
     setPreviewCard(card);

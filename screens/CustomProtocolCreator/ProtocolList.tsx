@@ -288,43 +288,12 @@ export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateN
                     <div
                         key={protocol.id}
                         className="protocol-card"
-                        style={{ borderColor: protocol.color }}
+                        style={getPatternPreviewStyle(protocol.pattern, protocol.color)}
                         onClick={() => onEdit(protocol)}
                     >
-                        <div className="protocol-header" style={getPatternPreviewStyle(protocol.pattern, protocol.color)}>
-                            <div className="protocol-header-content">
-                                <h3>{protocol.name}</h3>
-                                {protocol.description && <p className="header-description">{protocol.description}</p>}
-                            </div>
-                        </div>
-
-                        <div className="protocol-body">
-                            <div className="protocol-meta">
-                                <span>{protocol.cards.length} cards</span>
-                                <span>Created: {new Date(protocol.createdAt).toLocaleDateString('en-US')}</span>
-                            </div>
-
-                            <div className="card-preview-mini">
-                                {protocol.cards.map(card => (
-                                    <div
-                                        key={card.value}
-                                        className="mini-card"
-                                        style={getPatternPreviewStyle(protocol.pattern, protocol.color)}
-                                        title={`${protocol.name}-${card.value}: ${card.topEffects.length + card.middleEffects.length + card.bottomEffects.length} effects`}
-                                    >
-                                        {card.value}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="protocol-actions" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => onEdit(protocol)} className="btn">
-                                Edit
-                            </button>
-                            <button onClick={() => handleDelete(protocol.id, protocol.name)} className="btn btn-delete">
-                                Delete
-                            </button>
+                        <div className="protocol-header-content">
+                            <h3>{protocol.name}</h3>
+                            {protocol.description && <p className="header-description">{protocol.description}</p>}
                         </div>
                     </div>
                 ))}

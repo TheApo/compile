@@ -69,6 +69,47 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                 </select>
             </label>
 
+            <label>
+                Condition
+                <select
+                    value={params.condition?.type || 'none'}
+                    onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'none') {
+                            const { condition, ...rest } = params;
+                            onChange(rest as PlayEffectParams);
+                        } else if (val === 'per_x_cards_in_line') {
+                            onChange({ ...params, condition: { type: val, cardCount: 2 } });
+                        } else {
+                            onChange({ ...params, condition: { type: val as any } });
+                        }
+                    }}
+                >
+                    <option value="none">None (always play)</option>
+                    <option value="per_x_cards_in_line">For every X cards in this line</option>
+                    <option value="only_in_lines_with_cards">Only in lines where you have a card</option>
+                </select>
+            </label>
+
+            {params.condition?.type === 'per_x_cards_in_line' && (
+                <label>
+                    Cards per play (X)
+                    <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        value={params.condition.cardCount || 2}
+                        onChange={e => onChange({
+                            ...params,
+                            condition: { ...params.condition!, cardCount: parseInt(e.target.value) || 2 }
+                        })}
+                    />
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Gravity-0: "For every 2 cards in this line, play..." → X = 2
+                    </small>
+                </label>
+            )}
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {generatePlayText(params)}
             </div>
@@ -91,7 +132,20 @@ const generatePlayText = (params: PlayEffectParams): string => {
         source = params.source === 'deck' ? 'from your deck' : 'from your hand';
     }
 
-    let text = `${actorText} ${params.count} ${cardWord} ${faceState} ${source}`;
+    let text = '';
+
+    // Add condition prefix
+    if (params.condition?.type === 'per_x_cards_in_line') {
+        const x = params.condition.cardCount || 2;
+        text = `For every ${x} cards in this line, `;
+        text += `${actorText.toLowerCase()} ${params.count} ${cardWord} ${faceState} ${source}`;
+    } else if (params.condition?.type === 'only_in_lines_with_cards') {
+        text = `${actorText} ${params.count} ${cardWord} ${faceState} ${source}`;
+        text += ' only in lines where you have a card';
+        return text + '.';
+    } else {
+        text = `${actorText} ${params.count} ${cardWord} ${faceState} ${source}`;
+    }
 
     if (params.destinationRule.type === 'other_lines') {
         text += ' to other lines';

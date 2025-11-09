@@ -1,0 +1,161 @@
+{
+  "id": "death_custom_v1",
+  "name": "Death_cust",
+  "description": "Custom Death protocol - delete cards with various conditions",
+  "author": "System",
+  "createdAt": "2025-01-09T00:00:00Z",
+  "color": "#8B0000",
+  "pattern": "stripes",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "death-0-delete-from-each-lane",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "scope": {
+              "type": "each_other_line"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "death-1-optional-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "optional": true
+          },
+          "position": "top",
+          "trigger": "start",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "death-1-delete-other",
+              "params": {
+                "action": "delete",
+                "count": 1,
+                "excludeSelf": true
+              },
+              "position": "top",
+              "trigger": "start",
+              "conditional": {
+                "type": "then",
+                "thenEffect": {
+                  "id": "death-1-delete-self",
+                  "params": {
+                    "action": "delete",
+                    "count": 1,
+                    "targetFilter": {
+                      "position": "any",
+                      "owner": "own"
+                    },
+                    "deleteSelf": true
+                  },
+                  "position": "top",
+                  "trigger": "start"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "death-2-delete-lane-values",
+          "params": {
+            "action": "delete",
+            "count": "all",
+            "selectLane": true,
+            "targetFilter": {
+              "faceState": "any",
+              "valueRange": {
+                "min": 1,
+                "max": 2
+              }
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "death-3-delete-facedown",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "face_down"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "death-4-delete-low-value",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "face_up",
+              "valueRange": {
+                "min": 0,
+                "max": 1
+              }
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "death-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

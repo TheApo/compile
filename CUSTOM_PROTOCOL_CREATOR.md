@@ -2,64 +2,106 @@
 
 ## Overview
 
-The Custom Protocol Creator allows players to design their own custom protocols by selecting and configuring modular effects. Custom protocols are stored in `localStorage` and can be used like Fan-Content protocols in the protocol selection screen.
+The Custom Protocol Creator allows players to design their own custom protocols by selecting and configuring modular effects. Custom protocols are stored in `localStorage` and can be used like original protocols in the protocol selection screen.
+
+**Key Features**:
+- Visual editor with parameter configuration for all effect types
+- Support for all effect positions (top/middle/bottom) and triggers
+- Conditional effects ("if you do, then..." chains)
+- Passive rules (ongoing restrictions)
+- Reactive triggers (respond to game events)
+- Value modifiers (dynamic card value changes)
+- Import/Export protocols as JSON files
+- Live validation and helpful error messages
+
+---
 
 ## Architecture
 
 ### 1. Type Definitions (`types/customProtocol.ts`)
 
-Defines the schema for custom protocols:
+Defines the complete schema for custom protocols:
 
-- **EffectParams**: Union type of all effect parameter interfaces
-  - `DrawEffectParams`: Draw cards (count, target, source, conditionals)
-  - `FlipEffectParams`: Flip cards (count, target filters, optional)
-  - `ShiftEffectParams`: Shift cards (target filters, destination restrictions)
-  - `DeleteEffectParams`: Delete cards (count, filters, scope, protocol matching)
-  - `DiscardEffectParams`: Discard from hand (count, actor, conditional)
-  - `ReturnEffectParams`: Return to hand (count, filters)
-  - `PlayEffectParams`: Play from hand/deck (count, face state, destination)
-  - `ProtocolEffectParams`: Rearrange/swap protocols (target, restrictions)
-  - `RevealEffectParams`: Reveal/give hand cards
+#### Effect Types
 
-- **EffectDefinition**: Single effect with parameters, position, and trigger
-- **CustomCardDefinition**: One card with value (0-5) and effects array
-- **CustomProtocolDefinition**: Complete protocol with 6 cards, name, description
+**All 9 Core Effect Types**:
+- `DrawEffectParams`: Draw cards (count, target, source, conditionals)
+- `FlipEffectParams`: Flip cards (count, target filters, optional, self-flip)
+- `ShiftEffectParams`: Shift cards (target filters, destination restrictions)
+- `DeleteEffectParams`: Delete cards (count, filters, scope, protocol matching)
+- `DiscardEffectParams`: Discard from hand (count, actor, conditional)
+- `ReturnEffectParams`: Return to hand (count, filters)
+- `PlayEffectParams`: Play from hand/deck (count, face state, destination)
+- `ProtocolEffectParams`: Rearrange/swap protocols (target, restrictions)
+- `RevealEffectParams`: Reveal/give hand cards (count, optional)
+- `TakeEffectParams`: Take cards from opponent's hand
+- `ChoiceEffectParams`: Let player choose between multiple effects
 
-### 2. Effect Generator (`logic/customProtocols/effectGenerator.ts`)
+#### Advanced Features
 
-Converts custom effect definitions into executable effect functions:
+- **Passive Rules** (`PassiveRuleParams`): Ongoing restrictions like "Opponent cannot compile if they have >3 cards in hand"
+- **Reactive Triggers** (`ReactiveTriggerParams`): Respond to events like "When opponent plays card, flip 1 card"
+- **Value Modifiers** (`ValueModifierParams`): Dynamic value changes like "+1 to all cards in this line"
+
+#### Effect Chaining
+
+- **Conditional Chains**: `conditional: { type: 'if_executed', thenEffect: {...} }`
+- **Sequential Chains**: `conditional: { type: 'then', thenEffect: {...} }`
+- **Follow-up Effects**: `followUpEffect: {...}` for complex sequences
+
+---
+
+### 2. Effect Interpreter (`logic/customProtocols/effectInterpreter.ts`)
+
+The core engine that executes custom protocol effects:
 
 ```typescript
-const generateEffect = (params: EffectParams) => {
-    return (card, laneIndex, state, context) => {
-        // Execute effect based on params.action
-        // Returns EffectResult with updated state
-    }
-}
+export function executeCustomEffect(
+    card: PlayedCard,
+    laneIndex: number,
+    state: GameState,
+    context: EffectContext,
+    effectDef: EffectDefinition
+): EffectResult
 ```
 
 **Key Features**:
-- Handles all 9 effect types (draw, flip, shift, delete, discard, return, play, protocol, reveal)
-- Respects game rules (Frost-1 blocking, Apathy-2, etc.)
+- Validates card state (face-up, uncovered) based on effect position
+- Handles all 9+ effect types with full parameter support
 - Generates appropriate `actionRequired` and `queuedActions`
+- Respects game rules (Frost-1, Apathy-2, Plague-0, etc.)
 - Produces human-readable log messages
+- Executes conditional chains and follow-up effects
+
+**Position-Based Execution**:
+- **Top effects**: Execute when card is face-up (even if covered)
+- **Middle effects**: Require uncovered status
+- **Bottom effects**: Require uncovered status
+
+---
 
 ### 3. Storage Manager (`logic/customProtocols/storage.ts`)
 
-Manages localStorage persistence:
+Manages localStorage persistence and protocol lifecycle:
 
 ```typescript
 // Load all custom protocols
 const protocols = loadCustomProtocols();
 
 // Save a protocol
-addCustomProtocol(protocolDefinition);
+saveCustomProtocol(protocolDefinition);
+
+// Update existing protocol
+updateCustomProtocol(id, protocolDefinition);
 
 // Delete a protocol
 deleteCustomProtocol(id);
 
-// Convert to CardData format
-const cards = customProtocolToCards(protocol);
+// Import from JSON
+importCustomProtocol(jsonString);
+
+// Export to JSON
+const json = exportCustomProtocol(protocol);
 ```
 
 **Storage Format**:
@@ -71,36 +113,94 @@ const cards = customProtocolToCards(protocol);
       "id": "uuid",
       "name": "Lightning",
       "description": "Fast and aggressive",
+      "color": "#FFEB7F",
+      "pattern": "hexagons",
       "author": "Player",
       "createdAt": "2025-11-05T...",
-      "cards": [...]
+      "cards": [
+        {
+          "value": 0,
+          "topEffects": [...],
+          "middleEffects": [...],
+          "bottomEffects": [...]
+        }
+      ]
     }
   ]
 }
 ```
 
-### 4. UI Component (`screens/CustomProtocolCreator.tsx`)
+---
 
-React component for creating/editing custom protocols:
+### 4. Card Factory (`logic/customProtocols/cardFactory.ts`)
 
-**Features**:
-- List view of existing custom protocols
+Converts custom protocol definitions to playable cards:
+
+```typescript
+export function getAllCustomProtocolCards(): Card[]
+```
+
+- Attaches `customEffects` to each card
+- Generates card text descriptions
+- Assigns colors and patterns
+- Creates unique card IDs
+
+---
+
+### 5. UI Components
+
+#### Main Screens
+
+**`screens/CustomProtocolCreator/ProtocolList.tsx`**:
+- List all custom protocols
 - Create new protocol
-- Edit protocol name and description
-- Add/remove effects for each card (0-5)
-- Save to localStorage
-- Delete protocols
+- Edit/Delete existing protocols
+- Import/Export JSON files
 
-**Workflow**:
-1. Click "Create New Protocol"
-2. Enter protocol name and description
-3. For each card (0-5), add effects by selecting from dropdown
-4. Effects are added with default parameters
-5. Save protocol
+**`screens/CustomProtocolCreator/ProtocolWizard.tsx`**:
+- Step-by-step protocol creation
+- Configure name, description, color, pattern
+- Navigate between cards (0-5)
+- Add/remove effects per card
 
-### 5. Styling (`styles/custom-protocol-creator.css`)
+**`screens/CustomProtocolCreator/CardEditor.tsx`**:
+- Edit single card's effects
+- Organize effects by position (top/middle/bottom)
+- Set triggers (on_play, start, end, on_cover)
+- Drag-and-drop reordering
 
-Responsive CSS for the creator UI with dark theme support.
+#### Effect Parameter Editors
+
+Each effect type has a dedicated editor:
+
+- `DrawEffectEditor.tsx`: Count, target, source, conditionals
+- `FlipEffectEditor.tsx`: Count, filters, optional, self-flip
+- `ShiftEffectEditor.tsx`: Target filters, destination
+- `DeleteEffectEditor.tsx`: Count, filters, scope, protocol matching
+- `DiscardEffectEditor.tsx`: Count, actor, conditional
+- `PlayEffectEditor.tsx`: Count, face state, destination
+- `ProtocolEffectEditor.tsx`: Rearrange/swap, target, restrictions
+- `ChoiceEffectEditor.tsx`: Multiple effect options
+- `PassiveRuleEditor.tsx`: Passive restrictions
+- `ValueModifierEditor.tsx`: Dynamic value changes
+
+**Common Features**:
+- Dropdown selections for enums
+- Number inputs with validation
+- Checkboxes for booleans
+- Nested editors for complex parameters
+- Live validation with error messages
+
+---
+
+### 6. Styling (`styles/custom-protocol-creator.css`)
+
+Comprehensive CSS for the creator UI:
+- Dark theme with protocol colors
+- Responsive layout
+- Card preview styling
+- Effect editor forms
+- Modal dialogs
 
 ---
 
@@ -108,537 +208,382 @@ Responsive CSS for the creator UI with dark theme support.
 
 ### Effect Positions
 
-Each effect has a **position** that determines where it appears on the card:
+Each effect has a **position** that determines activation rules:
 
 1. **Top Box** (`position: 'top'`)
    - Always active when card is face-up (even if covered)
-   - Example: Passive blocking effects
+   - Example: "Opponent cannot play cards with value > 4"
+   - Used for: Passive effects, ongoing restrictions
 
-2. **Middle Box** (`position: 'middle'`, `trigger: 'on_play'`)
-   - Executes when card is played or becomes uncovered
-   - Most common effect position
-   - Blocked by Apathy-2 in same line
+2. **Middle Box** (`position: 'middle'`)
+   - Only active when card is uncovered
+   - Default trigger: `on_play` (when played or uncovered)
+   - Blocked by Apathy-2 in same lane
+   - Example: "Draw 2 cards"
 
 3. **Bottom Box** (`position: 'bottom'`)
-   - Only active when card is uncovered (top of stack) AND face-up
-   - Has different triggers:
-     - `trigger: 'start'` - Start of turn
-     - `trigger: 'end'` - End of turn
-     - `trigger: 'on_cover'` - When about to be covered
+   - Only active when card is uncovered AND face-up
+   - Multiple triggers available:
+     - `start` - Start of turn
+     - `end` - End of turn
+     - `on_cover` - When about to be covered
+   - Example: "Start: Flip 1 card"
 
-### Effect Parameters
+### Effect Triggers
 
-Each effect type has specific parameters:
+- `on_play`: Executes when card is played or becomes uncovered (middle box)
+- `start`: Executes at start of turn (bottom box)
+- `end`: Executes at end of turn (bottom box)
+- `on_cover`: Executes when card is about to be covered (bottom box)
+- `on_uncover`: Executes when card becomes uncovered (middle box)
 
-#### Draw Effect
+### Conditional Effects
+
+**If-Then Chains**:
 ```typescript
 {
-  action: 'draw',
-  count: 1-6,
-  target: 'self' | 'opponent',
-  source: 'own_deck' | 'opponent_deck',
-  conditional?: {
-    type: 'count_face_down' | 'is_covering' | 'non_matching_protocols'
-  },
-  preAction?: 'refresh'  // Refresh hand first
-}
-```
-
-**Examples**:
-- `{ action: 'draw', count: 2, target: 'self', source: 'own_deck' }` → "Draw 2 cards."
-- `{ action: 'draw', count: 1, conditional: { type: 'count_face_down' } }` → "Draw 1 for each face-down card."
-
-#### Flip Effect
-```typescript
-{
-  action: 'flip',
-  count: 1-6,
-  targetFilter: {
-    owner: 'any' | 'own' | 'opponent',
-    position: 'any' | 'covered' | 'uncovered' | 'covered_in_this_line',
-    faceState: 'any' | 'face_up' | 'face_down',
-    excludeSelf: boolean
-  },
-  optional: boolean,
-  selfFlipAfter?: boolean
-}
-```
-
-**Examples**:
-- `{ action: 'flip', count: 1, targetFilter: { owner: 'opponent', position: 'any', faceState: 'any', excludeSelf: false }, optional: false }` → "Flip 1 opponent's card."
-- `{ action: 'flip', count: 2, targetFilter: { owner: 'any', position: 'covered', faceState: 'face_down', excludeSelf: true }, optional: true }` → "May flip 2 covered face-down other cards."
-
-#### Delete Effect
-```typescript
-{
-  action: 'delete',
-  count: 1-6 | 'all_in_lane',
-  targetFilter: {
-    position: 'uncovered' | 'covered' | 'any',
-    faceState: 'any' | 'face_up' | 'face_down',
-    valueRange?: { min: number, max: number },
-    calculation?: 'highest_value' | 'lowest_value'
-  },
-  scope?: {
-    type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line'
-  },
-  protocolMatching?: 'must_match' | 'must_not_match',
-  excludeSelf: boolean
-}
-```
-
-**Examples**:
-- `{ action: 'delete', count: 1, targetFilter: { position: 'uncovered', faceState: 'any' }, excludeSelf: true }` → "Delete 1 card."
-- `{ action: 'delete', count: 'all_in_lane', targetFilter: { position: 'any', faceState: 'any', valueRange: { min: 1, max: 2 } } }` → "Delete all cards with value 1 or 2 in 1 line."
-
-#### Protocol Effects
-```typescript
-{
-  action: 'rearrange_protocols' | 'swap_protocols',
-  target: 'own' | 'opponent' | 'both_sequential',
-  restriction?: {
-    disallowedProtocol: string,
-    laneIndex: number
-  }
-}
-```
-
-**Examples**:
-- `{ action: 'rearrange_protocols', target: 'own' }` → "Rearrange your protocols."
-- `{ action: 'swap_protocols', target: 'opponent' }` → "Swap 2 of opponent's protocols."
-
----
-
-## Integration with Protocol Selection
-
-To integrate custom protocols into the protocol selection system:
-
-### 1. Load Custom Protocols
-
-In `ProtocolSelection.tsx`:
-
-```typescript
-import { loadCustomProtocols, customProtocolToCards } from '../logic/customProtocols/storage';
-
-const customProtocols = loadCustomProtocols();
-```
-
-### 2. Add to Protocol List
-
-Add custom protocols to the existing protocol categories:
-
-```typescript
-const allProtocols = [
-  ...existingProtocols,
-  ...customProtocols.map(protocol => ({
-    name: protocol.name,
-    description: protocol.description,
-    category: 'Custom',  // or 'Fan-Content'
-    cards: customProtocolToCards(protocol),
-    isCustom: true,
-  }))
-];
-```
-
-### 3. Register Effects
-
-Custom protocol effects need to be registered at runtime:
-
-```typescript
-import { generateEffect } from '../logic/customProtocols/effectGenerator';
-import { effectRegistry } from '../logic/effects/effectRegistry';
-
-// For each custom protocol
-customProtocols.forEach(protocol => {
-  protocol.cards.forEach(card => {
-    card.effects.forEach(effect => {
-      // Register middle effects
-      if (effect.position === 'middle' && effect.trigger === 'on_play') {
-        const key = `${protocol.name}-${card.value}`;
-        effectRegistry[key] = generateEffect(effect.params);
-      }
-
-      // Similar for start, end, on-cover registries
-    });
-  });
-});
-```
-
-### 4. Handle Multiple Effects per Card
-
-The current implementation assumes one effect per card. For multiple effects:
-
-```typescript
-// Instead of single execute function, chain multiple:
-effectRegistry[`${protocol.name}-${card.value}`] = (card, laneIndex, state, context) => {
-  let result = { newState: state };
-
-  for (const effect of card.effects.filter(e => e.position === 'middle')) {
-    const effectFn = generateEffect(effect.params);
-    result = effectFn(card, laneIndex, result.newState, context);
-
-    // If action required, queue remaining effects
-    if (result.newState.actionRequired) {
-      const remainingEffects = card.effects.slice(card.effects.indexOf(effect) + 1);
-      result.newState.queuedActions = [
-        ...(result.newState.queuedActions || []),
-        ...remainingEffects.map(e => ({ type: 'custom_effect', effect: e }))
-      ];
-      break;
+  id: "draw-effect",
+  params: { action: "draw", count: 1, optional: true },
+  conditional: {
+    type: "if_executed",
+    thenEffect: {
+      id: "delete-effect",
+      params: { action: "delete", count: 1 }
     }
   }
-
-  return result;
-};
+}
 ```
+Generates: "You may draw 1 card. If you do, delete 1 card."
+
+**Sequential Chains**:
+```typescript
+{
+  id: "flip-effect",
+  params: { action: "flip", count: 1 },
+  conditional: {
+    type: "then",
+    thenEffect: {
+      id: "self-flip",
+      params: { action: "flip", count: 1, deleteSelf: true }
+    }
+  }
+}
+```
+Generates: "Flip 1 card. Flip this card."
 
 ---
 
-## Future Enhancements
+## Advanced Features
 
-### 1. Advanced Effect Configuration UI
+### Passive Rules
 
-Create detailed editors for each effect parameter:
-
-```tsx
-interface EffectConfiguratorProps {
-  effect: EffectDefinition;
-  onChange: (updated: EffectDefinition) => void;
-}
-
-const DrawEffectConfigurator: React.FC<{params: DrawEffectParams, onChange: ...}> = ({ params, onChange }) => {
-  return (
-    <div>
-      <label>
-        Count:
-        <input
-          type="number"
-          min={1}
-          max={6}
-          value={params.count}
-          onChange={e => onChange({ ...params, count: parseInt(e.target.value) })}
-        />
-      </label>
-
-      <label>
-        Target:
-        <select value={params.target} onChange={...}>
-          <option value="self">Self</option>
-          <option value="opponent">Opponent</option>
-        </select>
-      </label>
-
-      <label>
-        Conditional:
-        <select value={params.conditional?.type || 'none'} onChange={...}>
-          <option value="none">None</option>
-          <option value="count_face_down">1 per face-down card</option>
-          <option value="is_covering">If covering</option>
-        </select>
-      </label>
-    </div>
-  );
-};
-```
-
-### 2. Effect Chaining ("If you do, then...")
-
-Add conditional chaining:
+Ongoing restrictions that apply while card is active:
 
 ```typescript
-interface EffectDefinition {
-  // ... existing fields
-  conditional?: {
-    type: 'if_you_do';
-    thenEffect: EffectDefinition;  // Chained effect
-  };
+{
+  id: "passive-rule",
+  params: {
+    action: "passive_rule",
+    ruleType: "prevent_compile",
+    condition: {
+      type: "hand_size",
+      comparison: "greater_than",
+      value: 3
+    },
+    target: "opponent"
+  },
+  position: "top",
+  trigger: "on_play"
 }
 ```
 
-### 3. Card Preview
+**Available Rule Types**:
+- `prevent_compile`: Block compiling under conditions
+- `prevent_play`: Block playing cards
+- `prevent_draw`: Block drawing cards
+- `force_discard`: Force discards under conditions
 
-Show live preview of custom card with rendered text:
+### Reactive Triggers
 
-```tsx
-<CardComponent
-  card={{
-    protocol: protocolName,
-    value: cardValue,
-    top: generateTopText(card.effects.filter(e => e.position === 'top')),
-    middle: generateMiddleText(card.effects.filter(e => e.position === 'middle')),
-    bottom: generateBottomText(card.effects.filter(e => e.position === 'bottom')),
-    isFaceUp: true,
-  }}
-  isFaceUp={true}
-/>
-```
-
-### 4. Import/Export
-
-Allow sharing custom protocols:
+Respond to game events:
 
 ```typescript
-const exportProtocol = (protocol: CustomProtocolDefinition) => {
-  const json = JSON.stringify(protocol, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${protocol.name}.protocol.json`;
-  a.click();
-};
-
-const importProtocol = (file: File) => {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const protocol = JSON.parse(e.target.result as string);
-    addCustomProtocol(protocol);
-  };
-  reader.readAsText(file);
-};
-```
-
-### 5. AI-Powered Effect Generation
-
-Allow AI to suggest balanced effects:
-
-```typescript
-const generateBalancedCard = async (value: number, theme: string) => {
-  const prompt = `Generate a ${theme} protocol card with value ${value}.
-    Suggest 1-2 balanced effects following these patterns:
-    - Low values (0-2): Draw/utility effects
-    - Mid values (3-4): Moderate impact effects
-    - High values (5-6): Powerful but risky effects`;
-
-  const response = await callAI(prompt);
-  return parseEffectsFromResponse(response);
-};
-```
-
-### 6. Balance Checker
-
-Analyze custom protocols for balance:
-
-```typescript
-const analyzeBalance = (protocol: CustomProtocolDefinition) => {
-  let score = 0;
-
-  protocol.cards.forEach(card => {
-    card.effects.forEach(effect => {
-      // Award points based on effect power
-      if (effect.params.action === 'draw') {
-        score += effect.params.count * 2;
-      }
-      if (effect.params.action === 'delete') {
-        score += 5;
-      }
-      // etc.
-    });
-
-    // Deduct points for high card values (risk)
-    score -= card.value;
-  });
-
-  return {
-    score,
-    rating: score < 20 ? 'Weak' : score < 40 ? 'Balanced' : 'Overpowered',
-    suggestions: ['Consider adding a discard cost to value-5 card', ...],
-  };
-};
-```
-
-### 7. Template System
-
-Provide pre-made templates:
-
-```typescript
-const TEMPLATES = {
-  aggressive: {
-    name: 'Aggressive Template',
-    cards: [
-      { value: 0, effects: [{ action: 'delete', count: 1, ... }] },
-      { value: 1, effects: [{ action: 'discard', count: 1, actor: 'opponent', ... }] },
-      // ...
-    ]
+{
+  id: "reactive-trigger",
+  params: {
+    action: "reactive_trigger",
+    eventType: "after_play",
+    condition: {
+      type: "card_played_by",
+      player: "opponent"
+    },
+    reaction: {
+      id: "flip-reaction",
+      params: { action: "flip", count: 1 }
+    }
   },
-
-  control: {
-    name: 'Control Template',
-    cards: [
-      { value: 0, effects: [{ action: 'flip', count: 1, ... }] },
-      { value: 1, effects: [{ action: 'shift', ... }] },
-      // ...
-    ]
-  },
-};
+  position: "top",
+  trigger: "on_play"
+}
 ```
+
+**Available Event Types**:
+- `after_play`: When a card is played
+- `after_delete`: When a card is deleted
+- `after_compile`: When a lane compiles
+- `after_draw`: When cards are drawn
+
+### Value Modifiers
+
+Dynamic card value changes:
+
+```typescript
+{
+  id: "value-modifier",
+  params: {
+    action: "value_modifier",
+    modifierType: "add",
+    value: 1,
+    scope: {
+      type: "this_line",
+      owner: "own"
+    }
+  },
+  position: "top",
+  trigger: "on_play"
+}
+```
+
+Generates: "+1 to all cards in this line"
 
 ---
 
-## Testing Custom Protocols
+## Integration with Game System
 
-### Unit Tests
+### 1. Protocol Loading
 
-Test effect generation:
-
-```typescript
-describe('Effect Generator', () => {
-  it('should generate draw effect correctly', () => {
-    const params: DrawEffectParams = {
-      action: 'draw',
-      count: 2,
-      target: 'self',
-      source: 'own_deck',
-    };
-
-    const effectFn = generateEffect(params);
-    const mockCard = createMockCard();
-    const mockState = createMockState();
-
-    const result = effectFn(mockCard, 0, mockState, { cardOwner: 'player', opponent: 'opponent' });
-
-    expect(result.newState.player.hand.length).toBe(mockState.player.hand.length + 2);
-  });
-});
-```
-
-### Integration Tests
-
-Test in actual gameplay:
+Custom protocols are loaded alongside base protocols:
 
 ```typescript
-describe('Custom Protocol Integration', () => {
-  it('should register and execute custom protocol effects', () => {
-    const customProtocol: CustomProtocolDefinition = {
-      id: 'test-1',
-      name: 'TestProtocol',
-      cards: [
-        { value: 0, effects: [{ params: { action: 'draw', count: 1, ... }, ... }] }
-      ],
-      // ...
-    };
-
-    registerCustomProtocol(customProtocol);
-
-    const gameState = createGameWithProtocol('TestProtocol');
-    const result = playCard(gameState, 'TestProtocol-0');
-
-    expect(result.player.hand.length).toBe(initialHandSize + 1);
-  });
-});
+// In ProtocolSelection.tsx
+const customCards = isCustomProtocolEnabled()
+  ? getAllCustomProtocolCards()
+  : [];
+const allCards = [...baseCards, ...customCards];
 ```
+
+### 2. Effect Execution
+
+Custom effects are executed via `effectInterpreter.ts`:
+
+```typescript
+// In effectExecutor.ts
+const customCard = card as any;
+if (customCard.customEffects) {
+  const effects = customCard.customEffects.middleEffects;
+  for (const effectDef of effects) {
+    const result = executeCustomEffect(card, laneIndex, state, context, effectDef);
+    // Process result...
+  }
+}
+```
+
+### 3. Multi-Effect Handling
+
+Cards can have multiple effects per position:
+
+```typescript
+{
+  value: 0,
+  topEffects: [
+    { /* passive rule */ },
+    { /* value modifier */ }
+  ],
+  middleEffects: [
+    { /* draw effect */ },
+    { /* flip effect with conditional */ }
+  ],
+  bottomEffects: [
+    { /* start trigger */ },
+    { /* end trigger */ }
+  ]
+}
+```
+
+Effects are executed sequentially. If an effect creates `actionRequired`, remaining effects are queued.
 
 ---
 
-## Limitations and Considerations
+## Creating a Custom Protocol: Step-by-Step
+
+### 1. Navigate to Custom Protocols
+
+- Main Menu → "Custom Protocols" (activated by clicking "developed" 5 times)
+
+### 2. Create New Protocol
+
+- Click "Create New Protocol"
+- Enter name, description
+- Choose color and pattern
+
+### 3. Configure Each Card (0-5)
+
+For each card value:
+
+1. **Add Top Effects** (optional):
+   - Click "Add Top Effect"
+   - Select effect type (passive_rule, value_modifier, etc.)
+   - Configure parameters
+   - Set trigger (usually `on_play`)
+
+2. **Add Middle Effects**:
+   - Click "Add Middle Effect"
+   - Select effect type (draw, flip, delete, etc.)
+   - Configure parameters
+   - Add conditionals if needed
+
+3. **Add Bottom Effects** (optional):
+   - Click "Add Bottom Effect"
+   - Select effect type
+   - Choose trigger (start, end, on_cover)
+   - Configure parameters
+
+### 4. Save Protocol
+
+- Click "Save Protocol"
+- Protocol is stored in localStorage
+- Immediately available in Protocol Selection
+
+### 5. Export/Share
+
+- Click "Export" to download JSON file
+- Share with other players
+- Import via "Import Protocol" button
+
+---
+
+## Validation Rules
+
+The editor validates:
+
+1. **Required Fields**: All effect parameters must be filled
+2. **Value Ranges**: Numbers must be within valid ranges (1-6 for counts, etc.)
+3. **Position Rules**: Top effects can only have certain triggers
+4. **Effect Completeness**: Conditional effects must have thenEffect
+5. **Protocol Uniqueness**: Protocol names must be unique
+
+**Validation Errors**:
+- Shown inline with red borders
+- Save button disabled until all errors resolved
+- Helpful tooltips explain requirements
+
+---
+
+## Limitations and Best Practices
 
 ### Current Limitations
 
-1. **No Complex Conditionals**: Effects like "Flip 1 card. If face-up, delete it" not yet supported
-2. **No Multi-Target Effects**: Can't target "all cards in line" with one effect
-3. **No Variable Calculations**: Can't reference other card values (e.g., "Draw X where X = this card's value")
-4. **No Effect Combos**: Can't easily combine effects like "Draw 2 AND flip 1" in single effect slot
+1. **No Variable Calculations**: Can't reference card values dynamically (e.g., "Draw X where X = this card's value")
+2. **No Complex Target Expressions**: Can't target "all cards with value < opponent's highest card"
+3. **No Cost-Benefit Effects**: Can't easily create "Draw 3, then opponent draws 2"
 
-### Performance Considerations
+### Best Practices
 
-- Custom protocols stored in localStorage (5-10MB limit)
-- Effect generation happens at runtime (minimal overhead)
-- Consider protocol count limit (e.g., max 20 custom protocols)
+1. **Balance Low/High Values**:
+   - Value 0-1: Moderate effects (draw 1-2, flip 1, shift 1)
+   - Value 2-3: Medium effects (delete 1, discard 1, rearrange)
+   - Value 4-5: Powerful effects (draw 3+, delete multiple, play from deck)
 
-### Balance Concerns
+2. **Use Conditionals Wisely**:
+   - "Optional" effects add flexibility
+   - "If you do" chains create interesting choices
+   - Don't overload with too many chains
 
-- Players can create overpowered protocols
-- Consider adding validation rules:
-  - Max total effect "power" per protocol
-  - Restrict certain combinations (e.g., no "Draw 6" on value-0)
-  - Require balance between beneficial and detrimental effects
+3. **Mix Effect Types**:
+   - Combine offensive (delete, discard) and defensive (draw, play)
+   - Add utility effects (flip, shift, protocol swap)
+   - Include passive effects for ongoing impact
+
+4. **Test Thoroughly**:
+   - Play against AI to test balance
+   - Try different scenarios (early game, late game)
+   - Check for softlocks (no valid targets)
 
 ---
 
-## Example: Creating a "Lightning" Protocol
+## Example: Creating "Storm" Protocol
 
-```typescript
-const lightningProtocol: CustomProtocolDefinition = {
-  id: uuidv4(),
-  name: 'Lightning',
-  description: 'Fast and aggressive, focused on quick draws and disruption',
-  author: 'Player',
-  createdAt: new Date().toISOString(),
-  cards: [
-    {
-      value: 0,
-      effects: [
-        {
-          id: uuidv4(),
-          params: {
-            action: 'draw',
-            count: 2,
-            target: 'self',
-            source: 'own_deck',
-          },
-          position: 'middle',
-          trigger: 'on_play',
-        }
-      ]
-    },
-    {
-      value: 1,
-      effects: [
-        {
-          id: uuidv4(),
-          params: {
-            action: 'flip',
-            count: 1,
-            targetFilter: {
-              owner: 'opponent',
-              position: 'any',
-              faceState: 'any',
-              excludeSelf: false,
-            },
-            optional: false,
-          },
-          position: 'middle',
-          trigger: 'on_play',
-        }
-      ]
-    },
-    {
-      value: 2,
-      effects: [
-        {
-          id: uuidv4(),
-          params: {
-            action: 'discard',
-            count: 1,
-            actor: 'opponent',
-          },
-          position: 'middle',
-          trigger: 'on_play',
-        }
-      ]
-    },
-    // ... values 3-5
-  ]
-};
+A weather-themed protocol focused on card manipulation:
 
-addCustomProtocol(lightningProtocol);
-```
+**Storm-0** (Value 0):
+- Middle: Draw 2 cards
 
-This creates a "Lightning" protocol where:
-- **Lightning-0**: Draw 2 cards
-- **Lightning-1**: Flip 1 opponent's card
-- **Lightning-2**: Opponent discards 1
-- etc.
+**Storm-1** (Value 1):
+- Middle: Flip 1 card
+- Conditional: If target becomes face-up, flip this card
+
+**Storm-2** (Value 2):
+- Middle: Shift 1 card
+- Bottom (on_cover): Flip 1 covered card
+
+**Storm-3** (Value 3):
+- Top: +1 to all cards in this line
+- Middle: Delete 1 card with value ≤ 2
+
+**Storm-4** (Value 4):
+- Middle: Swap 2 of opponent's protocols
+- Bottom (end): Draw 1 card
+
+**Storm-5** (Value 5):
+- Middle: You may draw 3 cards. If you do, opponent draws 2.
+- Bottom (start): Flip all covered cards in this line
+
+This creates a balanced protocol with:
+- Draw power (0, 4, 5)
+- Disruption (1, 2, 3)
+- Protocol manipulation (4)
+- Positional strategy (2, 5)
+
+---
+
+## Troubleshooting
+
+### Effect Not Executing
+
+1. Check card is face-up
+2. Check card is uncovered (for middle/bottom effects)
+3. Check trigger matches (on_play vs start/end)
+4. Check target filters (owner, position, faceState)
+5. Check game rules (Frost-1, Apathy-2, Plague-0)
+
+### Validation Errors
+
+1. Fill all required fields
+2. Check value ranges (1-6 for counts)
+3. Ensure conditionals have thenEffect
+4. Check protocol name is unique
+
+### Softlock After Effect
+
+1. Add "optional: true" to effects that might have no targets
+2. Use appropriate target filters
+3. Test with different board states
 
 ---
 
 ## Conclusion
 
-The Custom Protocol Creator provides a modular foundation for player-created content. By abstracting effects into parameterizable components, it enables creative deck building while maintaining game balance and consistency.
+The Custom Protocol Creator provides a powerful, flexible system for creating custom content. By using modular, parameterizable effects, players can recreate any original protocol card or design entirely new strategies.
 
-Future enhancements should focus on:
-1. Better UI for configuring effect parameters
-2. Balance checking and validation
-3. Sharing and importing protocols
-4. Advanced effect patterns (conditionals, chains, calculations)
+**Key Strengths**:
+- Full parity with original cards (all effects reproducible)
+- No card-specific code required
+- User-friendly visual editor
+- Import/Export for sharing
+- Comprehensive validation
+
+**Future Potential**:
+- Community protocol library
+- AI-assisted balancing
+- Tournament-legal custom protocols
+- Advanced scripting for complex effects

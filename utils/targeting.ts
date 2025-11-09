@@ -59,6 +59,29 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_opponent_face_up_card_to_flip':
             return owner === 'opponent' && card.isFaceUp && isUncovered;
 
+        case 'select_card_to_flip': {
+            // Generic flip for custom protocols
+            const targetFilter = (actionRequired as any).targetFilter || {};
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+
+            // Check position filter
+            if (targetFilter.position === 'uncovered' && !isUncovered) return false;
+            if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+
+            // Check owner filter
+            if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
+            if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+
+            // Check face state filter
+            if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return false;
+            if (targetFilter.faceState === 'face_down' && card.isFaceUp) return false;
+
+            // Check excludeSelf
+            if (targetFilter.excludeSelf && card.id === actionRequired.sourceCardId) return false;
+
+            return true;
+        }
+
         // Rule: Keywords like "covered" override the default.
         case 'select_own_face_up_covered_card_to_flip': {
             const cardIndex = lane.findIndex(c => c.id === card.id);
@@ -101,8 +124,52 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return !card.isFaceUp && isUncovered;
-        case 'select_cards_to_delete':
-            return !actionRequired.disallowedIds.includes(card.id) && isUncovered;
+        case 'select_cards_to_delete': {
+            // Check if disallowed
+            if (actionRequired.disallowedIds.includes(card.id)) return false;
+
+            // Check targetFilter if it exists (custom protocols)
+            const targetFilter = (actionRequired as any).targetFilter;
+            if (targetFilter) {
+                const cardIndex = lane.findIndex(c => c.id === card.id);
+
+                // Check position filter
+                if (targetFilter.position === 'uncovered' && !isUncovered) return false;
+                if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+                // position 'any' allows both covered and uncovered
+
+                // Check face state filter
+                if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return false;
+                if (targetFilter.faceState === 'face_down' && card.isFaceUp) return false;
+
+                // Check value range filter (Death-4: value 0 or 1)
+                if (targetFilter.valueRange) {
+                    const { min, max } = targetFilter.valueRange;
+                    if (card.value < min || card.value > max) return false;
+                }
+
+                // Check owner filter
+                if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
+                if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+
+                // Check protocolMatching (handled in cardResolver, but we can pre-filter here)
+                const protocolMatching = (actionRequired as any).protocolMatching;
+                if (protocolMatching) {
+                    const playerProtocolAtLane = gameState.player.protocols[laneIndex];
+                    const opponentProtocolAtLane = gameState.opponent.protocols[laneIndex];
+                    const cardProtocol = card.protocol;
+                    const hasMatch = cardProtocol === playerProtocolAtLane || cardProtocol === opponentProtocolAtLane;
+
+                    if (protocolMatching === 'must_match' && !hasMatch) return false;
+                    if (protocolMatching === 'must_not_match' && hasMatch) return false;
+                }
+
+                return true;
+            }
+
+            // Default: only uncovered (for standard cards)
+            return isUncovered;
+        }
         case 'select_card_to_delete_for_death_1':
             return card.id !== actionRequired.sourceCardId && isUncovered;
         case 'select_face_down_card_to_delete':
@@ -200,6 +267,40 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
+        }
+        case 'select_card_to_shift': {
+            // Generic shift for custom protocols
+            // IMPORTANT: Like Anarchy-1, we allow all cards matching basic filters
+            // Destination protocol validation happens in laneResolver (for face-up cards only)
+            // Frost-3 blocks shifts from its lane
+            if (hasFrost3InLane(gameState, laneIndex)) return false;
+
+            const targetFilter = (actionRequired as any).targetFilter || {};
+            const destinationRestriction = (actionRequired as any).destinationRestriction;
+
+            // CRITICAL: For non_matching_protocol restriction, we need to know the card's protocol
+            // Face-down cards have unknown protocols → can't validate destination → skip them
+            if (destinationRestriction?.type === 'non_matching_protocol' && !card.isFaceUp) {
+                return false;
+            }
+
+            // Check position filter (covered vs uncovered)
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            if (targetFilter.position === 'uncovered' && !isUncovered) return false;
+            if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+
+            // Check owner filter if specified (but 'any' allows both players)
+            if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
+            if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+
+            // Check face state filter if specified (but 'any' allows both face-up and face-down)
+            if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return false;
+            if (targetFilter.faceState === 'face_down' && card.isFaceUp) return false;
+
+            // Check excludeSelf - card shouldn't shift itself
+            if (targetFilter.excludeSelf && card.id === actionRequired.sourceCardId) return false;
+
+            return true;
         }
 
         default:

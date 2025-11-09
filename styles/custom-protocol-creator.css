@@ -29,7 +29,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .protocol-list .list-header {
@@ -37,7 +37,6 @@
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
-    margin-bottom: 1.5rem;
 }
 
 .protocol-list h2 {
@@ -72,6 +71,8 @@
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1rem;
     padding: 0.5rem;
+    align-content: start;
+    grid-auto-rows: min-content;
 }
 
 .protocols-grid::-webkit-scrollbar {
@@ -87,7 +88,7 @@
     border-radius: 4px;
 }
 
-.protocol-card {
+.protocol-list .protocol-card {
     background-color: var(--surface-color);
     border: 1px solid var(--secondary-color);
     border-radius: 8px;
@@ -95,54 +96,70 @@
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
     cursor: pointer;
+    padding: 5px 1rem 1rem 1rem;
+    min-height: 100px;
 }
 
-.protocol-card:hover {
+/* Larger buttons for screens < 1600px */
+@media (max-width: 1600px) {
+    .protocol-list .protocol-card {
+        min-height: 140px;
+        padding: 5px 1.5rem 1.5rem 1.5rem;
+    }
+
+    .protocol-list .protocol-card .protocol-header-content h3 {
+        font-size: 1.3rem;
+    }
+
+    .protocol-list .header-description {
+        font-size: 0.85rem;
+    }
+}
+
+.protocol-list .protocol-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
     border-color: var(--primary-color);
 }
 
-.protocol-card .protocol-header {
-    padding: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--surface-hover);
-    min-height: 60px;
-}
-
-.protocol-card .protocol-header h3 {
-    margin: 0;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.2rem;
-    color: var(--text-color);
-}
-
-.protocol-header-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+.protocol-list .protocol-card .protocol-header-content {
     text-align: center;
-    gap: 0.25rem;
+    width: 100%;
+}
+
+.protocol-list .protocol-card .protocol-header-content h3 {
+    margin: 0;
+    padding: 0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    color: var(--text-color);
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.3;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.5);
 }
 
 .header-description {
-    margin: 0;
-    font-size: 0.65rem;
+    margin: 0.35rem 0 0 0;
+    padding: 0;
+    font-size: 0.75rem;
     color: var(--secondary-color);
-    opacity: 0.8;
-    line-height: 1.2;
+    opacity: 0.85;
+    line-height: 1.3;
+    text-align: center;
+    display: block;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 .protocol-card .protocol-body {
     flex: 1;
-    padding: 1.25rem;
+    padding: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
 }
 
 .protocol-card .description {
@@ -156,7 +173,7 @@
 .protocol-card .protocol-meta {
     display: flex;
     justify-content: space-between;
-    font-size: 0.8rem;
+    font-size: 1rem;
     color: var(--secondary-color);
     opacity: 0.7;
 }
@@ -185,9 +202,10 @@
 
 .protocol-card .protocol-actions {
     display: flex;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    gap: 0.75rem;
+    padding: 1.25rem;
     background-color: var(--background-color);
+    flex-shrink: 0;
 }
 
 .protocol-card .protocol-actions button {
@@ -775,6 +793,28 @@
     border-color: var(--primary-color);
 }
 
+.add-effect-controls {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.add-effect-controls select {
+    flex: 1;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Poppins', sans-serif;
+}
+
+.add-effect-controls select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
 .bottom-effect-add {
     display: flex;
     gap: 0.4rem;
@@ -1117,21 +1157,25 @@
     }
 
     .protocol-card .protocol-header {
-        padding: 0.75rem;
-        min-height: 50px;
+        height: 90px;
     }
 
     .protocol-card .protocol-header h3 {
         font-size: 1rem;
     }
 
+    .protocol-header-content {
+        padding: 0 0.75rem;
+    }
+
     .header-description {
-        font-size: 0.6rem;
+        font-size: 0.7rem;
+        margin-top: 0.3rem;
     }
 
     .protocol-card .protocol-body {
-        padding: 0.75rem;
-        gap: 0.75rem;
+        padding: 1.25rem;
+        gap: 1rem;
     }
 
     .protocol-card .description {
@@ -1139,9 +1183,14 @@
     }
 
     .mini-card {
-        width: 28px;
-        height: 42px;
-        font-size: 0.9rem;
+        width: 30px;
+        height: 45px;
+        font-size: 0.95rem;
+    }
+
+    .protocol-card .protocol-actions {
+        padding: 1.1rem;
+        gap: 0.6rem;
     }
 
     .wizard-header h2 {
@@ -1256,16 +1305,36 @@
     }
 
     .protocol-card .protocol-header {
-        min-height: 45px;
-        padding: 0.5rem;
+        height: 80px;
     }
 
     .protocol-card .protocol-header h3 {
-        font-size: 0.9rem;
+        font-size: 0.95rem;
+    }
+
+    .protocol-header-content {
+        padding: 0 0.5rem;
     }
 
     .header-description {
-        font-size: 0.55rem;
+        font-size: 0.65rem;
+        margin-top: 0.25rem;
+    }
+
+    .protocol-card .protocol-body {
+        padding: 1rem;
+        gap: 0.85rem;
+    }
+
+    .mini-card {
+        width: 28px;
+        height: 42px;
+        font-size: 0.9rem;
+    }
+
+    .protocol-card .protocol-actions {
+        padding: 0.85rem;
+        gap: 0.5rem;
     }
 
     .btn {

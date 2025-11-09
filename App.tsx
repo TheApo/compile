@@ -13,6 +13,7 @@ import { StatisticsScreen } from './screens/StatisticsScreen';
 import { CustomProtocolCreator } from './screens/CustomProtocolCreator';
 import { CoinFlipModal } from './components/CoinFlipModal';
 import { Difficulty, GameState } from './types';
+import { loadDefaultCustomProtocols } from './logic/customProtocols/loadDefaultProtocols';
 
 type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics' | 'CustomProtocols';
 export type Player = 'player' | 'opponent';
@@ -26,6 +27,11 @@ export function App() {
   const [finalGameState, setFinalGameState] = useState<GameState | null>(null);
   const [useControl, setUseControl] = useState(true);
   const [startingPlayer, setStartingPlayer] = useState<Player>('player');
+
+  // Load default custom protocols on app start (Anarchy_custom for testing)
+  useEffect(() => {
+    loadDefaultCustomProtocols();
+  }, []);
 
   const handleBackToMenu = useCallback(() => {
     setScreen('MainMenu');

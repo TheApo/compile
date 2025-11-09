@@ -101,39 +101,45 @@ export const customCardToCardData = (
     protocolName: string
 ): CardData => {
     // Generate card text from effects
-    const topEffects: string[] = [];
-    const middleEffects: string[] = [];
-    const bottomEffects: string[] = [];
+    const topTexts: string[] = [];
+    const middleTexts: string[] = [];
+    const bottomTexts: string[] = [];
 
-    for (const effect of customCard.effects) {
+    // Process top effects
+    for (const effect of customCard.topEffects) {
         const effectText = generateEffectText(effect.params);
+        topTexts.push(effectText);
+    }
 
-        if (effect.position === 'top') {
-            topEffects.push(effectText);
-        } else if (effect.position === 'middle') {
-            middleEffects.push(effectText);
-        } else if (effect.position === 'bottom') {
-            // Categorize by trigger
-            let prefix = '';
-            switch (effect.trigger) {
-                case 'start':
-                    prefix = "<span class='emphasis'>Start:</span> ";
-                    break;
-                case 'end':
-                    prefix = "<span class='emphasis'>End:</span> ";
-                    break;
-                case 'on_cover':
-                    prefix = "<span class='emphasis'>On Cover:</span> ";
-                    break;
-            }
-            bottomEffects.push(prefix + effectText);
+    // Process middle effects
+    for (const effect of customCard.middleEffects) {
+        const effectText = generateEffectText(effect.params);
+        middleTexts.push(effectText);
+    }
+
+    // Process bottom effects
+    for (const effect of customCard.bottomEffects) {
+        const effectText = generateEffectText(effect.params);
+        // Categorize by trigger
+        let prefix = '';
+        switch (effect.trigger) {
+            case 'start':
+                prefix = "<span class='emphasis'>Start:</span> ";
+                break;
+            case 'end':
+                prefix = "<span class='emphasis'>End:</span> ";
+                break;
+            case 'on_cover':
+                prefix = "<span class='emphasis'>On Cover:</span> ";
+                break;
         }
+        bottomTexts.push(prefix + effectText);
     }
 
     // Build top, middle, bottom strings
-    const top = topEffects.length > 0 ? topEffects.join(' ') : '';
-    const middle = middleEffects.length > 0 ? middleEffects.join(' ') : '';
-    const bottom = bottomEffects.length > 0 ? bottomEffects.join(' ') : '';
+    const top = topTexts.length > 0 ? topTexts.join(' ') : '';
+    const middle = middleTexts.length > 0 ? middleTexts.join(' ') : '';
+    const bottom = bottomTexts.length > 0 ? bottomTexts.join(' ') : '';
 
     return {
         protocol: protocolName as any,  // Will be the custom protocol name
@@ -193,6 +199,7 @@ const generateEffectText = (params: any): string => {
             return text;
 
         case 'shift':
+            const mayShift = params.optional ? 'You may shift' : 'Shift';
             let shiftTarget = '';
             if (params.targetFilter.owner === 'opponent') shiftTarget = "opponent's ";
             if (params.targetFilter.position === 'covered') shiftTarget += 'covered ';
@@ -205,9 +212,10 @@ const generateEffectText = (params: any): string => {
                 destination = ' to this line';
             }
 
-            return `Shift 1 ${shiftTarget}card${destination}.`;
+            return `${mayShift} 1 ${shiftTarget}card${destination}.`;
 
         case 'delete':
+            const mayDelete = params.optional ? 'May delete' : 'Delete';
             const deleteCount = typeof params.count === 'number' ? params.count.toString() : 'all';
             let deleteTarget = '';
 
@@ -222,24 +230,31 @@ const generateEffectText = (params: any): string => {
 
             const deleteCardWord = deleteCount === '1' ? 'card' : 'cards';
 
-            return `Delete ${deleteCount} ${deleteTarget}${deleteCardWord}${deleteScope}.`;
+            return `${mayDelete} ${deleteCount} ${deleteTarget}${deleteCardWord}${deleteScope}.`;
 
         case 'discard':
-            const discardActor = params.actor === 'opponent' ? 'Opponent discards' : 'Discard';
+            let discardActor = '';
+            if (params.actor === 'opponent') {
+                discardActor = params.optional ? 'Opponent may discard' : 'Opponent discards';
+            } else {
+                discardActor = params.optional ? 'May discard' : 'Discard';
+            }
             return `${discardActor} ${params.count} card${params.count !== 1 ? 's' : ''}.`;
 
         case 'return':
+            const mayReturn = params.optional ? 'May return' : 'Return';
             const returnCount = typeof params.count === 'number' ? params.count.toString() : 'all';
             let returnFilter = '';
             if (params.targetFilter.valueEquals !== undefined) {
                 returnFilter = ` with value ${params.targetFilter.valueEquals}`;
             }
-            return `Return ${returnCount} card${params.count !== 1 ? 's' : ''}${returnFilter} to hand.`;
+            return `${mayReturn} ${returnCount} card${params.count !== 1 ? 's' : ''}${returnFilter} to hand.`;
 
         case 'play':
+            const mayPlay = params.optional ? 'May play' : 'Play';
             const playSource = params.source === 'deck' ? ' from top of deck' : '';
             const faceState = params.faceDown ? 'face-down' : 'face-up';
-            return `Play ${params.count} card${params.count !== 1 ? 's' : ''}${playSource} ${faceState}.`;
+            return `${mayPlay} ${params.count} card${params.count !== 1 ? 's' : ''}${playSource} ${faceState}.`;
 
         case 'rearrange_protocols':
             const rearrangeTarget = params.target === 'opponent' ? "opponent's" : 'your';
@@ -254,10 +269,74 @@ const generateEffectText = (params: any): string => {
             return `Swap 2 of ${swapTarget} protocols.`;
 
         case 'reveal':
-            return `Reveal ${params.count} card${params.count !== 1 ? 's' : ''} from your hand.`;
+            const mayReveal = params.optional ? 'May reveal' : 'Reveal';
+            return `${mayReveal} ${params.count} card${params.count !== 1 ? 's' : ''} from your hand.`;
 
         case 'give':
-            return `Give ${params.count} card${params.count !== 1 ? 's' : ''} to opponent.`;
+            const mayGive = params.optional ? 'May give' : 'Give';
+            return `${mayGive} ${params.count} card${params.count !== 1 ? 's' : ''} to opponent.`;
+
+        case 'take':
+            const mayTake = params.optional ? 'May take' : 'Take';
+            const randomness = params.random ? ' at random' : '';
+            return `${mayTake} ${params.count} card${params.count !== 1 ? 's' : ''} from opponent${randomness}.`;
+
+        case 'value_modifier':
+            const modifier = params.modifier;
+            if (modifier.type === 'set_to_fixed') {
+                // Build description based on target/scope/filter
+                let targetDesc = '';
+                if (modifier.target === 'own_cards') {
+                    targetDesc = 'your';
+                } else if (modifier.target === 'opponent_cards') {
+                    targetDesc = "opponent's";
+                } else {
+                    targetDesc = 'all';
+                }
+
+                let faceDesc = '';
+                if (modifier.filter?.faceState === 'face_down') {
+                    faceDesc = ' face-down';
+                } else if (modifier.filter?.faceState === 'face_up') {
+                    faceDesc = ' face-up';
+                }
+
+                let scopeDesc = '';
+                if (modifier.scope === 'this_lane') {
+                    scopeDesc = ' in this stack';
+                } else if (modifier.scope === 'global') {
+                    scopeDesc = '';
+                }
+
+                return `All ${targetDesc}${faceDesc} cards${scopeDesc} have a value of ${modifier.value}.`;
+
+            } else if (modifier.type === 'add_per_condition') {
+                let conditionDesc = '';
+                if (modifier.condition === 'per_face_down_card') {
+                    conditionDesc = 'for each face-down card';
+                } else if (modifier.condition === 'per_face_up_card') {
+                    conditionDesc = 'for each face-up card';
+                } else if (modifier.condition === 'per_card') {
+                    conditionDesc = 'for each card';
+                }
+
+                let scopeDesc = modifier.scope === 'this_lane' ? "this line's " : '';
+                return `+${modifier.value} to ${scopeDesc}total ${conditionDesc}.`;
+
+            } else if (modifier.type === 'add_to_total') {
+                const sign = modifier.value >= 0 ? '+' : '';
+                let targetDesc = modifier.target === 'opponent_total' ? "Opponent's" : "Your";
+                return `${targetDesc} total ${sign}${modifier.value}.`;
+            }
+            return 'Modify card values.';
+
+        case 'passive_rule':
+            // Simplified text for passive rules
+            const rule = params.rule;
+            if (rule.type === 'ignore_middle_commands') {
+                return 'Middle effects in this line are ignored.';
+            }
+            return 'Special rule active.';
 
         default:
             return 'Unknown effect.';

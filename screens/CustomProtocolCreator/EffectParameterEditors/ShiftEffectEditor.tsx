@@ -69,6 +69,29 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                     <option value="face_down">Face-down</option>
                 </select>
             </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.targetFilter.excludeSelf || false}
+                    onChange={e =>
+                        onChange({ ...params, targetFilter: { ...params.targetFilter, excludeSelf: e.target.checked } })
+                    }
+                />
+                Exclude self ("other card")
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.optional || false}
+                    onChange={e =>
+                        onChange({ ...params, optional: e.target.checked })
+                    }
+                />
+                Optional ("You may shift" instead of "Shift")
+            </label>
+
             <label>
                 Destination
                 <select
@@ -97,9 +120,11 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
 };
 
 const generateShiftText = (params: ShiftEffectParams): string => {
+    const mayShift = params.optional ? 'You may shift' : 'Shift';
     let targetDesc = '';
 
     if (params.targetFilter.owner === 'opponent') targetDesc += "opponent's ";
+    if (params.targetFilter.excludeSelf) targetDesc += 'other ';
     if (params.targetFilter.position === 'covered') targetDesc += 'covered ';
     if (params.targetFilter.position === 'uncovered') targetDesc += 'uncovered ';
     if (params.targetFilter.faceState === 'face_down') targetDesc += 'face-down ';
@@ -107,10 +132,10 @@ const generateShiftText = (params: ShiftEffectParams): string => {
 
     const count = (params as any).count === 'all' ? 'all' : '1';
     const cardWord = count === '1' ? 'card' : 'cards';
-    let text = `Shift ${count} ${targetDesc}${cardWord}`;
+    let text = `${mayShift} ${count} ${targetDesc}${cardWord}`;
 
     if (params.destinationRestriction?.type === 'non_matching_protocol') {
-        text += ' to a non-matching protocol';
+        text += ' to a line without a matching protocol';
     } else if (params.destinationRestriction?.type === 'specific_lane') {
         text += ' within this line';
     } else if (params.destinationRestriction?.type === 'to_another_line') {

@@ -8,6 +8,9 @@ import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent, completeEffectAction } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
+import { canFlipCard, canShiftCard } from '../passiveRuleChecker';
+import { processReactiveEffects } from '../reactiveEffectProcessor';
+import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
     if (!cardId) return null;
@@ -36,6 +39,59 @@ export function isCardUncovered(state: GameState, cardId: string | undefined): b
     return false; // Card not found or is covered
 }
 
+/**
+ * Handle follow-up effects after flip completes (similar to handleChainedEffectsOnDiscard)
+ * For effects like "Flip 1 card. Draw cards equal to that card's value" (Light-0)
+ */
+export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: string, sourceCardId?: string): GameState {
+    let newState = { ...state };
+
+    // Save followUpEffect from custom effects before clearing actionRequired
+    const followUpEffect = (state.actionRequired as any)?.followUpEffect;
+
+    // Get the flipped card's value for context
+    const flippedCardInfo = findCardOnBoard(newState, flippedCardId);
+    const referencedCardValue = flippedCardInfo ? getEffectiveCardValue(flippedCardInfo.card,
+        newState[flippedCardInfo.owner].lanes.find(l => l.some(c => c.id === flippedCardId)) || []) : 0;
+
+    // Clear actionRequired
+    newState.actionRequired = null;
+
+    // Handle custom effect conditional follow-ups
+    if (followUpEffect && sourceCardId) {
+        const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
+        if (sourceCardInfo) {
+            console.log('[Custom Effect] Executing conditional follow-up effect after flip');
+
+            const context: EffectContext = {
+                cardOwner: sourceCardInfo.owner,
+                opponent: sourceCardInfo.owner === 'player' ? ('opponent' as Player) : ('player' as Player),
+                currentTurn: newState.turn,
+                actor: sourceCardInfo.owner,
+                // NEW: Pass referenced card for follow-up effects
+                referencedCard: flippedCardInfo?.card,
+                referencedCardValue: referencedCardValue,
+            };
+            console.log(`[Context Propagation] Flipped card ${flippedCardInfo?.card.protocol}-${flippedCardInfo?.card.value}, value: ${referencedCardValue}`);
+
+            // Find lane index
+            let laneIndex = -1;
+            for (let i = 0; i < newState[sourceCardInfo.owner].lanes.length; i++) {
+                if (newState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                    laneIndex = i;
+                    break;
+                }
+            }
+            if (laneIndex !== -1) {
+                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
+                return result.newState;
+            }
+        }
+    }
+
+    return newState;
+}
+
 export function handleChainedEffectsOnDiscard(state: GameState, player: Player, sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start', sourceCardId?: string): GameState {
     let newState = { ...state };
 
@@ -56,12 +112,22 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
         const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
         if (sourceCardInfo) {
             console.log('[Custom Effect] Executing conditional follow-up effect after discard');
-            // Dynamically import and execute the follow-up effect
-            const { executeCustomEffect } = require('../../customProtocols/effectInterpreter');
+
+            // NEW: Calculate discarded count from previous action
+            const previousHandSize = (state.actionRequired as any)?.previousHandSize || 0;
+            const currentHandSize = newState[player].hand.length;
+            const discardedCount = Math.max(0, previousHandSize - currentHandSize);
+
             const context: EffectContext = {
                 cardOwner: sourceCardInfo.owner,
                 opponent: sourceCardInfo.owner === 'player' ? ('opponent' as Player) : ('player' as Player),
+                currentTurn: newState.turn,
+                actor: player,
+                // NEW: Pass discarded count for dynamic draw effects
+                discardedCount: discardedCount,
             };
+            console.log(`[Context Propagation] Discarded ${discardedCount} cards`);
+
             // Find lane index
             let laneIndex = -1;
             for (let i = 0; i < newState[sourceCardInfo.owner].lanes.length; i++) {
@@ -157,32 +223,48 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
 
     const { card, owner } = cardInfo;
 
-    // RULE: Frost-1 Top Effect blocks all face-down→face-up flips
+    // NEW: Check passive rules for flip restrictions (Frost-1, custom cards with block_flips rule)
     if (!card.isFaceUp) {
-        const frost1IsActive = [state.player, state.opponent].some(playerState =>
-            playerState.lanes.some(lane => {
-                const topCard = lane[lane.length - 1];
-                return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
-            })
-        );
-        if (frost1IsActive) {
-            console.log(`Frost-1 blocks face-down→face-up flip of ${card.protocol}-${card.value}`);
-            return state; // Block the flip
+        // Find which lane the card is in
+        let laneIndex = -1;
+        for (let i = 0; i < state[owner].lanes.length; i++) {
+            if (state[owner].lanes[i].some(c => c.id === targetCardId)) {
+                laneIndex = i;
+                break;
+            }
         }
+        if (laneIndex !== -1) {
+            const flipCheck = canFlipCard(state, laneIndex);
+            if (!flipCheck.allowed) {
+                console.log(`Flip blocked: ${flipCheck.reason}`);
+                return state; // Block the flip
+            }
+        }
+    }
+
+    // NEW: Trigger reactive effects BEFORE flip (Metal-6: "When this card would be flipped")
+    const beforeFlipResult = processReactiveEffects(state, 'on_flip', { player: owner, cardId: targetCardId });
+    let newState = beforeFlipResult.newState;
+
+    // Check if the card still exists after on_flip effects (Metal-6 might delete itself)
+    const cardAfterOnFlip = findCardOnBoard(newState, targetCardId);
+    if (!cardAfterOnFlip) {
+        console.log(`[on_flip] Card ${card.protocol}-${card.value} no longer exists after on_flip effect`);
+        return newState; // Card was deleted by on_flip effect, abort flip
     }
 
     // CRITICAL FIX: Use the actor from actionRequired if available, otherwise fall back to state.turn
     // This prevents actor confusion during interrupts (e.g., when Fire-0 is uncovered during Death-0's turn)
-    const actor = (state.actionRequired && 'actor' in state.actionRequired)
-        ? state.actionRequired.actor
-        : state.turn;
+    const actor = (newState.actionRequired && 'actor' in newState.actionRequired)
+        ? newState.actionRequired.actor
+        : newState.turn;
 
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const faceDirection = card.isFaceUp ? "face-down" : "face-up";
     const cardName = `${card.protocol}-${card.value}`; // Always show card name
 
-    let newState = log(state, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
+    newState = log(newState, actor, `${actorName} flips ${ownerName} ${cardName} ${faceDirection}.`);
 
     const newStats = { ...newState.stats[actor], cardsFlipped: newState.stats[actor].cardsFlipped + 1 };
     const newPlayerState = { ...newState[actor], stats: newStats };
@@ -368,24 +450,10 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     console.log('[DEBUG internalShiftCard] Shifting from lane', originalLaneIndex, 'to lane', targetLaneIndex);
 
-    // RULE: Frost-3 Top Effect blocks shifts from or to its line
-    // Top-Box effects are ALWAYS active when card is face-up, even if covered!
-    // Check if ANY face-up Frost-3 is in the original lane (shifting FROM)
-    const checkOriginalLane = state[cardOwner].lanes[originalLaneIndex];
-    const frost3BlocksFromOriginalLane = checkOriginalLane.some(card =>
-        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
-    );
-
-    // Check if ANY face-up Frost-3 is in the target lane (shifting TO)
-    const checkTargetLane = state[cardOwner].lanes[targetLaneIndex];
-    const frost3BlocksToTargetLane = checkTargetLane.some(card =>
-        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
-    );
-
-    console.log('[DEBUG internalShiftCard] Frost-3 on original lane?', frost3BlocksFromOriginalLane, 'Frost-3 on target lane?', frost3BlocksToTargetLane);
-
-    if (frost3BlocksFromOriginalLane || frost3BlocksToTargetLane) {
-        console.log(`[FROST-3 BLOCK] Blocking shift from lane ${originalLaneIndex} to lane ${targetLaneIndex}`);
+    // NEW: Check passive rules for shift restrictions (Frost-3, custom cards with block_shifts rules)
+    const shiftCheck = canShiftCard(state, originalLaneIndex, targetLaneIndex);
+    if (!shiftCheck.allowed) {
+        console.log(`[SHIFT BLOCKED] ${shiftCheck.reason}`);
         return { newState: state }; // Block the shift
     }
     

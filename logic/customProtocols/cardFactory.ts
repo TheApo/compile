@@ -15,6 +15,16 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
     switch (params.action) {
         case 'draw': {
+            // If referencing card from previous effect, draw based on that card's value
+            if (effect.useCardFromPreviousEffect) {
+                if (params.target === 'opponent') {
+                    mainText = "Opponent draws cards equal to that card's value.";
+                } else {
+                    mainText = "Draw cards equal to that card's value.";
+                }
+                break;
+            }
+
             if (params.conditional) {
                 switch (params.conditional.type) {
                     case 'count_face_down':
@@ -35,12 +45,16 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 text = 'Refresh your hand. ';
             }
 
+            // NEW: Handle optional draw (Death-1: "You may draw...")
+            const optionalPrefix = params.optional ? 'You may ' : '';
+
             if (params.source === 'opponent_deck') {
-                text += `Draw ${params.count} card${params.count !== 1 ? 's' : ''} from opponent's deck.`;
+                text += `${optionalPrefix}Draw ${params.count} card${params.count !== 1 ? 's' : ''} from opponent's deck.`;
             } else if (params.target === 'opponent') {
                 text += `Opponent draws ${params.count} card${params.count !== 1 ? 's' : ''}.`;
             } else {
-                text += `Draw ${params.count} card${params.count !== 1 ? 's' : ''}.`;
+                const drawVerb = params.optional ? 'draw' : 'Draw';
+                text += `${optionalPrefix}${drawVerb} ${params.count} card${params.count !== 1 ? 's' : ''}.`;
             }
 
             mainText = text;
@@ -48,12 +62,35 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'flip': {
-            const may = params.optional ? 'May flip' : 'Flip';
-            let targetDesc = '';
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                const mayFlip = params.optional ? 'May flip' : 'Flip';
+                mainText = `${mayFlip} that card.`;
+                break;
+            }
 
-            if (params.targetFilter?.owner === 'opponent') targetDesc = "opponent's ";
+            // NEW: Handle flipSelf mode (Anarchy-6)
+            if (params.flipSelf) {
+                let text = params.optional ? 'Flip this card' : 'Flip this card';
+
+                // NEW: Add conditional text (Anarchy-6)
+                if (params.advancedConditional?.type === 'protocol_match') {
+                    text += `, if this card is in the line with the ${params.advancedConditional.protocol || '[Protocol]'} protocol`;
+                }
+
+                mainText = text + '.';
+                break;
+            }
+
+            const may = params.optional ? 'You may flip' : 'Flip';
+            const isOwn = params.targetFilter?.owner === 'own';
+            const isOpponent = params.targetFilter?.owner === 'opponent';
+
+            let targetDesc = '';
+            if (isOwn) targetDesc = 'your ';
+            if (isOpponent) targetDesc = "opponent's ";
+            // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
             if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
-            if (params.targetFilter?.position === 'uncovered') targetDesc += 'uncovered ';
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
             if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
@@ -74,7 +111,22 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             const cardWord = (params.count === 1) ? 'card' : 'cards';
-            let text = `${may} ${countText} ${targetDesc}${cardWord}.`;
+
+            // Build text differently for "of your" phrasing (Apathy-4)
+            let text = '';
+            if (isOwn && params.targetFilter?.position === 'covered' && params.targetFilter?.faceState === 'face_up' && params.optional) {
+                // Special case: "You may flip 1 of your face-up covered cards" (always plural "cards")
+                text = `${may} ${countText} of your ${params.targetFilter.faceState.replace('_', '-')} ${params.targetFilter.position} cards`;
+            } else {
+                text = `${may} ${countText} ${targetDesc}${cardWord}`;
+            }
+
+            // NEW: Add scope text (Apathy-1)
+            if (params.scope === 'this_lane') {
+                text += ' in this line';
+            }
+
+            text += '.';
 
             if (params.selfFlipAfter) {
                 text += ' Then flip this card.';
@@ -85,20 +137,31 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'shift': {
+            const mayShift = params.optional ? 'You may shift' : 'Shift';
+
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                mainText = `${mayShift} that card.`;
+                break;
+            }
+
             let targetDesc = '';
 
             if (params.targetFilter?.owner === 'opponent') targetDesc += "opponent's ";
+            // NEW: Add "other" before position/faceState descriptors (Anarchy-1)
+            if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
+            // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
             if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
-            if (params.targetFilter?.position === 'uncovered') targetDesc += 'uncovered ';
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
 
             const count = params.count === 'all' ? 'all' : '1';
             const cardWord = count === '1' ? 'card' : 'cards';
-            let text = `Shift ${count} ${targetDesc}${cardWord}`;
+            let text = `${mayShift} ${count} ${targetDesc}${cardWord}`;
 
+            // NEW: Better destination text (Anarchy-1)
             if (params.destinationRestriction?.type === 'non_matching_protocol') {
-                text += ' to a non-matching protocol';
+                text += ' to a line without a matching protocol';
             } else if (params.destinationRestriction?.type === 'specific_lane') {
                 text += ' within this line';
             } else if (params.destinationRestriction?.type === 'to_another_line') {
@@ -110,12 +173,27 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'delete': {
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                mainText = 'Delete that card.';
+                break;
+            }
+
+            // NEW: Handle deleteSelf (Death-1: "delete this card")
+            if (params.deleteSelf) {
+                mainText = 'Delete this card.';
+                break;
+            }
+
             let text = 'Delete ';
+
+            // NEW: Special handling for Anarchy-2 style (covered or uncovered)
+            const isCoveredOrUncovered = params.targetFilter?.position === 'any';
 
             if (params.count === 'all_in_lane') {
                 text += 'all ';
             } else {
-                text += `${params.count} `;
+                text += isCoveredOrUncovered ? 'a ' : `${params.count} `;
             }
 
             if (params.targetFilter?.calculation === 'highest_value') {
@@ -125,13 +203,24 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             if (params.targetFilter?.valueRange) {
-                text += `value ${params.targetFilter.valueRange.min}-${params.targetFilter.valueRange.max} `;
+                const { min, max } = params.targetFilter.valueRange;
+                // Generate "value 0 or 1" instead of "value 0-1"
+                const values = [];
+                for (let i = min; i <= max; i++) {
+                    values.push(i);
+                }
+                const valueText = values.join(' or ');
+                text += `value ${valueText} `;
             }
 
-            if (params.targetFilter?.position === 'covered') {
-                text += 'covered ';
-            } else if (params.targetFilter?.position === 'uncovered') {
-                text += 'uncovered ';
+            // NEW: Handle "covered or uncovered" case (Anarchy-2)
+            if (isCoveredOrUncovered) {
+                text += 'covered or uncovered ';
+            } else {
+                // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
+                if (params.targetFilter?.position === 'covered') {
+                    text += 'covered ';
+                }
             }
 
             if (params.targetFilter?.faceState === 'face_down') {
@@ -140,8 +229,22 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 text += 'face-up ';
             }
 
+            // NEW: Handle excludeSelf (Death-1: "delete 1 other card")
+            const otherPrefix = params.excludeSelf ? 'other ' : '';
             const cardWord = params.count === 1 ? 'card' : 'cards';
-            text += cardWord;
+            text += otherPrefix + cardWord;
+
+            // NEW: Handle selectLane (Death-2: "in 1 line")
+            if (params.selectLane) {
+                text += ' in 1 line';
+            }
+
+            // NEW: Handle protocol matching (Anarchy-2: "in a line with a matching protocol")
+            if (params.protocolMatching === 'must_match') {
+                text += ' in a line with a matching protocol';
+            } else if (params.protocolMatching === 'must_not_match') {
+                text += ' in a line without a matching protocol';
+            }
 
             if (params.scope?.type === 'this_line') {
                 text += ' in this line';
@@ -151,15 +254,21 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 text += ' from each other line';
             }
 
-            if (params.excludeSelf) {
-                text += ' (excluding self)';
-            }
-
             mainText = text + '.';
             break;
         }
 
         case 'discard': {
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                if (params.actor === 'opponent') {
+                    mainText = 'Opponent discards that card.';
+                } else {
+                    mainText = 'Discard that card.';
+                }
+                break;
+            }
+
             const isVariable = params.variableCount;
             let countText = '';
 
@@ -179,6 +288,12 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'return': {
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                mainText = 'Return that card to hand.';
+                break;
+            }
+
             if (params.targetFilter?.valueEquals !== undefined) {
                 mainText = `Return all value ${params.targetFilter.valueEquals} cards to hand.`;
                 break;
@@ -191,6 +306,13 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'play': {
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                const faceState = params.faceDown ? 'face-down' : 'face-up';
+                mainText = `Play that card ${faceState}.`;
+                break;
+            }
+
             const actor = params.actor;
             const cardWord = params.count === 1 ? 'card' : 'cards';
             const faceState = params.faceDown ? 'face-down' : 'face-up';
@@ -232,16 +354,31 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                     ? "both players'"
                     : 'your';
 
+            let text = '';
             if (params.action === 'rearrange_protocols') {
-                mainText = `Rearrange ${targetText} protocols.`;
+                text = `Rearrange ${targetText} protocols`;
             } else {
-                mainText = `Swap 2 ${targetText} protocols.`;
+                text = `Swap 2 ${targetText} protocols`;
             }
+
+            // NEW: Add restriction text (Anarchy-3)
+            if (params.restriction && params.restriction.disallowedProtocol) {
+                text += `. ${params.restriction.disallowedProtocol} cannot be on this line`;
+            }
+
+            mainText = text + '.';
             break;
         }
 
         case 'reveal':
         case 'give': {
+            // If referencing card from previous effect, use "that card"
+            if (effect.useCardFromPreviousEffect) {
+                const actionText = params.action === 'give' ? 'Give' : 'Reveal';
+                mainText = `${actionText} that card.`;
+                break;
+            }
+
             const cardWord = params.count === 1 ? 'card' : 'cards';
             const actionText = params.action === 'give' ? 'Give' : 'Reveal';
             const sourceText = params.source === 'opponent_hand' ? "opponent's hand" : 'your hand';
@@ -268,6 +405,108 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'passive_rule': {
+            const rule = params.rule;
+            switch (rule?.type) {
+                case 'require_non_matching_protocol':
+                    mainText = 'Cards can only be played without matching protocols.';
+                    break;
+                case 'block_all_play':
+                    mainText = 'Cards cannot be played in this line.';
+                    break;
+                case 'ignore_middle_commands':
+                    mainText = 'Ignore all middle commands of cards in this line.';
+                    break;
+                case 'block_face_down_play':
+                    mainText = "Opponent can't play cards face-down in this line.";
+                    break;
+                case 'require_face_down_play':
+                    mainText = 'Opponent can only play cards face-down in this line.';
+                    break;
+                case 'allow_any_protocol_play':
+                    mainText = 'You can play cards without matching protocols.';
+                    break;
+                case 'block_flips':
+                    mainText = "Cards can't be flipped face-up in this line.";
+                    break;
+                case 'block_protocol_rearrange':
+                    mainText = "Protocols can't be rearranged.";
+                    break;
+                case 'block_shifts_from_lane':
+                    mainText = "Cards can't shift from this line.";
+                    break;
+                case 'block_shifts_to_lane':
+                    mainText = "Cards can't shift to this line.";
+                    break;
+                case 'skip_check_cache_phase':
+                    mainText = 'Skip check cache phase.';
+                    break;
+                default:
+                    mainText = 'Passive rule effect.';
+            }
+            break;
+        }
+
+        case 'value_modifier': {
+            const mod = params.modifier;
+            switch (mod?.type) {
+                case 'add_per_condition': {
+                    const scopeText = mod.scope === 'this_lane' ? 'in this line' : '';
+                    const targetText = mod.target === 'own_total' ? 'Your total value' :
+                                      mod.target === 'opponent_total' ? "Opponent's total value" :
+                                      'Total value';
+
+                    let conditionText = '';
+                    if (mod.condition === 'per_face_down_card') {
+                        conditionText = 'for each face-down card';
+                    } else if (mod.condition === 'per_face_up_card') {
+                        conditionText = 'for each face-up card';
+                    } else if (mod.condition === 'per_card') {
+                        conditionText = 'for each card';
+                    }
+
+                    const sign = mod.value >= 0 ? '+' : '';
+                    mainText = `${targetText} ${scopeText} is increased by ${sign}${mod.value} ${conditionText} ${scopeText}.`.replace(/\s+/g, ' ');
+                    break;
+                }
+                case 'set_to_fixed': {
+                    // Build description based on target/scope/filter
+                    let targetDesc = '';
+                    if (mod.target === 'own_cards') {
+                        targetDesc = 'your';
+                    } else if (mod.target === 'opponent_cards') {
+                        targetDesc = "opponent's";
+                    } else {
+                        targetDesc = 'all';
+                    }
+
+                    let faceDesc = '';
+                    if (mod.filter?.faceState === 'face_down') {
+                        faceDesc = ' face-down';
+                    } else if (mod.filter?.faceState === 'face_up') {
+                        faceDesc = ' face-up';
+                    }
+
+                    let scopeDesc = '';
+                    if (mod.scope === 'this_lane') {
+                        scopeDesc = ' in this stack';
+                    }
+
+                    mainText = `All ${targetDesc}${faceDesc} cards${scopeDesc} have a value of ${mod.value}.`;
+                    break;
+                }
+                case 'add_to_total': {
+                    const targetText = mod.target === 'opponent_total' ? 'Opponent total' : 'Your total';
+                    const sign = mod.value >= 0 ? '+' : '';
+                    mainText = `${targetText} ${sign}${mod.value}.`;
+                    break;
+                }
+                default:
+                    mainText = 'Value modifier effect.';
+            }
+            break;
+        }
+
         default:
             mainText = 'Effect';
             break;
@@ -276,7 +515,9 @@ const getEffectSummary = (effect: EffectDefinition): string => {
     // Handle conditional follow-up effects
     if (effect.conditional && effect.conditional.thenEffect) {
         const followUpText = getEffectSummary(effect.conditional.thenEffect);
-        mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
+        // Use "then" for sequential actions, "If you do" for conditional execution
+        const connector = effect.conditional.type === 'then' ? 'then' : 'If you do,';
+        mainText = `${mainText} ${connector} ${followUpText.toLowerCase()}`;
     }
 
     return mainText;
@@ -331,24 +572,33 @@ const generateEffectText = (effects: EffectDefinition[]): string => {
  */
 export const convertCustomCardToCard = (
     customCard: CustomCardDefinition,
-    protocolName: string
+    protocol: CustomProtocolDefinition
 ): Card => {
-    const topText = generateEffectText(customCard.topEffects);
-    const middleText = generateEffectText(customCard.middleEffects);
-    const bottomText = generateEffectText(customCard.bottomEffects);
+    // Use manual text if provided, otherwise generate from effects
+    const topText = (customCard.text?.top !== undefined)
+        ? customCard.text.top
+        : generateEffectText(customCard.topEffects);
+    const middleText = (customCard.text?.middle !== undefined)
+        ? customCard.text.middle
+        : generateEffectText(customCard.middleEffects);
+    const bottomText = (customCard.text?.bottom !== undefined)
+        ? customCard.text.bottom
+        : generateEffectText(customCard.bottomEffects);
 
     // Collect keywords from all effects
     const allEffects = [...customCard.topEffects, ...customCard.middleEffects, ...customCard.bottomEffects];
     const keywords = extractKeywords(allEffects);
 
-    return {
-        protocol: protocolName,
+    const card = {
+        protocol: protocol.name,
         value: customCard.value,
         top: topText,
         middle: middleText,
         bottom: bottomText,
         keywords,
         category: 'Custom',
+        color: protocol.color,  // Custom protocol color
+        pattern: protocol.pattern,  // Custom protocol pattern
         // Store the effect definitions for runtime execution
         customEffects: {
             topEffects: customCard.topEffects,
@@ -356,13 +606,15 @@ export const convertCustomCardToCard = (
             bottomEffects: customCard.bottomEffects,
         }
     } as any; // Type assertion needed since we're extending Card interface
+
+    return card;
 };
 
 /**
  * Convert a CustomProtocolDefinition to an array of Card objects
  */
 export const convertCustomProtocolToCards = (protocol: CustomProtocolDefinition): Card[] => {
-    return protocol.cards.map(card => convertCustomCardToCard(card, protocol.name));
+    return protocol.cards.map(card => convertCustomCardToCard(card, protocol));
 };
 
 /**

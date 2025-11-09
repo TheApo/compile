@@ -9,6 +9,7 @@ import { GameState, PlayedCard, Player, PlayerState, ActionRequired } from "../t
 import { shuffleDeck } from './gameLogic';
 import { log } from '../logic/utils/log';
 import { recalculateAllLaneValues } from '../logic/game/stateManager';
+import { processReactiveEffects } from '../logic/game/reactiveEffectProcessor';
 
 /**
  * Draws a specified number of cards from a deck, handling reshuffling the discard pile if necessary.
@@ -119,8 +120,12 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
     // After drawing, check for the trigger
     if (drawnCards.length > 0) {
         newState = checkForSpirit3Trigger(newState, player);
+
+        // NEW: Trigger reactive effects after draw (Spirit-3 custom protocol)
+        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player, count: drawnCards.length });
+        newState = reactiveResult.newState;
     }
-    
+
     return newState;
 }
 

@@ -5,6 +5,7 @@
 import React from 'react';
 import { GameState, PlayedCard } from '../types';
 import { CardComponent } from './Card';
+import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface LaneProps {
     cards: PlayedCard[];
@@ -21,13 +22,13 @@ interface LaneProps {
     owner: 'player' | 'opponent';
     animationState: GameState['animationState'];
     isCardTargetable: (card: PlayedCard) => boolean;
-    faceDownValue: number;
+    laneIndex: number;
     sourceCardId: string | null;
     gameState: GameState;
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, faceDownValue, sourceCardId, gameState }) => {
-    
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, laneIndex, sourceCardId, gameState }) => {
+
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
     if (isMatching) laneClasses.push('matching-protocol');
@@ -36,7 +37,7 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
     if (isEffectTarget) laneClasses.push('effect-target');
 
     return (
-        <div 
+        <div
             className={laneClasses.join(' ')}
             onPointerDown={onLanePointerDown}
         >
@@ -54,6 +55,8 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
             <div className="lane-stack">
                 {cards.map((card, index) => {
                     const isRevealed = gameState.actionRequired?.type === 'prompt_shift_or_flip_for_light_2' && gameState.actionRequired.revealedCardId === card.id;
+                    // Calculate effective face-down value for this specific card
+                    const faceDownValue = getEffectiveCardValue(card, cards, gameState, laneIndex, owner);
                     return (
                         <CardComponent
                             key={card.id}

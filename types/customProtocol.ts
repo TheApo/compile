@@ -22,10 +22,34 @@ export type EffectActionType =
     | 'swap_protocols'
     | 'reveal'
     | 'give'
-    | 'take';
+    | 'take'
+    | 'choice'
+    | 'passive_rule'
+    | 'value_modifier';
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
-export type EffectTrigger = 'on_play' | 'start' | 'end' | 'on_cover';
+
+// Expanded trigger types to support all card effects
+export type EffectTrigger =
+    // Immediate triggers (Middle Box)
+    | 'on_play'              // When played or uncovered
+    // Turn phase triggers (Bottom Box)
+    | 'start'                // Start of turn
+    | 'end'                  // End of turn
+    | 'on_cover'             // When this card would be covered
+    // Passive (Top Box)
+    | 'passive'              // Always active when face-up
+    // Reactive triggers (Top Box)
+    | 'after_delete'         // After you delete cards (Hate-3)
+    | 'after_opponent_discard' // After opponent discards (Plague-1)
+    | 'after_draw'           // After you draw cards (Spirit-3)
+    | 'after_clear_cache'    // After you clear cache (Speed-1)
+    | 'before_compile_delete' // Before this card deleted by compile (Speed-2)
+    | 'after_flip'           // After cards are flipped
+    | 'after_shift'          // After cards are shifted
+    | 'after_play'           // After cards are played
+    | 'on_flip'              // When this card would be flipped (Metal-6)
+    | 'on_cover_or_flip';    // When this card would be covered OR flipped (Metal-6)
 
 export type TargetOwner = 'any' | 'own' | 'opponent';
 export type TargetPosition = 'any' | 'covered' | 'uncovered' | 'covered_in_this_line';
@@ -36,13 +60,22 @@ export type TargetFaceState = 'any' | 'face_up' | 'face_down';
  */
 export interface DrawEffectParams {
     action: 'draw';
-    count: number;  // 1-6
+    count: number;  // 1-6 (only used if countType is 'fixed')
     target: 'self' | 'opponent';
     source: 'own_deck' | 'opponent_deck';
+    // NEW: Dynamic draw count types
+    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size';
+    countOffset?: number;  // For Fire-4: "discard count + 1" → offset = 1
     conditional?: {
         type: 'count_face_down' | 'is_covering' | 'non_matching_protocols';
     };
     preAction?: 'refresh';  // Refresh hand before drawing
+    // NEW: Advanced conditionals
+    advancedConditional?: {
+        type: 'protocol_match' | 'compile_block';  // Anarchy-6, Metal-1
+        protocol?: string;  // For 'protocol_match'
+        turnDuration?: number;  // For 'compile_block'
+    };
 }
 
 /**
@@ -59,6 +92,13 @@ export interface FlipEffectParams {
     };
     optional: boolean;  // "may flip" vs "flip"
     selfFlipAfter?: boolean;  // Flip this card after target flip
+    flipSelf?: boolean;  // NEW: Flip this card instead of selecting target (for Anarchy-6)
+    scope?: 'any' | 'this_lane';  // NEW: Limit flip to specific lane (Apathy-1)
+    // NEW: Advanced conditionals
+    advancedConditional?: {
+        type: 'protocol_match';  // Anarchy-6: "if this card is in line with Anarchy protocol"
+        protocol?: string;  // For 'protocol_match'
+    };
 }
 
 /**
@@ -66,10 +106,12 @@ export interface FlipEffectParams {
  */
 export interface ShiftEffectParams {
     action: 'shift';
+    optional?: boolean;  // "may shift" vs "shift"
     targetFilter: {
         owner: TargetOwner;
         position: 'uncovered' | 'covered' | 'any';
         faceState: TargetFaceState;
+        excludeSelf?: boolean;  // NEW: For Anarchy-1 "shift 1 other card"
     };
     destinationRestriction?: {
         type: 'non_matching_protocol' | 'specific_lane' | 'any';
@@ -89,13 +131,17 @@ export interface DeleteEffectParams {
         faceState: TargetFaceState;
         valueRange?: { min: number; max: number };  // e.g., values 0-1
         calculation?: 'highest_value' | 'lowest_value';
+        owner?: 'own' | 'opponent';  // NEW: which player's cards
     };
     scope?: {
         type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line';
         laneRestriction?: number;
+        minCardsInLane?: number;  // NEW: Metal-3 - "8 or more cards in line"
     };
     protocolMatching?: 'must_match' | 'must_not_match';
     excludeSelf: boolean;
+    // NEW: Who chooses which card to delete?
+    actorChooses?: 'effect_owner' | 'card_owner';  // Plague-4: opponent chooses their own card
 }
 
 /**
@@ -103,12 +149,16 @@ export interface DeleteEffectParams {
  */
 export interface DiscardEffectParams {
     action: 'discard';
-    count: number;  // 1-6
+    count: number;  // 1-6 (only used if countType is 'fixed')
     actor: 'self' | 'opponent';
+    variableCount?: boolean;  // "Discard 1 or more cards" (Fire-4, Plague-2)
     conditional?: boolean;  // If part of "if you do" chain
     choice?: {
         alternative: 'flip_self';  // Either discard or flip self
     };
+    // NEW: Dynamic discard count (Plague-2)
+    countType?: 'fixed' | 'equal_to_discarded';
+    countOffset?: number;  // For Plague-2: "discard count + 1" → offset = 1
 }
 
 /**
@@ -136,9 +186,15 @@ export interface PlayEffectParams {
     count: number;  // 1-6
     faceDown: boolean;
     destinationRule: {
-        type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card';
+        type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line';
         excludeCurrentLane?: boolean;
     };
+    // NEW: Conditional play
+    condition?: {
+        type: 'per_x_cards_in_line' | 'only_in_lines_with_cards';
+        cardCount?: number;  // For 'per_x_cards_in_line' (e.g., 2 for "every 2 cards")
+    };
+    actor?: 'self' | 'opponent';  // Who plays (default: self)
 }
 
 /**
@@ -149,7 +205,7 @@ export interface ProtocolEffectParams {
     target: 'own' | 'opponent' | 'both_sequential';
     restriction?: {
         disallowedProtocol: string;  // e.g., "Anarchy"
-        laneIndex: number;
+        laneIndex: number | 'current';  // NEW: 'current' = lane where this card is located (Anarchy-3)
     };
 }
 
@@ -174,6 +230,65 @@ export interface TakeEffectParams {
 }
 
 /**
+ * Choice Effect Parameters (Either/Or)
+ */
+export interface ChoiceEffectParams {
+    action: 'choice';
+    options: EffectDefinition[];  // Array of 2 effect options
+}
+
+/**
+ * Passive Rule Effect Parameters
+ * These modify game rules while the card is face-up
+ */
+export interface PassiveRuleParams {
+    action: 'passive_rule';
+    rule: {
+        type: 'block_face_down_play'        // Metal-2: Opponent can't play face-down
+            | 'block_face_up_play'           // (Not used currently)
+            | 'block_all_play'               // Plague-0: Opponent can't play in this lane
+            | 'require_face_down_play'       // Psychic-1: Opponent can only play face-down
+            | 'allow_any_protocol_play'      // Spirit-1, Chaos-3: Play anywhere without matching
+            | 'require_non_matching_protocol' // Anarchy-1: Can only play non-matching
+            | 'block_flips'                  // Frost-1: Cards can't be flipped face-up
+            | 'block_protocol_rearrange'     // Frost-1: Protocols can't be rearranged
+            | 'block_shifts_from_lane'       // Frost-3: Can't shift FROM this lane
+            | 'block_shifts_to_lane'         // Frost-3: Can't shift TO this lane
+            | 'ignore_middle_commands'       // Apathy-2: Ignore middle effects in this lane
+            | 'skip_check_cache_phase';      // Spirit-0: Skip check cache phase
+        target: 'self' | 'opponent' | 'all';  // Who is affected
+        scope: 'this_lane' | 'global';        // Where it applies
+    };
+}
+
+/**
+ * Value Modifier Effect Parameters
+ * These modify card values or lane totals while face-up
+ */
+export interface ValueModifierParams {
+    action: 'value_modifier';
+    modifier: {
+        type: 'add_per_condition'         // Apathy-0: +1 per face-down card
+            | 'set_to_fixed'              // Darkness-2: set face-down cards to 4
+            | 'add_to_total';             // Metal-0: opponent total -2
+        value: number;                    // The modifier value (+1, 4, -2, etc.)
+        condition?: 'per_face_down_card'  // For add_per_condition type
+                  | 'per_face_up_card'
+                  | 'per_card';
+        target: 'own_cards'               // Which cards/totals to modify
+              | 'opponent_cards'
+              | 'all_cards'
+              | 'own_total'               // Modify final total
+              | 'opponent_total';
+        scope: 'this_lane' | 'global';
+        filter?: {                        // Filter which cards (for card modifiers)
+            faceState?: 'face_up' | 'face_down' | 'any';
+            position?: 'covered' | 'uncovered' | 'any';
+        };
+    };
+}
+
+/**
  * Union of all effect parameter types
  */
 export type EffectParams =
@@ -186,7 +301,10 @@ export type EffectParams =
     | PlayEffectParams
     | ProtocolEffectParams
     | RevealEffectParams
-    | TakeEffectParams;
+    | TakeEffectParams
+    | ChoiceEffectParams
+    | PassiveRuleParams
+    | ValueModifierParams;
 
 /**
  * Effect Definition - Single effect with parameters
@@ -200,6 +318,9 @@ export interface EffectDefinition {
         type: 'if_you_do';
         thenEffect: EffectDefinition;  // Chained effect
     };
+    // NEW: Reference card from previous effect in chain
+    // Enables: "Flip 1 card. Shift THAT card" or "Flip 1 card. Draw cards equal to THAT card's value"
+    useCardFromPreviousEffect?: boolean;
 }
 
 /**

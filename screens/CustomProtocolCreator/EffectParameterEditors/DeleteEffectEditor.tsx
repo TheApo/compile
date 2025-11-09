@@ -69,6 +69,27 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             </label>
 
             <label>
+                Owner
+                <select
+                    value={params.targetFilter.owner || 'any'}
+                    onChange={e => {
+                        const val = e.target.value;
+                        const newFilter = { ...params.targetFilter };
+                        if (val === 'any') {
+                            delete newFilter.owner;
+                        } else {
+                            newFilter.owner = val as any;
+                        }
+                        onChange({ ...params, targetFilter: newFilter });
+                    }}
+                >
+                    <option value="any">Any (own or opponent)</option>
+                    <option value="own">Own cards only</option>
+                    <option value="opponent">Opponent's cards only</option>
+                </select>
+            </label>
+
+            <label>
                 Calculation
                 <select
                     value={params.targetFilter.calculation || 'none'}
@@ -138,6 +159,62 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                 </select>
             </label>
 
+            {(params.scope?.type === 'other_lanes' || params.scope?.type === 'any') && (
+                <label>
+                    Minimum Cards in Lane
+                    <select
+                        value={params.scope?.minCardsInLane || 0}
+                        onChange={e => {
+                            const val = parseInt(e.target.value);
+                            if (val === 0) {
+                                const newScope = { ...params.scope };
+                                delete newScope.minCardsInLane;
+                                onChange({ ...params, scope: newScope as any });
+                            } else {
+                                onChange({
+                                    ...params,
+                                    scope: { ...params.scope!, minCardsInLane: val }
+                                });
+                            }
+                        }}
+                    >
+                        <option value={0}>No minimum</option>
+                        <option value={8}>8 or more cards (Metal-3)</option>
+                        <option value={6}>6 or more cards</option>
+                        <option value={4}>4 or more cards</option>
+                    </select>
+                    {params.scope?.minCardsInLane && (
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Only delete from lanes with {params.scope.minCardsInLane}+ cards total.
+                        </small>
+                    )}
+                </label>
+            )}
+
+            <label>
+                Who Chooses Target?
+                <select
+                    value={params.actorChooses || 'effect_owner'}
+                    onChange={e => {
+                        const val = e.target.value as 'effect_owner' | 'card_owner';
+                        if (val === 'effect_owner') {
+                            const { actorChooses, ...rest } = params;
+                            onChange(rest as DeleteEffectParams);
+                        } else {
+                            onChange({ ...params, actorChooses: val });
+                        }
+                    }}
+                >
+                    <option value="effect_owner">Effect owner chooses (default)</option>
+                    <option value="card_owner">Card owner chooses (Plague-4: opponent deletes their own)</option>
+                </select>
+                {params.actorChooses === 'card_owner' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        The owner of the targeted card chooses which card to delete.
+                    </small>
+                )}
+            </label>
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {generateDeleteText(params)}
             </div>
@@ -183,12 +260,30 @@ const generateDeleteText = (params: DeleteEffectParams): string => {
         text += ' in this line';
     } else if (params.scope?.type === 'other_lanes') {
         text += ' in other lanes';
+        if (params.scope.minCardsInLane) {
+            text += ` with ${params.scope.minCardsInLane}+ cards`;
+        }
     } else if (params.scope?.type === 'each_other_line') {
         text += ' from each other line';
+    } else if (params.scope?.type === 'any' && params.scope.minCardsInLane) {
+        text += ` in lanes with ${params.scope.minCardsInLane}+ cards`;
+    }
+
+    // Add owner info
+    if (params.targetFilter.owner === 'own') {
+        text += ' (your cards)';
+    } else if (params.targetFilter.owner === 'opponent') {
+        text += ' (opponent\'s cards)';
     }
 
     if (params.excludeSelf) {
         text += ' (excluding self)';
+    }
+
+    // Add actor info
+    if (params.actorChooses === 'card_owner') {
+        text += '. Card owner chooses which.';
+        return text;
     }
 
     return text + '.';

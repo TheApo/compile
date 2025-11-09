@@ -17,6 +17,7 @@ interface PhaseControllerProps {
     onResolveFire4Discard: (cardIds: string[]) => void;
     onResolveHate1Discard: (cardIds: string[]) => void;
     onResolveLight2Prompt: (choice: 'shift' | 'flip' | 'skip') => void;
+    onResolveOptionalDrawPrompt: (accept: boolean) => void;
     onResolveDeath1Prompt: (accept: boolean) => void;
     onResolveLove1Prompt: (accept: boolean) => void;
     onResolvePsychic4Prompt: (accept: boolean) => void;
@@ -28,11 +29,11 @@ interface PhaseControllerProps {
     actionRequiredClass: string;
 }
 
-export const PhaseController: React.FC<PhaseControllerProps> = ({ 
-    gameState, onFillHand, onSkipAction, 
+export const PhaseController: React.FC<PhaseControllerProps> = ({
+    gameState, onFillHand, onSkipAction,
     onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt,
     onResolveSpeed3Prompt,
-    onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveDeath1Prompt,
+    onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
     onResolveControlMechanicPrompt,
     selectedCardId, multiSelectedCardIds, actionRequiredClass
@@ -69,6 +70,15 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
            );
         }
 
+        if (actionRequired?.type === 'prompt_optional_draw') {
+            return (
+               <>
+                   <button className="btn" onClick={() => onResolveOptionalDrawPrompt(true)}>Draw</button>
+                   <button className="btn btn-back" onClick={() => onResolveOptionalDrawPrompt(false)}>Skip</button>
+               </>
+           );
+        }
+
         if (actionRequired?.type === 'prompt_death_1_effect') {
              return (
                 <>
@@ -77,7 +87,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 </>
             );
         }
-        
+
         if (actionRequired?.type === 'prompt_give_card_for_love_1') {
             return (
                <>
@@ -253,10 +263,16 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return `Action: Select a card to delete (${actionRequired.count} remaining)`;
                 case 'select_lane_for_death_2':
                     return 'Action: Select a lane to delete cards with value 1 or 2';
+                case 'select_lane_for_delete':
+                    return 'Action: Select a lane';
+                case 'prompt_optional_draw':
+                    return 'Optional: Draw card(s)?';
                 case 'prompt_death_1_effect':
                     return 'Start Phase: Use Death-1 effect?';
                 case 'select_card_to_delete_for_death_1':
                     return 'Action: Select a card to delete';
+                case 'delete_self':
+                    return 'Deleting card...';
                 case 'prompt_give_card_for_love_1':
                     return 'End Phase: Give 1 card to draw 2?';
                 case 'select_card_from_hand_to_give':

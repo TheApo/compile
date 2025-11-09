@@ -1,0 +1,180 @@
+{
+  "id": "anarchy-custom-001",
+  "name": "Anarchy_custom",
+  "description": "Custom recreation of Anarchy protocol to validate editor capabilities",
+  "author": "System Validation",
+  "createdAt": "2025-11-08T00:00:00.000Z",
+  "color": "#8B0000",
+  "pattern": "chaos",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "anarchy-0-shift",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "anarchy-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "conditional": {
+              "type": "non_matching_protocols"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "anarchy-1-passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "require_non_matching_protocol",
+              "target": "all",
+              "scope": "global"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "anarchy-1-shift",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": true
+            },
+            "destinationRestriction": {
+              "type": "non_matching_protocol"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "anarchy-2-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "any",
+              "faceState": "face_up"
+            },
+            "protocolMatching": "must_match",
+            "excludeSelf": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "anarchy-3-swap",
+          "params": {
+            "action": "swap_protocols",
+            "target": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "anarchy-3-end-rearrange",
+          "params": {
+            "action": "rearrange_protocols",
+            "target": "own",
+            "restriction": {
+              "disallowedProtocol": "Anarchy",
+              "laneIndex": "current"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "anarchy-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "anarchy-6-start-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "flipSelf": true,
+            "optional": false,
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "advancedConditional": {
+              "type": "protocol_match",
+              "protocol": "Anarchy_custom"
+            }
+          },
+          "position": "top",
+          "trigger": "start"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { CardComponent } from '../components/Card';
 import { cards, Card as CardData } from '../data/cards';
 import { shuffleDeck } from '../utils/gameLogic';
 import { Difficulty } from '../types';
+import { isCustomProtocolEnabled, setCustomProtocolEnabled } from '../utils/customProtocolSettings';
 
 interface MainMenuProps {
   onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary' | 'Statistics' | 'CustomProtocols') => void;
@@ -24,6 +25,8 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
   const [initialPreviewCard, setInitialPreviewCard] = useState<CardData | null>(null);
   const [shuffledTickerCards, setShuffledTickerCards] = useState<CardData[]>([]);
+  const [customProtocolsVisible, setCustomProtocolsVisible] = useState(isCustomProtocolEnabled());
+  const [developedClickCount, setDevelopedClickCount] = useState(0);
 
   useEffect(() => {
     // A stable way to get two different random cards
@@ -32,7 +35,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
         indices.add(Math.floor(Math.random() * cards.length));
     }
     const randomCards = Array.from(indices).map(i => cards[i]);
-    
+
     // Set up the preview card and the right decorative card
     if (randomCards.length > 0) {
       setInitialPreviewCard(randomCards[0]);
@@ -46,6 +49,18 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
     setShuffledTickerCards(shuffleDeck(cards));
   }, []);
 
+  const handleDevelopedClick = () => {
+    const newCount = developedClickCount + 1;
+    setDevelopedClickCount(newCount);
+
+    if (newCount >= 5) {
+      const newState = !customProtocolsVisible;
+      setCustomProtocolsVisible(newState);
+      setCustomProtocolEnabled(newState);
+      setDevelopedClickCount(0);
+    }
+  };
+
   return (
     <div className="screen main-menu">
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
@@ -56,7 +71,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
           based on the card game <a href="https://boardgamegeek.com/boardgame/406652/compile-main-1" target="_blank" rel="noopener noreferrer">Compile: Main 1</a> designed by <a href="https://justgravyllc.com/" target="_blank" rel="noopener noreferrer">Michael Yang</a>
         </p>
         <p>
-          developed by <a href="https://apo-games.de/" target="_blank" rel="noopener noreferrer">Dirk Aporius</a>
+          <span onClick={handleDevelopedClick} style={{ cursor: 'default', userSelect: 'none' }}>developed</span> by <a href="https://apo-games.de/" target="_blank" rel="noopener noreferrer">Dirk Aporius</a>
         </p>
       </div>
       
@@ -100,9 +115,11 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
             <button className="btn" onClick={() => onNavigate('Statistics')}>
               Statistics
             </button>
-            <button className="btn" onClick={() => onNavigate('CustomProtocols')}>
-              Custom Protocols
-            </button>
+            {customProtocolsVisible && (
+              <button className="btn" onClick={() => onNavigate('CustomProtocols')}>
+                Custom Protocols
+              </button>
+            )}
             <button className="btn" onClick={() => setShowRules(true)}>
               Rules
             </button>

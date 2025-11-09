@@ -16,6 +16,9 @@ import { PlayEffectEditor } from './EffectParameterEditors/PlayEffectEditor';
 import { ProtocolEffectEditor } from './EffectParameterEditors/ProtocolEffectEditor';
 import { RevealEffectEditor } from './EffectParameterEditors/RevealEffectEditor';
 import { TakeEffectEditor } from './EffectParameterEditors/TakeEffectEditor';
+import { ChoiceEffectEditor } from './EffectParameterEditors/ChoiceEffectEditor';
+import { PassiveRuleEditor } from './EffectParameterEditors/PassiveRuleEditor';
+import { ValueModifierEditor } from './EffectParameterEditors/ValueModifierEditor';
 
 interface EffectEditorProps {
     effect: EffectDefinition;
@@ -68,6 +71,12 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action, source: 'own_hand', count: 1 };
         case 'take':
             return { action: 'take', source: 'opponent_hand', count: 1, random: true };
+        case 'choice':
+            return { action: 'choice', options: [] };
+        case 'passive_rule':
+            return { action: 'passive_rule', rule: { type: 'block_all_play', target: 'opponent', scope: 'this_lane' } };
+        case 'value_modifier':
+            return { action: 'value_modifier', modifier: { type: 'add_per_condition', value: 1, condition: 'per_face_down_card', target: 'own_total', scope: 'this_lane' } };
         default:
             return {};
     }
@@ -152,6 +161,12 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                 return <RevealEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'take':
                 return <TakeEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'choice':
+                return <ChoiceEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'passive_rule':
+                return <PassiveRuleEditor params={effectToRender.params} onChange={onChange} />;
+            case 'value_modifier':
+                return <ValueModifierEditor params={effectToRender.params} onChange={onChange} />;
             default:
                 return <div>Unknown effect type</div>;
         }
@@ -165,8 +180,25 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                 {renderEffectParams(effect, handleParamsChange)}
             </div>
 
+            {/* Use Card from Previous Effect */}
+            <div style={{ marginTop: '15px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                        type="checkbox"
+                        checked={!!effect.useCardFromPreviousEffect}
+                        onChange={(e) => onChange({ ...effect, useCardFromPreviousEffect: e.target.checked })}
+                    />
+                    <span>Use card from previous effect (for "shift THAT card", "draw equal to THAT card's value", etc.)</span>
+                </label>
+                {effect.useCardFromPreviousEffect && (
+                    <small style={{ display: 'block', marginLeft: '24px', marginTop: '4px', color: '#8A79E8' }}>
+                        This effect will target/use the card selected by the previous effect in the chain.
+                    </small>
+                )}
+            </div>
+
             {/* Conditional Follow-Up */}
-            <div className="conditional-section" style={{ marginTop: '20px', borderTop: '1px solid #ccc', paddingTop: '15px' }}>
+            <div className="conditional-section" style={{ marginTop: '20px', borderTop: '1px solid #2c1d63', paddingTop: '15px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                     <input
                         type="checkbox"
@@ -177,7 +209,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                 </label>
 
                 {effect.conditional && (
-                    <div className="follow-up-effect" style={{ marginLeft: '20px', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+                    <div className="follow-up-effect" style={{ marginLeft: '20px', padding: '10px', backgroundColor: '#2c1d63', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.2)' }}>
                         <h4 style={{ marginTop: 0 }}>Follow-Up Effect</h4>
 
                         <label>
@@ -185,7 +217,16 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                             <select
                                 value={effect.conditional.thenEffect.params.action}
                                 onChange={(e) => handleConditionalActionChange(e.target.value as EffectActionType)}
-                                style={{ width: '100%', padding: '5px', marginTop: '5px' }}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px',
+                                    marginTop: '5px',
+                                    backgroundColor: '#1A113B',
+                                    color: '#F0F0F0',
+                                    border: '1px solid rgba(97, 239, 255, 0.3)',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                }}
                             >
                                 <option value="draw">Draw Cards</option>
                                 <option value="flip">Flip Cards</option>
@@ -197,6 +238,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                                 <option value="reveal">Reveal Hand</option>
                                 <option value="give">Give Cards</option>
                                 <option value="take">Take from Hand</option>
+                                <option value="choice">Either/Or Choice</option>
                             </select>
                         </label>
 

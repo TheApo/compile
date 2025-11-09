@@ -8,6 +8,7 @@ import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } 
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
+import { processReactiveEffects } from '../reactiveEffectProcessor';
 
 const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     if (state.processedSpeed1TriggerThisTurn) {
@@ -71,6 +72,11 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
         
         if (isHandLimitDiscard) {
             stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, 'player');
+
+            // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+            const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player: 'player' });
+            stateAfterDiscard = reactiveResult.newState;
+
             stateAfterDiscard.actionRequired = null;
             return stateAfterDiscard;
         } else {
@@ -152,9 +158,20 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         let stateAfterDiscard = state;
         if (isHandLimitDiscard) {
             stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, player);
+
+            // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+            const reactiveClearResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player });
+            stateAfterDiscard = reactiveClearResult.newState;
         }
         const stateAfterPlagueTrigger = checkForPlague1Trigger(stateAfterDiscard, player);
-        return handleChainedEffectsOnDiscard(stateAfterPlagueTrigger, player, action?.sourceEffect, action?.sourceCardId);
+
+        // NEW: Trigger reactive effects after opponent discards (Plague-1 custom protocol)
+        // Trigger for the opponent of the discarding player
+        const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
+        const reactiveResult = processReactiveEffects(stateAfterPlagueTrigger, 'after_opponent_discard', { player: opponentOfDiscarder });
+        const stateAfterReactive = reactiveResult.newState;
+
+        return handleChainedEffectsOnDiscard(stateAfterReactive, player, action?.sourceEffect, action?.sourceCardId);
     };
 
     if (originalAction && originalAction.actor === player) {
@@ -180,10 +197,20 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     
     const isHandLimitDiscard = (prevState.phase === 'hand_limit');
     let finalState = checkForPlague1Trigger(newState, player);
+
+    // NEW: Trigger reactive effects after opponent discards (Plague-1 custom protocol)
+    const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
+    const reactiveResult = processReactiveEffects(finalState, 'after_opponent_discard', { player: opponentOfDiscarder });
+    finalState = reactiveResult.newState;
+
     if (isHandLimitDiscard) {
         finalState = checkForSpeed1Trigger(finalState, player);
+
+        // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+        const reactiveClearResult = processReactiveEffects(finalState, 'after_clear_cache', { player });
+        finalState = reactiveClearResult.newState;
     }
-    
+
     return finalState;
 };
 

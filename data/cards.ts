@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CardPattern } from '../types/customProtocol';
+
 export interface Card {
   protocol: string;
   value: number;
@@ -11,6 +13,8 @@ export interface Card {
   bottom: string;
   keywords: Record<string, boolean>;
   category: string;
+  color?: string;  // Hex color for custom protocols (e.g., "#1976D2")
+  pattern?: CardPattern;  // Background pattern for custom protocols
 }
 
 export const cards: Card[] = [

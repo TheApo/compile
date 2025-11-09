@@ -11,6 +11,7 @@ import { effectRegistryOnCover } from "./effects/effectRegistryOnCover";
 import { recalculateAllLaneValues } from "./game/stateManager";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "./utils/log";
 import { executeCustomEffect } from "./customProtocols/effectInterpreter";
+import { shouldIgnoreMiddleCommand } from "./game/passiveRuleChecker";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
@@ -30,17 +31,16 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         return { newState: state }; // Card is covered, do not trigger middle effect.
     }
 
-    // Check for Apathy-2 in the same line, which ignores middle effects for both players
-    const playerLaneHasApathy2 = state[cardOwner].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2 && c.id !== card.id);
-    const opponentLaneHasApathy2 = state[opponent].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2);
-
-    if (playerLaneHasApathy2 || opponentLaneHasApathy2) {
+    // NEW: Check passive rules for ignore middle command (Apathy-2, custom cards)
+    if (shouldIgnoreMiddleCommand(state, laneIndex)) {
         return { newState: state }; // Middle effects are ignored in this line
     }
 
     // Check if this is a custom protocol card with custom effects
     const customCard = card as any;
     if (customCard.customEffects && customCard.customEffects.middleEffects && customCard.customEffects.middleEffects.length > 0) {
+        console.log(`[effectExecutor] Executing custom card ${card.protocol}-${card.value} with ${customCard.customEffects.middleEffects.length} middle effects, triggerType=${triggerType}`);
+
         // Execute custom effects
         let stateWithContext = state;
         if (triggerType === 'middle' || triggerType === 'play') {
@@ -54,12 +54,33 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         let currentState = stateWithContext;
 
         // Execute all middle effects sequentially
-        for (const effectDef of customCard.customEffects.middleEffects) {
+        for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
+            console.log(`[effectExecutor] Executing effect ${i + 1}/${customCard.customEffects.middleEffects.length}:`, customCard.customEffects.middleEffects[i].params.action);
+            const effectDef = customCard.customEffects.middleEffects[i];
             const result = executeCustomEffect(card, laneIndex, currentState, context, effectDef);
             currentState = result.newState;
 
-            // If an action is required, stop and return
+            console.log(`[effectExecutor] Effect ${i + 1} done. actionRequired?`, !!currentState.actionRequired);
+
+            // If an action is required, save remaining effects and return
             if (currentState.actionRequired) {
+                const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
+                console.log(`[effectExecutor] ⚠ Action required! Remaining effects: ${remainingEffects.length}`);
+                console.log(`[effectExecutor] Current effect index: ${i}, Total effects: ${customCard.customEffects.middleEffects.length}`);
+                console.log(`[effectExecutor] Remaining effects:`, remainingEffects.map((e: any) => `${e.params.action} (trigger: ${e.trigger}, useCardFromPreviousEffect: ${e.useCardFromPreviousEffect})`));
+                if (remainingEffects.length > 0) {
+                    console.log(`[effectExecutor] ✓ Setting _pendingCustomEffects with ${remainingEffects.length} effects`);
+                    // CRITICAL: Store in state, not in actionRequired (which gets deleted)
+                    (currentState as any)._pendingCustomEffects = {
+                        sourceCardId: card.id,
+                        laneIndex,
+                        context,
+                        effects: remainingEffects
+                    };
+                    console.log(`[effectExecutor] ✓ _pendingCustomEffects confirmed set:`, !!(currentState as any)._pendingCustomEffects);
+                } else {
+                    console.log(`[effectExecutor] ⚠ No remaining effects - this was the last effect`);
+                }
                 return { newState: recalculateAllLaneValues(currentState) };
             }
         }

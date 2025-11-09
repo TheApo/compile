@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+@import './styles/components.css';
+
 :root {
   --background-color: #0A051A;   /* Deep space blue/purple */
   --surface-color: #1A113B;      /* Dark violet surface */
@@ -1103,10 +1105,10 @@ p {
 
 .card-header {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .card-protocol, .card-value {
@@ -1118,11 +1120,15 @@ p {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-color);
 }
 .card-protocol {
-  font-size: 1.1em;
+  font-size: 0.9em;
   justify-content: flex-start;
-  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0% 100%);
+  overflow: visible;
+  white-space: nowrap;
+  min-width: 0;
+  text-overflow: clip;
 }
 .card-value {
   font-size: 1.8em;
@@ -1562,8 +1568,13 @@ p {
 .protocol-card-grid .card-component.in-hand .card-protocol,
 .selected-protocol-cards-container .card-component.in-hand .card-protocol,
 .debug-card-grid .card-component.in-hand .card-protocol {
-    padding: 1px 6px;
-    clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0% 100%);
+    padding: 2px 3px 2px 0;
+    clip-path: none;
+    font-size: 0.9em;
+    overflow: visible;
+    white-space: nowrap;
+    min-width: 0;
+    text-overflow: clip;
 }
 
 .lane-stack .card-component .card-value,
@@ -2324,6 +2335,16 @@ p {
 @media (min-width: 1601px) {
   .protocol-preview-area .card-rule-box {
     font-size: 0.85em !important;
+  }
+
+  /* More spacing for large preview cards on desktop */
+  .card-header {
+    margin-bottom: 21px;
+  }
+
+  /* Wider buttons in Main Menu so "CUSTOM PROTOCOLS" fits in one line */
+  .main-menu-start-group, .main-menu-other-actions {
+    width: 280px;
   }
 }
 

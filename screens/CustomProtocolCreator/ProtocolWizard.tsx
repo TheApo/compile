@@ -168,18 +168,24 @@ interface ProtocolWizardProps {
 type WizardStep = 'name' | 'color' | 'pattern' | 'cards';
 
 const PREDEFINED_COLORS = [
-    { name: 'Red (Fire)', hex: '#D32F2F' },
-    { name: 'Blue (Water)', hex: '#1976D2' },
-    { name: 'Green (Life)', hex: '#388E3C' },
-    { name: 'Yellow (Light)', hex: '#F57C00' },
-    { name: 'Purple (Psychic)', hex: '#7B1FA2' },
-    { name: 'Gray (Metal)', hex: '#616161' },
-    { name: 'Black (Death)', hex: '#212121' },
-    { name: 'White (Spirit)', hex: '#FAFAFA' },
-    { name: 'Brown (Gravity)', hex: '#5D4037' },
-    { name: 'Pink (Love)', hex: '#C2185B' },
-    { name: 'Turquoise (Frost)', hex: '#00ACC1' },
-    { name: 'Orange (Hate)', hex: '#E64A19' },
+    // Original Protocol Colors (from components.css)
+    { name: 'Anarchy', hex: '#EA5A3C' },  // hsl(15, 85%, 60%)
+    { name: 'Apathy', hex: '#989A9A' },   // hsl(240, 5%, 60%)
+    { name: 'Chaos', hex: '#E53FE5' },    // hsl(300, 80%, 60%)
+    { name: 'Darkness', hex: '#A772D4' }, // hsl(270, 50%, 70%)
+    { name: 'Death', hex: '#E25656' },    // hsl(0, 70%, 65%)
+    { name: 'Fire', hex: '#F06838' },     // hsl(20, 90%, 65%)
+    { name: 'Gravity', hex: '#7599EB' },  // hsl(230, 60%, 70%)
+    { name: 'Hate', hex: '#E03E5E' },     // hsl(350, 60%, 60%)
+    { name: 'Life', hex: '#3CE076' },     // hsl(140, 70%, 60%)
+    { name: 'Light', hex: '#FFEB7F' },    // hsl(50, 100%, 75%)
+    { name: 'Love', hex: '#F074D9' },     // hsl(320, 80%, 75%)
+    { name: 'Metal', hex: '#B3B8BD' },    // hsl(210, 15%, 75%)
+    { name: 'Plague', hex: '#A2CD3A' },   // hsl(80, 60%, 55%)
+    { name: 'Psychic', hex: '#C971EB' },  // hsl(280, 70%, 70%)
+    { name: 'Speed', hex: '#33DDDD' },    // hsl(180, 80%, 60%)
+    { name: 'Spirit', hex: '#42D4A8' },   // hsl(170, 60%, 65%)
+    { name: 'Water', hex: '#3FA4EB' },    // hsl(210, 80%, 65%)
 ];
 
 const CARD_PATTERNS = [
@@ -322,7 +328,7 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
         <div className="protocol-wizard">
             <div className="wizard-header">
                 <h2>
-                    {initialProtocol ? 'Edit Protocol' : 'Create New Protocol'}
+                    {initialProtocol ? `Edit Protocol: ${protocolName}` : 'Create New Protocol'}
                 </h2>
                 <div className="wizard-progress">
                     <button

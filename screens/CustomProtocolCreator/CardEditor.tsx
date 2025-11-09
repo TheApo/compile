@@ -113,6 +113,27 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
         setEditingEffect({ box, effectIndex, effect });
     };
 
+    const getTriggerLabel = (trigger: string): string => {
+        switch (trigger) {
+            case 'passive': return '';
+            case 'on_play': return '';
+            case 'start': return 'Start';
+            case 'end': return 'End';
+            case 'on_cover': return 'On Cover';
+            case 'after_delete': return 'After you delete cards';
+            case 'after_opponent_discard': return 'After opponent discards';
+            case 'after_draw': return 'After you draw cards';
+            case 'after_clear_cache': return 'After you clear cache';
+            case 'before_compile_delete': return 'Before deleted by compile';
+            case 'after_flip': return 'After cards are flipped';
+            case 'after_shift': return 'After cards are shifted';
+            case 'after_play': return 'After cards are played';
+            case 'on_flip': return 'When this card would be flipped';
+            case 'on_cover_or_flip': return 'When covered or flipped';
+            default: return trigger;
+        }
+    };
+
     const getEffectSummary = (effect: EffectDefinition): string => {
         const params = effect.params as any;
         let mainText = '';
@@ -153,6 +174,20 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
             }
 
             case 'flip': {
+                // NEW: Flip self mode (Anarchy-6)
+                if (params.flipSelf) {
+                    let text = params.optional ? 'May flip this card' : 'Flip this card';
+
+                    // Add conditional
+                    if (params.advancedConditional?.type === 'protocol_match') {
+                        text += `, if this card is in the line with the ${params.advancedConditional.protocol || '[Protocol]'} protocol`;
+                    }
+
+                    text += '.';
+                    mainText = text;
+                    break;
+                }
+
                 // Match FlipEffectEditor's generateFlipText
                 const may = params.optional ? 'May flip' : 'Flip';
                 let targetDesc = '';
@@ -195,6 +230,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                 let targetDesc = '';
 
                 if (params.targetFilter?.owner === 'opponent') targetDesc += "opponent's ";
+                if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
                 if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
                 if (params.targetFilter?.position === 'uncovered') targetDesc += 'uncovered ';
                 if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
@@ -205,7 +241,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                 let text = `Shift ${count} ${targetDesc}${cardWord}`;
 
                 if (params.destinationRestriction?.type === 'non_matching_protocol') {
-                    text += ' to a non-matching protocol';
+                    text += ' to a line without a matching protocol';
                 } else if (params.destinationRestriction?.type === 'specific_lane') {
                     text += ' within this line';
                 } else if (params.destinationRestriction?.type === 'to_another_line') {
@@ -344,11 +380,23 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         ? "both players'"
                         : 'your';
 
+                let text = '';
                 if (params.action === 'rearrange_protocols') {
-                    mainText = `Rearrange ${targetText} protocols.`;
+                    text = `Rearrange ${targetText} protocols.`;
                 } else {
-                    mainText = `Swap 2 ${targetText} protocols.`;
+                    text = `Swap 2 ${targetText} protocols.`;
                 }
+
+                // Add restriction text (Anarchy-3)
+                if (params.restriction && params.restriction.disallowedProtocol) {
+                    const laneText = params.restriction.laneIndex === 'current'
+                        ? 'this line'
+                        : `lane ${typeof params.restriction.laneIndex === 'number' ? params.restriction.laneIndex + 1 : params.restriction.laneIndex}`;
+
+                    text += ` ${params.restriction.disallowedProtocol} cannot be on ${laneText}.`;
+                }
+
+                mainText = text;
                 break;
             }
 
@@ -379,6 +427,92 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                 const randomText = params.random ? 'random ' : '';
 
                 mainText = `Take ${params.count} ${randomText}${cardWord} from opponent's hand.`;
+                break;
+            }
+
+            case 'choice': {
+                const options = params.options || [];
+                if (options.length !== 2) {
+                    mainText = 'Either/Or (incomplete)';
+                } else {
+                    const option1Text = getEffectSummary(options[0]);
+                    const option2Text = getEffectSummary(options[1]);
+                    mainText = `Either ${option1Text.toLowerCase()} or ${option2Text.toLowerCase()}`;
+                }
+                break;
+            }
+
+            case 'passive_rule': {
+                const ruleType = params.rule?.type || 'block_all_play';
+                const target = params.rule?.target || 'opponent';
+                const scope = params.rule?.scope || 'this_lane';
+
+                const targetText = target === 'self' ? 'You' : target === 'opponent' ? 'Your opponent' : 'All players';
+                const scopeText = scope === 'this_lane' ? ' in this lane' : '';
+
+                switch (ruleType) {
+                    case 'block_face_down_play':
+                        mainText = `${targetText} cannot play cards face-down${scopeText}`;
+                        break;
+                    case 'block_face_up_play':
+                        mainText = `${targetText} cannot play cards face-up${scopeText}`;
+                        break;
+                    case 'block_all_play':
+                        mainText = `${targetText} cannot play cards${scopeText}`;
+                        break;
+                    case 'require_face_down_play':
+                        mainText = `${targetText} can only play cards face-down${scopeText}`;
+                        break;
+                    case 'allow_any_protocol_play':
+                        mainText = `${targetText} may play cards without matching protocols${scopeText}`;
+                        break;
+                    case 'require_non_matching_protocol':
+                        mainText = `${targetText} can only play cards without matching protocols${scopeText}`;
+                        break;
+                    case 'block_flips':
+                        mainText = `Cards cannot be flipped face-up${scopeText}`;
+                        break;
+                    case 'block_protocol_rearrange':
+                        mainText = 'Protocols cannot be rearranged';
+                        break;
+                    case 'block_shifts_from_lane':
+                        mainText = 'Cards cannot shift from this lane';
+                        break;
+                    case 'block_shifts_to_lane':
+                        mainText = 'Cards cannot shift to this lane';
+                        break;
+                    case 'ignore_middle_commands':
+                        mainText = `Ignore all middle commands of cards${scopeText}`;
+                        break;
+                    case 'skip_check_cache_phase':
+                        mainText = 'Skip your check cache phase';
+                        break;
+                    default:
+                        mainText = 'Passive rule active';
+                        break;
+                }
+                break;
+            }
+
+            case 'value_modifier': {
+                const modifierType = params.modifier?.type || 'add_per_condition';
+                const value = params.modifier?.value || 0;
+                const target = params.modifier?.target || 'own_total';
+
+                switch (modifierType) {
+                    case 'add_per_condition':
+                        mainText = value >= 0 ? `+${value} value per condition` : `${value} value per condition`;
+                        break;
+                    case 'set_to_fixed':
+                        mainText = `Set cards to value ${value}`;
+                        break;
+                    case 'add_to_total':
+                        mainText = value >= 0 ? `+${value} to total` : `${value} to total`;
+                        break;
+                    default:
+                        mainText = 'Value modifier active';
+                        break;
+                }
                 break;
             }
 
@@ -503,13 +637,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
 
                 {/* Top Box */}
                 <div className="card-box top-box">
-                    <h4>Top Box (Passive)</h4>
-                    <p className="box-description">Always active when face-up, even when covered</p>
+                    <h4>Top Box (Passive/Reactive)</h4>
+                    <p className="box-description">Passive effects or reactive triggers</p>
 
                     <div className="effects-list">
                         {card.topEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
                                 <span onClick={() => handleEditEffect('top', index)}>
+                                    {effect.trigger !== 'passive' && (
+                                        <strong>{getTriggerLabel(effect.trigger)}:</strong>
+                                    )}{' '}
                                     {getEffectSummary(effect)}
                                 </span>
                                 <button onClick={() => handleRemoveEffect('top', index)}>×</button>
@@ -518,19 +655,69 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         {card.topEffects.length === 0 && <p className="empty-box">No effects</p>}
                     </div>
 
-                    <select
-                        onChange={e => {
-                            if (e.target.value) {
-                                handleAddEffect('top', e.target.value as EffectActionType, 'passive');
-                                e.target.value = '';
-                            }
-                        }}
-                    >
-                        <option value="">+ Add Effect</option>
-                        <option value="draw">Draw Cards</option>
-                        <option value="flip">Flip Cards</option>
-                        <option value="delete">Delete Cards</option>
-                    </select>
+                    <div className="add-effect-controls">
+                        <select id="top-trigger" defaultValue="">
+                            <option value="">Choose Trigger</option>
+                            <optgroup label="Passive">
+                                <option value="passive">Passive (always active)</option>
+                            </optgroup>
+                            <optgroup label="Phase Triggers">
+                                <option value="start">Start Phase</option>
+                                <option value="end">End Phase</option>
+                                <option value="on_cover">On Cover</option>
+                            </optgroup>
+                            <optgroup label="Reactive Triggers">
+                                <option value="after_delete">After you delete cards</option>
+                                <option value="after_opponent_discard">After opponent discards</option>
+                                <option value="after_draw">After you draw cards</option>
+                                <option value="after_clear_cache">After you clear cache</option>
+                                <option value="before_compile_delete">Before deleted by compile</option>
+                                <option value="after_flip">After cards are flipped</option>
+                                <option value="after_shift">After cards are shifted</option>
+                                <option value="after_play">After cards are played</option>
+                                <option value="on_flip">When this card would be flipped</option>
+                            </optgroup>
+                        </select>
+
+                        <select id="top-action" defaultValue="">
+                            <option value="">Choose Action</option>
+                            <option value="draw">Draw Cards</option>
+                            <option value="flip">Flip Cards</option>
+                            <option value="shift">Shift Card</option>
+                            <option value="delete">Delete Cards</option>
+                            <option value="discard">Discard Cards</option>
+                            <option value="return">Return to Hand</option>
+                            <option value="play">Play from Hand/Deck</option>
+                            <option value="rearrange_protocols">Rearrange Protocols</option>
+                            <option value="swap_protocols">Swap Protocols</option>
+                            <option value="reveal">Reveal Hand</option>
+                            <option value="give">Give Cards</option>
+                            <option value="take">Take from Hand</option>
+                            <option value="choice">Either/Or Choice</option>
+                            <option value="passive_rule">Passive Rule</option>
+                            <option value="value_modifier">Value Modifier</option>
+                        </select>
+
+                        <button
+                            className="btn btn-add-effect"
+                            onClick={() => {
+                                const triggerSelect = document.getElementById('top-trigger') as HTMLSelectElement;
+                                const actionSelect = document.getElementById('top-action') as HTMLSelectElement;
+                                const trigger = triggerSelect.value as any;
+                                const action = actionSelect.value as EffectActionType;
+
+                                if (trigger && action) {
+                                    handleAddEffect('top', action, trigger);
+                                    triggerSelect.value = '';
+                                    actionSelect.value = '';
+                                } else {
+                                    setShowValidationModal(true);
+                                }
+                            }}
+                        >
+                            +
+                        </button>
+                    </div>
                 </div>
 
                 {/* Middle Box */}
@@ -571,6 +758,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         <option value="reveal">Reveal Hand</option>
                         <option value="give">Give Cards</option>
                         <option value="take">Take from Hand</option>
+                        <option value="choice">Either/Or Choice</option>
+                        <option value="passive_rule">Passive Rule</option>
+                        <option value="value_modifier">Value Modifier</option>
                     </select>
                 </div>
 
@@ -583,7 +773,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         {card.bottomEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
                                 <span onClick={() => handleEditEffect('bottom', index)}>
-                                    <strong>{effect.trigger === 'start' ? 'Start:' : effect.trigger === 'end' ? 'End:' : 'On Cover:'}</strong>{' '}
+                                    <strong>{getTriggerLabel(effect.trigger)}:</strong>{' '}
                                     {getEffectSummary(effect)}
                                 </span>
                                 <button onClick={() => handleRemoveEffect('bottom', index)}>×</button>
@@ -614,6 +804,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                             <option value="reveal">Reveal Hand</option>
                             <option value="give">Give Cards</option>
                             <option value="take">Take from Hand</option>
+                            <option value="choice">Either/Or Choice</option>
+                            <option value="passive_rule">Passive Rule</option>
+                            <option value="value_modifier">Value Modifier</option>
                         </select>
 
                         <button
@@ -707,7 +900,7 @@ const createDefaultParams = (action: EffectActionType): any => {
         case 'shift':
             return {
                 action: 'shift',
-                targetFilter: { owner: 'any', position: 'uncovered', faceState: 'any' },
+                targetFilter: { owner: 'any', position: 'uncovered', faceState: 'any', excludeSelf: false },
             };
         case 'delete':
             return {
@@ -731,6 +924,12 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action, source: 'own_hand', count: 1 };
         case 'take':
             return { action: 'take', source: 'opponent_hand', count: 1, random: true };
+        case 'choice':
+            return { action: 'choice', options: [] };
+        case 'passive_rule':
+            return { action: 'passive_rule', rule: { type: 'block_all_play', target: 'opponent', scope: 'this_lane' } };
+        case 'value_modifier':
+            return { action: 'value_modifier', modifier: { type: 'add_per_condition', value: 1, condition: 'per_face_down_card', target: 'own_total', scope: 'this_lane' } };
         default:
             return {};
     }

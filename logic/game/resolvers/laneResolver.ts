@@ -14,6 +14,9 @@ import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
 import { executeOnCoverEffect } from '../../effectExecutor';
 import { handleAnarchyConditionalDraw } from '../../effects/anarchy/Anarchy-0';
+import { processReactiveEffects } from '../reactiveEffectProcessor';
+import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+import { processQueuedActions } from '../phaseManager';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -81,6 +84,23 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (!isFromGravityLane && !isToGravityLane) {
                         // ILLEGAL: Shifting between two lanes that are NOT the Gravity lane
                         console.error(`Illegal Gravity-1 shift: Must shift to or from Gravity lane ${gravity1LaneIndex}, but tried ${originalLaneIndex} → ${targetLaneIndex}`);
+                        return { nextState: prev }; // Block the illegal move
+                    }
+                }
+            }
+
+            // GENERIC VALIDATION for custom protocol destinationRestriction
+            if ((prev.actionRequired as any).destinationRestriction && cardToShift) {
+                const destinationRestriction = (prev.actionRequired as any).destinationRestriction;
+
+                if (destinationRestriction.type === 'non_matching_protocol' && cardToShift.card.isFaceUp) {
+                    const playerProtocolAtTarget = prev.player.protocols[targetLaneIndex];
+                    const opponentProtocolAtTarget = prev.opponent.protocols[targetLaneIndex];
+                    const cardProtocol = cardToShift.card.protocol;
+
+                    // RULE: Card's protocol must NOT match either protocol in target lane
+                    if (cardProtocol === playerProtocolAtTarget || cardProtocol === opponentProtocolAtTarget) {
+                        console.error(`Illegal shift: ${cardProtocol} cannot be shifted to lane ${targetLaneIndex} (protocols: ${playerProtocolAtTarget}/${opponentProtocolAtTarget}) - matching protocol not allowed`);
                         return { nextState: prev }; // Block the illegal move
                     }
                 }
@@ -157,6 +177,34 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 }
                             }
 
+                            // NEW: Queue pending effects from custom cards if shift created an interrupt
+                            const pendingEffects = (finalState as any)._pendingCustomEffects;
+                            if (pendingEffects) {
+                                console.log(`[laneResolver] Queueing ${pendingEffects.effects.length} pending effects due to interrupt`);
+                                const sourceCard = findCardOnBoard(finalState, pendingEffects.sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === pendingEffects.sourceCardId));
+                                    const isStillUncovered = lane && lane.length > 0 && lane[lane.length - 1].id === pendingEffects.sourceCardId;
+
+                                    if (isStillUncovered) {
+                                        const pendingAction: ActionRequired = {
+                                            type: 'execute_remaining_custom_effects' as any,
+                                            sourceCardId: pendingEffects.sourceCardId,
+                                            laneIndex: pendingEffects.laneIndex,
+                                            effects: pendingEffects.effects,
+                                            context: pendingEffects.context,
+                                            actor: actor,
+                                        };
+                                        finalState.queuedActions = [
+                                            ...(finalState.queuedActions || []),
+                                            pendingAction
+                                        ];
+                                    }
+                                }
+                                // Clear from state after queueing
+                                delete (finalState as any)._pendingCustomEffects;
+                            }
+
                             // Return state with interrupt and queued follow-up actions
                             // NOTE: Do NOT decrease log indent here - the original effect is not complete yet
                             // The indent will be decreased when the queued action executes
@@ -183,12 +231,49 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 finalState = log(finalState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
                             }
                         }
+
+                        // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0)
+                        const pendingEffects = (finalState as any)._pendingCustomEffects;
+                        if (pendingEffects) {
+                            console.log(`[laneResolver] Executing ${pendingEffects.effects.length} pending effects after shift`);
+                            // Check if source card is still uncovered and face-up
+                            const sourceCard = findCardOnBoard(finalState, pendingEffects.sourceCardId);
+                            if (sourceCard && sourceCard.card.isFaceUp) {
+                                const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === pendingEffects.sourceCardId));
+                                const isStillUncovered = lane && lane.length > 0 && lane[lane.length - 1].id === pendingEffects.sourceCardId;
+
+                                if (isStillUncovered) {
+                                    // Execute remaining effects
+                                    for (const effectDef of pendingEffects.effects) {
+                                        const result = executeCustomEffect(
+                                            sourceCard.card,
+                                            pendingEffects.laneIndex,
+                                            finalState,
+                                            pendingEffects.context,
+                                            effectDef
+                                        );
+                                        finalState = result.newState;
+                                    }
+                                    // Clear the pending effects
+                                    delete (finalState as any)._pendingCustomEffects;
+                                } else {
+                                    finalState = log(finalState, actor, `Pending effects cancelled because source card is now covered.`);
+                                    delete (finalState as any)._pendingCustomEffects;
+                                }
+                            } else {
+                                delete (finalState as any)._pendingCustomEffects;
+                            }
+                        }
                         // CRITICAL FIX: Decrease log indent and clear actionRequired before calling endTurnCb
                         // Decrease indent if this shift was triggered by an effect (has sourceCardId)
                         if (sourceCardId) {
                             finalState = decreaseLogIndent(finalState);
                         }
                         finalState.actionRequired = null;
+
+                        // NEW: Trigger reactive effects after shift
+                        const reactiveShiftResult = processReactiveEffects(finalState, 'after_shift', { player: actor, cardId: cardToShiftId });
+                        finalState = reactiveShiftResult.newState;
 
                         // CRITICAL: Process queued actions after shift completes
                         // This ensures effects like anarchy_0_conditional_draw are executed automatically
@@ -247,6 +332,37 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         newState = findAndFlipCards(new Set([speed3CardId]), newState);
                         newState.animationState = { type: 'flipCard', cardId: speed3CardId };
                     }
+
+                    // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0) - NO ANIMATION case
+                    const pendingEffects = (newState as any)._pendingCustomEffects;
+                    if (pendingEffects) {
+                        console.log(`[laneResolver NO ANIM] Executing ${pendingEffects.effects.length} pending effects after shift`);
+                        const sourceCardPending = findCardOnBoard(newState, pendingEffects.sourceCardId);
+                        if (sourceCardPending && sourceCardPending.card.isFaceUp) {
+                            const lane = newState[sourceCardPending.owner].lanes.find(l => l.some(c => c.id === pendingEffects.sourceCardId));
+                            const isStillUncovered = lane && lane.length > 0 && lane[lane.length - 1].id === pendingEffects.sourceCardId;
+
+                            if (isStillUncovered) {
+                                for (const effectDef of pendingEffects.effects) {
+                                    const result = executeCustomEffect(
+                                        sourceCardPending.card,
+                                        pendingEffects.laneIndex,
+                                        newState,
+                                        pendingEffects.context,
+                                        effectDef
+                                    );
+                                    newState = result.newState;
+                                }
+                                delete (newState as any)._pendingCustomEffects;
+                            } else {
+                                newState = log(newState, actor, `Pending effects cancelled because source card is now covered.`);
+                                delete (newState as any)._pendingCustomEffects;
+                            }
+                        } else {
+                            delete (newState as any)._pendingCustomEffects;
+                        }
+                    }
+
                     // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
                     // CRITICAL: Only execute if Anarchy-0 is still uncovered AND face-up
                     const sourceCard = findCardOnBoard(newState, sourceCardId);
@@ -267,6 +383,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         newState = decreaseLogIndent(newState);
                     }
                     newState.actionRequired = null;
+
+                    // NEW: Trigger reactive effects after shift
+                    const reactiveShiftResult = processReactiveEffects(newState, 'after_shift', { player: actor, cardId: cardToShiftId });
+                    newState = reactiveShiftResult.newState;
 
                     // CRITICAL: Process queued actions after shift completes
                     // This ensures effects like anarchy_0_conditional_draw are executed automatically
@@ -290,7 +410,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                  // FIX: Implemented `onCompleteCallback` for consistency, ensuring any post-animation logic can be handled.
                  requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    onCompleteCallback: (s, endTurnCb) => {
+                        // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
+                        return endTurnCb(s);
+                    }
                 };
             }
             break;
@@ -328,16 +451,98 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);
             newState = stateAfterPlay;
 
+            console.log('[LANE RESOLVER] After playCard - actionRequired?', newState.actionRequired?.type || 'null', 'queuedActions?', newState.queuedActions?.length || 0, 'animationRequests?', animationRequests?.length || 0);
+
             if (animationRequests) {
                 // FIX: Implemented `onCompleteCallback` for card-play animations to ensure turn progression occurs correctly after animations complete.
                 requiresAnimation = {
                     animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    onCompleteCallback: (s, endTurnCb) => {
+                        console.log('[PLAY CALLBACK] Animation complete. queuedActions?', s.queuedActions?.length || 0);
+                        if (s.queuedActions && s.queuedActions.length > 0) {
+                            console.log('[PLAY CALLBACK] Queue found! First action:', s.queuedActions[0].type);
+                        }
+                        // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
+                        console.log('[PLAY CALLBACK] Calling endTurnCb');
+                        return endTurnCb(s);
+                    }
+                };
+            }
+            break;
+        }
+        case 'select_lane_for_delete': {
+            // NEW: Generic lane selection for delete with composable filters
+            // Used by Death-2 and other cards that need lane-based deletion
+            const actor = prev.actionRequired.actor;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const targetProtocolName = prev.player.protocols[targetLaneIndex];
+            const targetFilter = (prev.actionRequired as any).targetFilter || {};
+            const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
+
+            newState = log(newState, actor, `${sourceCardName}: ${actorName} targets Protocol ${targetProtocolName}.`);
+
+            const cardsToDelete: AnimationRequest[] = [];
+            const deletedCardNames: string[] = [];
+
+            for (const p of ['player', 'opponent'] as Player[]) {
+                const playerState = prev[p];
+                const faceDownValueInLane = playerState.lanes[targetLaneIndex]
+                    .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
+
+                for (const card of playerState.lanes[targetLaneIndex]) {
+                    // Apply targetFilter to determine if card should be deleted
+                    const value = card.isFaceUp ? card.value : faceDownValueInLane;
+
+                    // Check valueRange filter
+                    if (targetFilter.valueRange) {
+                        const { min, max } = targetFilter.valueRange;
+                        if (value < min || value > max) continue;
+                    }
+
+                    // Check faceState filter
+                    if (targetFilter.faceState === 'face_up' && !card.isFaceUp) continue;
+                    if (targetFilter.faceState === 'face_down' && card.isFaceUp) continue;
+
+                    // Check owner filter
+                    if (targetFilter.owner === 'own' && p !== actor) continue;
+                    if (targetFilter.owner === 'opponent' && p === actor) continue;
+
+                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                    const ownerName = p === 'player' ? "Player's" : "Opponent's";
+                    const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
+                    deletedCardNames.push(`${ownerName} ${cardName}`);
+                }
+            }
+
+            if (deletedCardNames.length > 0) {
+                newState = log(newState, actor, `${sourceCardName}: Deleting ${deletedCardNames.join(', ')}.`);
+
+                const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + deletedCardNames.length };
+                const newPlayerState = { ...newState[actor], stats: newStats };
+                newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+            }
+
+            newState.actionRequired = null;
+            if (cardsToDelete.length > 0) {
+                requiresAnimation = {
+                    animationRequests: cardsToDelete,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        let stateAfterDelete = s;
+                        for (let i = 0; i < cardsToDelete.length; i++) {
+                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
+                        }
+                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
+                        stateAfterDelete = reactiveResult.newState;
+
+                        return endTurnCb(stateAfterDelete);
+                    }
                 };
             }
             break;
         }
         case 'select_lane_for_death_2': {
+            // DEPRECATED: Keep for backwards compatibility with original Death-2
             // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
             const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
@@ -362,12 +567,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     }
                 }
             }
-            
+
             if (deletedCardNames.length > 0) {
                 const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
                 const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Death-2';
                 newState = log(newState, actor, `${sourceCardName}: Deleting ${deletedCardNames.join(', ')}.`);
-                
+
                 const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + deletedCardNames.length };
                 const newPlayerState = { ...newState[actor], stats: newStats };
                 newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
@@ -383,6 +588,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         for (let i = 0; i < cardsToDelete.length; i++) {
                             stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
                         }
+                        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
+                        stateAfterDelete = reactiveResult.newState;
+
                         return endTurnCb(stateAfterDelete);
                     }
                 };
@@ -427,6 +636,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         for (let i = 0; i < cardsToDelete.length; i++) {
                             stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
                         }
+                        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
+                        stateAfterDelete = reactiveResult.newState;
+
                         return endTurnCb(stateAfterDelete);
                     }
                 };
@@ -476,7 +689,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // FIX: Implemented `onCompleteCallback` for on-cover animations.
                     requiresAnimation = {
                         animationRequests: onCoverResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                        onCompleteCallback: (s, endTurnCb) => {
+                            // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
+                            return endTurnCb(s);
+                        }
                     };
                 }
             } else {
@@ -586,13 +802,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         default: return { nextState: prev };
     }
 
-    if (!requiresAnimation && newState.actionRequired === null) {
-        if (newState.queuedActions && newState.queuedActions.length > 0) {
-            const newQueue = [...newState.queuedActions];
-            const nextAction = newQueue.shift();
-            newState = { ...newState, actionRequired: nextAction, queuedActions: newQueue };
-        }
-    }
+    // DO NOT move queue to actionRequired here - processEndOfAction handles queue processing!
+    // The queue contains auto-resolving actions that should be processed by processQueuedActions,
+    // not treated as user actions.
+
+    console.log('[LANE RESOLVER END] Returning - actionRequired?', newState.actionRequired?.type || 'null', 'queuedActions?', newState.queuedActions?.length || 0, 'requiresAnimation?', requiresAnimation ? 'yes' : 'no');
 
     return { nextState: recalculateAllLaneValues(newState), requiresAnimation };
 };

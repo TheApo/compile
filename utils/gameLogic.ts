@@ -5,16 +5,18 @@
 
 import { Card, cards as baseCards } from "../data/cards";
 import { getAllCustomProtocolCards } from "../logic/customProtocols/cardFactory";
+import { isCustomProtocolEnabled } from "./customProtocolSettings";
 
 // Cached merged cards to avoid reloading on every buildDeck call
 let cachedMergedCards: Card[] | null = null;
 
 /**
- * Get all available cards (base + custom protocols)
+ * Get all available cards (base + custom protocols if enabled)
  */
 function getAllCards(): Card[] {
     if (!cachedMergedCards) {
-        const customCards = getAllCustomProtocolCards();
+        const customEnabled = isCustomProtocolEnabled();
+        const customCards = customEnabled ? getAllCustomProtocolCards() : [];
         cachedMergedCards = [...baseCards, ...customCards];
     }
     return cachedMergedCards;
