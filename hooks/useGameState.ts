@@ -211,13 +211,33 @@ export const useGameState = (
                     if (stateAfterCompile.winner) {
                         return stateAfterCompile;
                     }
-    
+
                     // REMOVED: Duplicate Control-Mechanic handling that was overwriting the originalAction from performCompile
                     // The Control-Mechanic prompt is now fully handled inside performCompile
                     if (stateAfterCompile.actionRequired?.type === 'prompt_use_control_mechanic') {
                         return { ...stateAfterCompile, animationState: null };
                     }
-                    
+
+                    // NEW: Check for compile delete animations
+                    const compileAnimations = (stateAfterCompile as any)._compileAnimations as AnimationRequest[] | undefined;
+                    if (compileAnimations && compileAnimations.length > 0) {
+                        // Play delete animations sequentially before processing queue
+                        processAnimationQueue(compileAnimations, () => {
+                            setGameState(s => {
+                                // Clean up animation marker
+                                const cleanState = { ...s };
+                                delete (cleanState as any)._compileAnimations;
+
+                                const finalState = turnProgressionCb(cleanState);
+                                return { ...finalState, animationState: null };
+                            });
+                        });
+                        // Return state with compile animation still showing while deletes play
+                        const stateWithoutMarker = { ...stateAfterCompile };
+                        delete (stateWithoutMarker as any)._compileAnimations;
+                        return stateWithoutMarker;
+                    }
+
                     const finalState = turnProgressionCb(stateAfterCompile);
                     return { ...finalState, animationState: null };
                 });
@@ -231,7 +251,7 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId);
-    
+
             if (requiresAnimation) {
                 // FIX: Updated the call to `processAnimationQueue` to pass a callback, which aligns with the refactored, more flexible animation handling pattern. This fixes the original property access error.
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
@@ -239,11 +259,11 @@ export const useGameState = (
                 });
                 return nextState;
             }
-    
+
             if (nextState.actionRequired) {
                 return nextState;
             }
-    
+
             // If the current action was resolved (actionRequired is null),
             // we must always call the turn progression callback. It will handle
             // processing any queued actions (like Water-0's self-flip) or
@@ -387,6 +407,17 @@ export const useGameState = (
             }
         });
     }, [onEndGame, getTurnProgressionCallback]);
+
+    const resolveOptionalDrawPrompt = useCallback((accept: boolean) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveOptionalDrawPrompt(prev, accept);
+            if (!nextState.actionRequired) {
+                return turnProgressionCb(nextState);
+            }
+            return nextState;
+        });
+    }, [getTurnProgressionCallback]);
 
     const resolveDeath1Prompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -862,6 +893,7 @@ export const useGameState = (
                     },
                     returnCard: resolvers.returnCard,
                     skipAction: resolvers.skipAction,
+                    resolveOptionalDrawPrompt: resolvers.resolveOptionalDrawPrompt,
                     resolveDeath1Prompt: resolvers.resolveDeath1Prompt,
                     resolveLove1Prompt: resolvers.resolveLove1Prompt,
                     resolvePlague4Flip: (s, a) => resolvers.resolvePlague4Flip(s, a, 'opponent'),
@@ -929,6 +961,9 @@ export const useGameState = (
                         resolveHate1Discard: resolvers.resolveHate1Discard,
                         revealOpponentHand: resolvers.revealOpponentHand,
                         resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
+                        resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
+                        resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
+                        resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
                     },
                     phaseManager,
                     processAnimationQueue,
@@ -958,7 +993,7 @@ export const useGameState = (
         discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane,
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
         resolvePlague4Flip, resolveFire3Prompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
-        resolveRearrangeProtocols, resolveSpeed3Prompt, resolveDeath1Prompt, resolveLove1Prompt,
+        resolveRearrangeProtocols, resolveSpeed3Prompt, resolveOptionalDrawPrompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
         resolveControlMechanicPrompt,
         setupTestScenario,

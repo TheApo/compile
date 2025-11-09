@@ -21,6 +21,7 @@ import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
+import { hasRequireNonMatchingProtocolRule } from '../logic/game/passiveRuleChecker';
 
 
 interface GameScreenProps {
@@ -119,6 +120,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     selectHandCardForAction,
     resolveActionWithHandCard,
     skipAction,
+    resolveOptionalDrawPrompt,
     resolveDeath1Prompt,
     resolveLove1Prompt,
     resolvePlague2Discard,
@@ -292,7 +294,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     // (e.g., Spirit-3 triggering during opponent's end phase), the player needs to act
     // even though turn might still be set to 'opponent'.
     if (actionRequired && actionRequired.actor === 'player' &&
-        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete'].includes(actionRequired.type)) {
+        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_delete', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete'].includes(actionRequired.type)) {
         resolveActionWithLane(laneIndex);
         return;
     }
@@ -323,9 +325,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
             .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
 
+        // Check for custom cards with require_non_matching_protocol passive rule
+        const hasCustomNonMatchingRule = hasRequireNonMatchingProtocolRule(currentState);
+
         let canPlayFaceUp: boolean;
-        if (anyPlayerHasAnarchy1) {
-            // Anarchy-1 active: INVERTED rule - can only play face-up if protocol does NOT match
+        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+            // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = cardInHand.protocol !== player.protocols[laneIndex] && cardInHand.protocol !== opponent.protocols[laneIndex];
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
         } else {
@@ -600,10 +605,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 />
                 
                 <div className="player-action-area">
-                  <PhaseController 
+                  <PhaseController
                     gameState={gameState}
                     onFillHand={fillHand}
                     onSkipAction={skipAction}
+                    onResolveOptionalDrawPrompt={resolveOptionalDrawPrompt}
                     onResolveDeath1Prompt={resolveDeath1Prompt}
                     onResolveLove1Prompt={resolveLove1Prompt}
                     onResolvePlague2Discard={resolvePlague2Discard}

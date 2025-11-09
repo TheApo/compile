@@ -210,14 +210,19 @@
   font-size: 1em;
   position: relative;
   overflow: hidden;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   min-height: 60px;
   height: 60px;
 }
 
 .protocol-card .protocol-category-label {
+  position: absolute;
+  top: 0.25rem;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.45em;
   font-weight: 400;
   opacity: 0.5;
@@ -227,14 +232,19 @@
   line-height: 1;
   margin: 0;
   padding: 0;
-  align-self: start;
 }
 
 .protocol-card .protocol-name {
   font-size: 1em;
   margin: 0;
   padding: 0;
-  align-self: center;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .protocol-card:hover:not([aria-disabled="true"]) {
@@ -315,6 +325,234 @@
 
 .protocol-card.is-scanning {
     animation: scan-opponent 1s ease-in-out;
+}
+
+/* --- Custom Protocol Pattern Styles for Protocol Cards --- */
+
+/* Pattern: Solid */
+.protocol-card.pattern-solid {
+    background-color: var(--card-custom-color) !important;
+    background-image: none !important;
+}
+
+/* Pattern: Radial */
+.protocol-card.pattern-radial {
+    background-image: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 25%, transparent) 0%, transparent 60%) !important;
+}
+
+/* Pattern: Dual Radial */
+.protocol-card.pattern-dual-radial {
+    background-image:
+        radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--card-custom-color) 30%, transparent) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--card-custom-color) 30%, transparent) 0%, transparent 50%) !important;
+}
+
+/* Pattern: Multi Radial */
+.protocol-card.pattern-multi-radial {
+    background-image:
+        radial-gradient(circle at 25% 25%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+        radial-gradient(circle at 75% 25%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+        radial-gradient(circle at 50% 75%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%) !important;
+}
+
+/* Pattern: Chaos (uses fixed HSL colors, NOT custom color) */
+.protocol-card.pattern-chaos {
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%) !important;
+}
+
+/* Pattern: Grid */
+.protocol-card.pattern-grid {
+    background-image:
+        linear-gradient(0deg, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+}
+
+/* Pattern: Diagonal Lines */
+.protocol-card.pattern-diagonal-lines {
+    background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px,
+        color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px
+    ) !important;
+}
+
+/* Pattern: Cross Diagonal */
+.protocol-card.pattern-cross-diagonal {
+    background-image:
+        repeating-linear-gradient(45deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px),
+        repeating-linear-gradient(-45deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px) !important;
+}
+
+/* Pattern: Horizontal Lines */
+.protocol-card.pattern-horizontal-lines {
+    background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px
+    ) !important;
+}
+
+/* Pattern: Vertical Lines */
+.protocol-card.pattern-vertical-lines {
+    background-image: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px
+    ) !important;
+}
+
+/* Pattern: Cross */
+.protocol-card.pattern-cross {
+    background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px) !important;
+}
+
+/* Pattern: Hexagons */
+.protocol-card.pattern-hexagons {
+    background-image:
+        radial-gradient(circle at 0% 50%, transparent 30%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 31%, transparent 32%),
+        radial-gradient(circle at 100% 50%, transparent 30%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 31%, transparent 32%),
+        linear-gradient(60deg, transparent 40%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 41%, transparent 42%),
+        linear-gradient(-60deg, transparent 40%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 41%, transparent 42%) !important;
+    background-size: 40px 70px !important;
+    background-position: 0 0, 0 0, 0 0, 0 0 !important;
+}
+
+/* Pattern: Stripes */
+.protocol-card.pattern-stripes {
+    background-image: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent),
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px,
+        transparent 10px,
+        transparent 20px
+    ) !important;
+}
+
+/* --- Custom Protocol Pattern Styles for Protocol Display Cards --- */
+
+/* Pattern: Solid */
+.protocol-display-card.pattern-solid {
+    background-color: var(--card-custom-color) !important;
+    background-image: none !important;
+}
+
+/* Pattern: Radial */
+.protocol-display-card.pattern-radial {
+    background-image: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 25%, transparent) 0%, transparent 60%) !important;
+}
+
+/* Pattern: Dual Radial */
+.protocol-display-card.pattern-dual-radial {
+    background-image:
+        radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--card-custom-color) 30%, transparent) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--card-custom-color) 30%, transparent) 0%, transparent 50%) !important;
+}
+
+/* Pattern: Multi Radial */
+.protocol-display-card.pattern-multi-radial {
+    background-image:
+        radial-gradient(circle at 25% 25%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+        radial-gradient(circle at 75% 25%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+        radial-gradient(circle at 50% 75%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%) !important;
+}
+
+/* Pattern: Chaos (uses fixed HSL colors, NOT custom color) */
+.protocol-display-card.pattern-chaos {
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%) !important;
+}
+
+/* Pattern: Grid */
+.protocol-display-card.pattern-grid {
+    background-image:
+        linear-gradient(0deg, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+}
+
+/* Pattern: Diagonal Lines */
+.protocol-display-card.pattern-diagonal-lines {
+    background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px,
+        color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px
+    ) !important;
+}
+
+/* Pattern: Cross Diagonal */
+.protocol-display-card.pattern-cross-diagonal {
+    background-image:
+        repeating-linear-gradient(45deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px),
+        repeating-linear-gradient(-45deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 15%, transparent) 12px) !important;
+}
+
+/* Pattern: Horizontal Lines */
+.protocol-display-card.pattern-horizontal-lines {
+    background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px
+    ) !important;
+}
+
+/* Pattern: Vertical Lines */
+.protocol-display-card.pattern-vertical-lines {
+    background-image: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px
+    ) !important;
+}
+
+/* Pattern: Cross */
+.protocol-display-card.pattern-cross {
+    background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px) !important;
+}
+
+/* Pattern: Hexagons */
+.protocol-display-card.pattern-hexagons {
+    background-image:
+        radial-gradient(circle at 0% 50%, transparent 30%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 31%, transparent 32%),
+        radial-gradient(circle at 100% 50%, transparent 30%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 31%, transparent 32%),
+        linear-gradient(60deg, transparent 40%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 41%, transparent 42%),
+        linear-gradient(-60deg, transparent 40%, color-mix(in srgb, var(--card-custom-color) 12%, transparent) 41%, transparent 42%) !important;
+    background-size: 40px 70px !important;
+    background-position: 0 0, 0 0, 0 0, 0 0 !important;
+}
+
+/* Pattern: Stripes */
+.protocol-display-card.pattern-stripes {
+    background-image: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent),
+        color-mix(in srgb, var(--card-custom-color) 20%, transparent) 10px,
+        transparent 10px,
+        transparent 20px
+    ) !important;
 }
 
 

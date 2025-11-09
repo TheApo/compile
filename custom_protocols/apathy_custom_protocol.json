@@ -1,0 +1,158 @@
+{
+  "id": "apathy_custom",
+  "name": "Apathy_custom",
+  "description": "Custom implementation of Apathy protocol",
+  "author": "System",
+  "createdAt": "2025-01-08T00:00:00Z",
+  "color": "#9E9E9E",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "apathy-0-value-modifier",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_per_condition",
+              "value": 1,
+              "condition": "per_face_down_card",
+              "target": "own_total",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "apathy-1-flip-all",
+          "params": {
+            "action": "flip",
+            "count": "all",
+            "optional": false,
+            "scope": "this_lane",
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "face_up",
+              "excludeSelf": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "apathy-2-passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "ignore_middle_commands",
+              "target": "all",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "apathy-2-on-cover",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "flipSelf": true,
+            "optional": false,
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "bottom",
+          "trigger": "on_cover"
+        }
+      ]
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "apathy-3-flip-opponent",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": false,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "uncovered",
+              "faceState": "face_up",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "apathy-4-flip-covered",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "own",
+              "position": "covered",
+              "faceState": "face_up",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "apathy-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

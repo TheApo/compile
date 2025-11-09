@@ -10,6 +10,8 @@ import { effectRegistryEnd } from "./effects/effectRegistryEnd";
 import { effectRegistryOnCover } from "./effects/effectRegistryOnCover";
 import { recalculateAllLaneValues } from "./game/stateManager";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "./utils/log";
+import { executeCustomEffect } from "./customProtocols/effectInterpreter";
+import { shouldIgnoreMiddleCommand } from "./game/passiveRuleChecker";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
@@ -29,14 +31,65 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         return { newState: state }; // Card is covered, do not trigger middle effect.
     }
 
-    // Check for Apathy-2 in the same line, which ignores middle effects for both players
-    const playerLaneHasApathy2 = state[cardOwner].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2 && c.id !== card.id);
-    const opponentLaneHasApathy2 = state[opponent].lanes[laneIndex].some(c => c.isFaceUp && c.protocol === 'Apathy' && c.value === 2);
-
-    if (playerLaneHasApathy2 || opponentLaneHasApathy2) {
+    // NEW: Check passive rules for ignore middle command (Apathy-2, custom cards)
+    if (shouldIgnoreMiddleCommand(state, laneIndex)) {
         return { newState: state }; // Middle effects are ignored in this line
     }
 
+    // Check if this is a custom protocol card with custom effects
+    const customCard = card as any;
+    if (customCard.customEffects && customCard.customEffects.middleEffects && customCard.customEffects.middleEffects.length > 0) {
+        console.log(`[effectExecutor] Executing custom card ${card.protocol}-${card.value} with ${customCard.customEffects.middleEffects.length} middle effects, triggerType=${triggerType}`);
+
+        // Execute custom effects
+        let stateWithContext = state;
+        if (triggerType === 'middle' || triggerType === 'play') {
+            stateWithContext = increaseLogIndent(stateWithContext);
+        }
+
+        const cardName = `${card.protocol}-${card.value}`;
+        stateWithContext = setLogSource(stateWithContext, cardName);
+        stateWithContext = setLogPhase(stateWithContext, 'middle');
+
+        let currentState = stateWithContext;
+
+        // Execute all middle effects sequentially
+        for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
+            console.log(`[effectExecutor] Executing effect ${i + 1}/${customCard.customEffects.middleEffects.length}:`, customCard.customEffects.middleEffects[i].params.action);
+            const effectDef = customCard.customEffects.middleEffects[i];
+            const result = executeCustomEffect(card, laneIndex, currentState, context, effectDef);
+            currentState = result.newState;
+
+            console.log(`[effectExecutor] Effect ${i + 1} done. actionRequired?`, !!currentState.actionRequired);
+
+            // If an action is required, save remaining effects and return
+            if (currentState.actionRequired) {
+                const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
+                console.log(`[effectExecutor] ⚠ Action required! Remaining effects: ${remainingEffects.length}`);
+                console.log(`[effectExecutor] Current effect index: ${i}, Total effects: ${customCard.customEffects.middleEffects.length}`);
+                console.log(`[effectExecutor] Remaining effects:`, remainingEffects.map((e: any) => `${e.params.action} (trigger: ${e.trigger}, useCardFromPreviousEffect: ${e.useCardFromPreviousEffect})`));
+                if (remainingEffects.length > 0) {
+                    console.log(`[effectExecutor] ✓ Setting _pendingCustomEffects with ${remainingEffects.length} effects`);
+                    // CRITICAL: Store in state, not in actionRequired (which gets deleted)
+                    (currentState as any)._pendingCustomEffects = {
+                        sourceCardId: card.id,
+                        laneIndex,
+                        context,
+                        effects: remainingEffects
+                    };
+                    console.log(`[effectExecutor] ✓ _pendingCustomEffects confirmed set:`, !!(currentState as any)._pendingCustomEffects);
+                } else {
+                    console.log(`[effectExecutor] ⚠ No remaining effects - this was the last effect`);
+                }
+                return { newState: recalculateAllLaneValues(currentState) };
+            }
+        }
+
+        const stateWithRecalculatedValues = recalculateAllLaneValues(currentState);
+        return { newState: stateWithRecalculatedValues };
+    }
+
+    // Standard card - use registry
     const effectKey = `${card.protocol}-${card.value}`;
     const execute = effectRegistry[effectKey];
 
@@ -85,6 +138,37 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         return { newState: state };
     }
 
+    // Check if this is a custom protocol card with custom on-cover effects
+    const customCard = coveredCard as any;
+    if (customCard.customEffects && customCard.customEffects.bottomEffects) {
+        const onCoverEffects = customCard.customEffects.bottomEffects.filter((e: any) => e.trigger === 'on_cover');
+
+        if (onCoverEffects.length > 0) {
+            const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
+            let stateWithContext = setLogSource(state, cardName);
+            stateWithContext = setLogPhase(stateWithContext, undefined);
+
+            let currentState = stateWithContext;
+
+            // Execute all on-cover effects sequentially
+            for (const effectDef of onCoverEffects) {
+                const result = executeCustomEffect(coveredCard, laneIndex, currentState, context, effectDef);
+                currentState = result.newState;
+
+                // If an action is required, stop and return
+                if (currentState.actionRequired) {
+                    let finalState = increaseLogIndent(currentState);
+                    return { newState: recalculateAllLaneValues(finalState) };
+                }
+            }
+
+            let finalState = increaseLogIndent(currentState);
+            const stateWithRecalculatedValues = recalculateAllLaneValues(finalState);
+            return { newState: stateWithRecalculatedValues };
+        }
+    }
+
+    // Standard card - use registry
     const effectKey = `${coveredCard.protocol}-${coveredCard.value}`;
     const execute = effectRegistryOnCover[effectKey];
 
@@ -161,6 +245,66 @@ function processTriggeredEffects(
             if (!isStillUncovered) continue; // Card was covered by a previous effect.
         }
 
+        // Build context for the effect
+        const opponent = player === 'player' ? 'opponent' : 'player';
+        const context: EffectContext = {
+            cardOwner: player,
+            actor: player,
+            currentTurn: state.turn,
+            opponent,
+            triggerType: effectKeyword === 'Start' ? 'start' : 'end'
+        };
+
+        // Check if this is a custom protocol card with custom effects
+        const customCard = card as any;
+        const triggerType = effectKeyword === 'Start' ? 'start' : 'end';
+
+        if (customCard.customEffects) {
+            const effectsSource = box === 'top' ? customCard.customEffects.topEffects : customCard.customEffects.bottomEffects;
+            const matchingEffects = effectsSource?.filter((e: any) => e.trigger === triggerType) || [];
+
+            if (matchingEffects.length > 0) {
+                // IMPORTANT: Increase indent FIRST
+                newState = increaseLogIndent(newState);
+
+                const cardName = `${card.protocol}-${card.value}`;
+                const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
+                newState = setLogSource(newState, cardName);
+                newState = setLogPhase(newState, phaseContext);
+
+                // Log that the effect is triggering
+                newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
+
+                // Find lane index
+                const laneIndex = newState[player].lanes.findIndex(l => l.some(c => c.id === card.id));
+
+                // Execute all matching effects sequentially
+                for (const effectDef of matchingEffects) {
+                    const result = executeCustomEffect(card, laneIndex, newState, context, effectDef);
+                    newState = recalculateAllLaneValues(result.newState);
+
+                    if (newState.actionRequired) {
+                        // Mark as processed before returning
+                        const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
+                        newState[processedKey] = [...(newState[processedKey] || []), card.id];
+                        return { newState };
+                    }
+                }
+
+                // Mark as processed
+                const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
+                newState[processedKey] = [...(newState[processedKey] || []), card.id];
+
+                // Decrease indent after effect completes
+                newState = decreaseLogIndent(newState);
+                newState = setLogSource(newState, undefined);
+                newState = setLogPhase(newState, undefined);
+
+                continue; // Skip standard registry check
+            }
+        }
+
+        // Standard card - use registry
         const effectKey = `${card.protocol}-${card.value}`;
         const execute = effectRegistry[effectKey];
         if (execute) {
@@ -175,16 +319,6 @@ function processTriggeredEffects(
 
             // Log that the effect is triggering with Start/End marker
             newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
-
-            // Build context for the effect
-            const opponent = player === 'player' ? 'opponent' : 'player';
-            const context: EffectContext = {
-                cardOwner: player,
-                actor: player,
-                currentTurn: state.turn,
-                opponent,
-                triggerType: effectKeyword === 'Start' ? 'start' : 'end'
-            };
 
             // FIXED: Now calls execute with proper signature (card, state, context)
             const result = execute(card, newState, context);

@@ -1231,6 +1231,45 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        case 'select_card_to_shift': {
+            // Generic shift for custom protocols
+            const targetFilter = (action as any).targetFilter || {};
+            const validTargets: PlayedCard[] = [];
+
+            for (const playerKey of ['player', 'opponent'] as const) {
+                // Determine if we should check this player's cards
+                const isOwn = playerKey === 'opponent'; // AI is opponent
+                if (targetFilter.owner === 'own' && !isOwn) continue;
+                if (targetFilter.owner === 'opponent' && isOwn) continue;
+
+                for (const lane of state[playerKey].lanes) {
+                    for (let i = 0; i < lane.length; i++) {
+                        const card = lane[i];
+                        const isTopCard = i === lane.length - 1;
+
+                        // Check position filter
+                        if (targetFilter.position === 'uncovered' && !isTopCard) continue;
+                        if (targetFilter.position === 'covered' && isTopCard) continue;
+
+                        // Check face state filter
+                        if (targetFilter.faceState === 'face_up' && !card.isFaceUp) continue;
+                        if (targetFilter.faceState === 'face_down' && card.isFaceUp) continue;
+
+                        // Check excludeSelf
+                        if (targetFilter.excludeSelf && card.id === action.sourceCardId) continue;
+
+                        validTargets.push(card);
+                    }
+                }
+            }
+
+            if (validTargets.length > 0) {
+                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
+                return { type: 'deleteCard', cardId: randomTarget.id };
+            }
+            return { type: 'skip' };
+        }
+
         case 'select_any_opponent_card_to_shift': {
             const validTargets = state.player.lanes.map(lane => lane.length > 0 ? lane[lane.length - 1] : null).filter((c): c is PlayedCard => c !== null);
             if (validTargets.length > 0) {

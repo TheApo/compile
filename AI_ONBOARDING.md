@@ -62,28 +62,85 @@ Diese Datei beschreibt die optimale Reihenfolge zum Einlesen des Projekts für s
 
 #### 3.1 Karten-System
 
-7. **`data/cards.ts`** (TypeScript)
-   - Enthält: Alle 84 Karten mit top/middle/bottom Commands
-   - **Wann lesen:** Wenn du wissen musst, was eine Karte genau macht
+8. **`data/cards.ts`** (TypeScript)
+   - Enthält: Alle Original-Karten (18 Protokolle × 6 Karten = 108 Karten)
+   - **Wann lesen:** Wenn du wissen musst, was eine Original-Karte genau macht
    - **Wie lesen:** Suche nach spezifischer Karte (z.B. "Anarchy-0")
+   - **Wichtig:** Custom Protocol Karten sind NICHT hier, sondern in localStorage
 
-#### 3.2 Effekt-System
+#### 3.2 Effekt-System (Original Karten)
 
-8. **`logic/effects/`** Ordner
+9. **`logic/effects/`** Ordner
    - Struktur:
      - `effectRegistry.ts` - Middle Commands (on-play)
      - `effectRegistryStart.ts` - Start-Phase Effekte
      - `effectRegistryEnd.ts` - End-Phase Effekte
      - `effectRegistryOnCover.ts` - "When covered" Effekte
-     - `{protocol}/` Ordner - Einzelne Karten-Effekte
-   - **Wann lesen:** Wenn du einen spezifischen Karten-Effekt debuggen musst
+     - `{protocol}/` Ordner - Einzelne Karten-Effekte (z.B. `anarchy/Anarchy-0.ts`)
+   - **Wann lesen:** Wenn du einen spezifischen Original-Karten-Effekt debuggen musst
    - **Wie lesen:**
      1. Finde Registry-Eintrag
-     2. Lies die spezifische Effect-Datei (z.B. `anarchy/Anarchy-0.ts`)
+     2. Lies die spezifische Effect-Datei
+   - **Wichtig:** Custom Protocol Effekte nutzen NICHT diese Registries!
 
-#### 3.3 Game-Logic
+#### 3.3 Custom Protocol System ⭐
 
-9. **Kern-Dateien** (in dieser Reihenfolge):
+**Lese diese Sektion wenn du an Custom Protocols arbeitest!**
+
+10. **`CUSTOM_PROTOCOL_CREATOR.md`** (MD-Datei) ⭐
+    - Enthält: Architektur, Effect Types, UI-Komponenten, Integration
+    - **Warum wichtig:** Erklärt wie Custom Protocols funktionieren
+    - **Lesen:** Komplett wenn du Custom Protocols editierst/debuggst
+    - **Besonders wichtig:**
+      - Effect Positions (top/middle/bottom)
+      - Conditional Chains (if_executed, then)
+      - Parameter-basierte Effekte (KEINE card-spezifischen Funktionen!)
+
+11. **`CUSTOM_PROTOCOL_MIGRATION_GUIDE.md`** (MD-Datei)
+    - Enthält: Wie Original-Protokolle zu Custom Protocols migriert werden
+    - **Wann lesen:** Wenn du Protokolle migrierst oder Beispiele brauchst
+    - **Besonders wichtig:**
+      - Effect Parameter Patterns
+      - Target Filtering
+      - Conditional Chains
+      - Death Protocol Beispiel (komplett)
+
+**Custom Protocol Code-Dateien:**
+
+- **`types/customProtocol.ts`** - Type Definitions
+  - Alle Effect Parameter Types
+  - EffectDefinition, CustomProtocolDefinition
+  - Conditional Types (if_executed, then, followUp)
+
+- **`logic/customProtocols/effectInterpreter.ts`** ⭐ - Core Engine
+  - Führt Custom Effects aus
+  - Validiert Position (top/middle/bottom)
+  - Handled Conditionals und Chains
+  - Respektiert Spielregeln (Frost-1, Apathy-2, etc.)
+  - **KRITISCH:** Diese Datei ist das Herzstück!
+
+- **`logic/customProtocols/storage.ts`** - localStorage Management
+  - loadCustomProtocols(), saveCustomProtocol()
+  - Import/Export JSON
+
+- **`logic/customProtocols/cardFactory.ts`** - Card Generation
+  - Konvertiert JSON → Card Objects
+  - Fügt customEffects zu Karten hinzu
+
+- **`screens/CustomProtocolCreator/`** - UI Components
+  - ProtocolList.tsx - Protokoll-Übersicht
+  - ProtocolWizard.tsx - Editor
+  - CardEditor.tsx - Einzelne Karte editieren
+  - EffectParameterEditors/ - Parameter-Editoren für jeden Effect Type
+
+**Custom Protocol Activation:**
+- Custom Protocols sind standardmäßig UNSICHTBAR
+- Aktivierung: 5× auf "developed" im Main Menu klicken
+- Einstellung in `localStorage` via `utils/customProtocolSettings.ts`
+
+#### 3.4 Game-Logic
+
+12. **Kern-Dateien** (in dieser Reihenfolge):
 
    **a) `logic/game/stateManager.ts`**
    - Enthält: `recalculateAllLaneValues`, `getEffectiveCardValue`, `calculateCompilableLanes`
@@ -92,7 +149,7 @@ Diese Datei beschreibt die optimale Reihenfolge zum Einlesen des Projekts für s
    **b) `logic/game/phaseManager.ts`**
    - Enthält: `advancePhase`, `processEndOfAction`, `processQueuedActions`
    - **Wann lesen:** Wenn du Phase-Übergänge oder queued actions debuggen musst
-   - **Wichtig:** Zeilen 261-277 (anarchy_0_conditional_draw), Zeile 111-140 (hand_limit phase)
+   - **Wichtig:** `processQueuedActions` verarbeitet Auto-Resolving Actions (z.B. flip_self_for_water_0)
 
    **c) `logic/game/actionResolver.ts`**
    - Enthält: Haupt-Dispatcher für alle Actions
@@ -100,19 +157,70 @@ Diese Datei beschreibt die optimale Reihenfolge zum Einlesen des Projekts für s
 
    **d) `logic/game/resolvers/`** Ordner
    - `cardResolver.ts` - Karten-Aktionen (flip, delete, return, etc.)
-   - `laneResolver.ts` - Shift-Aktionen (alle Shift-Typen)
+   - `laneResolver.ts` - Shift-Aktionen + Play Card
    - `discardResolver.ts` - Discard-Aktionen
    - `promptResolver.ts` - Prompts (Rearrange, Compile, etc.)
    - **Wann lesen:** Wenn du einen spezifischen Action-Typ debuggen musst
 
-#### 3.4 AI-System
+   **e) `logic/effectExecutor.ts`** ⭐
+   - Verbindet Original Effects UND Custom Protocol Effects
+   - Ruft `executeCustomEffect` für Custom Cards
+   - **KRITISCH:** Hier wird entschieden ob Original oder Custom Effect
 
-10. **`logic/ai/`** Ordner
+#### 3.5 AI-System
+
+13. **`logic/ai/`** Ordner
     - `easy.ts` - Einfache AI (spielt höchsten Wert)
     - `normal.ts` - Mittlere AI (strategisch mit Fehlern)
     - `hardImproved.ts` - Schwere AI (Memory-System, Strategie)
     - **Wann lesen:** Nur wenn du AI-Bugs fixen musst
     - **Wichtig:** Ignoriere `hard.ts` (veraltet)
+    - **Custom Protocols:** AI kann Custom Protocols noch NICHT spielen (TODO)
+
+---
+
+## 🎨 CSS-Struktur (Wichtig!)
+
+Das CSS ist modular aufgeteilt - **NIEMALS** direkt in einzelne CSS-Dateien schauen, erst `CSS_STRUCTURE.md` lesen!
+
+### Datei-Organisation
+
+**Root-Level (`styles/`):**
+- `base.css` - Basis-Variablen, Reset, Dark Theme
+- `components.css` - Karten, Buttons, UI-Komponenten, Protocol-Farben
+- `custom-protocol-creator.css` - Custom Protocol Editor
+- `StatisticsScreen.css` - Statistics Screen
+
+**Layout-Spezifisch (`styles/layouts/`):**
+- `main-menu.css` - Main Menu Layout
+- `game-screen.css` - Spiel-Screen (Board, Lanes, Hand)
+- `card-library.css` - Card Library
+- `protocol-selection.css` - Protocol Selection
+
+**Responsive (`styles/responsive/`):**
+- `tablet.css` - Tablet Media Queries (@media (max-width: 1024px))
+
+### Wo ändere ich was?
+
+| Was? | Datei |
+|------|-------|
+| **Karten-Styling** | `components.css` |
+| **Protocol-Farben** | `components.css` (CSS-Variablen wie `--protocol-anarchy`) |
+| **Buttons/Inputs** | `components.css` |
+| **Main Menu Layout** | `layouts/main-menu.css` |
+| **Game Board** | `layouts/game-screen.css` |
+| **Protocol Selection** | `layouts/protocol-selection.css` |
+| **Card Library** | `layouts/card-library.css` |
+| **Custom Protocol Editor** | `custom-protocol-creator.css` |
+| **Tablet-Anpassungen** | `responsive/tablet.css` |
+| **Dark Theme** | `base.css` |
+
+### Wichtige Regeln
+
+1. **NIEMALS** inline Styles in Components - immer CSS-Klassen
+2. **NIEMALS** direkte Farben - immer CSS-Variablen (`var(--protocol-anarchy)`)
+3. **IMMER** Tablet-Responsive beachten - Test bei 1024px Breite
+4. **BEI LAYOUT-BUGS:** Erst `CSS_STRUCTURE.md` lesen, dann relevante CSS-Datei
 
 ---
 
@@ -124,9 +232,10 @@ Beim Start einer neuen Programmier-Session:
 - [ ] Lies `COMP-MN01_Rulesheet_Updated.pdf` Seite 1-2 (3 min)
 - [ ] Lies `LOGGING_SYSTEM.md` (5 min) ⭐
 - [ ] Scanne `CARD_TARGETING_RULES.md` Tabellen (2 min)
+- [ ] **OPTIONAL:** Lies `CUSTOM_PROTOCOL_CREATOR.md` wenn Custom Protocol Task (5 min)
 - [ ] **DANN:** Melde dich beim User zurück!
 
-**Geschätzte Zeit:** ~12 Minuten
+**Geschätzte Zeit:** ~12 Minuten (17 min mit Custom Protocols)
 
 ---
 
@@ -135,32 +244,51 @@ Beim Start einer neuen Programmier-Session:
 | Was suchst du? | Wo findest du es? |
 |----------------|-------------------|
 | **Spielregeln** | `beschreibung.txt`, PDF, `GAME_RULES.md` |
-| **Karten-Effekte** | `data/cards.ts` → `logic/effects/{protocol}/{Card}.ts` |
+| **Original Karten-Effekte** | `data/cards.ts` → `logic/effects/{protocol}/{Card}.ts` |
+| **Custom Protocol Effekte** | `logic/customProtocols/effectInterpreter.ts` |
+| **Custom Protocol Typen** | `types/customProtocol.ts` |
+| **Custom Protocol Migration** | `CUSTOM_PROTOCOL_MIGRATION_GUIDE.md` |
 | **Logging-Regeln** | `LOGGING_SYSTEM.md` ⭐ |
 | **Targeting-Regeln** | `CARD_TARGETING_RULES.md` |
-| **CSS-Struktur** | `CSS_STRUCTURE.md` ⭐ (Layouts, Responsive, Tablet) |
+| **CSS - Komponenten** | `styles/components.css` |
+| **CSS - Layouts** | `styles/layouts/{screen}.css` |
+| **CSS - Tablet** | `styles/responsive/tablet.css` |
+| **CSS - Übersicht** | `CSS_STRUCTURE.md` ⭐ |
 | **Phase-Management** | `logic/game/phaseManager.ts` |
 | **Shift-Logic** | `logic/game/resolvers/laneResolver.ts` |
 | **Delete/Flip/Return** | `logic/game/resolvers/cardResolver.ts` |
 | **AI-Entscheidungen** | `logic/ai/easy.ts`, `normal.ts`, `hardImproved.ts` |
 | **Uncover-Logic** | `logic/game/helpers/actionUtils.ts` → `handleUncoverEffect` |
 | **Queued Actions** | `logic/game/phaseManager.ts` → `processQueuedActions` |
+| **Effect Execution** | `logic/effectExecutor.ts` (Original + Custom) |
 
 ---
 
 ## 🔥 Häufige Bug-Kategorien & Wo schauen
 
 ### Softlock nach Effekt
-→ **Check:** `laneResolver.ts` (queued actions processing), `phaseManager.ts` (processQueuedActions)
+→ **Check:**
+1. `laneResolver.ts` - Animation Callbacks müssen IMMER `endTurnCb` aufrufen
+2. `phaseManager.ts` - `processQueuedActions` muss Queue verarbeiten
+3. `cardResolver.ts` - Keine Queue zu actionRequired bewegen!
+
+### Custom Protocol Effect funktioniert nicht
+→ **Check:**
+1. `effectInterpreter.ts` - Position-Check (top/middle/bottom)
+2. Karte face-up? (für alle Effekte)
+3. Karte uncovered? (für middle/bottom Effekte)
+4. Target Filters korrekt? (owner, position, faceState)
+5. Conditional richtig verschachtelt?
 
 ### Falsches Logging (Einrückung/Source)
 → **Check:** `LOGGING_SYSTEM.md`, `actionUtils.ts` (handleUncoverEffect), `cardResolver.ts` (Context-Management)
 
 ### Effekt wird nicht ausgeführt / falsche Bedingung
 → **Check:**
-1. `logic/effects/{protocol}/{Card}.ts` (Effect-Datei)
-2. `cardResolver.ts` oder `phaseManager.ts` (Aufruf-Stelle)
+1. Original Card: `logic/effects/{protocol}/{Card}.ts`
+2. Custom Card: `logic/customProtocols/effectInterpreter.ts`
 3. Ist Karte face-up? Ist Karte uncovered?
+4. Wird Effect vom richtigen Executor aufgerufen? (`effectExecutor.ts`)
 
 ### AI macht dumme Entscheidung
 → **Check:** `logic/ai/{difficulty}.ts`, validiere mit `CARD_TARGETING_RULES.md`
@@ -172,10 +300,22 @@ Beim Start einer neuen Programmier-Session:
 → **Check:** `CARD_TARGETING_RULES.md`, dann AI-Handler oder Resolver
 
 ### Layout/CSS kaputt auf Tablet
-→ **Check:** `CSS_STRUCTURE.md`, dann `styles/responsive/tablet.css`, Media Query Breakpoints prüfen
+→ **Check:**
+1. `CSS_STRUCTURE.md` - Welche Datei ist zuständig?
+2. `styles/responsive/tablet.css` - Media Query prüfen
+3. Breakpoint 1024px testen
 
 ### Protocol Grid zu breit/Cards falsche Größe
-→ **Check:** `CSS_STRUCTURE.md` → "Troubleshooting", dann `tablet.css` Grid-Dimensionen
+→ **Check:**
+1. `CSS_STRUCTURE.md` → "Troubleshooting"
+2. `styles/responsive/tablet.css` - Grid-Dimensionen
+
+### Custom Protocol Editor Validation Error
+→ **Check:**
+1. `CUSTOM_PROTOCOL_CREATOR.md` - Validation Rules
+2. Required Fields gefüllt?
+3. Conditionals haben thenEffect?
+4. Position/Trigger Kombination gültig?
 
 ---
 
@@ -189,10 +329,15 @@ Beim Start einer neuen Programmier-Session:
 - **Uncovered:** Oberste Karte im Stack → Middle + Bottom aktiv
 - **Covered:** Darunter → nur Top aktiv (wenn face-up)
 
-### Effekt-Typen
+### Effekt-Typen (Original + Custom)
 - **Top (Persistent):** Immer aktiv wenn face-up (auch wenn covered)
-- **Middle (Immediate):** Beim Spielen/Aufdecken/Uncovern
-- **Bottom (Auxiliary):** Nur wenn uncovered (triggered effects)
+- **Middle (Immediate):** Beim Spielen/Aufdecken/Uncovern (nur wenn uncovered!)
+- **Bottom (Auxiliary):** Nur wenn uncovered (triggered effects: start, end, on_cover)
+
+### Custom Protocol Positions
+- **Top:** Passive Rules, Value Modifiers - aktiv wenn covered
+- **Middle:** Draw, Flip, Delete, etc. - NUR wenn uncovered
+- **Bottom:** Start/End/OnCover Triggers - NUR wenn uncovered
 
 ### Turn-Interrupt
 - Wenn Effekt für anderen Spieler Action benötigt
@@ -201,8 +346,15 @@ Beim Start einer neuen Programmier-Session:
 
 ### Queued Actions
 - Actions die nach aktueller Action ausgeführt werden
-- Beispiel: `anarchy_0_conditional_draw`, `speed_3_self_flip_after_shift`
+- Beispiel: `flip_self_for_water_0`, `anarchy_0_conditional_draw`
 - Werden in `phaseManager.ts` → `processQueuedActions` verarbeitet
+- **KRITISCH:** NIEMALS Queue zu actionRequired bewegen!
+
+### Conditional Chains (Custom Protocols)
+- **optional: true** → "You may..."
+- **conditional: { type: "if_executed" }** → "If you do..."
+- **conditional: { type: "then" }** → "...then..."
+- **followUpEffect** → Sequentielle Verkettung
 
 ---
 
@@ -218,24 +370,35 @@ Beim Start einer neuen Programmier-Session:
 
 5. **IMMER** `setLogSource` und `setLogPhase` bei queued actions neu setzen!
 
+6. **NIEMALS** Animation Callbacks ohne `endTurnCb` aufrufen - führt zu Softlock!
+
+7. **NIEMALS** Queue-Actions zu `actionRequired` bewegen - sie sind auto-resolving!
+
+8. **NIEMALS** Custom Protocol Effekte mit card-spezifischem Code - nur Parameter!
+
+9. **NIEMALS** `Math.random()` nutzen - IMMER `import`, nie `require()` - es ist eine Web-App!
+
+10. **NIEMALS** Dev-Server selbst starten - User macht das!
+
 ---
 
 ## 🛠️ Debugging-Workflow
 
 Wenn etwas nicht funktioniert:
 
-1. **Reproduziere Bug** (am besten mit Debug-Tool)
+1. **Reproduziere Bug** (am besten mit Debug-Tool oder Testszenario)
 2. **Lies Log** (drücke "Log" Button im Spiel)
 3. **Identifiziere Problem:**
-   - Softlock? → Check queued actions / actionRequired
+   - Softlock? → Check queued actions / actionRequired / Animation Callbacks
    - Falsches Logging? → Check Indent-Level / Source
-   - Effekt nicht ausgeführt? → Check face-up / uncovered
+   - Effekt nicht ausgeführt? → Check face-up / uncovered / Position
    - Falscher Actor? → Check `actionRequired.actor` vs `state.turn`
+   - Custom Protocol Bug? → Check effectInterpreter.ts Position-Validierung
 4. **Finde relevante Datei** (siehe "Wo finde ich was?" Tabelle oben)
 5. **Lies Code-Kontext** (nur betroffene Funktion)
-6. **Finde Root Cause**
+6. **Finde Root Cause** - NICHT raten, systematisch analysieren!
 7. **Implementiere Fix**
-8. **Teste mit Debug-Tool**
+8. **Teste mit Debug-Tool oder Testszenario**
 
 ---
 
@@ -246,12 +409,12 @@ Wenn etwas nicht funktioniert:
 - ❌ `dist/` oder `docs/` (Build-Artifacts)
 - ❌ `logic/ai/hard.ts` (veraltet, benutze `hardImproved.ts`)
 - ❌ UI-Code (`screens/`, `components/`) außer bei UI-Bugs
-- ❌ `styles/` Module (benutze stattdessen `CSS_STRUCTURE.md` + `index.css`)
-- ❌ `index.css.backup` (falls vorhanden - ist nur Backup)
+- ❌ Einzelne CSS-Dateien (benutze stattdessen `CSS_STRUCTURE.md`)
+- ❌ Veraltete MD-Dateien (alle Status/TODO/Analysis Dateien wurden gelöscht)
 
 ### Nützliche Grep-Patterns
 ```bash
-# Finde alle Effekte einer Karte
+# Finde alle Effekte einer Original-Karte
 grep -r "Anarchy-0" logic/effects/
 
 # Finde wo Action-Type verwendet wird
@@ -259,6 +422,19 @@ grep -r "select_card_to_shift" logic/
 
 # Finde Log-Messages
 grep -r "log(" logic/ | grep "Anarchy-0"
+
+# Finde Custom Protocol Effect Parameter
+grep -r "action: 'draw'" logic/customProtocols/
+
+# Finde CSS für Komponente
+grep -r "\.card\b" styles/
+```
+
+### Custom Protocol localStorage
+```javascript
+// In Browser Console:
+localStorage.getItem('customProtocols') // Alle Custom Protocols
+localStorage.getItem('customProtocolsEnabled') // Aktivierungs-Status
 ```
 
 ---
@@ -270,7 +446,64 @@ Wenn du diese Anleitung befolgt hast, solltest du:
 ✅ Die Spielregeln verstehen (face-up, uncovered, compile)
 ✅ Das Logging-System verstehen (indent, source, phase)
 ✅ Wissen wo Code für spezifische Features liegt
+✅ Custom Protocol System verstehen (wenn relevant)
+✅ CSS-Struktur kennen (modular, wo was liegt)
 ✅ Häufige Bug-Kategorien kennen
 ✅ Bereit sein zum Programmieren!
 
 **Melde dich beim User und frage nach der Aufgabe!** 🚀
+
+---
+
+## 🎓 Spezial-Themen
+
+### Custom Protocol Migration
+
+Wenn du Original-Protokolle zu Custom Protocols migrierst:
+1. Lies `CUSTOM_PROTOCOL_MIGRATION_GUIDE.md` komplett
+2. Prüfe alle 6 Karten des Protokolls
+3. Mappe jeden Effekt zu Effect Type + Parametern
+4. Nutze Conditional Chains für komplexe Effekte
+5. Teste JEDEN Edge Case (no targets, softlocks, etc.)
+
+### Water-0 Pattern (Flip Self After Flip Other)
+
+```typescript
+{
+  params: { action: "flip", count: 1, excludeSelf: true },
+  conditional: {
+    type: "then",
+    thenEffect: {
+      params: { action: "flip", count: 1, deleteSelf: true }
+    }
+  }
+}
+```
+
+Generiert Queue-Action `flip_self_for_water_0` die von `processQueuedActions` verarbeitet wird.
+
+### Death-1 Pattern (Optional Draw → Delete Other → Delete Self)
+
+```typescript
+{
+  params: { action: "draw", count: 1, optional: true },
+  conditional: {
+    type: "if_executed",
+    thenEffect: {
+      params: { action: "delete", count: 1, excludeSelf: true },
+      conditional: {
+        type: "then",
+        thenEffect: {
+          params: { action: "delete", count: 1, deleteSelf: true }
+        }
+      }
+    }
+  }
+}
+```
+
+Multi-Step Conditional Chain.
+
+---
+
+**Viel Erfolg!** 🚀

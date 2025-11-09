@@ -250,11 +250,12 @@
 
 
 .card-header {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  position: relative;
+  display: flex;
   align-items: stretch;
-  gap: 6px;
+  gap: 0;
   margin-bottom: 10px;
+  height: 30px; /* Fixed height */
 }
 
 .card-protocol, .card-value {
@@ -266,18 +267,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
 }
 .card-protocol {
-  font-size: 1.1em;
+  font-size: 0.9em;
   justify-content: flex-start;
-  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0% 100%);
+  /* Protocol takes remaining space */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
 }
 .card-value {
-  font-size: 1.8em;
-  min-width: 40px;
+  font-size: 1.5em;
   color: var(--primary-color);
-  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0% 100%);
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0% 100%);
   border-left: 1px solid var(--secondary-color);
+  text-align: center;
+  padding: 2px 6px;
+  /* CRITICAL: Fixed width, NEVER shrinks, ALWAYS on top */
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  z-index: 100 !important;
+  position: relative;
+  background: rgba(10, 5, 26, 0.98) !important;
+  order: 2; /* Always render last (on right) */
 }
 
 .card-body {
@@ -438,6 +454,105 @@
     background-image:
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
         radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
+}
+
+/* --- Custom Protocol Card Styles (EXACT copy from Editor) --- */
+.card-component.has-custom-color .card-front {
+    border-color: var(--card-custom-color) !important;
+}
+
+/* Pattern: Solid */
+.card-component.card-pattern-solid .card-front {
+    background-color: var(--card-custom-color) !important;
+    background-image: none !important;
+}
+
+/* Pattern: Radial */
+.card-component.card-pattern-radial .card-front {
+    background-image: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 25%, transparent) 0%, transparent 60%) !important;
+}
+
+/* Pattern: Dual Radial */
+.card-component.card-pattern-dual-radial .card-front {
+    background-image:
+        radial-gradient(at 0% 0%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 50%),
+        radial-gradient(at 100% 100%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 50%) !important;
+}
+
+/* Pattern: Multi Radial */
+.card-component.card-pattern-multi-radial .card-front {
+    background-image:
+        radial-gradient(at 50% 0%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 70%),
+        radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--card-custom-color) 15%, transparent), transparent 40%),
+        radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 50%) !important;
+}
+
+/* Pattern: Chaos (uses fixed HSL colors, NOT custom color) */
+.card-component.card-pattern-chaos .card-front {
+    background-image:
+        radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+        radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+        radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+        radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%) !important;
+}
+
+/* Pattern: Grid */
+.card-component.card-pattern-grid .card-front {
+    background-image:
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+        linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px) !important;
+    background-size: 100% 100%, 20px 20px, 20px 20px !important;
+}
+
+/* Pattern: Diagonal Lines */
+.card-component.card-pattern-diagonal-lines .card-front {
+    background-image:
+        radial-gradient(at 0% 100%, color-mix(in srgb, var(--card-custom-color) 25%, transparent), transparent 70%),
+        repeating-linear-gradient(120deg, transparent, transparent 15px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 15px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 30px) !important;
+}
+
+/* Pattern: Cross Diagonal */
+.card-component.card-pattern-cross-diagonal .card-front {
+    background-image:
+        radial-gradient(at 50% 50%, color-mix(in srgb, var(--card-custom-color) 25%, transparent) 0%, transparent 50%),
+        repeating-linear-gradient(45deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 16px),
+        repeating-linear-gradient(-45deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 6%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 6%, transparent) 16px) !important;
+}
+
+/* Pattern: Horizontal Lines */
+.card-component.card-pattern-horizontal-lines .card-front {
+    background-image:
+        radial-gradient(at 80% 80%, color-mix(in srgb, var(--card-custom-color) 10%, transparent), transparent 50%),
+        repeating-linear-gradient(0deg, hsla(0,0%,100%,0.02), hsla(0,0%,100%,0.02) 1px, transparent 1px, transparent 3px) !important;
+}
+
+/* Pattern: Vertical Lines */
+.card-component.card-pattern-vertical-lines .card-front {
+    background-image:
+        radial-gradient(at 10% 10%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 50%),
+        repeating-linear-gradient(175deg, transparent, transparent 1px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 1px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 2px) !important;
+}
+
+/* Pattern: Cross */
+.card-component.card-pattern-cross .card-front {
+    background-image:
+        linear-gradient(0deg, transparent 40%, color-mix(in srgb, var(--card-custom-color) 10%, transparent) 50%, transparent 60%),
+        linear-gradient(90deg, transparent 48%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 50%, transparent 52%) !important;
+}
+
+/* Pattern: Hexagons */
+.card-component.card-pattern-hexagons .card-front {
+    background-image:
+        radial-gradient(at 50% 0%, color-mix(in srgb, var(--card-custom-color) 20%, transparent), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%23ffffff' fill-opacity='0.05' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v18.5l-13 7.5L0 33.5V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") !important;
+}
+
+/* Pattern: Stripes */
+.card-component.card-pattern-stripes .card-front {
+    background-image:
+        radial-gradient(at 50% 100%, color-mix(in srgb, var(--card-custom-color) 25%, transparent), transparent 60%),
+        linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%) !important;
 }
 
 /* --- Protocol Selection Card Styles (Protocol Grid) --- */
@@ -677,17 +792,19 @@
 .selected-protocol-cards-container .card-component.in-hand .card-header,
 .debug-card-grid .card-component.in-hand .card-header {
     margin-bottom: 4px;
-    gap: 4px;
+    gap: 0 !important; /* CRITICAL: No gap to prevent overflow */
 }
 
-.lane-stack .card-component .card-protocol,
-.player-hand-area .card-component.in-hand .card-protocol,
-.card-ticker-track .card-component.in-hand .card-protocol,
-.protocol-card-grid .card-component.in-hand .card-protocol,
-.selected-protocol-cards-container .card-component.in-hand .card-protocol,
-.debug-card-grid .card-component.in-hand .card-protocol {
-    padding: 1px 6px;
-    clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0% 100%);
+/* REMOVED: This rule was hiding the protocol name text */
+
+/* Larger font for short protocol names (≤ 8 characters) */
+.lane-stack .card-component .card-protocol.short-protocol,
+.player-hand-area .card-component.in-hand .card-protocol.short-protocol,
+.card-ticker-track .card-component.in-hand .card-protocol.short-protocol,
+.protocol-card-grid .card-component.in-hand .card-protocol.short-protocol,
+.selected-protocol-cards-container .card-component.in-hand .card-protocol.short-protocol,
+.debug-card-grid .card-component.in-hand .card-protocol.short-protocol {
+    font-size: 1.15em;
 }
 
 .lane-stack .card-component .card-value,
@@ -696,9 +813,18 @@
 .protocol-card-grid .card-component.in-hand .card-value,
 .selected-protocol-cards-container .card-component.in-hand .card-value,
 .debug-card-grid .card-component.in-hand .card-value {
-    padding: 1px 6px;
-    clip-path: polygon(6px 0, 100% 0, 100% 100%, 0% 100%);
-    min-width: 30px;
+    padding: 1px 4px;
+    clip-path: polygon(4px 0, 100% 0, 100% 100%, 0% 100%);
+    font-size: 1.8em;
+    /* CRITICAL: ALWAYS visible, NEVER shrinks */
+    min-width: 28px !important;
+    width: 28px !important;
+    max-width: 28px !important;
+    flex: 0 0 28px !important;
+    flex-shrink: 0 !important;
+    z-index: 100 !important;
+    position: relative !important;
+    background: rgba(10, 5, 26, 0.98) !important;
 }
 
 .lane-stack .card-component .card-body,
@@ -747,6 +873,8 @@
 .phase-controller {
     display: flex;
     flex-direction: column;
+}
+
 .toaster-container {
   position: fixed;
   top: 2rem;

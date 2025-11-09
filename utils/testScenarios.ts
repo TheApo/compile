@@ -7,6 +7,7 @@ import { GameState, PlayedCard, Player } from "../types";
 import { v4 as uuidv4 } from 'uuid';
 import { recalculateAllLaneValues } from '../logic/game/stateManager';
 import { cards } from '../data/cards';
+import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
 
 /**
  * Test Scenarios for validating actor/owner fixes
@@ -20,8 +21,14 @@ export type TestScenario = {
 
 // Helper: Create a PlayedCard with full data from cards database
 function createCard(protocol: string, value: number, isFaceUp: boolean = true): PlayedCard {
-    // Find the card in the database to get texts
-    const cardData = cards.find(c => c.protocol === protocol && c.value === value);
+    // Find the card in the database (base cards + custom protocols)
+    let cardData = cards.find(c => c.protocol === protocol && c.value === value);
+
+    // If not found in base cards, try custom protocols
+    if (!cardData) {
+        const customCards = getAllCustomProtocolCards();
+        cardData = customCards.find(c => c.protocol === protocol && c.value === value);
+    }
 
     if (!cardData) {
         console.warn(`Card not found: ${protocol}-${value}`);
@@ -48,6 +55,8 @@ function createCard(protocol: string, value: number, isFaceUp: boolean = true): 
         keywords: cardData.keywords,
         isFaceUp,
         isRevealed: false,
+        // Copy customEffects for custom protocol cards
+        ...(cardData as any).customEffects && { customEffects: (cardData as any).customEffects }
     };
 }
 
@@ -1166,6 +1175,206 @@ const scenario24_Frost3BlocksShift: TestScenario = {
     }
 };
 
+/**
+ * Szenario 25: Water-0 Softlock Bug Fix
+ *
+ * Setup:
+ * - Darkness-3 (face-down) in Lane 0
+ * - Player has Water-0 in hand
+ * - Player has Darkness-2 in hand
+ * - Player's Turn, Action Phase
+ *
+ * Test: Water-0 self-flip should be cancelled when card becomes covered
+ * Expected:
+ *   1. Player plays Water-0 in Lane 0
+ *   2. [Middle] Water-0 flips Darkness-3 face-up
+ *   3. Player plays Darkness-2 face-down in Lane 0 (covering Water-0)
+ *   4. Water-0's self-flip should be cancelled with log: "The self-flip effect was cancelled because it is now covered."
+ *   5. NO SOFTLOCK - game continues normally
+ */
+const scenario25_Water0SoftlockFix: TestScenario = {
+    name: "Water-0 Softlock Bug Fix",
+    description: "Water-0 self-flip should be cancelled when card becomes covered before self-flip executes",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Darkness', 'Light'],
+            ['Apathy', 'Fire', 'Death'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Darkness-3 (face-down) in Lane 0
+        newState = placeCard(newState, 'player', 1, createCard('Darkness', 3, false));
+
+        // Player: Water-0 and Darkness-2 in hand
+        newState.player.hand = [
+            createCard('Water', 0, true),
+            createCard('Darkness', 2, true),
+            createCard('Fire', 1, true), // Extra card for safety
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 26: Dark_cust-1 Flip and Shift Chain
+ *
+ * Setup:
+ * - Player has Dark_cust protocol in Lane 0
+ * - Opponent has Metal-2 (face-down) in Lane 0
+ * - Opponent has Fire-1 (face-up) in Lane 1
+ * - Player has Dark_cust-1 in hand
+ * - Player's Turn, Action Phase
+ *
+ * Test: Dark_cust-1 should flip opponent card, then allow shifting that card
+ * Expected:
+ *   1. Player plays Dark_cust-1 in Lane 0
+ *   2. [Middle Effect 1] Flip 1 opponent card -> Prompts to select Metal-2
+ *   3. Metal-2 flips face-up
+ *   4. [Middle Effect 2] "You may shift that card" -> Prompts to shift the FLIPPED card (Metal-2)
+ *   5. Player can choose to shift Metal-2 to another lane OR skip (optional)
+ */
+const scenario26_DarkCust1FlipShift: TestScenario = {
+    name: "Dark_cust-1 Flip and Shift Chain",
+    description: "Dark_cust-1 should flip opponent card, then allow shifting that same card",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Dark_cust', 'Water', 'Fire'],
+            ['Metal', 'Fire', 'Death'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Metal-2 (face-down) in Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, false));
+
+        // Opponent: Fire-1 (face-up) in Lane 1
+        newState = placeCard(newState, 'opponent', 1, createCard('Fire', 1, true));
+
+		newState = placeCard(newState, 'opponent', 2, createCard('Hate', 0, false));
+
+        // Player: Dark_cust-1 in hand
+        newState.player.hand = [
+            createCard('Dark_cust', 1, true),
+            createCard('Water', 2, true),
+            createCard('Fire', 3, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 27: Dark_cust-1 Flips Speed-3 - Middle Effect Should Execute
+ *
+ * Setup:
+ * - Player has Dark_cust protocol in Lane 0
+ * - Opponent has Speed-3 (face-down, uncovered) in Lane 1
+ * - Opponent has Fire-1 (face-up, uncovered) in Lane 2 (target for Speed-3's shift effect)
+ * - Player has Dark_cust-1 in hand
+ * - Player's Turn, Action Phase
+ *
+ * Test: When Dark_cust-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
+ * Expected:
+ *   1. Player plays Dark_cust-1 in Lane 0
+ *   2. [Middle Effect 1] Dark_cust-1: Flip 1 opponent card -> Player selects Speed-3
+ *   3. Speed-3 flips face-up
+ *   4. [CRITICAL] Speed-3's Middle Effect triggers: "Shift 1 of your other cards" (Opponent's effect!)
+ *   5. Opponent must select one of their cards to shift (e.g., Fire-1)
+ *   6. AFTER Speed-3's effect completes, Dark_cust-1's shift effect should execute
+ *   7. Player can choose to shift Speed-3 OR skip
+ */
+const scenario27_DarkCust1FlipSpeed3: TestScenario = {
+    name: "Dark_cust-1 Flips Speed-3 - Middle Effect Execution",
+    description: "When Dark_cust-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Dark_cust-1's shift",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Dark_cust', 'Water', 'Fire'],
+            ['Speed', 'Fire', 'Metal'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Speed-3 (face-down, uncovered) in Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, false));
+
+        // Opponent: Fire-1 (face-up, uncovered) in Lane 1 - target for Speed-3's shift
+        newState = placeCard(newState, 'opponent', 1, createCard('Fire', 1, true));
+
+        // Opponent: Metal-2 (face-up, uncovered) in Lane 2 - another target
+        newState = placeCard(newState, 'opponent', 2, createCard('Metal', 2, true));
+
+        // Player: Dark_cust-1 in hand
+        newState.player.hand = [
+            createCard('Dark_cust', 1, true),
+            createCard('Water', 2, true),
+            createCard('Fire', 3, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
+/**
+ * Szenario 27: Dark_cust-1 Flips Speed-3 - Middle Effect Should Execute
+ *
+ * Setup:
+ * - Player has Dark_cust protocol in Lane 0
+ * - Opponent has Speed-3 (face-down, uncovered) in Lane 1
+ * - Opponent has Fire-1 (face-up, uncovered) in Lane 2 (target for Speed-3's shift effect)
+ * - Player has Dark_cust-1 in hand
+ * - Player's Turn, Action Phase
+ *
+ * Test: When Dark_cust-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
+ * Expected:
+ *   1. Player plays Dark_cust-1 in Lane 0
+ *   2. [Middle Effect 1] Dark_cust-1: Flip 1 opponent card -> Player selects Speed-3
+ *   3. Speed-3 flips face-up
+ *   4. [CRITICAL] Speed-3's Middle Effect triggers: "Shift 1 of your other cards" (Opponent's effect!)
+ *   5. Opponent must select one of their cards to shift (e.g., Fire-1)
+ *   6. AFTER Speed-3's effect completes, Dark_cust-1's shift effect should execute
+ *   7. Player can choose to shift Speed-3 OR skip
+ */
+const scenario28_Darkness1FlipSpeed3: TestScenario = {
+    name: "Dark_cust-1 Flips Speed-3 - Middle Effect Execution",
+    description: "When Dark_cust-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Dark_cust-1's shift",
+    setup: (state: GameState): GameState => {
+        let newState = initScenarioBase(
+            state,
+            ['Darkness', 'Water', 'Fire'],
+            ['Speed', 'Fire', 'Metal'],
+            'player',
+            'action'
+        );
+
+        // Opponent: Speed-3 (face-down, uncovered) in Lane 0
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, false));
+
+        // Opponent: Fire-1 (face-up, uncovered) in Lane 1 - target for Speed-3's shift
+        newState = placeCard(newState, 'opponent', 1, createCard('Fire', 1, true));
+
+        // Opponent: Metal-2 (face-up, uncovered) in Lane 2 - another target
+        newState = placeCard(newState, 'opponent', 2, createCard('Metal', 2, true));
+
+        // Player: Dark_cust-1 in hand
+        newState.player.hand = [
+            createCard('Darkness', 1, true),
+            createCard('Water', 2, true),
+            createCard('Fire', 3, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return newState;
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -1191,4 +1400,8 @@ export const allScenarios: TestScenario[] = [
     scenario22_Hate2AIPlaysOpen,
     scenario23_Chaos3ProtocolFree,
     scenario24_Frost3BlocksShift,
+    scenario25_Water0SoftlockFix,
+    scenario26_DarkCust1FlipShift,
+    scenario27_DarkCust1FlipSpeed3,
+    scenario28_Darkness1FlipSpeed3,
 ];

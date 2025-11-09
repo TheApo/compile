@@ -10,10 +10,12 @@ import { GameScreen } from './screens/GameScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { CardLibraryScreen } from './screens/CardLibraryScreen';
 import { StatisticsScreen } from './screens/StatisticsScreen';
+import { CustomProtocolCreator } from './screens/CustomProtocolCreator';
 import { CoinFlipModal } from './components/CoinFlipModal';
 import { Difficulty, GameState } from './types';
+import { loadDefaultCustomProtocols } from './logic/customProtocols/loadDefaultProtocols';
 
-type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics';
+type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics' | 'CustomProtocols';
 export type Player = 'player' | 'opponent';
 
 export function App() {
@@ -25,6 +27,11 @@ export function App() {
   const [finalGameState, setFinalGameState] = useState<GameState | null>(null);
   const [useControl, setUseControl] = useState(true);
   const [startingPlayer, setStartingPlayer] = useState<Player>('player');
+
+  // Load default custom protocols on app start (Anarchy_custom for testing)
+  useEffect(() => {
+    loadDefaultCustomProtocols();
+  }, []);
 
   const handleBackToMenu = useCallback(() => {
     setScreen('MainMenu');
@@ -99,6 +106,8 @@ export function App() {
         return <CardLibraryScreen onBack={handleBackToMenu} />;
       case 'Statistics':
         return <StatisticsScreen onBack={handleBackToMenu} />;
+      case 'CustomProtocols':
+        return <CustomProtocolCreator onBack={handleBackToMenu} />;
       default:
         return <MainMenu onNavigate={(target) => setScreen(target)} difficulty={difficulty} setDifficulty={setDifficulty} useControl={useControl} onUseControlChange={setUseControl} />;
     }

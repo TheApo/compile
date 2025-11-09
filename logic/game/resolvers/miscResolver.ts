@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, PlayedCard } from '../../../types';
+import { GameState, Player, PlayedCard, AnimationRequest } from '../../../types';
 import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
@@ -11,12 +11,32 @@ import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
 // FIX: Import internal helpers to be used by new functions.
 import { findCardOnBoard, internalReturnCard, internalResolveTargetedFlip } from '../helpers/actionUtils';
 import { performFillHand } from './playResolver';
+import { processReactiveEffects } from '../reactiveEffectProcessor';
+
+/**
+ * CompileResult includes animation requests for deleted cards
+ */
+export type CompileResult = {
+    newState: GameState;
+    animationRequests?: AnimationRequest[];
+};
 
 export const performCompile = (prevState: GameState, laneIndex: number, onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     const compiler = prevState.turn;
     const nonCompiler = compiler === 'player' ? 'opponent' : 'player';
 
     let newState = { ...prevState };
+
+    // NEW: Check for compile block (Metal-1 effect)
+    const compileBlocked = (newState as any).compileBlockedPlayer === compiler &&
+                           (newState as any).compileBlockedUntilTurn > (newState.turnNumber || 0);
+
+    if (compileBlocked) {
+        const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
+        console.log(`[Compile Block] ${compilerName}'s compile is blocked until turn ${(newState as any).compileBlockedUntilTurn}`);
+        newState = log(newState, compiler, `${compilerName} can't compile - blocked by opponent's effect.`);
+        return newState;
+    }
 
     // CHECK FIRST: If compiler has control, prompt for rearrange BEFORE deleting cards
     const compilerHadControl = newState.useControlMechanic && newState.controlCardHolder === compiler;
@@ -43,6 +63,38 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     let nonCompilerState = { ...newState[nonCompiler] };
 
     const wasAlreadyCompiled = compilerState.compiled[laneIndex];
+
+    // NEW: Process before_compile_delete reactive effects for custom cards
+    // These effects execute BEFORE the card is deleted by compile
+    const customCardsWithBeforeDelete: Array<{ card: PlayedCard; owner: Player }> = [];
+
+    for (const player of [compiler, nonCompiler] as Player[]) {
+        const lane = newState[player].lanes[laneIndex];
+        lane.forEach(card => {
+            if (card.isFaceUp) {
+                const customCard = card as any;
+                if (customCard.customEffects && customCard.customEffects.topEffects) {
+                    const hasBeforeDelete = customCard.customEffects.topEffects.some(
+                        (effect: any) => effect.trigger === 'before_compile_delete'
+                    );
+                    if (hasBeforeDelete) {
+                        customCardsWithBeforeDelete.push({ card, owner: player });
+                    }
+                }
+            }
+        });
+    }
+
+    // Execute before_compile_delete effects
+    for (const { card, owner } of customCardsWithBeforeDelete) {
+        console.log(`[before_compile_delete] Executing effect for custom card ${card.protocol}-${card.value}`);
+        const reactiveResult = processReactiveEffects(newState, 'before_compile_delete', { player: owner, cardId: card.id });
+        newState = reactiveResult.newState;
+    }
+
+    // Refresh player states after reactive effects
+    compilerState = { ...newState[compiler] };
+    nonCompilerState = { ...newState[nonCompiler] };
 
     // Intercept Speed-2 cards before they are deleted.
     const compilerSpeed2sToShift: PlayedCard[] = [];
@@ -118,8 +170,12 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     const totalDeleted = compilerDeletedCards.length + nonCompilerDeletedCards.length;
     if (totalDeleted > 0) {
         newState = checkForHate3Trigger(newState, compiler);
+
+        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+        const reactiveResult = processReactiveEffects(newState, 'after_delete', { player: compiler });
+        newState = reactiveResult.newState;
     }
-    
+
     // --- Centralized Post-Compile Logic ---
     const allSpeed2s = [...compilerSpeed2sToShift, ...nonCompilerSpeed2sToShift];
     const queuedSpeed2Actions = allSpeed2s.map(card => {
@@ -151,7 +207,7 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         newState.actionRequired = null;
         newState.queuedActions = [];
     }
-    
+
     return newState;
 };
 
@@ -165,8 +221,8 @@ export const compileLane = (prevState: GameState, laneIndex: number): GameState 
 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
-    
-    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor } = prevState.actionRequired;
+
+    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown } = prevState.actionRequired as any;
     return {
         ...prevState,
         actionRequired: {
@@ -174,9 +230,11 @@ export const selectHandCardForAction = (prevState: GameState, cardId: string): G
             cardInHandId: cardId,
             disallowedLaneIndex,
             sourceCardId,
-            isFaceDown,
+            isFaceDown: isFaceDown || faceDown, // Support both naming conventions
             actor,
-        }
+            destinationRule, // Pass through for custom protocols
+            condition, // Pass through for conditional play
+        } as any
     };
 };
 

@@ -8,11 +8,20 @@ import { refreshHandForPlayer } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 import { recalculateAllLaneValues } from '../stateManager';
 import { log, setLogSource, setLogPhase } from '../../utils/log';
+import { processReactiveEffects } from '../reactiveEffectProcessor';
+import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule } from '../passiveRuleChecker';
 
 export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player): EffectResult => {
     const playerState = { ...prevState[player] };
     const cardToPlay = playerState.hand.find(c => c.id === cardId);
     if (!cardToPlay) return { newState: prevState };
+
+    // NEW: Check passive rule restrictions (Metal-2, Plague-0, Psychic-1, etc.)
+    const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol);
+    if (!passiveRuleCheck.allowed) {
+        console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} - ${passiveRuleCheck.reason}`);
+        return { newState: prevState };
+    }
 
     const opponent = player === 'player' ? 'opponent' : 'player';
     const opponentLane = prevState[opponent].lanes[laneIndex];
@@ -47,6 +56,9 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         const anyPlayerHasPsychic1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
         const anyPlayerHasAnarchy1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
 
+        // NEW: Check for custom cards with require_non_matching_protocol passive rule
+        const hasCustomNonMatchingRule = hasRequireNonMatchingProtocolRule(prevState);
+
         const playerHasSpirit1 = prevState[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
         // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
@@ -56,20 +68,23 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
         });
 
+        // NEW: Check for custom cards with allow_any_protocol_play passive rule
+        const hasCustomAnyProtocolRule = hasAnyProtocolPlayRule(prevState, player, laneIndex);
+
         let canPlayFaceUp: boolean;
 
-        if (anyPlayerHasAnarchy1) {
-            // Anarchy-1: INVERTED rule - can only play if protocol does NOT match
+        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+            // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play if protocol does NOT match
             const doesNotMatch = cardToPlay.protocol !== playerProtocol && cardToPlay.protocol !== opponentProtocol;
             canPlayFaceUp = doesNotMatch && !anyPlayerHasPsychic1;
         } else {
-            // Normal rule: can only play if protocol DOES match (or Spirit-1/Chaos-3 override)
+            // Normal rule: can only play if protocol DOES match (or Spirit-1/Chaos-3/custom rule override)
             const doesMatch = cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol;
-            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree) && !anyPlayerHasPsychic1;
+            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree || hasCustomAnyProtocolRule) && !anyPlayerHasPsychic1;
         }
 
         if (!canPlayFaceUp) {
-            const reason = anyPlayerHasAnarchy1 ? 'Anarchy-1 requires non-matching protocol' : 'matching protocol required';
+            const reason = (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) ? 'Non-matching protocol required' : 'matching protocol required';
             console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} face-up in lane ${laneIndex} (${reason}, protocols: player=${playerProtocol}, opponent=${opponentProtocol})`);
             return { newState: prevState };
         }
@@ -109,15 +124,36 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         stats: newStats,
     };
 
-    let stateAfterMove: GameState = { 
-        ...stateAfterOnCover, 
+    let stateAfterMove: GameState = {
+        ...stateAfterOnCover,
         [player]: newPlayerState,
         stats: {
             ...stateAfterOnCover.stats,
             [player]: newStats
         }
     };
-    
+
+    // CRITICAL FIX: Preserve queuedActions from prevState
+    // When resolving an interrupt by playing a card, the queuedActions must be maintained
+    // so they can be processed after the new interrupt is resolved.
+    // IMPORTANT: Only use stateAfterOnCover.queuedActions if it's DIFFERENT from prevState.queuedActions!
+    // If executeOnCoverEffect didn't add new actions, it returns the input state unchanged,
+    // which would cause duplicate queue entries if we blindly merge.
+    const oldQueue = prevState.queuedActions || [];
+    const coverQueue = stateAfterOnCover.queuedActions || [];
+
+    // Check if coverQueue is the SAME array reference as oldQueue (no new actions added)
+    if (coverQueue === oldQueue || (coverQueue.length === oldQueue.length && coverQueue.every((a, i) => a === oldQueue[i]))) {
+        // No new actions from onCover, just use oldQueue
+        if (oldQueue.length > 0) {
+            stateAfterMove.queuedActions = oldQueue;
+        }
+    } else {
+        // onCover added new actions, merge them
+        console.log('[DEBUG] playCard - Merging queuedActions: oldQueue:', oldQueue.length, 'coverQueue:', coverQueue.length);
+        stateAfterMove.queuedActions = [...oldQueue, ...coverQueue];
+    }
+
     // Set the last played card ID for the UI
     stateAfterMove.lastPlayedCardId = newCardOnBoard.id;
 
@@ -143,6 +179,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         logMessage += ` into Protocol ${protocolName}.`;
     }
     stateAfterMove = log(stateAfterMove, player, logMessage);
+
+    // NEW: Trigger reactive effects after play
+    const reactivePlayResult = processReactiveEffects(stateAfterMove, 'after_play', { player, cardId: newCardOnBoard.id });
+    stateAfterMove = reactivePlayResult.newState;
 
     // 4. Decide whether to execute onPlay now or queue it.
     if (stateAfterOnCover.actionRequired) {

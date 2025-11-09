@@ -23,10 +23,12 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
         handsRefreshed: 0,
     };
 
+    const hand = drawnCards.map(c => ({ ...c, id: uuidv4(), isFaceUp: true }));
+
     return {
         protocols,
         deck: remainingDeck,
-        hand: drawnCards.map(c => ({ ...c, id: uuidv4(), isFaceUp: true })),
+        hand,
         lanes: [[], [], []],
         discard: [],
         compiled: [false, false, false],
@@ -74,26 +76,189 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
     return stateWithLogs;
 }
 
-export const getEffectiveCardValue = (card: PlayedCard, lane: PlayedCard[]): number => {
+export const getEffectiveCardValue = (card: PlayedCard, lane: PlayedCard[], state?: GameState, laneIndex?: number, cardOwner?: Player): number => {
     if (card.isFaceUp) {
         return card.value;
     }
-    // Check if Darkness-2 is active in the lane
+
+    // Check if Darkness-2 (hardcoded) is active in the lane
     const hasDarkness2 = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2);
-    return hasDarkness2 ? 4 : 2;
+    if (hasDarkness2) {
+        return 4;
+    }
+
+    // Check for custom cards with set_to_fixed value modifiers
+    if (state && laneIndex !== undefined && cardOwner !== undefined) {
+        const modifiers = getActiveValueModifiers(state);
+        for (const modifier of modifiers) {
+            if (modifier.type === 'set_to_fixed') {
+                const appliesToLane = modifier.scope === 'global' || (modifier.scope === 'this_lane' && modifier.laneIndex === laneIndex);
+                if (!appliesToLane) continue;
+
+                // CRITICAL: Check if modifier applies to this card's owner
+                const modifierOwner = modifier.cardOwner;
+                if (modifier.target === 'own_cards' && modifierOwner !== cardOwner) continue;
+                if (modifier.target === 'opponent_cards' && modifierOwner === cardOwner) continue;
+
+                // Check if modifier filter matches this card
+                const filter = modifier.filter;
+                if (filter) {
+                    const faceStateMatches = !filter.faceState || filter.faceState === 'any' ||
+                                           (filter.faceState === 'face_down' && !card.isFaceUp) ||
+                                           (filter.faceState === 'face_up' && card.isFaceUp);
+
+                    if (faceStateMatches) {
+                        return modifier.value;
+                    }
+                }
+            }
+        }
+    }
+
+    return 2; // Default face-down value
 };
 
-const calculateBaseLaneValue = (lane: PlayedCard[]): number => {
+const calculateBaseLaneValue = (lane: PlayedCard[], state?: GameState, laneIndex?: number, cardOwner?: Player): number => {
     let value = 0;
     for (const card of lane) {
         if (card.isFaceUp) {
             value += card.value;
         } else {
-            value += 2;
+            // Check for value modifiers (Darkness-2, custom protocols)
+            value += getEffectiveCardValue(card, lane, state, laneIndex, cardOwner);
         }
     }
     return Math.max(0, value);
 };
+
+/**
+ * Get active value modifiers from custom protocol cards
+ */
+interface ValueModifier {
+    type: 'add_per_condition' | 'set_to_fixed' | 'add_to_total';
+    value: number;
+    condition?: 'per_face_down_card' | 'per_face_up_card' | 'per_card';
+    target: 'own_cards' | 'opponent_cards' | 'all_cards' | 'own_total' | 'opponent_total';
+    scope: 'this_lane' | 'global';
+    filter?: {
+        faceState?: 'face_up' | 'face_down' | 'any';
+        position?: 'covered' | 'uncovered' | 'any';
+    };
+    cardOwner: Player;
+    laneIndex: number;
+}
+
+function getActiveValueModifiers(state: GameState): ValueModifier[] {
+    const modifiers: ValueModifier[] = [];
+
+    for (const player of ['player', 'opponent'] as Player[]) {
+        state[player].lanes.forEach((lane, laneIndex) => {
+            lane.forEach(card => {
+                if (card.isFaceUp) {
+                    const customCard = card as any;
+                    if (customCard.customEffects) {
+                        // Check all three boxes for value modifiers
+                        const allEffects = [
+                            ...(customCard.customEffects.topEffects || []),
+                            ...(customCard.customEffects.middleEffects || []),
+                            ...(customCard.customEffects.bottomEffects || [])
+                        ];
+
+                        allEffects.forEach((effect: any) => {
+                            if (effect.params.action === 'value_modifier' && effect.trigger === 'passive') {
+                                modifiers.push({
+                                    ...effect.params.modifier,
+                                    cardOwner: player,
+                                    laneIndex
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    return modifiers;
+}
+
+/**
+ * Apply custom protocol value modifiers
+ */
+function applyCustomValueModifiers(
+    state: GameState,
+    playerValues: number[],
+    opponentValues: number[]
+): { finalPlayerValues: number[]; finalOpponentValues: number[] } {
+    const modifiers = getActiveValueModifiers(state);
+    const finalPlayerValues = [...playerValues];
+    const finalOpponentValues = [...opponentValues];
+
+    for (const modifier of modifiers) {
+        const { type, value, condition, target, scope, filter, cardOwner, laneIndex } = modifier;
+
+        // Determine which lanes to affect
+        const lanes: number[] = scope === 'global' ? [0, 1, 2] : [laneIndex];
+
+        for (const lane of lanes) {
+            switch (type) {
+                case 'add_per_condition': {
+                    if (!condition) continue;
+
+                    let count = 0;
+                    const playerLane = state.player.lanes[lane];
+                    const opponentLane = state.opponent.lanes[lane];
+
+                    // Count based on condition
+                    if (condition === 'per_face_down_card') {
+                        count = playerLane.filter(c => !c.isFaceUp).length +
+                                opponentLane.filter(c => !c.isFaceUp).length;
+                    } else if (condition === 'per_face_up_card') {
+                        count = playerLane.filter(c => c.isFaceUp).length +
+                                opponentLane.filter(c => c.isFaceUp).length;
+                    } else if (condition === 'per_card') {
+                        count = playerLane.length + opponentLane.length;
+                    }
+
+                    // Apply to target
+                    if (target === 'own_total' && cardOwner === 'player') {
+                        finalPlayerValues[lane] += value * count;
+                    } else if (target === 'own_total' && cardOwner === 'opponent') {
+                        finalOpponentValues[lane] += value * count;
+                    } else if (target === 'opponent_total' && cardOwner === 'player') {
+                        finalOpponentValues[lane] += value * count;
+                    } else if (target === 'opponent_total' && cardOwner === 'opponent') {
+                        finalPlayerValues[lane] += value * count;
+                    }
+                    break;
+                }
+
+                case 'set_to_fixed': {
+                    // This affects individual cards, handled in getEffectiveCardValue
+                    break;
+                }
+
+                case 'add_to_total': {
+                    if (target === 'own_total' && cardOwner === 'player') {
+                        finalPlayerValues[lane] += value;
+                    } else if (target === 'own_total' && cardOwner === 'opponent') {
+                        finalOpponentValues[lane] += value;
+                    } else if (target === 'opponent_total' && cardOwner === 'player') {
+                        finalOpponentValues[lane] += value;
+                    } else if (target === 'opponent_total' && cardOwner === 'opponent') {
+                        finalPlayerValues[lane] += value;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    return {
+        finalPlayerValues: finalPlayerValues.map(v => Math.max(0, v)),
+        finalOpponentValues: finalOpponentValues.map(v => Math.max(0, v))
+    };
+}
 
 function applyStaticValueModifiers(state: GameState, playerBase: number[], opponentBase: number[]): { finalPlayerValues: number[], finalOpponentValues: number[] } {
     let finalPlayerValues = [...playerBase];
@@ -154,10 +319,18 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
 
 
 export const recalculateAllLaneValues = (state: GameState): GameState => {
-    const playerBaseValues = state.player.lanes.map(calculateBaseLaneValue);
-    const opponentBaseValues = state.opponent.lanes.map(calculateBaseLaneValue);
+    const playerBaseValues = state.player.lanes.map((lane, idx) => calculateBaseLaneValue(lane, state, idx, 'player'));
+    const opponentBaseValues = state.opponent.lanes.map((lane, idx) => calculateBaseLaneValue(lane, state, idx, 'opponent'));
 
-    const { finalPlayerValues, finalOpponentValues } = applyStaticValueModifiers(state, playerBaseValues, opponentBaseValues);
+    // Apply hardcoded modifiers (Apathy-0, Darkness-2, Metal-0)
+    const staticResult = applyStaticValueModifiers(state, playerBaseValues, opponentBaseValues);
+
+    // Apply custom protocol value modifiers
+    const { finalPlayerValues, finalOpponentValues } = applyCustomValueModifiers(
+        state,
+        staticResult.finalPlayerValues,
+        staticResult.finalOpponentValues
+    );
 
     return {
         ...state,

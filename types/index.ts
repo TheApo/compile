@@ -35,6 +35,12 @@ export type EffectContext = {
     currentTurn: Player;         // Wessen Zug ist es?
     opponent: Player;            // Gegner des Kartenbesitzers
     triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover'; // Wie wurde der Effekt ausgelöst?
+    // NEW: For follow-up actions (useCardFromPreviousEffect)
+    referencedCard?: PlayedCard; // Card selected by previous effect in chain
+    referencedCardValue?: number; // Value of referenced card (for dynamic draw)
+    // NEW: For dynamic draw counts
+    discardedCount?: number;     // Number of cards discarded (for Fire-4, Plague-2)
+    handSize?: number;           // Size of hand before action (for Chaos-4 End)
 };
 
 export interface PlayerStats {
@@ -500,11 +506,24 @@ export type AIAction =
     | { type: 'resolveControlMechanicPrompt', choice: 'player' | 'opponent' | 'skip' };
 
 
-export type AnimationRequest = {
-    type: 'delete';
-    cardId: string;
-    owner: Player;
-};
+/**
+ * AnimationRequest represents a visual animation that should play
+ * BEFORE the game state is updated in the UI.
+ *
+ * All card operations (delete, flip, shift, return, discard) should
+ * generate animation requests to ensure visual consistency.
+ */
+export type AnimationRequest =
+    | { type: 'delete'; cardId: string; owner: Player }
+    | { type: 'flip'; cardId: string }
+    | { type: 'shift'; cardId: string; fromLane: number; toLane: number; owner: Player }
+    | { type: 'return'; cardId: string; owner: Player }
+    | { type: 'discard'; cardId: string; owner: Player }
+    | {
+        type: 'compile_delete';
+        laneIndex: number;
+        deletedCards: Array<{cardId: string; owner: Player}>
+    };
 
 export type EffectResult = {
     newState: GameState;

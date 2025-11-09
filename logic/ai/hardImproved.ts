@@ -1820,13 +1820,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 candidates.push({ card: topCard, sourceLaneIndex, bestScore });
             });
 
-            if (candidates.length === 0) return { type: 'skip' };
+            if (candidates.length === 0) {
+                return { type: 'skip' };
+            }
 
             candidates.sort((a, b) => b.bestScore - a.bestScore);
 
             // Only shift if it makes strategic sense (positive score)
             if (candidates[0].bestScore > 0) {
-                return { type: 'deleteCard', cardId: candidates[0].card.id };
+                return { type: 'shiftCard', cardId: candidates[0].card.id };
             }
 
             return { type: 'skip' };
@@ -2693,25 +2695,69 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
         case 'prompt_shift_for_speed_3': {
             // Speed-3 End: Shift 1 of your cards from other protocols
-            // Only accept if we have at least 2 cards (so we can shift 1)
-            const totalCards = state.opponent.lanes.flat().length;
-            const hasMultipleCards = totalCards >= 2;
+            // CRITICAL: Use the SAME logic as select_own_card_to_shift_for_speed_3
+            // to determine if shifting is strategically beneficial!
 
-            // Also check: Do we have cards in other protocols than Speed-3?
-            const sourceCardId = action.sourceCardId;
-            const sourceCardInfo = findCardOnBoard(state, sourceCardId);
-            const sourceLaneIndex = sourceCardInfo ?
-                state.opponent.lanes.findIndex(l => l.some(c => c.id === sourceCardId)) : -1;
+            const candidates: { card: PlayedCard; sourceLaneIndex: number; bestScore: number }[] = [];
 
-            // Count cards in OTHER lanes
-            let cardsInOtherLanes = 0;
-            state.opponent.lanes.forEach((lane, i) => {
-                if (i !== sourceLaneIndex && lane.length > 0) {
-                    cardsInOtherLanes += lane.filter(c => c.id !== sourceCardId).length;
+            state.opponent.lanes.forEach((lane, sourceLaneIndex) => {
+                if (lane.length === 0) return;
+                const topCard = lane[lane.length - 1];
+
+                const sourceIsCompiled = state.opponent.compiled[sourceLaneIndex];
+                let bestScore = -Infinity;
+
+                // Check all possible target lanes for this card
+                for (let targetLaneIndex = 0; targetLaneIndex < 3; targetLaneIndex++) {
+                    if (targetLaneIndex === sourceLaneIndex) continue;
+
+                    const targetLaneValue = state.opponent.laneValues[targetLaneIndex];
+                    const targetIsCompiled = state.opponent.compiled[targetLaneIndex];
+
+                    if (targetIsCompiled) continue; // Don't shift TO compiled lanes
+
+                    // Calculate future value after shift (card becomes 2 when flipped)
+                    const futureTargetValue = targetLaneValue + 2;
+                    const playerTargetValue = state.player.laneValues[targetLaneIndex];
+
+                    let score = 0;
+
+                    // Strategy 1: Source is COMPILED → good to move out
+                    if (sourceIsCompiled) {
+                        score += 10000;
+                        // Prefer targets that are close to compiling
+                        if (futureTargetValue >= 10 && futureTargetValue > playerTargetValue) {
+                            score += 50000; // Can compile!
+                        } else if (futureTargetValue >= 8) {
+                            score += 5000; // Close to compile
+                        }
+                    }
+                    // Strategy 2: Source is NOT compiled, but target can COMPILE
+                    else if (futureTargetValue >= 10 && futureTargetValue > playerTargetValue) {
+                        score += 50000; // Worth losing 1 value to compile another lane!
+                    }
+                    // Otherwise: Bad move - loses value for no reason
+                    else {
+                        score = -10000;
+                    }
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                    }
                 }
+
+                candidates.push({ card: topCard, sourceLaneIndex, bestScore });
             });
 
-            return { type: 'resolveSpeed3Prompt', accept: hasMultipleCards && cardsInOtherLanes > 0 };
+            if (candidates.length === 0) {
+                return { type: 'resolveSpeed3Prompt', accept: false };
+            }
+
+            candidates.sort((a, b) => b.bestScore - a.bestScore);
+
+            // Only accept if it makes strategic sense (positive score)
+            const shouldAccept = candidates[0].bestScore > 0;
+            return { type: 'resolveSpeed3Prompt', accept: shouldAccept };
         }
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };

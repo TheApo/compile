@@ -5,8 +5,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '../components/Header';
-import { uniqueProtocols, cards, Card as CardData } from '../data/cards';
+import { uniqueProtocols as baseUniqueProtocols, cards as baseCards, Card as CardData } from '../data/cards';
 import { CardComponent } from '../components/Card';
+import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
+import { invalidateCardCache } from '../utils/gameLogic';
+import { isCustomProtocolEnabled } from '../utils/customProtocolSettings';
 import '../styles/layouts/protocol-selection.css';
 
 
@@ -31,11 +34,38 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   const [scanningProtocol, setScanningProtocol] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
 
+  // Refresh tracker to force cards reload
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Invalidate card cache on mount to load latest custom protocols
+  useEffect(() => {
+    invalidateCardCache();
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
+  // Merge base cards with custom protocol cards (only if enabled)
+  // Depends on refreshKey to reload when custom protocols change
+  const cards = useMemo(() => {
+    const customEnabled = isCustomProtocolEnabled();
+    const customCards = customEnabled ? getAllCustomProtocolCards() : [];
+    const merged = [...baseCards, ...customCards];
+    console.log('[Protocol Selection] Total cards loaded:', merged.length, '(base:', baseCards.length, ', custom:', customCards.length, ', enabled:', customEnabled, ')');
+    return merged;
+  }, [refreshKey]);
+
+  // Get unique protocols from merged cards
+  const uniqueProtocols = useMemo(() => {
+    const protocolSet = new Set(cards.map(card => card.protocol));
+    const protocols = Array.from(protocolSet).sort();
+    console.log('[Protocol Selection] Unique protocols:', protocols);
+    return protocols;
+  }, [cards]);
+
   // Get all unique categories dynamically
   const allCategories = useMemo(() => {
     const categorySet = new Set(cards.map(card => card.category));
     return Array.from(categorySet).sort();
-  }, []);
+  }, [cards]);
 
   // Filter state - by default all categories are enabled
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));
@@ -49,6 +79,25 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
   const getProtocolCategory = (protocol: string): string => {
     const card = cards.find(c => c.protocol === protocol);
     return card?.category || '';
+  };
+
+  // Get custom protocol color and pattern
+  const getProtocolStyle = (protocol: string): React.CSSProperties => {
+    const card = cards.find(c => c.protocol === protocol);
+    const customCard = card as any;
+    if (customCard?.color) {
+      return {
+        '--card-custom-color': customCard.color,
+        borderColor: customCard.color,
+      } as React.CSSProperties;
+    }
+    return {};
+  };
+
+  const getProtocolPatternClass = (protocol: string): string => {
+    const card = cards.find(c => c.protocol === protocol);
+    const customCard = card as any;
+    return customCard?.pattern ? `pattern-${customCard.pattern}` : '';
   };
 
   // Filter protocols by enabled categories
@@ -145,7 +194,13 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         const debugProtocols = [];
 
         // Select protocols
-        const availableForOpponent = uniqueProtocols.filter(p => !chosenProtocols.has(p));
+        // IMPORTANT: Filter out custom protocols - AI should only pick from base game protocols
+        const availableForOpponent = uniqueProtocols.filter(p => {
+            if (chosenProtocols.has(p)) return false;
+            const protocolCategory = getProtocolCategory(p);
+            if (protocolCategory === 'Custom') return false; // Block AI from selecting custom protocols
+            return true;
+        });
         const opponentChoices: string[] = [];
         
         const availableDebugProtocols = debugProtocols.filter(p => availableForOpponent.includes(p));
@@ -224,7 +279,13 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
           <div className="player-protocols-area">
             <h3>Your Protocols</h3>
             {playerProtocols.map(p => (
-              <div key={p} className={`protocol-display-card player card-protocol-${p.toLowerCase()}`}>{p}</div>
+              <div
+                key={p}
+                className={`protocol-display-card player card-protocol-${p.toLowerCase()} ${getProtocolPatternClass(p)}`}
+                style={getProtocolStyle(p)}
+              >
+                {p}
+              </div>
             ))}
           </div>
           <div className="protocol-preview-area">
@@ -260,20 +321,28 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
           {/* Scrollable wrapper for protocol grid - max 3 rows visible */}
           <div className="protocol-grid-scroll-wrapper">
             <div className="protocol-grid">
-              {filteredProtocols.map((protocol) => (
-                <div
-                  key={protocol}
-                  className={getCardClassName(protocol)}
-                  onClick={() => handleSelectProtocol(protocol)}
-                  role="button"
-                  aria-disabled={chosenProtocols.has(protocol) || !isPlayerTurn || isAnimating}
-                  tabIndex={!chosenProtocols.has(protocol) && isPlayerTurn && !isAnimating ? 0 : -1}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSelectProtocol(protocol)}
-                >
-                  <span className="protocol-category-label">{getProtocolCategory(protocol)}</span>
-                  <span className="protocol-name">{protocol}</span>
-                </div>
-              ))}
+              {filteredProtocols.map((protocol) => {
+                const protocolStyle = getProtocolStyle(protocol);
+                // Dynamically scale font size based on protocol name length
+                const fontSize = protocol.length > 10 ? '0.65em' : '1em';
+                const nameStyle = { fontSize };
+
+                return (
+                  <div
+                    key={protocol}
+                    className={`${getCardClassName(protocol)} ${getProtocolPatternClass(protocol)}`}
+                    style={protocolStyle}
+                    onClick={() => handleSelectProtocol(protocol)}
+                    role="button"
+                    aria-disabled={chosenProtocols.has(protocol) || !isPlayerTurn || isAnimating}
+                    tabIndex={!chosenProtocols.has(protocol) && isPlayerTurn && !isAnimating ? 0 : -1}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSelectProtocol(protocol)}
+                  >
+                    <span className="protocol-category-label">{getProtocolCategory(protocol)}</span>
+                    <span className="protocol-name" style={nameStyle}>{protocol}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
           {isPlayerTurn && (
@@ -290,7 +359,13 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         <div className="opponent-protocols-area">
           <h3>Opponent Protocols</h3>
           {opponentProtocols.map(p => (
-            <div key={p} className={`protocol-display-card opponent card-protocol-${p.toLowerCase()}`}>{p}</div>
+            <div
+              key={p}
+              className={`protocol-display-card opponent card-protocol-${p.toLowerCase()} ${getProtocolPatternClass(p)}`}
+              style={getProtocolStyle(p)}
+            >
+              {p}
+            </div>
           ))}
         </div>
       </div>

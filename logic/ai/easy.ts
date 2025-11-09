@@ -776,7 +776,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // If no valid targets, the action is mandatory, so just pick lane 0.
             return { type: 'selectLane', laneIndex: 0 };
         }
-        
+
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: Math.random() > 0.7 }; // Rarely accepts
         case 'prompt_give_card_for_love_1': return { type: 'resolveLove1Prompt', accept: false };
         case 'plague_4_player_flip_optional': return { type: 'resolvePlague4Flip', accept: false };

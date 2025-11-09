@@ -10,6 +10,8 @@ import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/a
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase, decreaseLogIndent } from '../utils/log';
 import { handleAnarchyConditionalDraw } from '../effects/anarchy/Anarchy-0';
+import { getActivePassiveRules } from './passiveRuleChecker';
+import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 
 const checkControlPhase = (state: GameState): GameState => {
     if (!state.useControlMechanic) {
@@ -111,7 +113,7 @@ export const advancePhase = (state: GameState): GameState => {
         case 'hand_limit': {
             const playerState = nextState[turnPlayer];
 
-            // Check for Spirit-0 (must be face-up and uncovered)
+            // Check for Spirit-0 (hardcoded - must be face-up and uncovered)
             const hasSpirit0 = playerState.lanes.some(lane =>
                 lane.length > 0 &&
                 lane[lane.length - 1].isFaceUp &&
@@ -119,8 +121,16 @@ export const advancePhase = (state: GameState): GameState => {
                 lane[lane.length - 1].value === 0
             );
 
-            if (hasSpirit0) {
-                let stateWithLog = log(nextState, turnPlayer, "Spirit-0: Skipping Check Cache phase.");
+            // Check for custom cards with skip_check_cache_phase passive rule
+            const passiveRules = getActivePassiveRules(nextState);
+            const hasSkipCacheRule = passiveRules.some(({ rule, cardOwner }) =>
+                rule.type === 'skip_check_cache_phase' &&
+                (rule.target === 'self' && cardOwner === turnPlayer || rule.target === 'all') &&
+                cardOwner === turnPlayer
+            );
+
+            if (hasSpirit0 || hasSkipCacheRule) {
+                let stateWithLog = log(nextState, turnPlayer, "Skipping Check Cache phase.");
 
                 // Clear context again before transitioning to end phase
                 stateWithLog = setLogSource(stateWithLog, undefined);
@@ -209,14 +219,19 @@ export const processQueuedActions = (state: GameState): GameState => {
         return state;
     }
 
+    console.log('[PROCESS QUEUE] Processing queue with', state.queuedActions.length, 'actions');
+    console.log('[PROCESS QUEUE] Action types:', state.queuedActions.map(a => a.type));
+
     let mutableState = { ...state };
     let queuedActions = [...mutableState.queuedActions];
 
     while (queuedActions.length > 0) {
         const nextAction = queuedActions.shift()!;
+        console.log('[PROCESS QUEUE] Processing action:', nextAction.type);
 
         // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
-        if (nextAction.sourceCardId) {
+        // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
+        if (nextAction.sourceCardId && nextAction.type !== 'flip_self_for_water_0' && nextAction.type !== 'flip_self_for_psychic_4') {
             const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
             if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
@@ -227,14 +242,26 @@ export const processQueuedActions = (state: GameState): GameState => {
 
         // --- Auto-resolving actions ---
         if (nextAction.type === 'flip_self_for_water_0') {
+            console.log('[WATER-0 FLIP] Processing flip_self_for_water_0 in processQueuedActions');
             const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+
+            // DEBUG: Log what we found
+            console.log('[DEBUG] Water-0 self-flip queue processing:', {
+                sourceCardId,
+                foundCard: !!sourceCardInfo,
+                cardName: sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'NOT_FOUND',
+                isFaceUp: sourceCardInfo?.card.isFaceUp,
+                isUncovered: sourceIsUncovered,
+                willExecute: !!(sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered)
+            });
 
             // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
             // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                console.log('[WATER-0 FLIP] Executing self-flip');
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
@@ -243,6 +270,7 @@ export const processQueuedActions = (state: GameState): GameState => {
                 const reason = !sourceCardInfo ? 'deleted' :
                               !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
                               'now covered';
+                console.log('[WATER-0 FLIP] Cancelling self-flip - reason:', reason);
                 mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
@@ -286,6 +314,61 @@ export const processQueuedActions = (state: GameState): GameState => {
                 mutableState = decreaseLogIndent(mutableState);
             }
             continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        if (nextAction.type === 'execute_remaining_custom_effects') {
+            const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+            // CRITICAL: Check if source card still exists and is active
+            if (!sourceCardInfo) {
+                mutableState = log(mutableState, context.cardOwner, `Remaining effects cancelled because the source card was deleted or returned.`);
+                continue;
+            }
+
+            if (!sourceCardInfo.card.isFaceUp) {
+                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                mutableState = log(mutableState, context.cardOwner, `Remaining effects from ${cardName} cancelled because it was flipped face-down.`);
+                continue;
+            }
+
+            // Check if source card is still uncovered (required for middle/bottom box effects)
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+            if (!sourceIsUncovered) {
+                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                mutableState = log(mutableState, context.cardOwner, `Remaining effects from ${cardName} cancelled because it is now covered.`);
+                continue;
+            }
+
+            // If we have a selected card from previous effect (e.g., "Flip 1 card. Shift THAT card"), store it
+            if (selectedCardFromPreviousEffect) {
+                (mutableState as any)._selectedCardFromPreviousEffect = selectedCardFromPreviousEffect;
+            }
+
+            // Execute remaining effects sequentially
+            for (const effectDef of effects) {
+                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
+                mutableState = result.newState;
+
+                // If an action is required, stop and update queuedActions
+                if (mutableState.actionRequired) {
+                    // CRITICAL: If there's an interrupted turn, restore it before returning
+                    // This ensures the turn is correct when the action is displayed to the user
+                    if (mutableState._interruptedTurn) {
+                        const originalTurnPlayer = mutableState._interruptedTurn;
+                        const originalPhase = mutableState._interruptedPhase || mutableState.phase;
+                        delete mutableState._interruptedTurn;
+                        delete mutableState._interruptedPhase;
+                        mutableState.turn = originalTurnPlayer;
+                        mutableState.phase = originalPhase;
+                    }
+
+                    mutableState.queuedActions = queuedActions; // Save remaining queue
+                    return mutableState;
+                }
+            }
+
+            continue; // Action resolved, move to next in queue
         }
 
         if (nextAction.type === 'speed_3_self_flip_after_shift') {
@@ -382,14 +465,25 @@ export const processQueuedActions = (state: GameState): GameState => {
 };
 
 export const processEndOfAction = (state: GameState): GameState => {
-    console.log('[DEBUG processEndOfAction] Called with actionRequired:', state.actionRequired?.type, 'turn:', state.turn, 'opponent hand:', state.opponent.hand.length);
     if (state.winner) return state;
+
+    // CRITICAL FIX: If execute_remaining_custom_effects is set as actionRequired (not in queue),
+    // we need to process it immediately by calling processQueuedActions.
+    if (state.actionRequired?.type === 'execute_remaining_custom_effects') {
+        // Move to queue and process immediately
+        const action = state.actionRequired;
+        const stateWithQueue = {
+            ...state,
+            actionRequired: null,
+            queuedActions: [action, ...(state.queuedActions || [])]
+        };
+        return processQueuedActions(stateWithQueue);
+    }
 
     // This is the crucial check. If an action is required, the turn cannot end.
     // This handles both actions for the current turn player (which the AI manager will loop on)
     // and interrupt actions for the other player (which the useGameState hook will trigger the AI for).
     if (state.actionRequired) {
-        console.log('[DEBUG processEndOfAction] Action still required, returning state unchanged');
         return state;
     }
 
@@ -523,7 +617,8 @@ export const processEndOfAction = (state: GameState): GameState => {
             const nextAction = queuedActions.shift()!;
 
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
-            if (nextAction.sourceCardId) {
+            // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
+            if (nextAction.sourceCardId && nextAction.type !== 'flip_self_for_water_0' && nextAction.type !== 'flip_self_for_psychic_4') {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
@@ -534,14 +629,26 @@ export const processEndOfAction = (state: GameState): GameState => {
 
             // --- Auto-resolving actions ---
             if (nextAction.type === 'flip_self_for_water_0') {
+                console.log('[WATER-0 FLIP] Processing flip_self_for_water_0 in processEndOfAction (SECOND LOCATION - SHOULD NOT BE CALLED)');
                 const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
                 const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+
+                // DEBUG: Log what we found (SECOND LOCATION - processEndOfAction)
+                console.log('[DEBUG] Water-0 self-flip queue processing (processEndOfAction):', {
+                    sourceCardId,
+                    foundCard: !!sourceCardInfo,
+                    cardName: sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'NOT_FOUND',
+                    isFaceUp: sourceCardInfo?.card.isFaceUp,
+                    isUncovered: sourceIsUncovered,
+                    willExecute: !!(sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered)
+                });
 
                 // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
                 // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                    console.log('[WATER-0 FLIP] Executing self-flip (processEndOfAction)');
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                     mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
@@ -550,6 +657,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     const reason = !sourceCardInfo ? 'deleted' :
                                   !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
                                   'now covered';
+                    console.log('[WATER-0 FLIP] Cancelling self-flip (processEndOfAction) - reason:', reason);
                     mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
                 }
                 continue; // Action resolved (or cancelled), move to next in queue
@@ -701,7 +809,6 @@ export const processEndOfAction = (state: GameState): GameState => {
         }
     }
 
-    console.log('[DEBUG processEndOfAction] RETURNING with opponent hand:', nextState.opponent.hand.length, 'turn:', nextState.turn);
     return nextState;
 };
 
