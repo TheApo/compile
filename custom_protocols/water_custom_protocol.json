@@ -1,0 +1,144 @@
+{
+  "id": "water_custom_1",
+  "name": "Water_custom",
+  "description": "Wash away and renew. Custom protocol migration of original Water protocol.",
+  "color": "#5DADE2",
+  "pattern": "multi-radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_0_flip_other",
+          "trigger": "immediate",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": true
+            },
+            "optional": false
+          },
+          "position": "middle"
+        },
+        {
+          "id": "water_0_flip_self",
+          "trigger": "immediate",
+          "params": {
+            "action": "flip",
+            "flipSelf": true
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_1_play",
+          "trigger": "immediate",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "each_other_line"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_2_draw",
+          "trigger": "immediate",
+          "params": {
+            "action": "draw",
+            "count": 2
+          },
+          "position": "middle"
+        },
+        {
+          "id": "water_2_rearrange",
+          "trigger": "immediate",
+          "params": {
+            "action": "rearrange_protocols",
+            "target": "own"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_3_return",
+          "trigger": "immediate",
+          "params": {
+            "action": "return",
+            "count": "all",
+            "targetFilter": {
+              "owner": "any",
+              "valueEquals": 2
+            },
+            "selectLane": true
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_4_return",
+          "trigger": "immediate",
+          "params": {
+            "action": "return",
+            "count": 1,
+            "targetFilter": {
+              "owner": "own"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "water_5_discard",
+          "trigger": "immediate",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

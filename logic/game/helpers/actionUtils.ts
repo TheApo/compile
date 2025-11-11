@@ -135,8 +135,9 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
                 actor: player,
                 // NEW: Pass discarded count for dynamic draw effects
                 discardedCount: discardedCount,
-            };
-            console.log(`[Context Propagation] Discarded ${discardedCount} cards`);
+                previousHandSize: previousHandSize, // For Chaos-4: draw same amount as discarded
+            } as any;
+            console.log(`[Context Propagation] Discarded ${discardedCount} cards, previousHandSize: ${previousHandSize}`);
 
             // Find lane index
             let laneIndex = -1;

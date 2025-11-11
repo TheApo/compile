@@ -14,6 +14,19 @@ const getEffectSummary = (effect: EffectDefinition): string => {
     let mainText = '';
 
     switch (params.action) {
+        case 'refresh': {
+            // Spirit-0: Refresh (fill hand to 5 cards)
+            mainText = 'Refresh.';
+            break;
+        }
+
+        case 'mutual_draw': {
+            // Chaos-0: Both players draw from each other's decks
+            const count = params.count || 1;
+            mainText = `Draw the top card${count !== 1 ? 's' : ''} of your opponent's deck. Your opponent draws the top card${count !== 1 ? 's' : ''} of your deck.`;
+            break;
+        }
+
         case 'draw': {
             // If referencing card from previous effect, draw based on that card's value
             if (effect.useCardFromPreviousEffect) {
@@ -41,17 +54,15 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             let text = '';
-            if (params.preAction === 'refresh') {
-                text = 'Refresh your hand. ';
-            }
 
             // NEW: Handle dynamic count types (Fire-4, Chaos-4)
             if (params.countType === 'equal_to_discarded') {
                 const offset = params.countOffset || 0;
                 if (offset === 1) {
-                    text += 'Draw the amount discarded plus 1.';
+                    text += 'Draw 1 more card than the amount discarded.';
                 } else if (offset === 0) {
-                    text += 'Draw the amount discarded.';
+                    // Chaos-4: "Draw the same amount of cards"
+                    text += 'Draw the same amount of cards.';
                 } else {
                     text += `Draw the amount discarded plus ${offset}.`;
                 }
@@ -143,9 +154,12 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 text = `${may} ${countText} ${targetDesc}${cardWord}`;
             }
 
-            // NEW: Add scope text (Apathy-1)
+            // NEW: Add scope text
             if (params.scope === 'this_lane') {
                 text += ' in this line';
+            } else if (params.scope === 'each_lane') {
+                // Chaos-0: "In each line, flip 1 covered card."
+                text = `In each line, ${text.charAt(0).toLowerCase() + text.slice(1)}`;
             }
 
             text += '.';
@@ -163,7 +177,60 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
-                mainText = `${mayShift} that card.`;
+                let text = `${mayShift} that card`;
+
+                // Add destination restriction (Gravity-2: "to this line")
+                if (params.destinationRestriction?.type === 'to_this_lane') {
+                    text += ' to this line';
+                } else if (params.destinationRestriction?.type === 'to_another_line') {
+                    text += ' to another line';
+                } else if (params.destinationRestriction?.type === 'non_matching_protocol') {
+                    text += ' to a line without a matching protocol';
+                } else if (params.destinationRestriction?.type === 'specific_lane') {
+                    text += ' within this line';
+                }
+
+                mainText = text + '.';
+                break;
+            }
+
+            const count = params.count || 1;
+
+            // NEW: Special formatting for "of your" phrasing (Chaos-2: "Shift 1 of your covered cards")
+            const isOwn = params.targetFilter?.owner === 'own';
+            const isCovered = params.targetFilter?.position === 'covered';
+
+            if (isOwn && isCovered && count === 1) {
+                // Chaos-2 format: "Shift 1 of your covered cards" (always plural)
+                let text = `${mayShift} 1 of your covered cards`;
+
+                // Add destination text
+                if (params.destinationRestriction?.type === 'non_matching_protocol') {
+                    text += ' to a line without a matching protocol';
+                } else if (params.destinationRestriction?.type === 'specific_lane') {
+                    text += ' within this line';
+                } else if (params.destinationRestriction?.type === 'to_another_line') {
+                    text += ' to another line';
+                }
+
+                mainText = text + '.';
+                break;
+            }
+
+            // NEW: Spirit-3 special case - "shift this card"
+            // Only when no owner filter OR no position filter (except position=any)
+            const hasSpecificTargetFilter = params.targetFilter?.owner || (params.targetFilter?.position && params.targetFilter.position !== 'any');
+            const isShiftSelf = !hasSpecificTargetFilter && !params.targetFilter?.excludeSelf && count === 1;
+
+            if (isShiftSelf) {
+                let text = `${mayShift} this card`;
+
+                // NEW: Add "even if covered" for position="any"
+                if (params.targetFilter?.position === 'any') {
+                    text += ', even if this card is covered';
+                }
+
+                mainText = text + '.';
                 break;
             }
 
@@ -177,17 +244,22 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
 
-            const count = params.count === 'all' ? 'all' : '1';
-            const cardWord = count === '1' ? 'card' : 'cards';
-            let text = `${mayShift} ${count} ${targetDesc}${cardWord}`;
+            const countText = params.count === 'all' ? 'all' : '1';
+            const cardWord = countText === '1' ? 'card' : 'cards';
+            let text = `${mayShift} ${countText} ${targetDesc}${cardWord}`;
 
-            // NEW: Better destination text (Anarchy-1)
+            // NEW: Better destination text (Anarchy-1, Gravity-1, Gravity-2, Gravity-4)
             if (params.destinationRestriction?.type === 'non_matching_protocol') {
                 text += ' to a line without a matching protocol';
             } else if (params.destinationRestriction?.type === 'specific_lane') {
                 text += ' within this line';
             } else if (params.destinationRestriction?.type === 'to_another_line') {
                 text += ' to another line';
+            } else if (params.destinationRestriction?.type === 'to_this_lane') {
+                text += ' to this line';
+            } else if (params.destinationRestriction?.type === 'to_or_from_this_lane') {
+                // Gravity-1: "Shift 1 card either to or from this line"
+                text += ' either to or from this line';
             }
 
             mainText = text + '.';
@@ -296,16 +368,23 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
             if (isVariable) {
                 countText = '1 or more cards';
+            } else if (params.count === 'all') {
+                // Chaos-4: "Discard your hand" instead of "You discard all cards"
+                countText = 'your hand';
             } else {
                 const cardWord = params.count === 1 ? 'card' : 'cards';
                 countText = `${params.count} ${cardWord}`;
             }
 
             // NEW: Handle optional discard (Fire-3: "You may discard 1 card")
-            const mayPrefix = params.optional ? 'You may discard' : 'Discard';
+            const mayPrefix = params.optional ? 'You may discard' : params.count === 'all' ? 'Discard' : 'You discard';
 
             if (params.actor === 'opponent') {
-                mainText = `Opponent discards ${countText}.`;
+                if (params.count === 'all') {
+                    mainText = `Opponent discards their hand.`;
+                } else {
+                    mainText = `Opponent discards ${countText}.`;
+                }
             } else {
                 mainText = `${mayPrefix} ${countText}.`;
             }
@@ -319,8 +398,12 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
+            const selectLane = (params as any).selectLane || false;
+            const laneText = selectLane ? ' in 1 line' : '';
+
             if (params.targetFilter?.valueEquals !== undefined) {
-                mainText = `Return all value ${params.targetFilter.valueEquals} cards to hand.`;
+                mainText = `Return all cards with a value of ${params.targetFilter.valueEquals}${laneText}.`;
                 break;
             }
 
@@ -329,12 +412,12 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
             let ownerText = '';
             if (owner === 'own') {
-                ownerText = ' of your own';
+                ownerText = ' of your';
             } else if (owner === 'opponent') {
                 ownerText = " of opponent's";
             }
 
-            mainText = `Return ${countText}${ownerText} to hand.`;
+            mainText = `Return ${countText}${ownerText}${laneText}.`;
             break;
         }
 
@@ -353,14 +436,23 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             let actorText = '';
             let source = '';
             if (actor === 'opponent') {
-                actorText = 'Opponent plays';
-                source = params.source === 'deck' ? 'from their deck' : 'from their hand';
+                actorText = 'Your opponent plays';
+                source = params.source === 'deck' ? 'the top card of their deck' : 'from their hand';
             } else {
                 actorText = 'Play';
-                source = params.source === 'deck' ? 'from your deck' : 'from your hand';
+                source = params.source === 'deck' ? 'the top card of your deck' : 'from your hand';
             }
 
-            let text = `${actorText} ${params.count} ${cardWord} ${faceState} ${source}`;
+            // NEW: Handle conditional play prefix (Gravity-0)
+            let conditionalPrefix = '';
+            if (params.condition?.type === 'per_x_cards_in_line') {
+                const cardCount = params.condition.cardCount || 2;
+                conditionalPrefix = `For every ${cardCount} cards in this line, `;
+                // Lowercase the actor text when used in conditional
+                actorText = actorText.toLowerCase();
+            }
+
+            let text = `${conditionalPrefix}${actorText} ${source} ${faceState}`;
 
             if (params.destinationRule?.type === 'other_lines') {
                 text += ' to other lines';
@@ -382,7 +474,7 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         case 'swap_protocols': {
             const targetText =
                 params.target === 'opponent'
-                    ? "opponent's"
+                    ? "your opponent's"
                     : params.target === 'both_sequential'
                     ? "both players'"
                     : 'your';
@@ -391,7 +483,7 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.action === 'rearrange_protocols') {
                 text = `Rearrange ${targetText} protocols`;
             } else {
-                text = `Swap 2 ${targetText} protocols`;
+                text = `Swap the positions of 2 of ${targetText} protocols`;
             }
 
             // NEW: Add restriction text (Anarchy-3)
@@ -438,6 +530,36 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'choice': {
+            // Spirit-1: Choice effect - "Either X or Y."
+            const options = params.options || [];
+            if (options.length === 0) {
+                mainText = 'Effect';
+                break;
+            }
+
+            if (options.length === 2) {
+                // Generate text for each option
+                const optionTexts = options.map((opt: any) => {
+                    const optEffect = { trigger: 'on_play', params: opt.params, position: 'bottom' } as EffectDefinition;
+                    let optText = getEffectSummary(optEffect);
+                    // Remove trailing period for embedding
+                    if (optText.endsWith('.')) {
+                        optText = optText.slice(0, -1);
+                    }
+                    // Lowercase first letter for embedding
+                    optText = optText.charAt(0).toLowerCase() + optText.slice(1);
+                    return optText;
+                });
+
+                mainText = `Either ${optionTexts[0]} or ${optionTexts[1]}.`;
+            } else {
+                // More than 2 options - just say "Effect" for now
+                mainText = 'Effect';
+            }
+            break;
+        }
+
         case 'passive_rule': {
             const rule = params.rule;
             switch (rule?.type) {
@@ -457,7 +579,7 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                     mainText = 'Opponent can only play cards face-down in this line.';
                     break;
                 case 'allow_any_protocol_play':
-                    mainText = 'You can play cards without matching protocols.';
+                    mainText = 'You may play cards without matching protocols.';
                     break;
                 case 'block_flips':
                     mainText = "Cards can't be flipped face-up in this line.";
@@ -548,9 +670,17 @@ const getEffectSummary = (effect: EffectDefinition): string => {
     // Handle conditional follow-up effects
     if (effect.conditional && effect.conditional.thenEffect) {
         const followUpText = getEffectSummary(effect.conditional.thenEffect);
-        // Use "then" for sequential actions, "If you do" for conditional execution
-        const connector = effect.conditional.type === 'then' ? 'then' : 'If you do,';
-        mainText = `${mainText} ${connector} ${followUpText.toLowerCase()}`;
+        // Use "Then" for sequential actions, "If you do" for conditional execution
+        if (effect.conditional.type === 'then') {
+            // Chaos-4: "Discard your hand. Draw the same amount of cards."
+            // Remove period from first part and capitalize follow-up
+            const firstPart = mainText.endsWith('.') ? mainText.slice(0, -1) : mainText;
+            const secondPart = followUpText.charAt(0).toUpperCase() + followUpText.slice(1);
+            mainText = `${firstPart}. ${secondPart}`;
+        } else {
+            // "If you do" format
+            mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
+        }
     }
 
     return mainText;
@@ -595,6 +725,12 @@ const generateEffectText = (effects: EffectDefinition[]): string => {
         if (trigger === 'start') return `<div><span class='emphasis'>Start:</span> ${summary}</div>`;
         if (trigger === 'end') return `<div><span class='emphasis'>End:</span> ${summary}</div>`;
         if (trigger === 'on_cover') return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
+
+        // NEW: Reactive triggers (Spirit-3, etc.)
+        if (trigger === 'after_draw') return `<div><span class='emphasis'>After you draw cards:</span> ${summary}</div>`;
+        if (trigger === 'after_delete') return `<div><span class='emphasis'>After a card is deleted:</span> ${summary}</div>`;
+        if (trigger === 'after_shift') return `<div><span class='emphasis'>After a card is shifted:</span> ${summary}</div>`;
+        if (trigger === 'after_flip') return `<div><span class='emphasis'>After a card is flipped:</span> ${summary}</div>`;
 
         return summary;
     }).join(' ');

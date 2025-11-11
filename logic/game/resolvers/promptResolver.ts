@@ -361,6 +361,31 @@ export const resolveRearrangeProtocols = (
     newState[target] = targetState;
     newState.actionRequired = null; // Clear the rearrange action
 
+    // NEW: Handle pending custom effects (for Chaos-1: two rearrange effects)
+    // This is duplicated from the central logic because we need it BEFORE processQueuedActions
+    const pendingEffects = (newState as any)._pendingCustomEffects;
+    if (pendingEffects && pendingEffects.effects.length > 0) {
+        console.log('[resolveRearrangeProtocols] Found pending effects:', pendingEffects.effects.length);
+        const pendingAction: any = {
+            type: 'execute_remaining_custom_effects',
+            sourceCardId: pendingEffects.sourceCardId,
+            laneIndex: pendingEffects.laneIndex,
+            effects: pendingEffects.effects,
+            context: pendingEffects.context,
+            actor: actor,
+        };
+
+        // Queue the pending effects
+        newState.queuedActions = [
+            ...(newState.queuedActions || []),
+            pendingAction
+        ];
+
+        // Clear from state after queueing
+        delete (newState as any)._pendingCustomEffects;
+        console.log('[resolveRearrangeProtocols] Queued pending effects');
+    }
+
     // Convert sourceCardId to a readable name
     let sourceText = 'Control Action';
     if (sourceCardId !== 'CONTROL_MECHANIC') {
@@ -527,7 +552,32 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
     playerState.compiled = newCompiled;
     
     let newState = { ...prevState, [target]: playerState, actionRequired: null };
-    
+
+    // NEW: Handle pending custom effects (for cards with multiple swap effects)
+    // This is duplicated from the central logic because we need it BEFORE processQueuedActions
+    const pendingEffects = (newState as any)._pendingCustomEffects;
+    if (pendingEffects && pendingEffects.effects.length > 0) {
+        console.log('[resolveSwapProtocols] Found pending effects:', pendingEffects.effects.length);
+        const pendingAction: any = {
+            type: 'execute_remaining_custom_effects',
+            sourceCardId: pendingEffects.sourceCardId,
+            laneIndex: pendingEffects.laneIndex,
+            effects: pendingEffects.effects,
+            context: pendingEffects.context,
+            actor: actor,
+        };
+
+        // Queue the pending effects
+        newState.queuedActions = [
+            ...(newState.queuedActions || []),
+            pendingAction
+        ];
+
+        // Clear from state after queueing
+        delete (newState as any)._pendingCustomEffects;
+        console.log('[resolveSwapProtocols] Queued pending effects');
+    }
+
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     const targetName = target.charAt(0).toUpperCase() + target.slice(1);
     const sourceText = sourceCardId === 'CONTROL_MECHANIC' ? 'Control' : 'Spirit-4';

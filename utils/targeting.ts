@@ -60,9 +60,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner === 'opponent' && card.isFaceUp && isUncovered;
 
         case 'select_card_to_flip': {
-            // Generic flip for custom protocols
+            // Generic flip for custom protocols (supports scope: 'each_lane' via currentLaneIndex parameter)
             const targetFilter = (actionRequired as any).targetFilter || {};
             const cardIndex = lane.findIndex(c => c.id === card.id);
+            const currentLaneIndex = (actionRequired as any).currentLaneIndex;
+
+            // NEW: If currentLaneIndex is set (scope: 'each_lane'), only cards in that lane are targetable
+            if (currentLaneIndex !== undefined && laneIndex !== currentLaneIndex) return false;
 
             // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
             // This matches the game rules: "flip 1 card" means "flip 1 uncovered card"
@@ -131,6 +135,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_cards_to_delete': {
             // Check if disallowed
             if (actionRequired.disallowedIds.includes(card.id)) return false;
+
+            // NEW: If currentLaneIndex is set (scope: 'each_lane'), only cards in that lane are targetable
+            const currentLaneIndex = (actionRequired as any).currentLaneIndex;
+            if (currentLaneIndex !== undefined && laneIndex !== currentLaneIndex) return false;
 
             // Check targetFilter if it exists (custom protocols)
             const targetFilter = (actionRequired as any).targetFilter;

@@ -1,0 +1,157 @@
+{
+  "id": "chaos_custom_1",
+  "name": "Chaos_custom",
+  "description": "Embrace the unpredictable. Custom protocol migration of original Chaos protocol.",
+  "color": "#E64DB8",
+  "pattern": "chaos",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "chaos_0_flip_covered",
+          "trigger": "on_play",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "scope": "each_lane",
+            "targetFilter": {
+              "owner": "any",
+              "position": "covered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "chaos_0_start_swap_draws",
+          "trigger": "start",
+          "params": {
+            "action": "mutual_draw",
+            "count": 1
+          },
+          "position": "bottom"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "chaos_1_rearrange_own",
+          "trigger": "on_play",
+          "params": {
+            "action": "rearrange_protocols",
+            "target": "own"
+          },
+          "position": "middle"
+        },
+        {
+          "id": "chaos_1_rearrange_opponent",
+          "trigger": "on_play",
+          "params": {
+            "action": "rearrange_protocols",
+            "target": "opponent"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "chaos_2_shift_covered",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "targetFilter": {
+              "owner": "own",
+              "position": "covered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "chaos_3_allow_any_protocol",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "allow_any_protocol_play",
+              "target": "self",
+              "scope": "global"
+            }
+          },
+          "position": "bottom"
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "chaos_4_end_discard_draw",
+          "trigger": "end",
+          "params": {
+            "action": "discard",
+            "count": "all",
+            "actor": "self"
+          },
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "chaos_4_draw_after_discard",
+              "trigger": "on_play",
+              "params": {
+                "action": "draw",
+                "count": 1,
+                "countType": "equal_to_discarded",
+                "countOffset": 0,
+                "target": "self",
+                "source": "own_deck"
+              },
+              "position": "bottom"
+            }
+          },
+          "position": "bottom"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "chaos_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

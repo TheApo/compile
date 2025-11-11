@@ -12,6 +12,8 @@
 
 export type EffectActionType =
     | 'draw'
+    | 'refresh'
+    | 'mutual_draw'
     | 'flip'
     | 'shift'
     | 'delete'
@@ -93,7 +95,7 @@ export interface FlipEffectParams {
     optional: boolean;  // "may flip" vs "flip"
     selfFlipAfter?: boolean;  // Flip this card after target flip
     flipSelf?: boolean;  // NEW: Flip this card instead of selecting target (for Anarchy-6)
-    scope?: 'any' | 'this_lane';  // NEW: Limit flip to specific lane (Apathy-1)
+    scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane (Chaos-0)
     // NEW: Advanced conditionals
     advancedConditional?: {
         type: 'protocol_match';  // Anarchy-6: "if this card is in line with Anarchy protocol"
@@ -107,6 +109,7 @@ export interface FlipEffectParams {
 export interface ShiftEffectParams {
     action: 'shift';
     optional?: boolean;  // "may shift" vs "shift"
+    count?: number | 'all';  // NEW: For Light-3 "shift all face-down cards"
     targetFilter: {
         owner: TargetOwner;
         position: 'uncovered' | 'covered' | 'any';
@@ -114,10 +117,11 @@ export interface ShiftEffectParams {
         excludeSelf?: boolean;  // NEW: For Anarchy-1 "shift 1 other card"
     };
     destinationRestriction?: {
-        type: 'non_matching_protocol' | 'specific_lane' | 'any';
-        laneIndex?: number;  // If type is 'specific_lane'
+        type: 'non_matching_protocol' | 'specific_lane' | 'to_another_line' | 'to_this_lane' | 'to_or_from_this_lane' | 'any';
+        laneIndex?: number | 'current';  // If type is 'specific_lane', 'to_this_lane', or 'to_or_from_this_lane', 'current' = this card's lane (Gravity-1, Gravity-2, Gravity-4)
     };
     chainedFrom?: 'flip';  // If shift follows a flip
+    scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane
 }
 
 /**
@@ -134,7 +138,7 @@ export interface DeleteEffectParams {
         owner?: 'own' | 'opponent';  // NEW: which player's cards
     };
     scope?: {
-        type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line';
+        type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line' | 'each_lane';
         laneRestriction?: number;
         minCardsInLane?: number;  // NEW: Metal-3 - "8 or more cards in line"
     };
@@ -189,6 +193,7 @@ export interface PlayEffectParams {
     destinationRule: {
         type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line';
         excludeCurrentLane?: boolean;
+        laneIndex?: number | 'current';  // NEW: For Gravity-6 "opponent plays in this line", 'current' = this card's lane
     };
     // NEW: Conditional play
     condition?: {

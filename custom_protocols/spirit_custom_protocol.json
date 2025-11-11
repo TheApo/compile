@@ -1,0 +1,191 @@
+{
+  "id": "spirit_custom_1",
+  "name": "Spirit_custom",
+  "description": "True strength from within. Custom protocol migration of original Spirit protocol.",
+  "color": "#5DD9C1",
+  "pattern": "dual-radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "spirit_0_refresh",
+          "trigger": "on_play",
+          "params": {
+            "action": "refresh",
+            "target": "self"
+          },
+          "position": "middle"
+        },
+        {
+          "id": "spirit_0_draw",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "spirit_0_skip_cache",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "skip_check_cache_phase",
+              "target": "self",
+              "scope": "global"
+            }
+          },
+          "position": "bottom"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "spirit_1_play_anywhere",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "allow_any_protocol_play",
+              "target": "self",
+              "scope": "global"
+            }
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "spirit_1_draw",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "spirit_1_choice",
+          "trigger": "start",
+          "params": {
+            "action": "choice",
+            "options": [
+              {
+                "id": "spirit_1_choice_discard",
+                "trigger": "on_play",
+                "params": {
+                  "action": "discard",
+                  "count": 1,
+                  "actor": "self"
+                },
+                "position": "bottom"
+              },
+              {
+                "id": "spirit_1_choice_flip",
+                "trigger": "on_play",
+                "params": {
+                  "action": "flip",
+                  "flipSelf": true
+                },
+                "position": "bottom"
+              }
+            ]
+          },
+          "position": "bottom"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "spirit_2_flip",
+          "trigger": "on_play",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "optional": true
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [
+        {
+          "id": "spirit_3_shift",
+          "trigger": "after_draw",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "own",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "spirit_4_swap",
+          "trigger": "on_play",
+          "params": {
+            "action": "swap_protocols",
+            "target": "own"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "spirit_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

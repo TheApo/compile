@@ -40,6 +40,9 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                             const val = e.target.value;
                             if (val === 'variable') {
                                 onChange({ ...params, variableCount: true, count: 1 } as any);
+                            } else if (val === 'all') {
+                                const { variableCount, ...rest } = params as any;
+                                onChange({ ...rest, count: 'all' as any });
                             } else {
                                 const { variableCount, ...rest } = params as any;
                                 onChange({ ...rest, count: parseInt(val) });
@@ -49,6 +52,7 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                         <option value="1">1 card</option>
                         <option value="2">2 cards</option>
                         <option value="3">3 cards</option>
+                        <option value="all">All cards (entire hand)</option>
                         <option value="variable">1 or more cards (variable)</option>
                     </select>
                 </label>
@@ -94,12 +98,17 @@ const generateDiscardText = (params: DiscardEffectParams): string => {
         countText = `(amount discarded${offsetText}) cards`;
     } else if (isVariable) {
         countText = '1 or more cards';
+    } else if (params.count === 'all') {
+        countText = 'your hand';
     } else {
         const cardWord = params.count === 1 ? 'card' : 'cards';
         countText = `${params.count} ${cardWord}`;
     }
 
     if (params.actor === 'opponent') {
+        if (params.count === 'all') {
+            return `Opponent discards their hand.`;
+        }
         return `Opponent discards ${countText}.`;
     } else {
         return `Discard ${countText}.`;

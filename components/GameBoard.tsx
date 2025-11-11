@@ -8,7 +8,7 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
-import { hasRequireNonMatchingProtocolRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface GameBoardProps {
@@ -80,15 +80,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         // NEW: Check for custom cards with require_non_matching_protocol passive rule
         const hasCustomNonMatchingRule = hasRequireNonMatchingProtocolRule(gameState);
 
+        // NEW: Check for custom cards with allow_any_protocol_play passive rule (Spirit_custom-1)
+        const hasCustomAllowAnyProtocol = hasAnyProtocolPlayRule(gameState, 'player', laneIndex);
+
         let isMatching: boolean;
         if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = card.protocol !== player.protocols[laneIndex] && card.protocol !== opponent.protocols[laneIndex];
             isMatching = doesNotMatch && !opponentHasPsychic1;
         } else {
-            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3 override)
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3/Spirit_custom-1 override)
             isMatching = (
                 playerHasSpiritOne ||
+                hasCustomAllowAnyProtocol ||
                 playerHasChaosThree ||
                 card.protocol === player.protocols[laneIndex] ||
                 card.protocol === opponent.protocols[laneIndex]
@@ -114,6 +118,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             case 'select_lane_for_delete':
             case 'select_lane_for_death_2':
             case 'select_lane_for_water_3':
+            case 'select_lane_for_return':
                 return true;
             case 'select_lane_for_metal_3_delete': {
                 if (targetLaneIndex === actionRequired.disallowedLaneIndex) return false;
@@ -145,12 +150,41 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                     return false;
                 }
 
-                // CRITICAL VALIDATION for Gravity-1: "Shift 1 card either to or from this line"
-                // The shift must involve the Gravity-1's lane (either as source OR destination)
+                // CRITICAL VALIDATION for Gravity-1 AND Custom Protocols: "Shift 1 card either to or from this line"
+                // Check BOTH original Gravity-1 AND generic destinationRestriction for custom protocols
                 const sourceCard = [...gameState.player.lanes.flat(), ...gameState.opponent.lanes.flat()]
                     .find(c => c.id === actionRequired.sourceCardId);
 
-                if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
+                // Check for custom protocol destinationRestriction first (generic approach)
+                const destinationRestriction = (actionRequired as any).destinationRestriction;
+                if (destinationRestriction && destinationRestriction.type === 'to_or_from_this_lane') {
+                    // Find source card's lane to resolve 'current'
+                    let resolvedSourceLane = destinationRestriction.laneIndex;
+                    if (destinationRestriction.laneIndex === 'current' && sourceCard) {
+                        for (const owner of ['player', 'opponent'] as Player[]) {
+                            for (let i = 0; i < gameState[owner].lanes.length; i++) {
+                                if (gameState[owner].lanes[i].some(c => c.id === actionRequired.sourceCardId)) {
+                                    resolvedSourceLane = i;
+                                    break;
+                                }
+                            }
+                            if (typeof resolvedSourceLane === 'number') break;
+                        }
+                    }
+
+                    // RULE: Either originalLaneIndex OR targetLaneIndex must be the resolved lane
+                    if (typeof resolvedSourceLane === 'number') {
+                        const isFromSpecifiedLane = actionRequired.originalLaneIndex === resolvedSourceLane;
+                        const isToSpecifiedLane = targetLaneIndex === resolvedSourceLane;
+
+                        // At least ONE must be true
+                        if (!isFromSpecifiedLane && !isToSpecifiedLane) {
+                            return false; // ILLEGAL: Neither source nor target is the specified lane
+                        }
+                    }
+                }
+                // Fallback: Original Gravity-1 hardcoded check (for backwards compatibility)
+                else if (sourceCard && sourceCard.protocol === 'Gravity' && sourceCard.value === 1) {
                     // Find Gravity-1's lane
                     let gravity1LaneIndex = -1;
                     for (const owner of ['player', 'opponent'] as Player[]) {
@@ -178,19 +212,35 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 return true;
             }
             case 'shift_flipped_card_optional': {
-                // Darkness-1 card is always on the opponent's side.
-                const cardOwner: Player = 'opponent';
-                if (targetOwner !== cardOwner) return false;
-    
+                // CRITICAL: Find which player owns the card (Spirit-3 on player side, Darkness-1 on opponent side)
                 const cardId = actionRequired.cardId;
+                let cardOwner: Player | null = null;
                 let originalLaneIndex = -1;
-                // Find the original lane of the card being shifted
-                for(let i = 0; i < opponent.lanes.length; i++) {
-                    if (opponent.lanes[i].some(c => c.id === cardId)) {
+
+                // Check player's lanes
+                for(let i = 0; i < player.lanes.length; i++) {
+                    if (player.lanes[i].some(c => c.id === cardId)) {
+                        cardOwner = 'player';
                         originalLaneIndex = i;
                         break;
                     }
                 }
+
+                // Check opponent's lanes if not found on player side
+                if (cardOwner === null) {
+                    for(let i = 0; i < opponent.lanes.length; i++) {
+                        if (opponent.lanes[i].some(c => c.id === cardId)) {
+                            cardOwner = 'opponent';
+                            originalLaneIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                // Card must be on the same side as the target lane
+                if (targetOwner !== cardOwner) return false;
+
+                // Cannot shift to same lane
                 return targetLaneIndex !== originalLaneIndex;
             }
             case 'select_lane_for_life_3_play':

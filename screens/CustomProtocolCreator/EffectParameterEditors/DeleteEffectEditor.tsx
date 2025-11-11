@@ -168,6 +168,7 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                     <option value="this_line">This line only</option>
                     <option value="other_lanes">Other lanes</option>
                     <option value="each_other_line">Each other line (1 per line)</option>
+                    <option value="each_lane">Each lane (flexible, 1 per line)</option>
                 </select>
             </label>
 
@@ -278,10 +279,12 @@ const generateDeleteText = (params: DeleteEffectParams): string => {
         if (params.scope.minCardsInLane) {
             text += ` with ${params.scope.minCardsInLane}+ cards`;
         }
-    } else if (params.scope?.type === 'each_other_line') {
+    } else if (params.scope?.type === 'each_other_line' || (params.scope as any)?.type === 'each_other_line') {
         text += ' from each other line';
-    } else if (params.scope?.type === 'any' && params.scope.minCardsInLane) {
-        text += ` in lanes with ${params.scope.minCardsInLane}+ cards`;
+    } else if (params.scope?.type === 'each_lane') {
+        text = `In each line, ${text.toLowerCase()}`;
+    } else if ((params.scope as any)?.type === 'any' && (params.scope as any).minCardsInLane) {
+        text += ` in lanes with ${(params.scope as any).minCardsInLane}+ cards`;
     }
 
     // Add owner info

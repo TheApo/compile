@@ -21,7 +21,7 @@ import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
-import { hasRequireNonMatchingProtocolRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule } from '../logic/game/passiveRuleChecker';
 
 
 interface GameScreenProps {
@@ -138,6 +138,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSpeed3Prompt,
     resolvePsychic4Prompt,
     resolveControlMechanicPrompt,
+    resolveCustomChoice,
     setupTestScenario,
   } = useGameState(
     playerProtocols,
@@ -297,7 +298,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     // (e.g., Spirit-3 triggering during opponent's end phase), the player needs to act
     // even though turn might still be set to 'opponent'.
     if (actionRequired && actionRequired.actor === 'player' &&
-        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_delete', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete'].includes(actionRequired.type)) {
+        ['select_lane_for_shift', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_delete', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete', 'select_lane_for_return'].includes(actionRequired.type)) {
         resolveActionWithLane(laneIndex);
         return;
     }
@@ -331,15 +332,19 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         // Check for custom cards with require_non_matching_protocol passive rule
         const hasCustomNonMatchingRule = hasRequireNonMatchingProtocolRule(currentState);
 
+        // NEW: Check for custom cards with allow_any_protocol_play passive rule (Spirit_custom-1)
+        const hasCustomAllowAnyProtocol = hasAnyProtocolPlayRule(currentState, 'player', laneIndex);
+
         let canPlayFaceUp: boolean;
         if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = cardInHand.protocol !== player.protocols[laneIndex] && cardInHand.protocol !== opponent.protocols[laneIndex];
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
         } else {
-            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3 override)
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3/Spirit_custom-1 override)
             canPlayFaceUp = (
                 playerHasSpiritOne ||
+                hasCustomAllowAnyProtocol ||
                 playerHasChaosThree ||
                 cardInHand.protocol === player.protocols[laneIndex] ||
                 cardInHand.protocol === opponent.protocols[laneIndex]
@@ -641,6 +646,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onResolveSpirit1Prompt={resolveSpirit1Prompt}
                     onResolveSpirit3Prompt={resolveSpirit3Prompt}
                     onResolveControlMechanicPrompt={resolveControlMechanicPrompt}
+                    onResolveCustomChoice={resolveCustomChoice}
                     selectedCardId={selectedCard}
                     multiSelectedCardIds={multiSelectedCardIds}
                     actionRequiredClass={actionRequiredClass}

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player } from "../types";
+import { GameState, PlayedCard, Player, LogEntry } from "../types";
 import { v4 as uuidv4 } from 'uuid';
 import { recalculateAllLaneValues } from '../logic/game/stateManager';
 import { cards } from '../data/cards';
@@ -71,38 +71,101 @@ function placeCard(state: GameState, owner: Player, laneIndex: number, card: Pla
     return newState;
 }
 
+// Helper: Build deck from protocols, excluding cards already in use
+function buildDeckFromProtocols(protocols: string[], usedCards: PlayedCard[]): PlayedCard[] {
+    const deck: PlayedCard[] = [];
+
+    // Get all available cards (base + custom protocols)
+    const allCards = [...cards, ...getAllCustomProtocolCards()];
+
+    // For each protocol, add only cards that actually exist in that protocol
+    for (const protocol of protocols) {
+        const protocolCards = allCards.filter(c => c.protocol === protocol);
+
+        for (const cardData of protocolCards) {
+            // Check if this card is already used (on board or in hand)
+            const isUsed = usedCards.some(c => c.protocol === cardData.protocol && c.value === cardData.value);
+            if (!isUsed) {
+                deck.push(createCard(cardData.protocol, cardData.value, true));
+            }
+        }
+    }
+
+    return deck;
+}
+
 // Helper: Initialize common scenario setup
 function initScenarioBase(state: GameState, playerProtocols: string[], opponentProtocols: string[], turn: Player, phase: GameState['phase']): GameState {
-    let newState = { ...state };
-
-    // ALWAYS set protocols (override existing ones for test scenarios)
-    newState.player.protocols = playerProtocols;
-    newState.opponent.protocols = opponentProtocols;
-
-    // ALWAYS reset lanes (clear existing cards for test scenarios)
-    newState.player.lanes = [[], [], []];
-    newState.opponent.lanes = [[], [], []];
-
-    // ALWAYS reset hands (will be filled by scenario)
-    newState.player.hand = [];
-    newState.opponent.hand = [];
-
-    // Set turn and phase
-    newState.turn = turn;
-    newState.phase = phase;
-    newState.actionRequired = null;
-    newState.queuedActions = [];
-
-    // CRITICAL: Clear interrupt state from previous scenarios
-    newState._interruptedTurn = undefined;
-    newState._interruptedPhase = undefined;
-
-    // Initialize effect tracking arrays
-    newState.processedStartEffectIds = [];
-    newState.processedEndEffectIds = [];
-    newState.processedUncoverEventIds = [];
+    // Use proper immutable updates
+    const newState: GameState = {
+        ...state,
+        player: {
+            ...state.player,
+            protocols: playerProtocols,
+            lanes: [[], [], []],
+            hand: [],
+        },
+        opponent: {
+            ...state.opponent,
+            protocols: opponentProtocols,
+            lanes: [[], [], []],
+            hand: [],
+        },
+        turn,
+        phase,
+        actionRequired: null,
+        queuedActions: [],
+        _interruptedTurn: undefined,
+        _interruptedPhase: undefined,
+        processedStartEffectIds: [],
+        processedEndEffectIds: [],
+        processedUncoverEventIds: [],
+    };
 
     return newState;
+}
+
+// Helper: Finalize scenario setup - build decks, reset discard, uncompile protocols, reset log
+function finalizeScenario(state: GameState): GameState {
+    // Build decks from protocols, excluding cards already in use
+    const playerUsedCards = [
+        ...state.player.hand,
+        ...state.player.lanes.flat()
+    ];
+    const opponentUsedCards = [
+        ...state.opponent.hand,
+        ...state.opponent.lanes.flat()
+    ];
+
+    const playerDeck = buildDeckFromProtocols(state.player.protocols, playerUsedCards);
+    const opponentDeck = buildDeckFromProtocols(state.opponent.protocols, opponentUsedCards);
+
+    // ALWAYS reset log and initialize with protocols and starting player
+    const startingPlayer = state.turn === 'player' ? 'Player' : 'Opponent';
+    const newLog = [
+        { player: 'player' as Player, message: `Player protocols: ${state.player.protocols.join(', ')}` },
+        { player: 'opponent' as Player, message: `Opponent protocols: ${state.opponent.protocols.join(', ')}` },
+        { player: state.turn, message: `${startingPlayer} goes first.` },
+        { player: 'player' as Player, message: '---' }
+    ];
+
+    // Return new state with all updates
+    return {
+        ...state,
+        player: {
+            ...state.player,
+            deck: playerDeck,
+            discard: [],
+            compiled: [false, false, false]
+        },
+        opponent: {
+            ...state.opponent,
+            deck: opponentDeck,
+            discard: [],
+            compiled: [false, false, false]
+        },
+        log: newLog
+    };
 }
 
 /**
@@ -143,7 +206,7 @@ export const scenario1_Psychic3Uncover: TestScenario = {
         // Recalculate lane values
         newState = recalculateAllLaneValues(newState);
 
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -184,7 +247,7 @@ export const scenario2_Psychic4EndEffect: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -225,7 +288,7 @@ export const scenario3_Spirit3EndPhase: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -268,7 +331,7 @@ export const scenario4_Plague2Actor: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -301,7 +364,7 @@ export const scenario5_Darkness1Interrupt: TestScenario = {
         newState = placeCard(newState, 'opponent', 0, createCard('Fire', 0, false));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -335,7 +398,7 @@ export const scenario8_Plague4Owner: TestScenario = {
         newState = placeCard(newState, 'player', 1, createCard('Water', 2, false));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -385,7 +448,7 @@ export const scenario9_Water: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -435,7 +498,7 @@ export const scenario10_Hate1Interrupt: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -500,7 +563,7 @@ export const scenario11_Darkness1HateChain: TestScenario = {
         newState.opponent.deck = [deathCard!];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -553,7 +616,7 @@ export const scenario12_Water4TurnEnd: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -605,7 +668,7 @@ export const scenario13_Psychic3ShiftTest: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -653,7 +716,7 @@ export const scenario14_Death1UncoverTest: TestScenario = {
         newState.opponent.hand = [];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -708,7 +771,7 @@ export const scenario15_Gravity2ShiftInterrupt: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -756,7 +819,7 @@ export const scenario16_Hate2PlayerPlays: TestScenario = {
         newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 2, false)); // Face-down (value 2)
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -804,7 +867,7 @@ export const scenario17_Hate2AIPlays: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Light', 2, true));  // Niedrig
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -852,7 +915,7 @@ export const scenario171_Hate2AIPlays: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Light', 5, true));  // Niedrig
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -897,7 +960,7 @@ export const scenario18_Hate2SelfDelete: TestScenario = {
         newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -946,7 +1009,7 @@ export const scenario19_Hate2MultipleTies: TestScenario = {
         newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 2, false)); // Niedriger
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -992,7 +1055,7 @@ export const scenario20_Hate2FaceDown: TestScenario = {
         newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 1, true)); // Niedrig
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1037,7 +1100,7 @@ export const scenario21_Hate2AIValidation: TestScenario = {
         newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1083,7 +1146,7 @@ export const scenario22_Hate2AIPlaysOpen: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Light', 1, true));   // Niedrig
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1124,7 +1187,7 @@ const scenario23_Chaos3ProtocolFree: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1171,7 +1234,7 @@ const scenario24_Frost3BlocksShift: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1215,7 +1278,7 @@ const scenario25_Water0SoftlockFix: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1265,7 +1328,7 @@ const scenario26_DarkCust1FlipShift: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1318,7 +1381,7 @@ const scenario27_DarkCust1FlipSpeed3: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1371,7 +1434,7 @@ const scenario28_Darkness1FlipSpeed3: TestScenario = {
         ];
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1435,7 +1498,7 @@ export const scenario29_FireCustomConditional: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1484,7 +1547,7 @@ export const scenario30_AnarchyCustomPlayground: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1534,7 +1597,7 @@ export const scenario31_DarkCustPlayground: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1584,7 +1647,7 @@ export const scenario32_ApathyCustomPlayground: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
     }
 };
 
@@ -1634,7 +1697,233 @@ export const scenario33_DeathCustomPlayground: TestScenario = {
         newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
 
         newState = recalculateAllLaneValues(newState);
-        return newState;
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 34: Water_custom Test Playground
+ *
+ * Setup:
+ * - Player has Water_custom protocol in Lane 0
+ * - Player has all Water_custom cards in hand (0, 1, 2, 3, 4, 5)
+ * - Opponent has cards on board for testing (including value 2 cards for Water-3)
+ * - Player's Turn, Action Phase
+ */
+export const scenario34_WaterCustomPlayground: TestScenario = {
+    name: "Water_custom Test Playground",
+    description: "🆕 All Water_custom cards on hand for testing - wash away and renew",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water_custom', 'Fire', 'Spirit'],
+            ['Metal', 'Death', 'Light'],
+            'player',
+            'action'
+        );
+
+        // Player: All Water_custom cards in hand
+        newState.player.hand = [
+            createCard('Water_custom', 0, true),
+            createCard('Water_custom', 1, true),
+            createCard('Water_custom', 2, true),
+            createCard('Water_custom', 3, true),
+            createCard('Water_custom', 4, true),
+            createCard('Water_custom', 5, true),
+        ];
+
+        // Opponent: Cards in all lanes, including value 2 cards for Water-3 testing
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, true)); // Value 2 for Water-3
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 2, true)); // Value 2 for Water-3
+
+        // Add some covered cards and face-down cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 4, true)); // On top of Metal-2
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, false)); // Face-down (value 2) for Water-3
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 5, false)); // Face-down
+
+        // Player cards on board for testing (including value 2 for Water-3)
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 2, true)); // Value 2
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 4, true));
+
+        // Add a face-down card for Water-0 flip testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 5, false)); // Face-down for Water-0
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+export const scenario35_SpiritCustomPlayground: TestScenario = {
+    name: "Spirit_custom Test Playground",
+    description: "🆕 All Spirit_custom cards on hand - true strength from within",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Spirit_custom', 'Fire', 'Water'],
+            ['Metal', 'Death', 'Light'],
+            'player',
+            'action'
+        );
+
+        // Player: All Spirit_custom cards in hand
+        newState.player.hand = [
+            createCard('Spirit_custom', 0, true),
+            createCard('Spirit_custom', 1, true),
+            createCard('Spirit_custom', 2, true),
+            createCard('Spirit_custom', 3, true),
+            createCard('Spirit_custom', 4, true),
+            createCard('Spirit_custom', 5, true),
+        ];
+
+        // Opponent: Mix of face-up and face-down cards for Spirit-2 flip testing
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, false)); // Face-down for flipping
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 4, true));
+
+        // Add some covered cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 5, false)); // Covered, face-down
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 3, true)); // On top of Light-4
+
+        // Player cards on board for Spirit-3 shift testing
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 3, false)); // Face-down
+
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 36: Chaos_custom Test Playground
+ *
+ * Setup:
+ * - Player has Chaos_custom protocol in Lane 0
+ * - Player has all Chaos_custom cards in hand (0, 1, 2, 3, 4, 5)
+ * - Opponent and Player have covered cards in all lanes for Chaos-0 "In each line, flip 1 covered card"
+ * - Player has covered cards for Chaos-2 "Shift 1 of your covered cards"
+ * - Player's Turn, Action Phase
+ */
+export const scenario36_ChaosCustomPlayground: TestScenario = {
+    name: "Chaos_custom Test Playground",
+    description: "🆕 All Chaos_custom cards on hand - embrace the unpredictable",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Chaos_custom', 'Fire', 'Water'],
+            ['Metal', 'Death', 'Light'],
+            'player',
+            'action'
+        );
+
+        // Player: All Chaos_custom cards in hand
+        newState.player.hand = [
+            createCard('Chaos_custom', 0, true),
+            createCard('Chaos_custom', 1, true),
+            createCard('Chaos_custom', 2, true),
+            createCard('Chaos_custom', 3, true),
+            createCard('Chaos_custom', 4, true),
+            createCard('Chaos_custom', 5, true),
+        ];
+
+        // Opponent: Covered cards in ALL lanes for Chaos-0 testing ("In each line, flip 1 covered card")
+        // Lane 0: Metal-2 (bottom, covered) + Metal-4 (top, uncovered)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, true)); // Covered
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 4, true)); // Uncovered
+
+        // Lane 1: Death-3 (bottom, covered, face-down) + Death-5 (top, uncovered)
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 3, false)); // Covered, face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true)); // Uncovered
+
+        // Lane 2: Light-1 (bottom, covered) + Light-3 (top, uncovered, face-down)
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 1, true)); // Covered
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 3, false)); // Uncovered, face-down
+
+        // Player: Covered cards for Chaos-2 shift testing + protocol rearrange testing
+        // Lane 0: Fire-2 (bottom, covered) + Fire-4 (top, uncovered)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true)); // Covered - for Chaos-2 shift
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 4, true)); // Uncovered
+
+        // Lane 1: Water-3 (bottom, covered, face-down) + Water-5 (top, uncovered)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, false)); // Covered, face-down
+        newState = placeCard(newState, 'player', 1, createCard('Water', 5, true)); // Uncovered
+
+        // Lane 2: Just one card for variety
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 1, true)); // Uncovered only
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 37: Gravity_custom Test Playground
+ *
+ * Setup:
+ * - Player has Gravity_custom protocol in Lane 1
+ * - Player has all Gravity_custom cards in hand (0, 1, 2, 4, 5, 6)
+ * - Lane 1 has multiple cards for Gravity-0 "For every 2 cards in this line, play..."
+ * - Multiple cards in different lanes for Gravity-1 shift testing
+ * - Face-up and face-down cards for Gravity-2 flip + shift combo
+ * - Face-down cards for Gravity-4 shift to this line
+ * - Opponent deck has cards for Gravity-6 "opponent plays in this line"
+ * - Player's Turn, Action Phase
+ */
+export const scenario37_GravityCustomPlayground: TestScenario = {
+    name: "Gravity_custom Test Playground",
+    description: "🆕 All Gravity_custom cards on hand - pull everything together",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Gravity_custom', 'Water'],
+            ['Metal', 'Death', 'Light'],
+            'player',
+            'action'
+        );
+
+        // Player: All Gravity_custom cards in hand
+        newState.player.hand = [
+            createCard('Gravity_custom', 0, true),
+            createCard('Gravity_custom', 1, true),
+            createCard('Gravity_custom', 2, true),
+            createCard('Gravity_custom', 4, true),
+            createCard('Gravity_custom', 5, true),
+            createCard('Gravity_custom', 6, true),
+        ];
+
+        // Player Lane 1 (Gravity_custom): Multiple cards for Gravity-0 testing
+        // "For every 2 cards in this line, play the top card of your deck face-down under this card"
+
+        // Player Lane 0: Cards for shift testing
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 1, true));
+
+        // Player Lane 2: Cards for shift testing
+        newState = placeCard(newState, 'player', 2, createCard('Water', 2, false)); // Face-down for Gravity-4 shift
+
+        // Opponent: Cards for Gravity-2 flip testing and Gravity-4 shift testing
+        // Lane 0: Mix of face-up and face-down
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down for Gravity-2 flip
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 4, true));
+
+        // Lane 1: Face-down cards for Gravity-4 shift testing
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, false)); // Face-down - shiftable to Lane 1
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 3, true));
+
+        // Lane 2: Mixed cards
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 4, false)); // Face-down for Gravity-4
+
+        // Ensure opponent has cards in deck for Gravity-6 testing
+        newState.opponent.deck = [
+            createCard('Metal', 5, true),
+            createCard('Death', 4, true),
+            createCard('Light', 5, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
     }
 };
 
@@ -1672,4 +1961,8 @@ export const allScenarios: TestScenario[] = [
     scenario31_DarkCustPlayground,
     scenario32_ApathyCustomPlayground,
     scenario33_DeathCustomPlayground,
+    scenario34_WaterCustomPlayground,
+    scenario35_SpiritCustomPlayground,
+    scenario36_ChaosCustomPlayground,
+    scenario37_GravityCustomPlayground,
 ];

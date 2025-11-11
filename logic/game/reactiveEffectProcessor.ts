@@ -96,6 +96,12 @@ export function processReactiveEffects(
             }
         }
 
+        // CRITICAL: Spirit-3 fix - after_draw should only trigger for the card owner's draws
+        if (triggerType === 'after_draw' && context?.player && context.player !== owner) {
+            console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_draw - triggered by ${context.player}, but card owner is ${owner}`);
+            continue;
+        }
+
         const customCard = card as any;
         const matchingEffects = customCard.customEffects.topEffects.filter(
             (effect: any) => {

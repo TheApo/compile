@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { EffectDefinition, EffectActionType } from '../../types/customProtocol';
 import { v4 as uuidv4 } from 'uuid';
 import { DrawEffectEditor } from './EffectParameterEditors/DrawEffectEditor';
+import { RefreshEffectEditor } from './EffectParameterEditors/RefreshEffectEditor';
+import { MutualDrawEffectEditor } from './EffectParameterEditors/MutualDrawEffectEditor';
 import { FlipEffectEditor } from './EffectParameterEditors/FlipEffectEditor';
 import { ShiftEffectEditor } from './EffectParameterEditors/ShiftEffectEditor';
 import { DeleteEffectEditor } from './EffectParameterEditors/DeleteEffectEditor';
@@ -29,6 +31,10 @@ const createDefaultParams = (action: EffectActionType): any => {
     switch (action) {
         case 'draw':
             return { action: 'draw', count: 1, target: 'self', source: 'own_deck' };
+        case 'refresh':
+            return { action: 'refresh', target: 'self' };
+        case 'mutual_draw':
+            return { action: 'mutual_draw', count: 1 };
         case 'flip':
             return {
                 action: 'flip',
@@ -242,6 +248,10 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
         switch (effectToRender.params.action) {
             case 'draw':
                 return <DrawEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'refresh':
+                return <RefreshEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'mutual_draw':
+                return <MutualDrawEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'flip':
                 return <FlipEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'shift':

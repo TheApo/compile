@@ -42,6 +42,21 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 </select>
             </label>
 
+            {/* NEW: Scope selector for each_lane (Chaos-0: "In each line, flip 1 covered card") */}
+            {typeof params.count === 'number' && (
+                <label>
+                    Scope
+                    <select
+                        value={params.scope || 'any'}
+                        onChange={e => onChange({ ...params, scope: e.target.value as any })}
+                    >
+                        <option value="any">Any lane</option>
+                        <option value="this_lane">This lane only</option>
+                        <option value="each_lane">Each lane (Chaos-0: "In each line...")</option>
+                    </select>
+                </label>
+            )}
+
             <label>
                 <input
                     type="checkbox"
@@ -231,7 +246,17 @@ const generateFlipText = (params: FlipEffectParams): string => {
     }
 
     const cardWord = (params.count === 1) ? 'card' : 'cards';
-    let text = `${may} ${countText} ${targetDesc}${cardWord}.`;
+    let text = `${may} ${countText} ${targetDesc}${cardWord}`;
+
+    // NEW: Add scope text (Chaos-0: "In each line, flip 1 covered card")
+    if (params.scope === 'this_lane') {
+        text += ' in this line';
+    } else if (params.scope === 'each_lane') {
+        // Rephrase for "In each line, flip..." format
+        text = `In each line, ${may.toLowerCase()} ${countText} ${targetDesc}${cardWord}`;
+    }
+
+    text += '.';
 
     if (params.selfFlipAfter) {
         text += ' Then flip this card.';

@@ -210,19 +210,60 @@ export const advancePhase = (state: GameState): GameState => {
 };
 
 /**
+ * CENTRAL QUEUE HELPER: Automatically queue pending custom effects
+ * This ensures that multi-effect cards (like Chaos-1) always work correctly
+ * regardless of which resolver was used.
+ */
+function queuePendingCustomEffects(state: GameState): GameState {
+    const pendingEffects = (state as any)._pendingCustomEffects;
+    if (!pendingEffects || pendingEffects.effects.length === 0) {
+        return state; // No pending effects, nothing to do
+    }
+
+    console.log('[CENTRAL QUEUE] Found pending effects:', pendingEffects.effects.length);
+
+    const pendingAction: any = {
+        type: 'execute_remaining_custom_effects',
+        sourceCardId: pendingEffects.sourceCardId,
+        laneIndex: pendingEffects.laneIndex,
+        effects: pendingEffects.effects,
+        context: pendingEffects.context,
+        actor: pendingEffects.context.cardOwner,
+        selectedCardFromPreviousEffect: pendingEffects.selectedCardFromPreviousEffect,
+    };
+
+    // Queue the pending effects
+    const newState = {
+        ...state,
+        queuedActions: [
+            ...(state.queuedActions || []),
+            pendingAction
+        ]
+    };
+
+    // Clear from state after queueing
+    delete (newState as any)._pendingCustomEffects;
+    console.log('[CENTRAL QUEUE] Queued', pendingEffects.effects.length, 'pending effects');
+
+    return newState;
+}
+
+/**
  * Process only the queued actions without advancing phases.
  * Use this when you want to resolve queued effects but stay in the current phase.
  */
 export const processQueuedActions = (state: GameState): GameState => {
+    // CRITICAL: Check for pending custom effects FIRST before processing queue
+    let mutableState = queuePendingCustomEffects(state);
+
     // Check for a queued ACTION first.
-    if (!state.queuedActions || state.queuedActions.length === 0) {
-        return state;
+    if (!mutableState.queuedActions || mutableState.queuedActions.length === 0) {
+        return mutableState;
     }
 
-    console.log('[PROCESS QUEUE] Processing queue with', state.queuedActions.length, 'actions');
-    console.log('[PROCESS QUEUE] Action types:', state.queuedActions.map(a => a.type));
+    console.log('[PROCESS QUEUE] Processing queue with', mutableState.queuedActions.length, 'actions');
+    console.log('[PROCESS QUEUE] Action types:', mutableState.queuedActions.map(a => a.type));
 
-    let mutableState = { ...state };
     let queuedActions = [...mutableState.queuedActions];
 
     while (queuedActions.length > 0) {
@@ -241,6 +282,8 @@ export const processQueuedActions = (state: GameState): GameState => {
         }
 
         // --- Auto-resolving actions ---
+        // NOTE: "discard all" is now auto-executed in effectInterpreter.ts
+
         if (nextAction.type === 'flip_self_for_water_0') {
             console.log('[WATER-0 FLIP] Processing flip_self_for_water_0 in processQueuedActions');
             const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };

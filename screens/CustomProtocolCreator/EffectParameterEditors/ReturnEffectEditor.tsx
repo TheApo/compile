@@ -11,6 +11,8 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
     onChange,
 }) => {
     const owner = params.targetFilter?.owner || 'any';
+    const valueEquals = params.targetFilter?.valueEquals;
+    const selectLane = (params as any).selectLane || false;
 
     return (
         <div className="param-editor">
@@ -45,6 +47,66 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                 </select>
             </label>
 
+            <label>
+                <input
+                    type="checkbox"
+                    checked={selectLane}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, selectLane: true } as any);
+                        } else {
+                            const { selectLane, ...rest } = params as any;
+                            onChange(rest);
+                        }
+                    }}
+                />
+                Select lane first (Water-3: "in 1 line")
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={valueEquals !== undefined}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({
+                                ...params,
+                                targetFilter: {
+                                    ...params.targetFilter,
+                                    valueEquals: 2
+                                }
+                            });
+                        } else {
+                            const { valueEquals, ...rest } = params.targetFilter || {};
+                            onChange({
+                                ...params,
+                                targetFilter: rest
+                            });
+                        }
+                    }}
+                />
+                Filter by value
+            </label>
+
+            {valueEquals !== undefined && (
+                <label>
+                    Value to return
+                    <input
+                        type="number"
+                        min={0}
+                        max={6}
+                        value={valueEquals}
+                        onChange={e => onChange({
+                            ...params,
+                            targetFilter: {
+                                ...params.targetFilter,
+                                valueEquals: parseInt(e.target.value) || 0
+                            }
+                        })}
+                    />
+                </label>
+            )}
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {generateReturnText(params)}
             </div>
@@ -53,8 +115,11 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
 };
 
 const generateReturnText = (params: ReturnEffectParams): string => {
+    const selectLane = (params as any).selectLane || false;
+
     if (params.targetFilter?.valueEquals !== undefined) {
-        return `Return all value ${params.targetFilter.valueEquals} cards to hand.`;
+        const laneText = selectLane ? ' in 1 line' : '';
+        return `Return all cards with a value of ${params.targetFilter.valueEquals}${laneText}.`;
     }
 
     const countText = params.count === 'all' ? 'all cards' : params.count === 1 ? '1 card' : `${params.count} cards`;
@@ -62,10 +127,11 @@ const generateReturnText = (params: ReturnEffectParams): string => {
 
     let ownerText = '';
     if (owner === 'own') {
-        ownerText = ' of your own';
+        ownerText = ' of your';
     } else if (owner === 'opponent') {
         ownerText = " of opponent's";
     }
 
-    return `Return ${countText}${ownerText} to hand.`;
+    const laneText = selectLane ? ' in 1 line' : '';
+    return `Return ${countText}${ownerText}${laneText}.`;
 };

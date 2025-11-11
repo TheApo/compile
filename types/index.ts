@@ -427,6 +427,26 @@ export type ActionRequired = {
     type: 'speed_3_self_flip_after_shift';
     sourceCardId: string;
     actor: Player;
+} | {
+    // NEW: Generic flip action for custom protocols (flexible, supports scope: 'each_lane' via parameters)
+    type: 'select_card_to_flip';
+    sourceCardId: string;
+    actor: Player;
+    targetFilter?: any;
+    currentLaneIndex?: number;  // Optional: Restricts selection to this lane (scope: 'each_lane')
+    remainingLanes?: number[];  // Optional: Lanes to process after this one
+    params?: any;  // Store params for continuation
+    draws?: number;  // Optional: Draw cards after flip
+    followUpEffect?: any;  // Optional: Follow-up effect after flip
+} | {
+    // NEW: Generic shift action for custom protocols (flexible, supports scope: 'each_lane' via parameters)
+    type: 'select_card_to_shift';
+    sourceCardId: string;
+    actor: Player;
+    targetFilter?: any;
+    currentLaneIndex?: number;  // Optional: Restricts selection to this lane
+    remainingLanes?: number[];  // Optional: Lanes to process after this one
+    params?: any;
 } | null;
 
 export type AnimationState = 

@@ -41,15 +41,14 @@ export const resolveCustomChoice = (prevState: GameState, selectedOptionIndex: n
         opponent,
     };
 
+    // CRITICAL: Clear actionRequired BEFORE executing the effect
+    // Otherwise the old custom_choice stays in the state
+    let stateBeforeEffect = { ...prevState, actionRequired: null };
+
     // Execute the selected effect
     console.log(`[Choice Resolver] Executing option ${selectedOptionIndex}`);
-    const result = executeCustomEffect(sourceCardInfo.card, laneIndex, prevState, effectContext, selectedEffect);
+    const result = executeCustomEffect(sourceCardInfo.card, laneIndex, stateBeforeEffect, effectContext, selectedEffect);
     let newState = recalculateAllLaneValues(result.newState);
-
-    // If no actionRequired was set by the selected effect, clear it
-    if (!newState.actionRequired) {
-        newState.actionRequired = null;
-    }
 
     return newState;
 };

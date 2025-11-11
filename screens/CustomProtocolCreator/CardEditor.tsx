@@ -732,6 +732,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         <select id="top-action" defaultValue="">
                             <option value="">Choose Action</option>
                             <option value="draw">Draw Cards</option>
+                            <option value="refresh">Refresh Hand</option>
+                            <option value="mutual_draw">Mutual Draw (Exchange)</option>
                             <option value="flip">Flip Cards</option>
                             <option value="shift">Shift Card</option>
                             <option value="delete">Delete Cards</option>
@@ -797,6 +799,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     >
                         <option value="">+ Add Effect</option>
                         <option value="draw">Draw Cards</option>
+                        <option value="refresh">Refresh Hand</option>
                         <option value="flip">Flip Cards</option>
                         <option value="shift">Shift Card</option>
                         <option value="delete">Delete Cards</option>
@@ -843,6 +846,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         <select id="bottom-action">
                             <option value="">2. Choose Effect</option>
                             <option value="draw">Draw Cards</option>
+                            <option value="refresh">Refresh Hand</option>
+                            <option value="mutual_draw">Mutual Draw (Exchange)</option>
                             <option value="flip">Flip Cards</option>
                             <option value="shift">Shift Card</option>
                             <option value="delete">Delete Cards</option>

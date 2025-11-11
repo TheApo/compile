@@ -104,6 +104,33 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         return { nextState: prev }; // Block the illegal move
                     }
                 }
+
+                // NEW: Validation for 'to_or_from_this_lane' (Gravity-1 style)
+                if (destinationRestriction.type === 'to_or_from_this_lane') {
+                    // Resolve 'current' laneIndex to actual lane number
+                    const resolvedSourceLane = destinationRestriction.laneIndex === 'current' && sourceCard
+                        ? (() => {
+                            for (let i = 0; i < prev[sourceCard.owner].lanes.length; i++) {
+                                if (prev[sourceCard.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                                    return i;
+                                }
+                            }
+                            return -1;
+                        })()
+                        : destinationRestriction.laneIndex;
+
+                    if (resolvedSourceLane !== undefined && resolvedSourceLane !== -1) {
+                        // RULE: Either originalLaneIndex OR targetLaneIndex must be the specified lane
+                        const isFromSpecifiedLane = originalLaneIndex === resolvedSourceLane;
+                        const isToSpecifiedLane = targetLaneIndex === resolvedSourceLane;
+
+                        if (!isFromSpecifiedLane && !isToSpecifiedLane) {
+                            // ILLEGAL: Shifting between two lanes that are NOT the specified lane
+                            console.error(`Illegal shift: Must shift to or from lane ${resolvedSourceLane}, but tried ${originalLaneIndex} → ${targetLaneIndex}`);
+                            return { nextState: prev }; // Block the illegal move
+                        }
+                    }
+                }
             }
 
             // CRITICAL VALIDATION: Check for Frost-3 in SOURCE or DESTINATION lane
@@ -403,7 +430,22 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const cardToShiftId = prev.actionRequired.cardId;
             // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
             const actor = prev.actionRequired.actor;
-            const cardOwner: Player = actor === 'player' ? 'opponent' : 'player';
+
+            // CRITICAL: Find which player owns the card (Spirit-3 on player side, Darkness-1 on opponent side)
+            let cardOwner: Player | null = null;
+            for (const player of ['player', 'opponent'] as Player[]) {
+                if (prev[player].lanes.flat().some(c => c.id === cardToShiftId)) {
+                    cardOwner = player;
+                    break;
+                }
+            }
+
+            if (!cardOwner) {
+                console.error('[shift_flipped_card_optional] Card not found on board:', cardToShiftId);
+                newState = prev;
+                break;
+            }
+
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
             if (shiftResult.animationRequests) {
@@ -536,6 +578,72 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         stateAfterDelete = reactiveResult.newState;
 
                         return endTurnCb(stateAfterDelete);
+                    }
+                };
+            }
+            break;
+        }
+        case 'select_lane_for_return': {
+            // NEW: Generic lane selection for return with composable filters
+            // Used by Water_custom-3 and other custom cards that need lane-based return
+            const actor = prev.actionRequired.actor;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const opponent = actor === 'player' ? 'opponent' : 'player';
+            const targetProtocolName = prev.player.protocols[targetLaneIndex];
+            const targetFilter = (prev.actionRequired as any).targetFilter || {};
+            const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
+
+            newState = log(newState, actor, `${sourceCardName}: ${actorName} targets Protocol ${targetProtocolName}.`);
+
+            const cardsToReturn: AnimationRequest[] = [];
+            const returnedCardNames: string[] = [];
+
+            for (const p of ['player', 'opponent'] as Player[]) {
+                const playerState = prev[p];
+                const faceDownValueInLane = playerState.lanes[targetLaneIndex]
+                    .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
+
+                for (const card of playerState.lanes[targetLaneIndex]) {
+                    // Apply targetFilter to determine if card should be returned
+                    const value = card.isFaceUp ? card.value : faceDownValueInLane;
+
+                    // Check valueEquals filter (Water-3: return all value 2 cards)
+                    if (targetFilter.valueEquals !== undefined && value !== targetFilter.valueEquals) {
+                        continue;
+                    }
+
+                    // Check faceState filter
+                    if (targetFilter.faceState === 'face_up' && !card.isFaceUp) continue;
+                    if (targetFilter.faceState === 'face_down' && card.isFaceUp) continue;
+
+                    // Check owner filter
+                    if (targetFilter.owner === 'own' && p !== actor) continue;
+                    if (targetFilter.owner === 'opponent' && p === actor) continue;
+
+                    cardsToReturn.push({ type: 'return', cardId: card.id, owner: p });
+                    const ownerName = p === 'player' ? "Player's" : "Opponent's";
+                    const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
+                    returnedCardNames.push(`${ownerName} ${cardName}`);
+                }
+            }
+
+            if (cardsToReturn.length === 0) {
+                newState = log(newState, actor, `${sourceCardName}: No matching cards in Protocol ${targetProtocolName}.`);
+                newState.actionRequired = null;
+                break;
+            }
+
+            if (returnedCardNames.length > 0) {
+                newState = log(newState, actor, `${sourceCardName}: Returning ${returnedCardNames.join(', ')}.`);
+            }
+
+            newState.actionRequired = null;
+            if (cardsToReturn.length > 0) {
+                requiresAnimation = {
+                    animationRequests: cardsToReturn,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        return endTurnCb(s);
                     }
                 };
             }

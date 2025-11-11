@@ -1,0 +1,179 @@
+{
+  "id": "gravity_custom_1",
+  "name": "Gravity_custom",
+  "description": "Pull everything together. Gravity draws cards towards this line.",
+  "color": "#7599EB",
+  "pattern": "grid",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_0_play_per_2_cards",
+          "trigger": "on_play",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "under_this_card"
+            },
+            "condition": {
+              "type": "per_x_cards_in_line",
+              "cardCount": 2
+            },
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_1_draw_2",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        },
+        {
+          "id": "gravity_1_shift_to_or_from",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "to_or_from_this_lane",
+              "laneIndex": "current"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_2_flip",
+          "trigger": "on_play",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "optional": false
+          },
+          "position": "middle"
+        },
+        {
+          "id": "gravity_2_shift_to_this_line",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "to_this_lane",
+              "laneIndex": "current"
+            }
+          },
+          "position": "middle",
+          "useCardFromPreviousEffect": true
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_4_shift_face_down_to_this_line",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "face_down",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "to_this_lane",
+              "laneIndex": "current"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "gravity_6_opponent_plays",
+          "trigger": "on_play",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "specific_lane",
+              "laneIndex": "current"
+            },
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "comment": "Opponent plays top of their deck in this line"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

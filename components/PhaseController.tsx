@@ -26,6 +26,7 @@ interface PhaseControllerProps {
     onResolveSpirit1Prompt: (choice: 'discard' | 'flip') => void;
     onResolveSpirit3Prompt: (accept: boolean) => void;
     onResolveControlMechanicPrompt: (choice: 'player' | 'opponent' | 'skip') => void;
+    onResolveCustomChoice: (optionIndex: number) => void;
     selectedCardId: string | null;
     multiSelectedCardIds: string[];
     actionRequiredClass: string;
@@ -38,7 +39,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     onResolveSpeed3Prompt,
     onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
-    onResolveControlMechanicPrompt,
+    onResolveControlMechanicPrompt, onResolveCustomChoice,
     selectedCardId, multiSelectedCardIds, actionRequiredClass
 }) => {
     const { phase, turn, actionRequired, player, compilableLanes } = gameState;
@@ -156,7 +157,36 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                </>
            );
         }
-        
+
+        // NEW: Custom Choice effect (Spirit_custom-1: Either discard or flip)
+        if (actionRequired?.type === 'custom_choice') {
+            const options = (actionRequired as any).options || [];
+
+            if (options.length === 2) {
+                // Generate button labels from effect params
+                const option1Params = options[0].params;
+                const option2Params = options[1].params;
+
+                const getButtonLabel = (params: any): string => {
+                    if (params.action === 'discard') return `Discard ${params.count || 1}`;
+                    if (params.action === 'flip' && params.flipSelf) return 'Flip This Card';
+                    if (params.action === 'draw') return `Draw ${params.count || 1}`;
+                    return 'Option';
+                };
+
+                return (
+                   <>
+                       <button className="btn" onClick={() => onResolveCustomChoice(0)}>
+                           {getButtonLabel(option1Params)}
+                       </button>
+                       <button className="btn btn-back" onClick={() => onResolveCustomChoice(1)}>
+                           {getButtonLabel(option2Params)}
+                       </button>
+                   </>
+               );
+            }
+        }
+
         if (actionRequired?.type === 'prompt_return_for_psychic_4') {
              return (
                 <>
@@ -398,6 +428,24 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select your highest value uncovered card to delete';
                 case 'select_opponent_highest_card_to_delete_for_hate_2':
                     return 'Action: Select opponent\'s highest value uncovered card to delete';
+                case 'custom_choice': {
+                    // Generate descriptive text from choice options (Spirit_custom-1: "Either discard 1 card or flip this card.")
+                    const options = (actionRequired as any).options || [];
+                    if (options.length === 2) {
+                        const opt1 = options[0].params;
+                        const opt2 = options[1].params;
+
+                        const getOptionText = (params: any): string => {
+                            if (params.action === 'discard') return `you discard ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
+                            if (params.action === 'flip' && params.flipSelf) return 'flip this card';
+                            if (params.action === 'draw') return `draw ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
+                            return 'option';
+                        };
+
+                        return `Either ${getOptionText(opt1)} or ${getOptionText(opt2)}.`;
+                    }
+                    return 'Action: Make a choice';
+                }
                 default:
                     return 'Action Required';
             }

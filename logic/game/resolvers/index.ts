@@ -10,3 +10,4 @@ export * from './playResolver';
 export * from './promptResolver';
 export * from './miscResolver';
 export * from './handCardResolver';
+export * from './choiceResolver';

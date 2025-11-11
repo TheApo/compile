@@ -211,6 +211,28 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 delete (newState as any)._pendingCustomEffects;
             }
 
+            // NEW: Handle each_lane continuation (scope: 'each_lane' parameter)
+            const remainingLanes = (prev.actionRequired as any)?.remainingLanes;
+            if (remainingLanes && remainingLanes.length > 0 && !newState.actionRequired) {
+                // Continue with next lane
+                const nextLane = remainingLanes[0];
+                const newRemainingLanes = remainingLanes.slice(1);
+                const actionParams = (prev.actionRequired as any)?.params;
+                const actionSourceCardId = (prev.actionRequired as any)?.sourceCardId;
+                const actionActor = (prev.actionRequired as any)?.actor;
+                const actionTargetFilter = (prev.actionRequired as any)?.targetFilter;
+
+                newState.actionRequired = {
+                    type: 'select_card_to_flip',
+                    sourceCardId: actionSourceCardId,
+                    actor: actionActor,
+                    currentLaneIndex: nextLane,
+                    remainingLanes: newRemainingLanes,
+                    targetFilter: actionTargetFilter,  // CRITICAL: Pass targetFilter for targeting
+                    params: actionParams,
+                } as any;
+            }
+
             if(newState.actionRequired || (newState.queuedActions && newState.queuedActions.length > 0)) {
                 requiresTurnEnd = false;
             }
@@ -292,6 +314,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
                 if (originalLaneIndex !== -1) {
+                    // CRITICAL: If targetLaneIndex is specified (like Gravity-4 and custom 'to_this_lane'), shift directly!
+                    // No lane selection needed - destination is fixed
+                    const fixedTargetLane = (prev.actionRequired as any).targetLaneIndex;
+                    if (fixedTargetLane !== undefined) {
+                        // Execute shift immediately like Gravity-4
+                        const actor = prev.actionRequired.actor;
+                        const shiftResult = internalShiftCard(prev, targetCardId, cardOwner, fixedTargetLane, actor);
+                        newState = shiftResult.newState;
+                        requiresTurnEnd = !newState.actionRequired;
+                        break;
+                    }
+
+                    // No fixed destination - ask user to select lane
                     // FIX: Use actor from the current action, not prev.turn
                     // This is critical for interrupt scenarios (e.g., Psychic-3 uncovered during opponent's turn)
                     const nextAction: ActionRequired = {
@@ -625,7 +660,27 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                     // CRITICAL: Multi-step effects (like Hate-1) require the source to be UNCOVERED AND face-up
                     if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
-                        if (originalAction.type === 'select_cards_to_delete' && originalAction.count > 1) {
+                        // NEW: Handle each_lane continuation (scope: 'each_lane' parameter)
+                        const remainingLanes = (originalAction as any).remainingLanes;
+                        if (originalAction.type === 'select_cards_to_delete' && remainingLanes && remainingLanes.length > 0) {
+                            // Continue with next lane
+                            const nextLane = remainingLanes[0];
+                            const newRemainingLanes = remainingLanes.slice(1);
+
+                            nextStepOfDeleteAction = {
+                                type: 'select_cards_to_delete',
+                                count: (originalAction as any).params?.count || originalAction.count,  // Reset count for next lane
+                                sourceCardId: originalAction.sourceCardId,
+                                actor: originalAction.actor,
+                                currentLaneIndex: nextLane,
+                                remainingLanes: newRemainingLanes,
+                                disallowedIds: (originalAction as any).params?.excludeSelf ? [originalAction.sourceCardId] : [],
+                                targetFilter: (originalAction as any).targetFilter,
+                                scope: (originalAction as any).scope,
+                                protocolMatching: (originalAction as any).protocolMatching,
+                                params: (originalAction as any).params,
+                            } as any;
+                        } else if (originalAction.type === 'select_cards_to_delete' && originalAction.count > 1) {
                              nextStepOfDeleteAction = {
                                 type: 'select_cards_to_delete',
                                 count: originalAction.count - 1,

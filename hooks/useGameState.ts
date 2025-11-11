@@ -92,31 +92,88 @@ export const useGameState = (
 
             const [nextRequest, ...rest] = q;
 
-            setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
+            // Handle different animation types
+            if (nextRequest.type === 'delete') {
+                setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
 
-            setTimeout(() => {
-                setGameState(s => {
-                    const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
-                    const wasTopCard = laneIndex !== -1 &&
-                                       s[nextRequest.owner].lanes[laneIndex].length > 0 &&
-                                       s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
+                setTimeout(() => {
+                    setGameState(s => {
+                        const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
+                        const wasTopCard = laneIndex !== -1 &&
+                                           s[nextRequest.owner].lanes[laneIndex].length > 0 &&
+                                           s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
 
-                    let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
-                    stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
+                        let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
+                        stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
 
-                    // CRITICAL: Trigger uncover effect if the deleted card was a top card.
-                    // The processedUncoverEventIds mechanism prevents double-triggering if the resolver callback also calls handleUncoverEffect.
-                    // This is needed for direct deletes (e.g., AI actions) that don't have resolver callbacks.
-                    if (wasTopCard && laneIndex !== -1) {
-                        const uncoverResult = handleUncoverEffect(stateAfterDelete, nextRequest.owner, laneIndex);
-                        stateAfterDelete = uncoverResult.newState;
-                    }
+                        // CRITICAL: Trigger uncover effect if the deleted card was a top card.
+                        // The processedUncoverEventIds mechanism prevents double-triggering if the resolver callback also calls handleUncoverEffect.
+                        // This is needed for direct deletes (e.g., AI actions) that don't have resolver callbacks.
+                        if (wasTopCard && laneIndex !== -1) {
+                            const uncoverResult = handleUncoverEffect(stateAfterDelete, nextRequest.owner, laneIndex);
+                            stateAfterDelete = uncoverResult.newState;
+                        }
 
-                    // Clear animation and return state with potential uncover effects
-                    return { ...stateAfterDelete, animationState: null };
-                });
+                        // Clear animation and return state with potential uncover effects
+                        return { ...stateAfterDelete, animationState: null };
+                    });
 
-                // After animation completes, immediately process next or call onComplete
+                    // After animation completes, immediately process next or call onComplete
+                    setTimeout(() => {
+                        if (rest.length > 0) {
+                            processNext(rest);
+                        } else {
+                            onComplete();
+                        }
+                    }, 10);
+                }, 500); // Animation duration
+            } else if (nextRequest.type === 'return') {
+                // NEW: Handle return animation (Water_custom-3)
+                setGameState(s => ({ ...s, animationState: { type: 'returnCard', cardId: nextRequest.cardId, owner: nextRequest.owner } as any }));
+
+                setTimeout(() => {
+                    setGameState(s => {
+                        const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
+                        const wasTopCard = laneIndex !== -1 &&
+                                           s[nextRequest.owner].lanes[laneIndex].length > 0 &&
+                                           s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
+
+                        // Find and remove card from board, add to hand
+                        const card = s[nextRequest.owner].lanes.flat().find(c => c.id === nextRequest.cardId);
+                        if (!card) {
+                            return { ...s, animationState: null };
+                        }
+
+                        const newLanes = s[nextRequest.owner].lanes.map(lane => lane.filter(c => c.id !== nextRequest.cardId));
+                        let stateAfterReturn = {
+                            ...s,
+                            [nextRequest.owner]: {
+                                ...s[nextRequest.owner],
+                                lanes: newLanes,
+                                hand: [...s[nextRequest.owner].hand, card]
+                            }
+                        };
+                        stateAfterReturn = stateManager.recalculateAllLaneValues(stateAfterReturn);
+
+                        // CRITICAL: Trigger uncover effect if the returned card was a top card
+                        if (wasTopCard && laneIndex !== -1 && stateAfterReturn[nextRequest.owner].lanes[laneIndex].length > 0) {
+                            const uncoverResult = handleUncoverEffect(stateAfterReturn, nextRequest.owner, laneIndex);
+                            stateAfterReturn = uncoverResult.newState;
+                        }
+
+                        return { ...stateAfterReturn, animationState: null };
+                    });
+
+                    setTimeout(() => {
+                        if (rest.length > 0) {
+                            processNext(rest);
+                        } else {
+                            onComplete();
+                        }
+                    }, 10);
+                }, 500);
+            } else {
+                // Skip unknown animation types
                 setTimeout(() => {
                     if (rest.length > 0) {
                         processNext(rest);
@@ -124,7 +181,7 @@ export const useGameState = (
                         onComplete();
                     }
                 }, 10);
-            }, 500); // Animation duration
+            }
         };
 
         processNext(queue);
@@ -594,6 +651,17 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
+    const resolveCustomChoice = useCallback((optionIndex: number) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveCustomChoice(prev, optionIndex);
+            if (nextState.actionRequired) {
+                return nextState;
+            }
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
     const resolveSwapProtocols = useCallback((indices: [number, number]) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
@@ -1023,7 +1091,7 @@ export const useGameState = (
         resolvePlague4Flip, resolveFire3Prompt, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
         resolveRearrangeProtocols, resolveSpeed3Prompt, resolveOptionalDrawPrompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
-        resolveControlMechanicPrompt,
+        resolveControlMechanicPrompt, resolveCustomChoice,
         setupTestScenario,
     };
 };
