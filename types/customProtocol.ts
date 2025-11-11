@@ -197,8 +197,8 @@ export interface PlayEffectParams {
     };
     // NEW: Conditional play
     condition?: {
-        type: 'per_x_cards_in_line' | 'only_in_lines_with_cards';
-        cardCount?: number;  // For 'per_x_cards_in_line' (e.g., 2 for "every 2 cards")
+        type: 'per_x_cards_in_line' | 'only_in_lines_with_cards' | 'per_x_face_down_cards';
+        cardCount?: number;  // For 'per_x_cards_in_line' and 'per_x_face_down_cards' (e.g., 2 for "every 2 cards")
     };
     actor?: 'self' | 'opponent';  // Who plays (default: self)
 }
@@ -258,8 +258,9 @@ export interface PassiveRuleParams {
             | 'require_non_matching_protocol' // Anarchy-1: Can only play non-matching
             | 'block_flips'                  // Frost-1: Cards can't be flipped face-up
             | 'block_protocol_rearrange'     // Frost-1: Protocols can't be rearranged
-            | 'block_shifts_from_lane'       // Frost-3: Can't shift FROM this lane
-            | 'block_shifts_to_lane'         // Frost-3: Can't shift TO this lane
+            | 'block_shifts_from_lane'       // Can't shift FROM this lane
+            | 'block_shifts_to_lane'         // Can't shift TO this lane
+            | 'block_shifts_from_and_to_lane' // Frost-3: Can't shift FROM or TO this lane
             | 'ignore_middle_commands'       // Apathy-2: Ignore middle effects in this lane
             | 'skip_check_cache_phase';      // Spirit-0: Skip check cache phase
         target: 'self' | 'opponent' | 'all';  // Who is affected
@@ -355,7 +356,8 @@ export type CardPattern =
     | 'vertical-lines'
     | 'cross'
     | 'hexagons'
-    | 'stripes';
+    | 'stripes'
+    | 'frost';
 
 /**
  * Custom Protocol Definition - Complete protocol set (6 cards)

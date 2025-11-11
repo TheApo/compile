@@ -20,25 +20,24 @@ interface PassiveRule {
 }
 
 /**
- * Get all active passive rules from face-up custom cards
+ * Get all active passive rules from face-up custom cards AND original cards
  */
 export function getActivePassiveRules(state: GameState): PassiveRule[] {
     const rules: PassiveRule[] = [];
 
     for (const player of ['player', 'opponent'] as Player[]) {
         state[player].lanes.forEach((lane, laneIndex) => {
-            lane.forEach(card => {
+            lane.forEach((card, cardIndex) => {
                 if (card.isFaceUp) {
                     const customCard = card as any;
-                    if (customCard.customEffects) {
-                        // Check all three boxes for passive rules
-                        const allEffects = [
-                            ...(customCard.customEffects.topEffects || []),
-                            ...(customCard.customEffects.middleEffects || []),
-                            ...(customCard.customEffects.bottomEffects || [])
-                        ];
 
-                        allEffects.forEach((effect: any) => {
+                    // Check custom protocol cards
+                    if (customCard.customEffects) {
+                        const isUncovered = cardIndex === lane.length - 1;
+
+                        // Top effects: ALWAYS active when face-up (even if covered)
+                        const topEffects = customCard.customEffects.topEffects || [];
+                        topEffects.forEach((effect: any) => {
                             if (effect.params.action === 'passive_rule' && effect.trigger === 'passive') {
                                 rules.push({
                                     rule: effect.params.rule,
@@ -46,6 +45,62 @@ export function getActivePassiveRules(state: GameState): PassiveRule[] {
                                     laneIndex
                                 });
                             }
+                        });
+
+                        // Middle effects: ALWAYS active when face-up (even if covered)
+                        const middleEffects = customCard.customEffects.middleEffects || [];
+                        middleEffects.forEach((effect: any) => {
+                            if (effect.params.action === 'passive_rule' && effect.trigger === 'passive') {
+                                rules.push({
+                                    rule: effect.params.rule,
+                                    cardOwner: player,
+                                    laneIndex
+                                });
+                            }
+                        });
+
+                        // Bottom effects: ONLY active when face-up AND uncovered (top card in stack)
+                        if (isUncovered) {
+                            const bottomEffects = customCard.customEffects.bottomEffects || [];
+                            bottomEffects.forEach((effect: any) => {
+                                if (effect.params.action === 'passive_rule' && effect.trigger === 'passive') {
+                                    rules.push({
+                                        rule: effect.params.rule,
+                                        cardOwner: player,
+                                        laneIndex
+                                    });
+                                }
+                            });
+                        }
+                    }
+
+                    // BRIDGE: Handle original Frost-1 until it's migrated to custom protocol
+                    if (card.protocol === 'Frost' && card.value === 1) {
+                        // Top effect: block_flips (ALWAYS active when face-up, even if covered)
+                        rules.push({
+                            rule: { type: 'block_flips', target: 'all', scope: 'global' },
+                            cardOwner: player,
+                            laneIndex
+                        });
+
+                        // Bottom effect: block_protocol_rearrange (ONLY when uncovered)
+                        const isUncovered = cardIndex === lane.length - 1;
+                        if (isUncovered) {
+                            rules.push({
+                                rule: { type: 'block_protocol_rearrange', target: 'all', scope: 'global' },
+                                cardOwner: player,
+                                laneIndex
+                            });
+                        }
+                    }
+
+                    // BRIDGE: Handle original Frost-3 until it's migrated to custom protocol
+                    if (card.protocol === 'Frost' && card.value === 3) {
+                        // Top effect: block shifts from and to this lane (ALWAYS active when face-up, even if covered)
+                        rules.push({
+                            rule: { type: 'block_shifts_from_and_to_lane', target: 'all', scope: 'this_lane' },
+                            cardOwner: player,
+                            laneIndex
                         });
                     }
                 }
@@ -194,6 +249,16 @@ export function canShiftCard(
             const appliesToLane = rule.scope === 'global' || true; // TO is always specific lane
             if (appliesToLane) {
                 return { allowed: false, reason: `Cards cannot shift to this lane (passive rule)` };
+            }
+        }
+
+        // NEW: Frost-3 and Frost_custom-3: block shifts FROM AND TO this lane
+        if (rule.type === 'block_shifts_from_and_to_lane') {
+            const blocksFrom = ruleLaneIndex === fromLaneIndex;
+            const blocksTo = ruleLaneIndex === toLaneIndex;
+
+            if (blocksFrom || blocksTo) {
+                return { allowed: false, reason: `Cards cannot shift from or to this lane (passive rule)` };
             }
         }
     }

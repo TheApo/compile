@@ -38,6 +38,12 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // NEW: Handle countType (Frost-0: count_face_down)
+            if (params.countType === 'count_face_down') {
+                mainText = 'Draw 1 card for each face-down card.';
+                break;
+            }
+
             if (params.conditional) {
                 switch (params.conditional.type) {
                     case 'count_face_down':
@@ -430,17 +436,26 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             const actor = params.actor;
-            const cardWord = params.count === 1 ? 'card' : 'cards';
+            const count = params.count || 1;
             const faceState = params.faceDown ? 'face-down' : 'face-up';
 
             let actorText = '';
-            let source = '';
+            let cardPart = '';
+
             if (actor === 'opponent') {
                 actorText = 'Your opponent plays';
-                source = params.source === 'deck' ? 'the top card of their deck' : 'from their hand';
+                if (params.source === 'deck') {
+                    cardPart = count === 1 ? 'the top card of their deck' : `${count} cards from their deck`;
+                } else {
+                    cardPart = count === 1 ? 'a card from their hand' : `${count} cards from their hand`;
+                }
             } else {
                 actorText = 'Play';
-                source = params.source === 'deck' ? 'the top card of your deck' : 'from your hand';
+                if (params.source === 'deck') {
+                    cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
+                } else {
+                    cardPart = count === 1 ? 'a card from your hand' : `${count} cards from your hand`;
+                }
             }
 
             // NEW: Handle conditional play prefix (Gravity-0)
@@ -452,7 +467,7 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 actorText = actorText.toLowerCase();
             }
 
-            let text = `${conditionalPrefix}${actorText} ${source} ${faceState}`;
+            let text = `${conditionalPrefix}${actorText} ${cardPart} ${faceState}`;
 
             if (params.destinationRule?.type === 'other_lines') {
                 text += ' to other lines';
@@ -582,7 +597,8 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                     mainText = 'You may play cards without matching protocols.';
                     break;
                 case 'block_flips':
-                    mainText = "Cards can't be flipped face-up in this line.";
+                    // Frost-1: scope is global, so no "in this line"
+                    mainText = rule.scope === 'global' ? "Cards cannot be flipped face-up." : "Cards can't be flipped face-up in this line.";
                     break;
                 case 'block_protocol_rearrange':
                     mainText = "Protocols can't be rearranged.";
@@ -592,6 +608,9 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                     break;
                 case 'block_shifts_to_lane':
                     mainText = "Cards can't shift to this line.";
+                    break;
+                case 'block_shifts_from_and_to_lane':
+                    mainText = "Cards cannot shift from or to this line.";
                     break;
                 case 'skip_check_cache_phase':
                     mainText = 'Skip check cache phase.';

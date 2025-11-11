@@ -502,7 +502,7 @@
         radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
         linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
         linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px) !important;
-    background-size: 100% 100%, 20px 20px, 20px 20px !important;
+    background-size: auto, 20px 20px, 20px 20px !important;
 }
 
 /* Pattern: Diagonal Lines */
@@ -553,6 +553,15 @@
     background-image:
         radial-gradient(at 50% 100%, color-mix(in srgb, var(--card-custom-color) 25%, transparent), transparent 60%),
         linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%) !important;
+}
+
+/* Pattern: Frost */
+.card-component.card-pattern-frost .card-front {
+    background-image:
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 9px) !important;
 }
 
 /* --- Protocol Selection Card Styles (Protocol Grid) --- */

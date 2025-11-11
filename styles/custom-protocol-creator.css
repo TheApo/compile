@@ -431,7 +431,7 @@
 }
 
 /* Pattern Step */
-.pattern-grid {
+.pattern-selection-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
@@ -606,7 +606,7 @@
         radial-gradient(circle at 50% 50%, var(--custom-color-alpha-20) 0%, transparent 40%),
         linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
         linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px) !important;
-    background-size: 100% 100%, 20px 20px, 20px 20px !important;
+    background-size: auto, 20px 20px, 20px 20px !important;
 }
 
 .card-custom-preview.pattern-diagonal-lines .card-front {
@@ -650,6 +650,14 @@
     background-image:
         radial-gradient(at 50% 100%, var(--custom-color-alpha-25), transparent 60%),
         linear-gradient(135deg, hsla(0,0%,0%,0.1) 23%, transparent 23%, transparent 25%, hsla(0,0%,0%,0.1) 25%, hsla(0,0%,0%,0.1) 27%, transparent 27%, transparent 73%, hsla(0,0%,0%,0.1) 73%, hsla(0,0%,0%,0.1) 75%, transparent 75%, transparent 77%, hsla(0,0%,0%,0.1) 77%) !important;
+}
+
+.card-custom-preview.pattern-frost .card-front {
+    background-image:
+        radial-gradient(circle at 50% 50%, var(--custom-color-alpha-20) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, var(--custom-color-alpha-08) 10px, var(--custom-color-alpha-08) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, var(--custom-color-alpha-08) 10px, var(--custom-color-alpha-08) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, var(--custom-color-alpha-05) 8px, var(--custom-color-alpha-05) 9px) !important;
 }
 
 .card-effects-editor {
@@ -1216,7 +1224,7 @@
         gap: 1rem;
     }
 
-    .pattern-grid {
+    .pattern-selection-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
 
@@ -1236,7 +1244,7 @@
         grid-template-columns: 1fr;
     }
 
-    .pattern-grid {
+    .pattern-selection-grid {
         grid-template-columns: 1fr;
     }
 

@@ -5,21 +5,19 @@
 
 import { GameState, PlayedCard, Player } from "../types";
 import { findAllHighestUncoveredCards } from "../logic/game/helpers/actionUtils";
+import { isFrost1Active } from "../logic/effects/common/frost1Check";
+import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
 
 /**
- * Helper: Check if Frost-3 is in a lane (blocks shifts to/from that LINE)
- * "Cards cannot shift from or to this line" - affects BOTH sides of the lane (player AND opponent)
+ * GENERIC: Check if there's an active shift-blocking rule in a lane.
+ * Works for ANY custom protocol with block_shifts_from_and_to_lane rule (e.g., Frost-3, Frost_custom-3, future cards).
  * Top-Box effects are ALWAYS active when card is face-up, even if covered!
  */
 const hasFrost3InLane = (gameState: GameState, laneIndex: number): boolean => {
-    // Check BOTH sides of the lane (player and opponent)
-    const playerHasFrost3 = gameState.player.lanes[laneIndex].some(card =>
-        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
+    const rules = getActivePassiveRules(gameState);
+    return rules.some(({ rule, laneIndex: ruleLaneIndex }) =>
+        rule.type === 'block_shifts_from_and_to_lane' && ruleLaneIndex === laneIndex
     );
-    const opponentHasFrost3 = gameState.opponent.lanes[laneIndex].some(card =>
-        card.isFaceUp && card.protocol === 'Frost' && card.value === 3
-    );
-    return playerHasFrost3 || opponentHasFrost3;
 };
 
 export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolean => {
@@ -56,8 +54,11 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
     const isUncovered = card.id === lane[lane.length - 1]?.id;
 
     switch (actionRequired.type) {
-        case 'select_opponent_face_up_card_to_flip':
+        case 'select_opponent_face_up_card_to_flip': {
+            // Frost-1: Only face-up cards can be flipped (to face-down) - already face-up so OK
+            // This case only targets face-up cards, so Frost-1 doesn't restrict it further
             return owner === 'opponent' && card.isFaceUp && isUncovered;
+        }
 
         case 'select_card_to_flip': {
             // Generic flip for custom protocols (supports scope: 'each_lane' via currentLaneIndex parameter)
@@ -110,13 +111,21 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
         case 'select_covered_card_in_line_to_flip_optional': { // Darkness-2
             const cardIndex = lane.findIndex(c => c.id === card.id);
+            const isCovered = cardIndex < lane.length - 1;
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             // Card must be in the correct lane, and must be covered (not the last card in its stack).
-            return laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
+            return laneIndex === actionRequired.laneIndex && isCovered;
         }
         case 'select_covered_card_to_flip_for_chaos_0': { // Chaos-0
             const cardIndex = lane.findIndex(c => c.id === card.id);
+            const isCovered = cardIndex < lane.length - 1;
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             // Card must be in the current lane being processed, and must be covered
-            return laneIndex === actionRequired.laneIndex && cardIndex < lane.length - 1;
+            return laneIndex === actionRequired.laneIndex && isCovered;
         }
 
         // Rule: Keywords like "that card" override the default.
@@ -126,8 +135,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return card.id === actionRequired.cardId;
 
         // Default targeting rules apply to the following:
-        case 'select_opponent_card_to_flip': // Darkness-1
+        case 'select_opponent_card_to_flip': { // Darkness-1
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return owner === 'opponent' && isUncovered;
+        }
         case 'select_face_down_card_to_shift_for_darkness_4': // Darkness-4
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
@@ -202,8 +215,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             }
             return false;
         }
-        case 'select_any_other_card_to_flip':
+        case 'select_any_other_card_to_flip': {
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return card.id !== actionRequired.sourceCardId && isUncovered;
+        }
         case 'select_card_to_return': {
             // Check if owner filter is specified (for custom protocols)
             const targetOwner = (actionRequired as any).targetOwner || 'any';
@@ -218,31 +235,51 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Default: any card (own or opponent)
             return isUncovered;
         }
-        case 'select_card_to_flip_for_fire_3':
+        case 'select_card_to_flip_for_fire_3': {
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return isUncovered;
+        }
         case 'select_card_to_shift_for_gravity_1':
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
-        case 'select_card_to_flip_and_shift_for_gravity_2':
+        case 'select_card_to_flip_and_shift_for_gravity_2': {
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return isUncovered;
+        }
         case 'select_face_down_card_to_shift_for_gravity_4':
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return !card.isFaceUp && laneIndex !== actionRequired.targetLaneIndex && isUncovered;
         case 'select_any_card_to_flip':
-        case 'select_any_card_to_flip_optional':
+        case 'select_any_card_to_flip_optional': {
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return isUncovered;
+        }
         case 'select_any_face_down_card_to_flip_optional':
             return !card.isFaceUp && isUncovered;
-        case 'select_card_to_flip_for_light_0':
+        case 'select_card_to_flip_for_light_0': {
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return isUncovered;
+        }
         case 'select_face_down_card_to_reveal_for_light_2':
             return !card.isFaceUp && isUncovered;
-        case 'select_any_other_card_to_flip_for_water_0':
+        case 'select_any_other_card_to_flip_for_water_0': {
+            // Frost-1: Only face-up cards can be flipped (to face-down)
+            const frost1Active = isFrost1Active(gameState);
+            if (frost1Active && !card.isFaceUp) return false;
             return card.id !== actionRequired.sourceCardId && isUncovered;
+        }
         case 'select_own_card_to_return_for_water_4':
             return owner === actionRequired.actor && isUncovered;
         case 'select_own_other_card_to_shift': // Speed-3 Middle

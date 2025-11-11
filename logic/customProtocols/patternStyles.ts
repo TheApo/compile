@@ -130,6 +130,17 @@ export const getPatternStyle = (pattern: CardPattern, color: string): React.CSSP
                 `,
             };
 
+        case 'frost':
+            return {
+                borderColor: color,
+                backgroundImage: `
+                    radial-gradient(circle at 50% 50%, ${addAlpha(color, 0.2)} 0%, transparent 50%),
+                    repeating-linear-gradient(30deg, transparent, transparent 10px, ${addAlpha(color, 0.08)} 10px, ${addAlpha(color, 0.08)} 11px),
+                    repeating-linear-gradient(-30deg, transparent, transparent 10px, ${addAlpha(color, 0.08)} 10px, ${addAlpha(color, 0.08)} 11px),
+                    repeating-linear-gradient(90deg, transparent, transparent 8px, ${addAlpha(color, 0.05)} 8px, ${addAlpha(color, 0.05)} 9px)
+                `,
+            };
+
         default:
             return { borderColor: color };
     }

@@ -8,7 +8,7 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
-import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface GameBoardProps {
@@ -133,14 +133,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const getLaneShiftTargetability = (targetLaneIndex: number, targetOwner: Player): boolean => {
         if (!actionRequired || actionRequired.actor !== 'player') return false;
 
-        // RULE: Frost-3 blocks shifts to/from its LINE (entire vertical column, both players)
-        // Top-Box effect is ALWAYS active when card is face-up, even if covered!
-        const hasFrost3InLine =
-            gameState.player.lanes[targetLaneIndex].some(card => card.isFaceUp && card.protocol === 'Frost' && card.value === 3) ||
-            gameState.opponent.lanes[targetLaneIndex].some(card => card.isFaceUp && card.protocol === 'Frost' && card.value === 3);
+        // RULE: Check passive rules for shift restrictions (Frost-3, custom protocols with block_shifts rules)
+        // This is needed for UI highlighting - check if shift TO this lane is allowed
+        // We use originalLaneIndex as FROM and targetLaneIndex as TO
+        const originalLaneIndex = actionRequired.type === 'select_lane_for_shift' ? actionRequired.originalLaneIndex :
+                                  actionRequired.type === 'select_card_to_shift' ? -1 : -1; // -1 = unknown/not applicable
 
-        if (hasFrost3InLine) {
-            return false; // Cannot shift to line with Frost-3
+        if (originalLaneIndex !== -1) {
+            const shiftCheck = canShiftCard(gameState, originalLaneIndex, targetLaneIndex);
+            if (!shiftCheck.allowed) {
+                return false; // Shift is blocked by passive rule
+            }
         }
 
         switch (actionRequired.type) {

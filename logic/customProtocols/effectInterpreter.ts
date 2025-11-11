@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard } from '../game/helpers/actionUtils';
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
-import { isFrost1Active } from '../effects/common/frost1Check';
+import { isFrost1Active, isFrost1BottomActive } from '../effects/common/frost1Check';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -329,10 +329,15 @@ function executeDrawEffect(
             }
 
             case 'count_face_down': {
-                // Count face-down cards in current lane
-                const lane = state[cardOwner].lanes[laneIndex];
-                dynamicCount = lane.filter(c => !c.isFaceUp).length;
-                console.log(`[Draw Effect] count_face_down: ${dynamicCount} face-down cards in lane`);
+                // Count ALL face-down cards on the entire board (both players, all lanes)
+                let totalFaceDown = 0;
+                for (const player of ['player', 'opponent'] as Player[]) {
+                    for (const lane of state[player].lanes) {
+                        totalFaceDown += lane.filter(c => !c.isFaceUp).length;
+                    }
+                }
+                dynamicCount = totalFaceDown;
+                console.log(`[Draw Effect] count_face_down: ${dynamicCount} face-down cards on entire board`);
                 break;
             }
 
@@ -405,6 +410,20 @@ function executeDrawEffect(
             count = (context as any).previousHandSize || context.handSize || 0;
             console.log(`[Draw Effect] Using previous hand size: ${count}`);
             break;
+
+        case 'count_face_down': {
+            // Frost_custom-0: "Draw 1 card for each face-down card"
+            // Count ALL face-down cards on the entire board (both players, all lanes)
+            let totalFaceDown = 0;
+            for (const player of ['player', 'opponent'] as Player[]) {
+                for (const lane of state[player].lanes) {
+                    totalFaceDown += lane.filter(c => !c.isFaceUp).length;
+                }
+            }
+            count = totalFaceDown * (params.count || 1);
+            console.log(`[Draw Effect] count_face_down: ${totalFaceDown} face-down cards on board, drawing ${count} cards`);
+            break;
+        }
 
         case 'fixed':
         default:
@@ -617,6 +636,9 @@ function executeFlipEffect(
         const opponent = cardOwner === 'player' ? 'opponent' : 'player';
         const targetFilter = params.targetFilter || {};
 
+        // CRITICAL: Check Frost-1 restriction
+        const frost1Active = isFrost1Active(state);
+
         const cardsToFlip = new Set<string>();
 
         // Collect cards from player's side of the lane
@@ -629,6 +651,8 @@ function executeFlipEffect(
             if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
             // Check owner
             if (targetFilter.owner === 'opponent') continue; // Skip own cards if only opponent wanted
+            // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
+            if (frost1Active && !c.isFaceUp) continue;
 
             cardsToFlip.add(c.id);
         }
@@ -641,6 +665,8 @@ function executeFlipEffect(
             if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
             // Check owner
             if (targetFilter.owner === 'own') continue; // Skip opponent cards if only own wanted
+            // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
+            if (frost1Active && !c.isFaceUp) continue;
 
             cardsToFlip.add(c.id);
         }
@@ -673,6 +699,9 @@ function executeFlipEffect(
     // Only if explicitly set to 'any' or 'covered' should covered cards be included
     const position = targetFilter.position || 'uncovered';
 
+    // CRITICAL: Check Frost-1 restriction (Cards cannot be flipped face-up)
+    const frost1Active = isFrost1Active(state);
+
     // CRITICAL: Check if there are any valid targets before setting actionRequired
     // This prevents softlocks when no valid targets exist
     const validTargets: string[] = [];
@@ -698,6 +727,9 @@ function executeFlipEffect(
                 // Check faceState
                 if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
                 if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
+                // CRITICAL: Frost-1 restriction - only face-up cards can be flipped (to become face-down)
+                // Face-down cards cannot be flipped because they would become face-up (blocked)
+                if (frost1Active && !c.isFaceUp) continue;
 
                 validTargets.push(c.id);
             }
@@ -1568,6 +1600,13 @@ function executeProtocolEffect(
     const targetPlayer = targetParam === 'opponent' ? opponent : cardOwner;
     // Actor is always the card owner (who performs the action)
     const actingPlayer = cardOwner;
+
+    // CRITICAL: Check if Frost-1 Bottom effect is active (Protocols cannot be rearranged)
+    const frost1BottomActive = isFrost1BottomActive(state);
+    if (frost1BottomActive && action === 'rearrange_protocols') {
+        let newState = log(state, cardOwner, `Protocols cannot be rearranged (Frost-1 bottom effect is active).`);
+        return { newState };
+    }
 
     let newState = log(state, cardOwner, `[Custom Protocol effect - ${action} for ${targetPlayer}]`);
 

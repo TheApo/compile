@@ -154,6 +154,18 @@ const getPatternPreviewStyle = (pattern: CardPattern, color: string): React.CSSP
                 `,
             };
 
+        case 'frost':
+            return {
+                ...baseStyle,
+                backgroundColor: 'var(--surface-color)',
+                backgroundImage: `
+                    radial-gradient(circle at 50% 50%, ${colorToRGBA(color, 0.2)} 0%, transparent 50%),
+                    repeating-linear-gradient(30deg, transparent, transparent 10px, ${colorToRGBA(color, 0.08)} 10px, ${colorToRGBA(color, 0.08)} 11px),
+                    repeating-linear-gradient(-30deg, transparent, transparent 10px, ${colorToRGBA(color, 0.08)} 10px, ${colorToRGBA(color, 0.08)} 11px),
+                    repeating-linear-gradient(90deg, transparent, transparent 8px, ${colorToRGBA(color, 0.05)} 8px, ${colorToRGBA(color, 0.05)} 9px)
+                `,
+            };
+
         default:
             return baseStyle;
     }
@@ -203,6 +215,7 @@ const CARD_PATTERNS = [
     { name: 'Cross Pattern', value: 'cross', description: 'Cross/plus pattern' },
     { name: 'Hexagons', value: 'hexagons', description: 'Hexagon pattern' },
     { name: 'Stripes', value: 'stripes', description: 'Diagonal stripe pattern' },
+    { name: 'Frost', value: 'frost', description: 'Icy crystalline pattern with crossing lines' },
 ];
 
 export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel, onDelete, initialProtocol }) => {
@@ -449,7 +462,7 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                     <div className="wizard-step pattern-step">
                         <h3>Step 3: Choose Card Pattern</h3>
 
-                        <div className="pattern-grid">
+                        <div className="pattern-selection-grid">
                             {CARD_PATTERNS.map(pattern => {
                                 const previewStyle = getPatternPreviewStyle(pattern.value, protocolColor);
                                 return (

@@ -1,0 +1,132 @@
+{
+  "id": "frost_custom_1",
+  "name": "Frost_custom",
+  "description": "Freeze the game state. Frost blocks actions and preserves face-down cards.",
+  "color": "#87CEEB",
+  "pattern": "frost",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "frost_0_draw_per_face_down",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "source": "own_deck",
+            "target": "self",
+            "countType": "count_face_down"
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "frost_1_block_flips",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_flips",
+              "target": "all",
+              "scope": "global"
+            }
+          }
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "frost_1_block_rearrange",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_protocol_rearrange",
+              "target": "all",
+              "scope": "global"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "frost_2_play_face_down",
+          "trigger": "on_play",
+          "params": {
+            "action": "play",
+            "count": 1,
+            "source": "hand",
+            "faceDown": true
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [
+        {
+          "id": "frost_3_block_shifts",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_shifts_from_and_to_lane",
+              "target": "all",
+              "scope": "this_lane"
+            }
+          }
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "frost_4_flip_covered",
+          "trigger": "on_play",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "own",
+              "faceState": "face_up",
+              "position": "covered"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "frost_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "target": "self"
+          }
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

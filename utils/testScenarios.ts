@@ -1927,6 +1927,63 @@ export const scenario37_GravityCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 38: Frost_custom Playground
+ *
+ * Test all Frost_custom cards
+ */
+export const scenario38_FrostCustomPlayground: TestScenario = {
+    name: "Frost_custom Test Playground",
+    description: "🆕 All Frost_custom cards on hand - pull everything together",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Frost_custom', 'Water'],
+            ['Metal', 'Death', 'Light'],
+            'player',
+            'action'
+        );
+
+        // Player: All Frost_custom cards in hand
+        newState.player.hand = [
+            createCard('Frost_custom', 0, true),
+            createCard('Frost_custom', 1, true),
+            createCard('Frost_custom', 2, true),
+            createCard('Frost_custom', 3, true),
+            createCard('Frost_custom', 4, true),
+            createCard('Frost_custom', 5, true),
+        ];
+
+        // Player Lane 0: Cards for shift testing
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 1, true));
+
+        // Player Lane 2: Cards for shift testing
+        newState = placeCard(newState, 'player', 2, createCard('Water', 2, false)); // Face-down
+
+        // Opponent: Cards for flip testing and shift testing
+        // Lane 0: Mix of face-up and face-down
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 4, true));
+
+        // Lane 1: Face-down cards for shift testing
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, false)); // Face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 3, true));
+
+        // Lane 2: Mixed cards
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 4, false)); // Face-down
+
+        // Ensure opponent has cards in deck
+        newState.opponent.deck = [
+            createCard('Metal', 5, true),
+            createCard('Death', 4, true),
+            createCard('Light', 5, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -1965,4 +2022,5 @@ export const allScenarios: TestScenario[] = [
     scenario35_SpiritCustomPlayground,
     scenario36_ChaosCustomPlayground,
     scenario37_GravityCustomPlayground,
+    scenario38_FrostCustomPlayground,
 ];

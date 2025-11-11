@@ -4,42 +4,28 @@
  */
 
 import { GameState } from "../../../types";
+import { getActivePassiveRules } from "../../game/passiveRuleChecker";
 
 /**
- * Checks if Frost-1's TOP effect is active on the board.
- * Frost-1 Top Effect: "Cards cannot be flipped face-up."
+ * GENERIC: Checks if any card has an active "block_flips" passive rule.
+ * This replaces hardcoded Frost-1 checks with generic passive rule logic.
+ * Works for ANY custom protocol with block_flips rule (e.g., Frost-1, Frost_custom-1, future cards).
  *
- * Top-Box effects are ALWAYS active when card is face-up, even if covered!
- *
- * @returns true if any face-up Frost-1 exists on the board (covered OR uncovered)
+ * @returns true if any face-up card has an active block_flips rule
  */
 export const isFrost1Active = (state: GameState): boolean => {
-    // Check ALL face-up Frost-1 cards in ALL lanes (covered OR uncovered)
-    // Top effects are ALWAYS active when card is face-up, even if covered!
-    return [state.player, state.opponent].some(playerState =>
-        playerState.lanes.some(lane =>
-            lane.some(card =>
-                card.isFaceUp && card.protocol === 'Frost' && card.value === 1
-            )
-        )
-    );
+    const rules = getActivePassiveRules(state);
+    return rules.some(({ rule }) => rule.type === 'block_flips');
 };
 
 /**
- * Checks if Frost-1's BOTTOM effect is active on the board.
- * Frost-1 Bottom Effect: "Protocols cannot be rearranged."
+ * GENERIC: Checks if any card has an active "block_protocol_rearrange" passive rule.
+ * This replaces hardcoded Frost-1 bottom checks with generic passive rule logic.
+ * Works for ANY custom protocol with block_protocol_rearrange rule (e.g., Frost-1, Frost_custom-1, future cards).
  *
- * Bottom-Box effects ONLY work when card is uncovered (top card) AND face-up!
- *
- * @returns true if any uncovered face-up Frost-1 exists on the board
+ * @returns true if any uncovered face-up card has an active block_protocol_rearrange rule
  */
 export const isFrost1BottomActive = (state: GameState): boolean => {
-    // Check ONLY uncovered (top card) face-up Frost-1 in ALL lanes
-    // Bottom effects only work when uncovered!
-    return [state.player, state.opponent].some(playerState =>
-        playerState.lanes.some(lane => {
-            const topCard = lane[lane.length - 1];
-            return topCard && topCard.isFaceUp && topCard.protocol === 'Frost' && topCard.value === 1;
-        })
-    );
+    const rules = getActivePassiveRules(state);
+    return rules.some(({ rule }) => rule.type === 'block_protocol_rearrange');
 };

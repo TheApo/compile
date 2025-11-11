@@ -253,6 +253,39 @@
   border-color: var(--primary-color);
 }
 
+/* Custom Protocol Pattern Styles for Protocol Selection Cards */
+.protocol-card.pattern-grid,
+.protocol-display-card.pattern-grid {
+  background-image:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 40%),
+    linear-gradient(hsla(0,0%,100%,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, hsla(0,0%,100%,0.03) 1px, transparent 1px) !important;
+  background-size: auto, 20px 20px, 20px 20px !important;
+}
+
+.protocol-card.pattern-radial,
+.protocol-display-card.pattern-radial {
+  background-image: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 25%, transparent) 0%, transparent 60%) !important;
+}
+
+.protocol-card.pattern-frost,
+.protocol-display-card.pattern-frost {
+  background-image:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 50%),
+    repeating-linear-gradient(30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+    repeating-linear-gradient(-30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+    repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 9px) !important;
+}
+
+.protocol-card.pattern-chaos,
+.protocol-display-card.pattern-chaos {
+  background-image:
+    radial-gradient(at 10% 10%, hsla(60, 100%, 50%, 0.15), transparent 30%),
+    radial-gradient(at 90% 20%, hsla(180, 100%, 50%, 0.15), transparent 35%),
+    radial-gradient(at 30% 80%, hsla(300, 100%, 50%, 0.15), transparent 40%),
+    radial-gradient(at 70% 60%, hsla(0, 100%, 50%, 0.1), transparent 25%) !important;
+}
+
 .protocol-card.selected {
   border-color: var(--primary-color);
   box-shadow: 0 6px 25px rgba(0,0,0,0.5), 0 0 15px var(--primary-color);
@@ -441,6 +474,15 @@
     ) !important;
 }
 
+/* Pattern: Frost */
+.protocol-card.pattern-frost {
+    background-image:
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 9px) !important;
+}
+
 /* --- Custom Protocol Pattern Styles for Protocol Display Cards --- */
 
 /* Pattern: Solid */
@@ -553,6 +595,15 @@
         transparent 10px,
         transparent 20px
     ) !important;
+}
+
+/* Pattern: Frost */
+.protocol-display-card.pattern-frost {
+    background-image:
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card-custom-color) 20%, transparent) 0%, transparent 50%),
+        repeating-linear-gradient(30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(-30deg, transparent, transparent 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 10px, color-mix(in srgb, var(--card-custom-color) 8%, transparent) 11px),
+        repeating-linear-gradient(90deg, transparent, transparent 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 8px, color-mix(in srgb, var(--card-custom-color) 5%, transparent) 9px) !important;
 }
 
 

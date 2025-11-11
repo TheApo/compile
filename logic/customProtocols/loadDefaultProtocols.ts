@@ -10,6 +10,7 @@ import chaosCustomData from '../../custom_protocols/chaos_custom_protocol.json';
 import darkCustData from '../../custom_protocols/dark_cust_protocol.json';
 import deathCustomData from '../../custom_protocols/death_custom_protocol.json';
 import fireCustomData from '../../custom_protocols/fire_custom_protocol.json';
+import frostCustomData from '../../custom_protocols/frost_custom_protocol.json';
 import waterCustomData from '../../custom_protocols/water_custom_protocol.json';
 import spiritCustomData from '../../custom_protocols/spirit_custom_protocol.json';
 import gravityCustomData from '../../custom_protocols/gravity_custom_protocol.json';
@@ -66,6 +67,11 @@ export const loadDefaultCustomProtocols = (): void => {
         console.log('[Default Protocols] Loading/Updating Gravity_custom protocol...');
         addCustomProtocol(gravityCustomData as any);
         console.log('[Default Protocols] Gravity_custom loaded/updated successfully!');
+
+        // ALWAYS update Frost_custom to latest version (for testing/development)
+        console.log('[Default Protocols] Loading/Updating Frost_custom protocol...');
+        addCustomProtocol(frostCustomData as any);
+        console.log('[Default Protocols] Frost_custom loaded/updated successfully!');
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }
