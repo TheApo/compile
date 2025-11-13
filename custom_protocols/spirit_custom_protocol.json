@@ -137,6 +137,7 @@
         {
           "id": "spirit_3_shift",
           "trigger": "after_draw",
+          "reactiveTriggerActor": "self",
           "params": {
             "action": "shift",
             "count": 1,

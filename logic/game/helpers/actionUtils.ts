@@ -11,6 +11,7 @@ import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor'
 import { canFlipCard, canShiftCard } from '../passiveRuleChecker';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+import { queuePendingCustomEffects } from '../phaseManager';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
     if (!cardId) return null;
@@ -53,6 +54,9 @@ export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: stri
     const flippedCardInfo = findCardOnBoard(newState, flippedCardId);
     const referencedCardValue = flippedCardInfo ? getEffectiveCardValue(flippedCardInfo.card,
         newState[flippedCardInfo.owner].lanes.find(l => l.some(c => c.id === flippedCardId)) || []) : 0;
+
+    // CRITICAL: Queue pending custom effects before clearing actionRequired
+    newState = queuePendingCustomEffects(newState);
 
     // Clear actionRequired
     newState.actionRequired = null;
@@ -98,6 +102,10 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     // Save followUpEffect from custom effects before clearing actionRequired
     const followUpEffect = (state.actionRequired as any)?.followUpEffect;
     const conditionalType = (state.actionRequired as any)?.conditionalType; // "if_executed" or "then"
+
+    // CRITICAL: Queue pending custom effects BEFORE clearing actionRequired
+    // This handles multi-effect cards like Hate-1: "Discard 3. Delete 1. Delete 1."
+    newState = queuePendingCustomEffects(newState);
 
     // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
     newState.actionRequired = null;
@@ -341,6 +349,9 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         }
 
         if (result.newState.actionRequired) {
+            // CRITICAL FIX: Queue pending custom effects before handling interrupts
+            result.newState = queuePendingCustomEffects(result.newState);
+
             const newActionActor = result.newState.actionRequired.actor;
             // If an interrupt is already in progress...
             if (state._interruptedTurn) {
@@ -425,6 +436,9 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const cardName = `${card.protocol}-${card.value}`;
     newState = log(newState, actor, `${actorName} returns ${ownerName} ${cardName} to their hand.`);
+
+    // CRITICAL: Queue pending custom effects before clearing actionRequired
+    newState = queuePendingCustomEffects(newState);
 
     newState.actionRequired = null;
     const stateAfterRecalc = recalculateAllLaneValues(newState);
@@ -513,7 +527,10 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     const newStats = { ...newState.stats[actor], cardsShifted: newState.stats[actor].cardsShifted + 1 };
     const newActorState = { ...newState[actor], stats: newStats };
     newState = { ...newState, [actor]: newActorState, stats: { ...newState.stats, [actor]: newStats } };
-    
+
+    // CRITICAL: Queue pending custom effects before clearing actionRequired
+    newState = queuePendingCustomEffects(newState);
+
     newState.actionRequired = null;
 
     let stateAfterRecalc = recalculateAllLaneValues(newState);
@@ -607,8 +624,11 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
         triggerType: 'flip'
     };
     const result = executeOnPlayEffect(card, laneIndex, state, flipContext);
-    
+
     if (result.newState.actionRequired) {
+        // CRITICAL FIX: Queue pending custom effects before handling interrupts
+        result.newState = queuePendingCustomEffects(result.newState);
+
         const newActionActor = result.newState.actionRequired.actor;
         // If an interrupt is already in progress...
         if (state._interruptedTurn) {
@@ -619,6 +639,7 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
                     ...(result.newState.queuedActions || []),
                     result.newState.actionRequired
                 ];
+                result.newState = queuePendingCustomEffects(result.newState);
                 result.newState.actionRequired = null;
                 return result;
             }

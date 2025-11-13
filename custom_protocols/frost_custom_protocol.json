@@ -12,6 +12,7 @@
         {
           "id": "frost_0_draw_per_face_down",
           "trigger": "on_play",
+          "position": "middle",
           "params": {
             "action": "draw",
             "count": 1,
@@ -29,6 +30,7 @@
         {
           "id": "frost_1_block_flips",
           "trigger": "passive",
+          "position": "top",
           "params": {
             "action": "passive_rule",
             "rule": {
@@ -44,6 +46,7 @@
         {
           "id": "frost_1_block_rearrange",
           "trigger": "passive",
+          "position": "bottom",
           "params": {
             "action": "passive_rule",
             "rule": {
@@ -62,6 +65,7 @@
         {
           "id": "frost_2_play_face_down",
           "trigger": "on_play",
+          "position": "middle",
           "params": {
             "action": "play",
             "count": 1,
@@ -78,6 +82,7 @@
         {
           "id": "frost_3_block_shifts",
           "trigger": "passive",
+          "position": "top",
           "params": {
             "action": "passive_rule",
             "rule": {
@@ -98,6 +103,7 @@
         {
           "id": "frost_4_flip_covered",
           "trigger": "on_play",
+          "position": "middle",
           "params": {
             "action": "flip",
             "count": 1,
@@ -119,6 +125,7 @@
         {
           "id": "frost_5_discard",
           "trigger": "on_play",
+          "position": "middle",
           "params": {
             "action": "discard",
             "count": 1,

@@ -11,6 +11,7 @@ import { recalculateAllLaneValues } from '../stateManager';
 import { performCompile } from './miscResolver';
 import { performFillHand } from './playResolver';
 import * as phaseManager from '../phaseManager';
+import { queuePendingCustomEffects } from '../phaseManager';
 import { canRearrangeProtocols } from '../passiveRuleChecker';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
@@ -47,6 +48,9 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                 };
                 const result = executeCustomEffect(sourceCard.card, laneIndex, newState, context, followUpEffect);
                 newState = result.newState;
+
+                // CRITICAL: Queue pending custom effects (Death-1: nested conditionals)
+                newState = queuePendingCustomEffects(newState);
             } else {
                 newState.actionRequired = null;
             }

@@ -11,6 +11,7 @@ import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCar
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 import { isFrost1Active, isFrost1BottomActive } from '../effects/common/frost1Check';
+import { executeOnCoverEffect } from '../effectExecutor';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -342,12 +343,13 @@ function executeDrawEffect(
             }
 
             case 'is_covering': {
-                // Check if this card is covering another card
+                // Life-4: Check if this card is covering another card
+                // The card has already been played and added to the lane
+                // If lane has > 1 card, then this card is covering something
                 const lane = state[cardOwner].lanes[laneIndex];
-                const cardIndex = lane.findIndex(c => c.id === card.id);
-                const isCovering = cardIndex < lane.length - 1;
+                const isCovering = lane.length > 1;
                 dynamicCount = isCovering ? (params.count || 1) : 0;
-                console.log(`[Draw Effect] is_covering: ${isCovering ? 'yes' : 'no'}`);
+                console.log(`[Draw Effect] is_covering: ${isCovering ? 'yes' : 'no'} (lane has ${lane.length} cards)`);
                 break;
             }
         }
@@ -383,7 +385,10 @@ function executeDrawEffect(
             newState = reactiveResult.newState;
         }
 
-        return { newState };
+        // Add draw animation request
+        const animationRequests = count > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count }] : undefined;
+
+        return { newState, animationRequests };
     }
 
     // NEW: Calculate draw count based on countType
@@ -502,7 +507,10 @@ function executeDrawEffect(
         newState = reactiveResult.newState;
     }
 
-    return { newState };
+    // Add draw animation request (Life-4 and other draw effects)
+    const animationRequests = drawnCards.length > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count: drawnCards.length }] : undefined;
+
+    return { newState, animationRequests };
 }
 
 /**
@@ -770,7 +778,7 @@ function executeDeleteEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
-    const count = params.count || 1;
+    let count = params.count || 1;
 
     // NEW: Line Filter - Metal-3: "If there are 8 or more cards in this line"
     if (params.scope?.minCardsInLane) {
@@ -803,6 +811,9 @@ function executeDeleteEffect(
     const validTargets: string[] = [];
     for (const player of ['player', 'opponent'] as const) {
         for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
+            // CRITICAL: Check scope - filter by lane if scope is 'this_line'
+            if (params.scope?.type === 'this_line' && laneIdx !== laneIndex) continue;
+
             const lane = state[player].lanes[laneIdx];
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const c = lane[cardIdx];
@@ -816,6 +827,20 @@ function executeDeleteEffect(
                 // Check position (using default 'uncovered' if not specified)
                 if (position === 'uncovered' && !isUncovered) continue;
                 if (position === 'covered' && isUncovered) continue;
+                // CRITICAL: 'covered_by_context' for on_cover triggers (Hate-4)
+                // In on_cover context:
+                // - Own lane: ALL cards are "covered" (will be covered by new card)
+                // - Opponent lane: ONLY already covered cards (topCard is NOT covered)
+                if (position === 'covered_by_context' && context.triggerType === 'cover') {
+                    if (player !== context.cardOwner) {
+                        // Opponent's lane: only already covered cards
+                        if (isUncovered) continue;
+                    }
+                    // Own lane: all cards valid (will all be covered)
+                } else if (position === 'covered_by_context') {
+                    // Outside on_cover context, treat as 'covered'
+                    if (isUncovered) continue;
+                }
                 // Check faceState
                 if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
                 if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
@@ -845,35 +870,173 @@ function executeDeleteEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom Delete effect - ${actor === cardOwner ? 'you' : 'opponent'} selecting ${count} card(s) to delete]`);
-
-    // NEW: Handle deleteSelf (Death-1: "then delete this card")
-    // Directly delete the source card without prompting
-    if (params.deleteSelf) {
-        const sourceCardInfo = findCardOnBoard(state, card.id);
-        if (!sourceCardInfo) {
-            newState = log(newState, cardOwner, `Source card no longer on board. Delete effect skipped.`);
+    // NEW: "upTo" mode (Hate-1: "Delete up to 2 cards")
+    // Adjust count to available targets
+    if (params.upTo) {
+        const originalCount = count;
+        count = Math.min(count, validTargets.length);
+        console.log(`[Delete Effect] upTo mode: requesting ${originalCount}, adjusted to ${count} (available targets: ${validTargets.length})`);
+        if (count === 0) {
+            let newState = log(state, cardOwner, `No valid targets available. Delete effect skipped.`);
             return { newState };
         }
+    }
 
-        const { owner, laneIndex } = sourceCardInfo;
+    // NEW: Filter by calculation (highest_value / lowest_value)
+    // This is CRITICAL for Hate-2: "Delete your highest value uncovered card"
+    let filteredTargets = validTargets;
+    if (targetFilter.calculation === 'highest_value' || targetFilter.calculation === 'lowest_value') {
+        // Build a map of cardId -> effectiveValue
+        const cardValues = new Map<string, number>();
+        for (const cardId of validTargets) {
+            const cardInfo = findCardOnBoard(state, cardId);
+            if (!cardInfo) continue;
+
+            // Find lane index for this card
+            let cardLaneIndex = -1;
+            for (let i = 0; i < state[cardInfo.owner].lanes.length; i++) {
+                if (state[cardInfo.owner].lanes[i].some(c => c.id === cardId)) {
+                    cardLaneIndex = i;
+                    break;
+                }
+            }
+
+            let effectiveValue = cardInfo.card.value;
+            // Check for Darkness-2 (face-down cards have value 4)
+            if (!cardInfo.card.isFaceUp && cardLaneIndex !== -1) {
+                const hasDarkness2 = state[cardInfo.owner].lanes[cardLaneIndex].some(
+                    c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2
+                );
+                effectiveValue = hasDarkness2 ? 4 : 2;
+            }
+
+            cardValues.set(cardId, effectiveValue);
+        }
+
+        // Find highest or lowest value
+        const values = Array.from(cardValues.values());
+        const targetValue = targetFilter.calculation === 'highest_value'
+            ? Math.max(...values)
+            : Math.min(...values);
+
+        // Keep only cards with that value
+        filteredTargets = validTargets.filter(id => cardValues.get(id) === targetValue);
+
+        console.log(`[Delete Effect] Filtered by ${targetFilter.calculation}: ${filteredTargets.length} card(s) with value ${targetValue}`);
+    }
+
+    // NEW: Auto-execute (Hate-4: automatically delete lowest value card without user selection)
+    if (params.autoExecute) {
+        console.log(`[Delete Effect] Auto-executing delete for ${filteredTargets.length} card(s)`);
+
+        // Take first N cards from filteredTargets (or all if count >= length)
+        const cardsToDelete = filteredTargets.slice(0, count);
+
+        let newState = state;
+        const animationRequests: any[] = [];
+
+        for (const cardId of cardsToDelete) {
+            const cardInfo = findCardOnBoard(newState, cardId);
+            if (!cardInfo) continue;
+
+            const { card: targetCard, owner } = cardInfo;
+
+            // Find lane index
+            let targetLaneIndex = -1;
+            for (let i = 0; i < newState[owner].lanes.length; i++) {
+                if (newState[owner].lanes[i].some(c => c.id === cardId)) {
+                    targetLaneIndex = i;
+                    break;
+                }
+            }
+
+            if (targetLaneIndex === -1) continue;
+
+            const lane = newState[owner].lanes[targetLaneIndex];
+            const wasTopCard = lane[lane.length - 1].id === cardId;
+
+            const deletedCardName = targetCard.isFaceUp ? `${targetCard.protocol}-${targetCard.value}` : 'a face-down card';
+            const deletedOwnerName = owner === 'player' ? "Player's" : "Opponent's";
+
+            newState = log(newState, cardOwner, `Effect triggers, deleting the lowest value covered card (${deletedOwnerName} ${deletedCardName}).`);
+
+            // Remove card from lane
+            const laneCopy = [...lane];
+            const cardIndex = laneCopy.findIndex(c => c.id === cardId);
+            laneCopy.splice(cardIndex, 1);
+
+            const newLanes = [...newState[owner].lanes];
+            newLanes[targetLaneIndex] = laneCopy;
+
+            newState = {
+                ...newState,
+                [owner]: { ...newState[owner], lanes: newLanes },
+            };
+
+            // Update stats
+            const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
+            newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
+
+            // Add animation request
+            animationRequests.push({ type: 'delete', cardId, owner });
+
+            // Handle uncover if was top card
+            if (wasTopCard && laneCopy.length > 0) {
+                const uncoverResult = handleUncoverEffect(newState, owner, targetLaneIndex);
+                newState = uncoverResult.newState;
+            }
+        }
+
+        return { newState, animationRequests };
+    }
+
+    let newState = log(state, cardOwner, `[Custom Delete effect - ${actor === cardOwner ? 'you' : 'opponent'} selecting ${count} card(s) to delete]`);
+
+    // NEW: Handle deleteSelf (Life-0 on_cover: "then delete this card")
+    // Directly delete the source card without prompting
+    if (params.deleteSelf) {
+        console.log(`[deleteSelf] Trying to delete card ${card.protocol}-${card.value} (id: ${card.id}), laneIndex from params: ${laneIndex}`);
+
+        // CRITICAL: Use the laneIndex parameter (we already know where the card is)
+        // Don't use findCardOnBoard because in on_cover context, the state might be mid-transition
+        const owner = cardOwner;
         const lane = state[owner].lanes[laneIndex];
+        console.log(`[deleteSelf] owner=${owner}, laneIndex=${laneIndex}, lane.length=${lane?.length}`);
 
         // CRITICAL: Check if lane exists (card might have been deleted already)
         if (!lane || lane.length === 0) {
+            console.log(`[deleteSelf] Lane is ${!lane ? 'null' : 'empty'}! Skipping delete.`);
             newState = log(newState, cardOwner, `Card already deleted. Delete effect skipped.`);
             return { newState };
         }
 
-        const wasTopCard = lane[lane.length - 1].id === card.id;
+        // Find the card in the lane
+        const cardIndex = lane.findIndex(c => c.id === card.id);
+        if (cardIndex === -1) {
+            console.log(`[deleteSelf] Card not found in lane ${laneIndex}!`);
+            newState = log(newState, cardOwner, `Card already deleted. Delete effect skipped.`);
+            return { newState };
+        }
+
+        // CRITICAL: Check if card is REALLY the top card in the CURRENT state
+        // (not in the original state where the effect started)
+        // This handles Life-0: If a card was already placed on top, don't trigger uncover
+        const currentLane = state[owner].lanes[laneIndex];
+        const wasTopCard = currentLane.length > 0 && currentLane[currentLane.length - 1].id === card.id;
+        console.log(`[deleteSelf] Card is ${wasTopCard ? 'TOP' : 'COVERED'} card in CURRENT lane (length=${currentLane.length}), cardIndex=${cardIndex}`);
 
         // Delete the card immediately
-        newState = log(newState, cardOwner, `Deleting ${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}.`);
+        newState = log(newState, cardOwner, `Deleting ${card.protocol}-${card.value}.`);
 
-        // Remove card from lane (make a copy of the lane we already checked)
-        const laneCopy = [...lane];
-        const cardIndex = laneCopy.findIndex(c => c.id === card.id);
-        laneCopy.splice(cardIndex, 1);
+        // Remove card from lane (use CURRENT lane, not the old one)
+        const laneCopy = [...currentLane];
+        const currentCardIndex = laneCopy.findIndex(c => c.id === card.id);
+        if (currentCardIndex === -1) {
+            console.log(`[deleteSelf] Card no longer in lane! Already deleted or moved.`);
+            return { newState };
+        }
+        console.log(`[deleteSelf] Removing card at index ${currentCardIndex} from lane`);
+        laneCopy.splice(currentCardIndex, 1);
 
         // CRITICAL: Use newState[owner].lanes, not state[owner].lanes!
         const newLanes = [...newState[owner].lanes];
@@ -888,13 +1051,22 @@ function executeDeleteEffect(
         const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
         newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
-        // Handle uncover if was top card
-        if (wasTopCard && laneCopy.length > 0) {
+        // CRITICAL: Create animation request for delete animation (Death-1)
+        const animationRequests = [{ type: 'delete', cardId: card.id, owner }];
+
+        // Handle uncover ONLY if:
+        // 1. Card was the top card
+        // 2. There are cards below it
+        // 3. NOT an on_cover delete (new card will be placed immediately after)
+        if (wasTopCard && laneCopy.length > 0 && context.triggerType !== 'cover') {
             const uncoverResult = handleUncoverEffect(newState, owner, laneIndex);
             newState = uncoverResult.newState;
+            if (uncoverResult.animationRequests) {
+                animationRequests.push(...uncoverResult.animationRequests);
+            }
         }
 
-        return { newState };
+        return { newState, animationRequests };
     }
 
     // NEW: Handle selectLane (Death-2: "Delete all cards in 1 line with values of 1 or 2")
@@ -1005,6 +1177,7 @@ function executeDeleteEffect(
         sourceCardId: card.id,
         actor,
         disallowedIds: params.excludeSelf ? [card.id] : [],
+        allowedIds: filteredTargets.length < validTargets.length ? filteredTargets : undefined, // NEW: Restrict to filtered targets if calculation was applied
         targetFilter: params.targetFilter,      // Pass filter to resolver/UI
         scope: params.scope,                     // Pass scope to resolver/UI
         protocolMatching: params.protocolMatching, // Pass protocol matching rule
@@ -1046,6 +1219,14 @@ function executeDiscardEffect(
     if (state[actor].hand.length === 0) {
         console.log(`[Discard Effect] ${actor} has no cards to discard - skipping effect.`);
         return { newState: state };
+    }
+
+    // NEW: "upTo" mode (Hate-1: "Discard up to 3 cards")
+    // Adjust count to available hand size
+    if (params.upTo) {
+        const originalCount = count;
+        count = Math.min(count, state[actor].hand.length);
+        console.log(`[Discard Effect] upTo mode: requesting ${originalCount}, adjusted to ${count} (hand size: ${state[actor].hand.length})`);
     }
 
     // NEW: Auto-execute "discard all" (Chaos-4: "Discard your hand")
@@ -1150,9 +1331,12 @@ function executeShiftEffect(
             // Since we're in execute_remaining_custom_effects, no actionRequired is set, so shift immediately
             console.log(`[Custom Shift] Executing immediate shift to lane ${resolvedTargetLane}`);
             const shiftResult = internalShiftCard(newState, selectedCardId, selectedCardInfo.owner, resolvedTargetLane, cardOwner);
-            newState = shiftResult.newState;
 
-            return { newState };
+            // CRITICAL: Return animation requests for shift animation!
+            return {
+                newState: shiftResult.newState,
+                animationRequests: shiftResult.animationRequests
+            };
         }
 
         // No fixed destination - let user choose the lane (like Darkness-1)
@@ -1435,6 +1619,150 @@ function executePlayEffect(
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
         newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down in other lines.`);
+        return { newState };
+    }
+
+    // NEW: Life-0 logic - Automatic play from deck to "each line where you/opponent have a card"
+    if (source === 'deck' && params.destinationRule?.type === 'each_line_with_card') {
+        const ownerFilter = params.destinationRule.ownerFilter || 'any';
+        const playerToCheck = ownerFilter === 'own' ? actor :
+                             ownerFilter === 'opponent' ? (actor === 'player' ? 'opponent' : 'player') :
+                             null;
+
+        // Find all lanes where the specified player has cards
+        const lanesWithCards: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            if (playerToCheck) {
+                // Check specific player's lanes
+                if (state[playerToCheck].lanes[i].length > 0) {
+                    lanesWithCards.push(i);
+                }
+            } else {
+                // Check if ANY player has a card in this lane
+                if (state.player.lanes[i].length > 0 || state.opponent.lanes[i].length > 0) {
+                    lanesWithCards.push(i);
+                }
+            }
+        }
+
+        if (lanesWithCards.length === 0) {
+            return { newState: state };
+        }
+
+        const playerState = state[actor];
+
+        // Check if deck has enough cards
+        if (playerState.deck.length === 0 && playerState.discard.length === 0) {
+            let newState = log(state, cardOwner, `[Custom Play effect] ${actor} has no cards in deck/discard - skipping.`);
+            return { newState };
+        }
+
+        // Draw cards from deck (with auto-reshuffle if needed)
+        const { drawnCards, remainingDeck, newDiscard } = drawCards(playerState.deck, playerState.discard, lanesWithCards.length);
+
+        if (drawnCards.length === 0) {
+            return { newState: state };
+        }
+
+        // Create new cards to play (face-down)
+        const newCardsToPlay = drawnCards.map((c: any) => ({ ...c, id: uuidv4(), isFaceUp: !faceDown }));
+
+        // Execute on-cover effects for covered cards before playing
+        let stateAfterOnCover = state;
+        const onCoverAnimations: AnimationRequest[] = [];
+
+        for (let i = 0; i < lanesWithCards.length; i++) {
+            const targetLaneIndex = lanesWithCards[i];
+            const lane = stateAfterOnCover[actor].lanes[targetLaneIndex];
+
+            if (lane.length > 0) {
+                const cardToBeCovered = lane[lane.length - 1];
+                const coverContext: EffectContext = {
+                    ...context,
+                    triggerType: 'cover'
+                };
+                const onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterOnCover, coverContext);
+                stateAfterOnCover = onCoverResult.newState;
+                if (onCoverResult.animationRequests) {
+                    onCoverAnimations.push(...onCoverResult.animationRequests);
+                }
+                if (stateAfterOnCover.actionRequired) {
+                    break;
+                }
+            }
+        }
+
+        // Add cards to lanes
+        const newPlayerLanes = [...stateAfterOnCover[actor].lanes];
+        const playAnimations: AnimationRequest[] = [];
+
+        for (let i = 0; i < newCardsToPlay.length; i++) {
+            const targetLaneIndex = lanesWithCards[i];
+            newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
+
+            // Add play animation for each card
+            playAnimations.push({
+                type: 'play',
+                cardId: newCardsToPlay[i].id,
+                owner: actor,
+                laneIndex: targetLaneIndex,
+                isFaceUp: newCardsToPlay[i].isFaceUp
+            });
+        }
+
+        const updatedPlayerState = {
+            ...stateAfterOnCover[actor],
+            lanes: newPlayerLanes,
+            deck: remainingDeck,
+            discard: newDiscard
+        };
+
+        let newState = {
+            ...stateAfterOnCover,
+            [actor]: updatedPlayerState
+        };
+
+        // Generic log message
+        const sourceCardInfo = findCardOnBoard(state, card.id);
+        const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
+        const ownerText = ownerFilter === 'own' ? 'where you have a card' :
+                         ownerFilter === 'opponent' ? 'where opponent has a card' :
+                         'with a card';
+        newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down in each line ${ownerText}.`);
+
+        // Combine all animations: on_cover animations first, then play animations
+        const allAnimations = [...onCoverAnimations, ...playAnimations];
+
+        return {
+            newState,
+            animationRequests: allAnimations.length > 0 ? allAnimations : undefined
+        };
+    }
+
+    // NEW: Life-3 logic - Prompt user to select "another line" to play from deck
+    if (source === 'deck' && params.destinationRule?.type === 'another_line') {
+        console.log(`[another_line] Life-3 triggered! laneIndex=${laneIndex}, source=${source}`);
+        const otherLaneIndices = [0, 1, 2].filter(i => i !== laneIndex);
+        console.log(`[another_line] Other lane indices: ${otherLaneIndices}`);
+        if (otherLaneIndices.length === 0) {
+            console.log(`[another_line] No other lanes available!`);
+            return { newState: state };
+        }
+
+        // CRITICAL: Prompt user to select a lane (not automatic!)
+        let newState = log(state, cardOwner, `[Custom Play effect - select another line to play]`);
+        newState.actionRequired = {
+            type: 'select_lane_for_play',
+            sourceCardId: card.id,
+            actor,
+            count: params.count || 1,
+            isFaceDown: params.faceDown,  // CRITICAL: Must be isFaceDown, not faceDown!
+            excludeCurrentLane: true,  // Life-3: Can't select the current lane
+            currentLaneIndex: laneIndex,  // Track which lane to exclude
+            source: params.source,  // 'deck'
+        } as any;
+
+        console.log(`[another_line] Created prompt for user to select lane`);
         return { newState };
     }
 

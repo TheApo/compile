@@ -1,0 +1,176 @@
+{
+  "id": "life_custom_1",
+  "name": "Life_custom",
+  "description": "Life begets more life. Play cards from your deck to grow your presence.",
+  "color": "#3CE076",
+  "pattern": "hexagons",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "life_0_play_each_line_with_card",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "each_line_with_card",
+              "ownerFilter": "own"
+            },
+            "actor": "self"
+          }
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "life_0_on_cover_delete_self",
+          "trigger": "on_cover",
+          "position": "bottom",
+          "params": {
+            "action": "delete",
+            "deleteSelf": true
+          }
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "life_1_flip_1",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": false,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          }
+        },
+        {
+          "id": "life_1_flip_2",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": false,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "life_2_draw",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          }
+        },
+        {
+          "id": "life_2_flip",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "face_down",
+              "excludeSelf": false
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "life_3_on_cover_play",
+          "trigger": "on_cover",
+          "position": "bottom",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "another_line",
+              "excludeCurrentLane": true
+            },
+            "actor": "self"
+          }
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "life_4_conditional_draw",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "conditional": {
+              "type": "is_covering"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "life_5_discard",
+          "trigger": "on_play",
+          "position": "middle",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          }
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

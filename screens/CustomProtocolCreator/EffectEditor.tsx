@@ -308,6 +308,40 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                 )}
             </div>
 
+            {/* Reactive Trigger Actor (only for reactive triggers) */}
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard') && (
+                <div style={{ marginTop: '15px' }}>
+                    <label>
+                        Trigger Actor (who triggers this effect?)
+                        <select
+                            value={effect.reactiveTriggerActor || 'self'}
+                            onChange={(e) => onChange({ ...effect, reactiveTriggerActor: e.target.value as any })}
+                            style={{
+                                width: '100%',
+                                padding: '8px',
+                                marginTop: '5px',
+                                backgroundColor: '#1A113B',
+                                color: '#F0F0F0',
+                                border: '1px solid rgba(97, 239, 255, 0.3)',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="self">Only when YOU perform the action (default)</option>
+                            <option value="opponent">Only when OPPONENT performs the action</option>
+                            <option value="any">When ANYONE performs the action</option>
+                        </select>
+                    </label>
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        {effect.reactiveTriggerActor === 'self' || !effect.reactiveTriggerActor
+                            ? 'Effect triggers only when YOU delete/draw/etc.'
+                            : effect.reactiveTriggerActor === 'opponent'
+                            ? 'Effect triggers only when OPPONENT deletes/draws/etc.'
+                            : 'Effect triggers when ANYONE deletes/draws/etc.'}
+                    </small>
+                </div>
+            )}
+
             {/* Conditional Follow-Up */}
             <div className="conditional-section" style={{ marginTop: '20px', borderTop: '1px solid #2c1d63', paddingTop: '15px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>

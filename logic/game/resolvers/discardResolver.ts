@@ -9,6 +9,7 @@ import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
 import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
+import { queuePendingCustomEffects } from '../phaseManager';
 
 const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     if (state.processedSpeed1TriggerThisTurn) {
@@ -77,6 +78,8 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player: 'player' });
             stateAfterDiscard = reactiveResult.newState;
 
+            // CRITICAL: Queue pending custom effects before clearing actionRequired
+            stateAfterDiscard = queuePendingCustomEffects(stateAfterDiscard);
             stateAfterDiscard.actionRequired = null;
             return stateAfterDiscard;
         } else {
@@ -247,6 +250,8 @@ export const resolvePlague2Discard = (prev: GameState, cardIdsToDiscard: string[
             sourceCardId: prev.actionRequired.sourceCardId
         };
     } else {
+        // CRITICAL: Queue pending custom effects before clearing actionRequired
+        newState = queuePendingCustomEffects(newState);
         newState.actionRequired = null;
     }
 
@@ -273,6 +278,8 @@ export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard:
             sourceCardId: prev.actionRequired.sourceCardId
         };
     } else {
+        // CRITICAL: Queue pending custom effects before clearing actionRequired
+        newState = queuePendingCustomEffects(newState);
         newState.actionRequired = null;
     }
 
@@ -327,6 +334,8 @@ export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): Ga
         };
     } else {
         newState = log(newState, actor, `Hate-1: No valid targets to delete.`);
+        // CRITICAL: Queue pending custom effects before clearing actionRequired
+        newState = queuePendingCustomEffects(newState);
         newState.actionRequired = null;
     }
 

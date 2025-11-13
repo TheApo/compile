@@ -1984,6 +1984,160 @@ export const scenario38_FrostCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 39: Hate_custom Playground
+ *
+ * Test all Hate_custom cards
+ * - Hate-0: Delete 1 card
+ * - Hate-1: Discard 3 cards. Delete 1 card. Delete 1 card.
+ * - Hate-2: Delete your highest value uncovered card. Delete your opponent's highest value uncovered card.
+ * - Hate-3: [Top] After you delete cards: Draw 1 card.
+ * - Hate-4: [Bottom on_cover] Delete the lowest value covered card in this line.
+ * - Hate-5: You discard 1 card.
+ */
+export const scenario39_HateCustomPlayground: TestScenario = {
+    name: "Hate_custom Test Playground",
+    description: "🆕 All Hate_custom cards on hand - test deletion mechanics",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Hate_custom cards in hand (0-5, no 6 for Hate)
+        newState.player.hand = [
+            createCard('Hate_custom', 0, true),
+            createCard('Hate_custom', 1, true),
+            createCard('Hate_custom', 2, true),
+            createCard('Hate_custom', 3, true),
+            createCard('Hate_custom', 4, true),
+            createCard('Hate_custom', 5, true),
+        ];
+
+        // Player Lane 0: Cards for delete testing (including covered cards for Hate-4)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 1, true)); // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true)); // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true)); // Uncovered
+
+        // Player Lane 1: Cards for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        // Player Lane 2: Cards for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, false)); // Face-down
+
+        // Opponent: Cards with various values for Hate-2 testing
+        // Lane 0: High value card (will be deleted by Hate-2)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 5, true));
+
+        // Lane 1: Mixed values
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, true)); // Lower value
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true)); // Higher value (uncovered)
+
+        // Lane 2: Face-down card
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 3, false)); // Face-down
+
+        // Ensure player has enough cards for discarding (Hate-1 needs 3 cards)
+        newState.player.deck = [
+            createCard('Water', 0, true),
+            createCard('Water', 4, true),
+            createCard('Spirit', 0, true),
+            createCard('Spirit', 5, true),
+        ];
+
+        // Ensure opponent has cards in deck for potential draw effects
+        newState.opponent.deck = [
+            createCard('Metal', 3, true),
+            createCard('Death', 5, true),
+            createCard('Fire', 1, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 40: Life_custom Playground
+ *
+ * Test all Life_custom cards
+ * - Life-0: Play the top card of your deck face-down in each line where you have a card.
+ * - Life-1: Flip 1 card. Flip 1 card.
+ * - Life-2: Draw 1 card. You may flip 1 face-down card.
+ * - Life-3: [Bottom on_cover] When this card would be covered: First, play the top card of your deck face-down in another line.
+ * - Life-4: If this card is covering a card, draw 1 card.
+ * - Life-5: Discard 1 card.
+ */
+export const scenario40_LifeCustomPlayground: TestScenario = {
+    name: "Life_custom Test Playground",
+    description: "🆕 All Life_custom cards on hand - test play and flip mechanics",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Life_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Life_custom cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Life_custom', 0, true),
+            createCard('Life_custom', 1, true),
+            createCard('Life_custom', 2, true),
+            createCard('Life_custom', 3, true),
+            createCard('Life_custom', 4, true),
+            createCard('Life_custom', 5, true),
+        ];
+
+        // Player Lane 0: Card for testing Life-0 (will have card, so Life-0 can play here)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 1, true)); // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true)); // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true)); // Uncovered
+
+        // Player Lane 1: Cards for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        // Player Lane 2: Cards for testing
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, false)); // Face-down
+
+        // Opponent: Mixed cards for flip testing
+        // Lane 0: Face-down card for Life-2 flip
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down
+
+        // Lane 1: Face-up card for Life-1 flip
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, false)); // Face-down (covered)
+
+        // Lane 2: Face-down card for flip testing
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 5, false)); // Face-down
+
+        // Ensure player has enough cards in deck for Life-0, Life-3 play effects
+        newState.player.deck = [
+            createCard('Water', 0, true),
+            createCard('Water', 3, true),
+            createCard('Water', 4, true),
+            createCard('Spirit', 0, true),
+            createCard('Spirit', 1, true),
+            createCard('Spirit', 2, true),
+            createCard('Spirit', 3, true),
+            createCard('Spirit', 4, true),
+        ];
+
+        // Ensure opponent has cards in deck
+        newState.opponent.deck = [
+            createCard('Metal', 1, true),
+            createCard('Death', 3, true),
+            createCard('Fire', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2023,4 +2177,6 @@ export const allScenarios: TestScenario[] = [
     scenario36_ChaosCustomPlayground,
     scenario37_GravityCustomPlayground,
     scenario38_FrostCustomPlayground,
+    scenario39_HateCustomPlayground,
+    scenario40_LifeCustomPlayground,
 ];

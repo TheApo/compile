@@ -1,0 +1,196 @@
+{
+  "id": "hate-custom-001",
+  "name": "Hate_custom",
+  "description": "Focused on deletion and sacrifice. Delete cards to gain advantage.",
+  "author": "System Migration",
+  "createdAt": "2025-11-13T00:00:00.000Z",
+  "color": "#E67A7A",
+  "pattern": "diagonal-lines",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "hate-0-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "any"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "excludeSelf": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "hate-1-discard",
+          "params": {
+            "action": "discard",
+            "count": 3,
+            "actor": "self",
+            "upTo": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "hate-1-delete-1",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "any"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "excludeSelf": false,
+            "upTo": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "hate-1-delete-2",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "any"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "excludeSelf": false,
+            "upTo": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "hate-2-delete-own",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "any",
+              "calculation": "highest_value",
+              "owner": "own"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "excludeSelf": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "hate-2-delete-opponent",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "uncovered",
+              "faceState": "any",
+              "calculation": "highest_value",
+              "owner": "opponent"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "excludeSelf": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [
+        {
+          "id": "hate-3-reactive-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top",
+          "trigger": "after_delete",
+          "reactiveTriggerActor": "self"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "hate-4-on-cover-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "position": "covered_by_context",
+              "faceState": "any",
+              "calculation": "lowest_value"
+            },
+            "scope": {
+              "type": "this_line"
+            },
+            "excludeSelf": false,
+            "autoExecute": true
+          },
+          "position": "bottom",
+          "trigger": "on_cover"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "hate-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

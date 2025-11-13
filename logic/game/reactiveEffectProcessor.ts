@@ -96,12 +96,6 @@ export function processReactiveEffects(
             }
         }
 
-        // CRITICAL: Spirit-3 fix - after_draw should only trigger for the card owner's draws
-        if (triggerType === 'after_draw' && context?.player && context.player !== owner) {
-            console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_draw - triggered by ${context.player}, but card owner is ${owner}`);
-            continue;
-        }
-
         const customCard = card as any;
         const matchingEffects = customCard.customEffects.topEffects.filter(
             (effect: any) => {
@@ -115,6 +109,40 @@ export function processReactiveEffects(
                 return false;
             }
         );
+
+        // CRITICAL: Filter effects based on reactiveTriggerActor
+        // Default is 'self' (only when card owner performs action)
+        const filteredEffects = matchingEffects.filter((effect: any) => {
+            const triggerActor = effect.reactiveTriggerActor || 'self';
+
+            if (!context?.player) {
+                // No context player - trigger for everyone (backwards compatibility)
+                return true;
+            }
+
+            // Check if this effect should trigger based on who performed the action
+            if (triggerActor === 'self') {
+                // Only trigger if card owner performed the action
+                if (context.player !== owner) {
+                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - triggerActor=self, but triggered by ${context.player} (owner: ${owner})`);
+                    return false;
+                }
+            } else if (triggerActor === 'opponent') {
+                // Only trigger if opponent performed the action
+                if (context.player === owner) {
+                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - triggerActor=opponent, but triggered by ${context.player} (owner: ${owner})`);
+                    return false;
+                }
+            }
+            // triggerActor === 'any' -> always trigger
+
+            return true;
+        });
+
+        // Skip if no effects passed the filter
+        if (filteredEffects.length === 0) {
+            continue;
+        }
 
         // Set logging context
         const cardName = `${card.protocol}-${card.value}`;
@@ -136,8 +164,8 @@ export function processReactiveEffects(
             triggerType: triggerType as any,
         };
 
-        // Execute all matching effects for this card
-        for (const effectDef of matchingEffects) {
+        // Execute all filtered effects for this card
+        for (const effectDef of filteredEffects) {
             const result = executeCustomEffect(card, laneIndex, newState, effectContext, effectDef);
             newState = recalculateAllLaneValues(result.newState);
 

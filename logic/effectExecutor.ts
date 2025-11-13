@@ -39,8 +39,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     // Check if this is a custom protocol card with custom effects
     const customCard = card as any;
     if (customCard.customEffects && customCard.customEffects.middleEffects && customCard.customEffects.middleEffects.length > 0) {
-        console.log(`[effectExecutor] Executing custom card ${card.protocol}-${card.value} with ${customCard.customEffects.middleEffects.length} middle effects, triggerType=${triggerType}`);
-
         // Execute custom effects
         let stateWithContext = state;
         if (triggerType === 'middle' || triggerType === 'play') {
@@ -55,21 +53,14 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
         // Execute all middle effects sequentially
         for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
-            console.log(`[effectExecutor] Executing effect ${i + 1}/${customCard.customEffects.middleEffects.length}:`, customCard.customEffects.middleEffects[i].params.action);
             const effectDef = customCard.customEffects.middleEffects[i];
             const result = executeCustomEffect(card, laneIndex, currentState, context, effectDef);
             currentState = result.newState;
 
-            console.log(`[effectExecutor] Effect ${i + 1} done. actionRequired?`, !!currentState.actionRequired);
-
             // If an action is required, save remaining effects and return
             if (currentState.actionRequired) {
                 const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
-                console.log(`[effectExecutor] ⚠ Action required! Remaining effects: ${remainingEffects.length}`);
-                console.log(`[effectExecutor] Current effect index: ${i}, Total effects: ${customCard.customEffects.middleEffects.length}`);
-                console.log(`[effectExecutor] Remaining effects:`, remainingEffects.map((e: any) => `${e.params.action} (trigger: ${e.trigger}, useCardFromPreviousEffect: ${e.useCardFromPreviousEffect})`));
                 if (remainingEffects.length > 0) {
-                    console.log(`[effectExecutor] ✓ Setting _pendingCustomEffects with ${remainingEffects.length} effects`);
                     // CRITICAL: Store in state, not in actionRequired (which gets deleted)
                     (currentState as any)._pendingCustomEffects = {
                         sourceCardId: card.id,
@@ -77,9 +68,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                         context,
                         effects: remainingEffects
                     };
-                    console.log(`[effectExecutor] ✓ _pendingCustomEffects confirmed set:`, !!(currentState as any)._pendingCustomEffects);
-                } else {
-                    console.log(`[effectExecutor] ⚠ No remaining effects - this was the last effect`);
                 }
                 return { newState: recalculateAllLaneValues(currentState) };
             }
@@ -149,22 +137,34 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
             stateWithContext = setLogPhase(stateWithContext, undefined);
 
             let currentState = stateWithContext;
+            const allAnimationRequests: any[] = [];
 
             // Execute all on-cover effects sequentially
             for (const effectDef of onCoverEffects) {
                 const result = executeCustomEffect(coveredCard, laneIndex, currentState, context, effectDef);
                 currentState = result.newState;
 
+                // CRITICAL: Collect animation requests (Hate-4: delete animation)
+                if (result.animationRequests) {
+                    allAnimationRequests.push(...result.animationRequests);
+                }
+
                 // If an action is required, stop and return
                 if (currentState.actionRequired) {
                     let finalState = increaseLogIndent(currentState);
-                    return { newState: recalculateAllLaneValues(finalState) };
+                    return {
+                        newState: recalculateAllLaneValues(finalState),
+                        animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
+                    };
                 }
             }
 
             let finalState = increaseLogIndent(currentState);
             const stateWithRecalculatedValues = recalculateAllLaneValues(finalState);
-            return { newState: stateWithRecalculatedValues };
+            return {
+                newState: stateWithRecalculatedValues,
+                animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
+            };
         }
     }
 

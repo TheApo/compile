@@ -214,13 +214,11 @@ export const advancePhase = (state: GameState): GameState => {
  * This ensures that multi-effect cards (like Chaos-1) always work correctly
  * regardless of which resolver was used.
  */
-function queuePendingCustomEffects(state: GameState): GameState {
+export function queuePendingCustomEffects(state: GameState): GameState {
     const pendingEffects = (state as any)._pendingCustomEffects;
     if (!pendingEffects || pendingEffects.effects.length === 0) {
         return state; // No pending effects, nothing to do
     }
-
-    console.log('[CENTRAL QUEUE] Found pending effects:', pendingEffects.effects.length);
 
     const pendingAction: any = {
         type: 'execute_remaining_custom_effects',
@@ -243,7 +241,6 @@ function queuePendingCustomEffects(state: GameState): GameState {
 
     // Clear from state after queueing
     delete (newState as any)._pendingCustomEffects;
-    console.log('[CENTRAL QUEUE] Queued', pendingEffects.effects.length, 'pending effects');
 
     return newState;
 }
@@ -261,14 +258,10 @@ export const processQueuedActions = (state: GameState): GameState => {
         return mutableState;
     }
 
-    console.log('[PROCESS QUEUE] Processing queue with', mutableState.queuedActions.length, 'actions');
-    console.log('[PROCESS QUEUE] Action types:', mutableState.queuedActions.map(a => a.type));
-
     let queuedActions = [...mutableState.queuedActions];
 
     while (queuedActions.length > 0) {
         const nextAction = queuedActions.shift()!;
-        console.log('[PROCESS QUEUE] Processing action:', nextAction.type);
 
         // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
         // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
@@ -389,12 +382,74 @@ export const processQueuedActions = (state: GameState): GameState => {
             }
 
             // Execute remaining effects sequentially
-            for (const effectDef of effects) {
+            for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
+                const effectDef = effects[effectIndex];
                 const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
                 mutableState = result.newState;
 
-                // If an action is required, stop and update queuedActions
+                // CRITICAL: If this effect has animations AND no actionRequired, show them
+                // But if actionRequired is set, prioritize it over animations
+                if (result.animationRequests && result.animationRequests.length > 0 && !mutableState.actionRequired) {
+                    console.log(`[execute_remaining_custom_effects] Effect ${effectIndex + 1} has ${result.animationRequests.length} animations - stopping to show them`);
+
+                    const remainingEffects = effects.slice(effectIndex + 1);
+
+                    // If there are more effects after this one, queue them to execute AFTER animations
+                    if (remainingEffects.length > 0) {
+                        const nextAction: any = {
+                            type: 'execute_remaining_custom_effects',
+                            sourceCardId,
+                            laneIndex,
+                            effects: remainingEffects,
+                            context,
+                            actor: context.cardOwner,
+                        };
+                        mutableState.queuedActions = [nextAction, ...(queuedActions || [])];
+                    } else {
+                        // No more effects - restore original queue
+                        mutableState.queuedActions = queuedActions;
+                    }
+
+                    // Set animation state so it displays
+                    // Take the FIRST animation request (show one at a time)
+                    const firstAnimation = result.animationRequests[0];
+                    if (firstAnimation.type === 'draw') {
+                        mutableState.animationState = {
+                            type: 'draw',
+                            player: firstAnimation.player as Player,
+                            count: firstAnimation.count
+                        };
+                    } else if (firstAnimation.type === 'play') {
+                        mutableState.animationState = {
+                            type: 'playCard',
+                            cardId: firstAnimation.cardId
+                        };
+                    } else if (firstAnimation.type === 'delete') {
+                        mutableState.animationState = {
+                            type: 'deleteCard',
+                            cardId: firstAnimation.cardId
+                        };
+                    }
+
+                    // Return to trigger animation display - queue will continue after animation
+                    return mutableState;
+                }
+
+                // If an action is required, stop and save remaining effects
                 if (mutableState.actionRequired) {
+                    const remainingEffects = effects.slice(effectIndex + 1);
+
+                    // CRITICAL: Save remaining effects to be executed after this action completes
+                    if (remainingEffects.length > 0) {
+                        console.log(`[processQueuedActions] Stopping at effect ${effectIndex + 1}/${effects.length}, ${remainingEffects.length} effects remaining`);
+                        (mutableState as any)._pendingCustomEffects = {
+                            sourceCardId,
+                            laneIndex,
+                            context,
+                            effects: remainingEffects
+                        };
+                    }
+
                     // CRITICAL: If there's an interrupted turn, restore it before returning
                     // This ensures the turn is correct when the action is displayed to the user
                     if (mutableState._interruptedTurn) {

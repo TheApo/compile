@@ -44,6 +44,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
                 const cardValue = 6; // Metal-6 value in trash is always its face-up value
                 stateAfterTriggers = log(stateAfterTriggers, action.actor, `Light-0: Drawing ${cardValue} card(s) after Metal-6 was deleted.`);
                 stateAfterTriggers = drawForPlayer(stateAfterTriggers, action.actor, cardValue);
+                stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
                 stateAfterTriggers.actionRequired = null; // Light-0 action is complete.
                 if (stateAfterTriggers.actionRequired) return stateAfterTriggers; // Check for triggers from drawing
                 return endTurnCb(stateAfterTriggers);
@@ -52,6 +53,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (action?.type === 'select_any_other_card_to_flip_for_water_0') {
                 // The self-flip is already in the queue, so we don't need to add it again.
                 // We just need to ensure the turn proceeds correctly after this animation.
+                stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
                 stateAfterTriggers.actionRequired = null;
                 return endTurnCb(stateAfterTriggers);
             }
@@ -62,6 +64,19 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
                 stateAfterTriggers.actionRequired = { ...action, count: remainingCount };
                 return stateAfterTriggers;
             }
+            // CRITICAL: If the input state already has actionRequired or queuedActions,
+            // it means processQueuedActions already ran and set up the next action.
+            // We should NOT override it by calling queuePendingCustomEffects again.
+            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) {
+                // Preserve actionRequired/queuedActions from input state
+                return {
+                    ...stateAfterTriggers,
+                    actionRequired: s.actionRequired,
+                    queuedActions: s.queuedActions
+                };
+            }
+
+            stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
             stateAfterTriggers.actionRequired = null;
 
             if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
@@ -129,6 +144,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 requiresTurnEnd = false;
             } else {
                 // No more lanes, clear action
+                newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 if (newState.queuedActions && newState.queuedActions.length > 0) {
                     requiresTurnEnd = false;
@@ -187,6 +203,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             // CRITICAL: ALWAYS queue pending effects to execute after the flipped card's on-flip effects complete
             const pendingEffects = (newState as any)._pendingCustomEffects;
             if (pendingEffects && pendingEffects.effects.length > 0) {
+                console.log('[SOFTLOCK DEBUG] Queueing pending effects after flip:');
+                console.log('  - cardOwner from context:', pendingEffects.context.cardOwner);
+                console.log('  - flipActor (prev actor):', flipActor);
+                console.log('  - current turn:', newState.turn);
+                console.log('  - actionRequired actor:', newState.actionRequired?.actor);
+                console.log('  - remaining effects:', pendingEffects.effects.length);
+
                 // ALWAYS queue the pending effects - never execute immediately
                 // This ensures the flipped card's on-flip effects (which may set actionRequired) complete first
                 const pendingAction: ActionRequired = {
@@ -195,10 +218,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     laneIndex: pendingEffects.laneIndex,
                     effects: pendingEffects.effects,
                     context: pendingEffects.context,
-                    actor: flipActor,
+                    actor: pendingEffects.context.cardOwner,  // CRITICAL: Use cardOwner from context, NOT flipActor (which could be from an uncover interrupt)
                     // Store the flipped card ID if needed for "that card" effects
                     selectedCardFromPreviousEffect: pendingEffects.effects[0].useCardFromPreviousEffect ? targetCardId : undefined,
                 } as any;
+
+                console.log('  - queued action actor:', pendingAction.actor);
 
                 // ALWAYS queue the pending effects, never set as actionRequired!
                 // execute_remaining_custom_effects is an internal action, not a user action
@@ -206,6 +231,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     ...(newState.queuedActions || []),
                     pendingAction
                 ];
+
+                console.log('  - queue length after:', newState.queuedActions.length);
 
                 // Clear from state after queueing
                 delete (newState as any)._pendingCustomEffects;
@@ -297,6 +324,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // Source card (e.g., Darkness-1) was deleted/returned/flipped → Cancel the shift
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     newState = log(prev, prev.actionRequired.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+                    newState = phaseManager.queuePendingCustomEffects(newState);
                     newState.actionRequired = null;
                     requiresTurnEnd = true;
                     break;
@@ -474,6 +502,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const sourceLane = prev[sourceCardInfo.owner].lanes[sourceLaneIndex];
             const sourceWasTopCard = sourceLane && sourceLane.length > 0 && sourceLane[sourceLane.length - 1].id === sourceCardId;
 
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [
@@ -529,6 +558,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             if (!cardInfo) {
                 newState = log(prev, actor, `Card no longer on board. Delete skipped.`);
+                newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 requiresTurnEnd = true;
                 break;
@@ -545,11 +575,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const newLanes = [...prev[owner].lanes];
             newLanes[laneIndex] = lane;
 
-            newState = {
+            let stateAfterDelete = {
                 ...prev,
                 [owner]: { ...prev[owner], lanes: newLanes },
-                actionRequired: null,
             };
+
+            newState = phaseManager.queuePendingCustomEffects(stateAfterDelete);
+            newState.actionRequired = null;
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
             newState = { ...newState, stats: { ...newState.stats, [actor]: newStats } };
@@ -574,6 +606,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (!sourceCardInfoCheck || !sourceCardInfoCheck.card.isFaceUp) {
                 const cardName = sourceCardInfoCheck ? `${sourceCardInfoCheck.card.protocol}-${sourceCardInfoCheck.card.value}` : 'the source card';
                 newState = log(prev, actor, `Effect from ${cardName} was cancelled because the source is no longer active.`);
+                newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 requiresTurnEnd = true;
                 break;
@@ -625,15 +658,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
             newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
-            
+
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-            
+
             const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
 
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -649,6 +683,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
                     const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: deletingPlayer });
                     stateAfterTriggers = reactiveResult.newState;
+
+                    // CRITICAL: Queue pending custom effects after delete completes (Hate-1: multiple deletes)
+                    stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
 
                     // 2. Determine the next step of the ORIGINAL multi-step delete action BEFORE uncovering
                     let nextStepOfDeleteAction: ActionRequired = null;
@@ -901,17 +938,18 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (!cardInfo) return { nextState: prev };
 
             const actor = prev.actionRequired.actor; // The opponent is the one deleting
-            
+
             newState = log(newState, actor, `Plague-4: Opponent deletes one of their face-down cards.`);
-            
+
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-            
+
             const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
-            
+
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -979,6 +1017,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
 
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -1064,6 +1103,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
 
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -1115,9 +1155,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     sourceCardId: sourceCardId,
                     actor: actor,
                 };
+                // CRITICAL: Like Water-0, Psychic-4's self-flip should execute BEFORE pending effects
                 stateAfterReturn.queuedActions = [
+                    flipAction,  // ← AN DEN ANFANG!
                     ...(stateAfterReturn.queuedActions || []),
-                    flipAction
                 ];
                 newState = stateAfterReturn;
                 requiresTurnEnd = false; // There's still an action pending
@@ -1181,11 +1222,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
                 newState = log(prev, actor, `Effect from ${cardName} was cancelled because the source is no longer active.`);
+                newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 requiresTurnEnd = true;
                 break;
             }
-            
+
             let nextActionInChain: ActionRequired = null;
             if (count > 1) {
                 nextActionInChain = {
@@ -1291,12 +1333,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             });
 
             if (stateAfterInterrupt.actionRequired) {
-                // Interrupt occurred - add self-flip to end of queue
+                // Interrupt occurred - add self-flip to BEGINNING of queue
+                // CRITICAL: Water-0's self-flip must execute BEFORE any pending effects from the interrupted card chain
                 stateAfterInterrupt.queuedActions = [
+                    selfFlipAction,  // ← AN DEN ANFANG!
                     ...(stateAfterInterrupt.queuedActions || []),
-                    selfFlipAction
                 ];
-                console.log('[WATER-0 QUEUE] Added to END of queue (interrupt case), new queue length:', stateAfterInterrupt.queuedActions.length);
+                console.log('[WATER-0 QUEUE] Added to BEGINNING of queue (interrupt case), new queue length:', stateAfterInterrupt.queuedActions.length);
                 console.log('[WATER-0 QUEUE] Current actionRequired:', stateAfterInterrupt.actionRequired.type);
             } else {
                 // No interrupt - add self-flip as the ONLY queued action
@@ -1439,9 +1482,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             // CRITICAL: execute_remaining_custom_effects should NOT be set as actionRequired!
             // It's an internal action that should be processed by processQueuedActions in phaseManager
             if (nextAction?.type === 'execute_remaining_custom_effects') {
-                // Put it back in queue and return with actionRequired = null
+                // Put it back in queue and return with no action required
                 // This will trigger turnProgressionCb -> processEndOfAction -> processQueuedActions
-                return { nextState: { ...newState, actionRequired: null, queuedActions: [nextAction, ...newQueue] }, requiresTurnEnd: false };
+                const stateWithQueue = phaseManager.queuePendingCustomEffects(newState);
+                return { nextState: { ...stateWithQueue, actionRequired: null, queuedActions: [nextAction, ...newQueue] }, requiresTurnEnd: false };
             }
 
             // CRITICAL: Validate shift actions before setting as actionRequired!

@@ -149,6 +149,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Check if disallowed
             if (actionRequired.disallowedIds.includes(card.id)) return false;
 
+            // NEW: If allowedIds is set (calculation: highest_value/lowest_value), only these cards are targetable
+            const allowedIds = (actionRequired as any).allowedIds;
+            if (allowedIds && !allowedIds.includes(card.id)) return false;
+
             // NEW: If currentLaneIndex is set (scope: 'each_lane'), only cards in that lane are targetable
             const currentLaneIndex = (actionRequired as any).currentLaneIndex;
             if (currentLaneIndex !== undefined && laneIndex !== currentLaneIndex) return false;

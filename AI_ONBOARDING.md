@@ -228,6 +228,7 @@ Das CSS ist modular aufgeteilt - **NIEMALS** direkt in einzelne CSS-Dateien scha
 
 Beim Start einer neuen Programmier-Session:
 
+- [ ] **ZUERST:** `npm run check:all` ausführen! ⚡
 - [ ] Lies `beschreibung.txt` (2 min)
 - [ ] Lies `COMP-MN01_Rulesheet_Updated.pdf` Seite 1-2 (3 min)
 - [ ] Lies `LOGGING_SYSTEM.md` (5 min) ⭐
@@ -235,7 +236,67 @@ Beim Start einer neuen Programmier-Session:
 - [ ] **OPTIONAL:** Lies `CUSTOM_PROTOCOL_CREATOR.md` wenn Custom Protocol Task (5 min)
 - [ ] **DANN:** Melde dich beim User zurück!
 
-**Geschätzte Zeit:** ~12 Minuten (17 min mit Custom Protocols)
+**Geschätzte Zeit:** ~13 Minuten (18 min mit Custom Protocols)
+
+---
+
+## 🔨 Build & Test Prozedere (PFLICHT!)
+
+**VOR JEDEM BUILD MUSS DIES AUSGEFÜHRT WERDEN:**
+
+```bash
+# IMMER in dieser Reihenfolge:
+npm run check:all    # Prüft queuePendingCustomEffects + custom protocol JSONs
+npm run build        # Baut das Projekt
+```
+
+### Was `npm run check:all` prüft:
+
+1. **`check:effects`** - Findet fehlende `queuePendingCustomEffects` calls
+   - ✅ Alle Resolver/Helpers haben queue vor `actionRequired = null`
+   - ❌ Fehlt queue → Multi-Effect Karten brechen!
+
+2. **`test:protocols`** - Validiert alle custom protocol JSONs
+   - ✅ Alle effects haben `position`, `trigger`, `params`, `id`
+   - ✅ Conditional chains korrekt verschachtelt
+   - ✅ ReactiveTriggerActor bei reactive triggers gesetzt
+   - ❌ Structural errors → Karten funktionieren nicht!
+
+### ⚠️ NIEMALS ohne Tests bauen!
+
+**FALSCH** ❌:
+```bash
+npm run build  # Direkt bauen ohne Tests
+```
+
+**RICHTIG** ✅:
+```bash
+npm run check:all && npm run build
+```
+
+### Nach JEDER Code-Änderung:
+
+- [ ] Geändert: Resolver/Helper? → `npm run check:all`
+- [ ] Geändert: Custom Protocol JSON? → `npm run check:all`
+- [ ] Geändert: Text-Generierung? → `npm run check:all`
+- [ ] **DANN ERST:** `npm run build`
+
+### Wenn Tests fehlschlagen:
+
+**check:effects schlägt fehl:**
+- Problem: Fehlende `queuePendingCustomEffects`
+- Fix: Vor JEDEM `actionRequired = null` einfügen:
+  ```typescript
+  newState = queuePendingCustomEffects(newState);
+  newState.actionRequired = null;
+  ```
+
+**test:protocols schlägt fehl:**
+- Problem: Fehlendes Feld in custom protocol JSON
+- Fix: Fehlende `position`, `trigger`, etc. hinzufügen
+- Beispiel: `"position": "middle"` bei middleEffects
+
+**NIEMALS Code committen wenn Tests fehlschlagen!**
 
 ---
 
@@ -260,11 +321,24 @@ Beim Start einer neuen Programmier-Session:
 | **AI-Entscheidungen** | `logic/ai/easy.ts`, `normal.ts`, `hardImproved.ts` |
 | **Uncover-Logic** | `logic/game/helpers/actionUtils.ts` → `handleUncoverEffect` |
 | **Queued Actions** | `logic/game/phaseManager.ts` → `processQueuedActions` |
+| **Pending Effects Queue** | `logic/game/phaseManager.ts` → `queuePendingCustomEffects` ⭐ |
 | **Effect Execution** | `logic/effectExecutor.ts` (Original + Custom) |
+| **Check Missing Queues** | `npm run check:effects` (Auto-Check Script) ⚡ |
+| **Check Custom Protocols** | `npm run test:protocols` (JSON Validation) ⚡ |
+| **Check ALLES** | `npm run check:all` (Beide Tests) ⚡ |
 
 ---
 
 ## 🔥 Häufige Bug-Kategorien & Wo schauen
+
+### 🚨 Effekte werden verschluckt (Multi-Effect Karten)
+→ **Check:**
+1. **ZUERST:** `npm run check:effects` ausführen ⚡
+2. Suche nach `actionRequired = null` ohne vorheriges `queuePendingCustomEffects`
+3. Prüfe `logic/game/resolvers/` (laneResolver, discardResolver, cardResolver)
+4. Prüfe `logic/game/helpers/actionUtils.ts` (handleUncoverEffect, handleOnFlipToFaceUp)
+5. **Pattern:** Reactive Effects → queuePendingCustomEffects → actionRequired = null
+→ **Symptom:** Zweiter/dritter Effekt wird nicht ausgeführt nach Uncover/Shift/Return
 
 ### Softlock nach Effekt
 → **Check:**
@@ -360,7 +434,20 @@ Beim Start einer neuen Programmier-Session:
 
 ## ⚠️ Kritische Warnungen
 
-1. **NIEMALS** `actionRequired = null` setzen ohne zu prüfen, ob queued actions verarbeitet werden müssen!
+1. **🚨 NIEMALS** `actionRequired = null` setzen ohne vorher `queuePendingCustomEffects(newState)` zu rufen!
+   - **Warum:** Multi-Effect Custom Protocols speichern pending effects in `_pendingCustomEffects`
+   - **Fix:** IMMER `newState = queuePendingCustomEffects(newState);` VOR `actionRequired = null`
+   - **Check-Script:** `npm run check:all` findet alle fehlenden Stellen automatisch!
+   - **Pattern:**
+     ```typescript
+     // ❌ FALSCH - Effects werden verschluckt!
+     newState.actionRequired = null;
+
+     // ✅ RICHTIG - Effects werden in Queue gespeichert
+     newState = queuePendingCustomEffects(newState);
+     newState.actionRequired = null;
+     ```
+   - **VOR JEDEM BUILD:** `npm run check:all && npm run build` ausführen!
 
 2. **IMMER** `decreaseLogIndent` symmetrisch zu `increaseLogIndent` aufrufen!
 

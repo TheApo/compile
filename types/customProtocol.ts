@@ -328,6 +328,11 @@ export interface EffectDefinition {
     // NEW: Reference card from previous effect in chain
     // Enables: "Flip 1 card. Shift THAT card" or "Flip 1 card. Draw cards equal to THAT card's value"
     useCardFromPreviousEffect?: boolean;
+    // NEW: For reactive triggers (after_delete, after_draw, etc.) - who triggers it?
+    // - 'self': Only when card owner performs the action (default for Hate-3, Spirit-3)
+    // - 'opponent': Only when opponent performs the action
+    // - 'any': When anyone performs the action
+    reactiveTriggerActor?: 'self' | 'opponent' | 'any';
 }
 
 /**

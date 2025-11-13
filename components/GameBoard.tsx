@@ -42,13 +42,22 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         if (isPlayFromHand) {
             card = player.hand.find(c => c.id === selectedCardId);
         } else if (isPlayFromEffect) {
+            // Life-3: Playing from deck - no card in hand
+            if ((actionRequired as any).source === 'deck') {
+                // Exclude current lane if specified
+                if ((actionRequired as any).excludeCurrentLane && laneIndex === (actionRequired as any).currentLaneIndex) {
+                    return { isPlayable: false, isMatching: false, isCompilable };
+                }
+                // All other lanes are playable (face-down from deck, no protocol matching needed)
+                return { isPlayable: true, isMatching: false, isCompilable };
+            }
             card = player.hand.find(c => c.id === actionRequired.cardInHandId);
         }
-    
+
         if (!card) {
             return { isPlayable: false, isMatching: false, isCompilable };
         }
-    
+
         if (isPlayFromEffect && laneIndex === actionRequired.disallowedLaneIndex) {
             return { isPlayable: false, isMatching: false, isCompilable };
         }

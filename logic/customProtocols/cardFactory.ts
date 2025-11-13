@@ -8,8 +8,10 @@ import { CustomProtocolDefinition, CustomCardDefinition, EffectDefinition } from
 
 /**
  * Generates human-readable text for an effect
+ * IMPORTANT: This is the single source of truth for effect text generation
+ * Used by both the game engine AND the card editor preview
  */
-const getEffectSummary = (effect: EffectDefinition): string => {
+export const getEffectSummary = (effect: EffectDefinition): string => {
     const params = effect.params as any;
     let mainText = '';
 
@@ -223,10 +225,18 @@ const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            // NEW: Spirit-3 special case - "shift this card"
-            // Only when no owner filter OR no position filter (except position=any)
-            const hasSpecificTargetFilter = params.targetFilter?.owner || (params.targetFilter?.position && params.targetFilter.position !== 'any');
-            const isShiftSelf = !hasSpecificTargetFilter && !params.targetFilter?.excludeSelf && count === 1;
+            // CRITICAL: Spirit-3 special case - "shift this card"
+            // This is ONLY for cards that shift themselves, with very specific conditions:
+            // - owner MUST be "own" (not "any" or "opponent")
+            // - excludeSelf MUST be false (explicitly allows self-targeting)
+            // - NO specific faceState filter (or faceState === "any")
+            // - NO specific destinationRestriction (or type === "any")
+            // Example: Spirit-3 "You may shift this card, even if this card is covered"
+            const isShiftSelf = params.targetFilter?.owner === 'own' &&
+                               params.targetFilter?.excludeSelf === false &&
+                               (!params.targetFilter?.faceState || params.targetFilter?.faceState === 'any') &&
+                               (!params.destinationRestriction || params.destinationRestriction?.type === 'any') &&
+                               count === 1;
 
             if (isShiftSelf) {
                 let text = `${mayShift} this card`;
@@ -242,7 +252,8 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
             let targetDesc = '';
 
-            if (params.targetFilter?.owner === 'opponent') targetDesc += "opponent's ";
+            // CRITICAL: "of your" before "opponent's" (Darkness-0: "Shift 1 of your opponent's covered cards")
+            if (params.targetFilter?.owner === 'opponent') targetDesc += "of your opponent's ";
             // NEW: Add "other" before position/faceState descriptors (Anarchy-1)
             if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
             // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
@@ -290,27 +301,53 @@ const getEffectSummary = (effect: EffectDefinition): string => {
             // NEW: Special handling for Anarchy-2 style (covered or uncovered)
             const isCoveredOrUncovered = params.targetFilter?.position === 'any';
 
+            // NEW: For better English grammar (Hate-2: "Delete your highest value uncovered card")
+            // When count=1 + calculation + owner, skip the "1" and put owner first
+            const hasCalculation = params.targetFilter?.calculation === 'highest_value' || params.targetFilter?.calculation === 'lowest_value';
+            const hasOwner = params.targetFilter?.owner === 'own' || params.targetFilter?.owner === 'opponent';
+            const useNaturalOrder = params.count === 1 && hasCalculation && hasOwner;
+
+            // Add count (skip if using natural order)
             if (params.count === 'all_in_lane') {
                 text += 'all ';
-            } else {
+            } else if (!useNaturalOrder) {
                 text += isCoveredOrUncovered ? 'a ' : `${params.count} `;
             }
 
+            // Add owner FIRST if using natural order (Hate-2 style)
+            if (useNaturalOrder) {
+                if (params.targetFilter?.owner === 'own') {
+                    text += 'your ';
+                } else if (params.targetFilter?.owner === 'opponent') {
+                    text += "opponent's ";
+                }
+            }
+
+            // Add calculation
             if (params.targetFilter?.calculation === 'highest_value') {
                 text += 'highest value ';
             } else if (params.targetFilter?.calculation === 'lowest_value') {
                 text += 'lowest value ';
             }
 
+            // Add value range
             if (params.targetFilter?.valueRange) {
                 const { min, max } = params.targetFilter.valueRange;
-                // Generate "value 0 or 1" instead of "value 0-1"
                 const values = [];
                 for (let i = min; i <= max; i++) {
                     values.push(i);
                 }
                 const valueText = values.join(' or ');
                 text += `value ${valueText} `;
+            }
+
+            // Add owner if NOT using natural order (normal style)
+            if (!useNaturalOrder) {
+                if (params.targetFilter?.owner === 'own') {
+                    text += 'your ';
+                } else if (params.targetFilter?.owner === 'opponent') {
+                    text += "opponent's ";
+                }
             }
 
             // NEW: Handle "covered or uncovered" case (Anarchy-2)
@@ -471,12 +508,23 @@ const getEffectSummary = (effect: EffectDefinition): string => {
 
             if (params.destinationRule?.type === 'other_lines') {
                 text += ' to other lines';
+            } else if (params.destinationRule?.type === 'another_line') {
+                // Life-3: "in another line" (singular - one random other line)
+                text += ' in another line';
             } else if (params.destinationRule?.type === 'each_other_line') {
                 text += ' in each other line';
             } else if (params.destinationRule?.type === 'under_this_card') {
                 text += ' under this card';
             } else if (params.destinationRule?.type === 'each_line_with_card') {
-                text += ' to each line with a card';
+                // Life-0: "in each line where you have a card" vs generic "to each line with a card"
+                const ownerFilter = params.destinationRule.ownerFilter;
+                if (ownerFilter === 'own') {
+                    text += ' in each line where you have a card';
+                } else if (ownerFilter === 'opponent') {
+                    text += ' in each line where opponent has a card';
+                } else {
+                    text += ' to each line with a card';
+                }
             } else if (params.destinationRule?.type === 'specific_lane') {
                 text += ' in this line';
             }
@@ -691,11 +739,10 @@ const getEffectSummary = (effect: EffectDefinition): string => {
         const followUpText = getEffectSummary(effect.conditional.thenEffect);
         // Use "Then" for sequential actions, "If you do" for conditional execution
         if (effect.conditional.type === 'then') {
-            // Chaos-4: "Discard your hand. Draw the same amount of cards."
-            // Remove period from first part and capitalize follow-up
+            // Death-1: "delete 1 other card, then delete this card."
+            // Remove period from first part and add "then" before follow-up (lowercase)
             const firstPart = mainText.endsWith('.') ? mainText.slice(0, -1) : mainText;
-            const secondPart = followUpText.charAt(0).toUpperCase() + followUpText.slice(1);
-            mainText = `${firstPart}. ${secondPart}`;
+            mainText = `${firstPart}, then ${followUpText.toLowerCase()}`;
         } else {
             // "If you do" format
             mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
@@ -733,8 +780,10 @@ const extractKeywords = (effects: EffectDefinition[]): Record<string, boolean> =
 
 /**
  * Generate text for a card's effects section
+ * IMPORTANT: This is the single source of truth for full effect text (trigger + effect)
+ * Used by both the game engine AND the card editor preview
  */
-const generateEffectText = (effects: EffectDefinition[]): string => {
+export const generateEffectText = (effects: EffectDefinition[]): string => {
     if (effects.length === 0) return '';
 
     return effects.map(effect => {
@@ -745,11 +794,27 @@ const generateEffectText = (effects: EffectDefinition[]): string => {
         if (trigger === 'end') return `<div><span class='emphasis'>End:</span> ${summary}</div>`;
         if (trigger === 'on_cover') return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
 
-        // NEW: Reactive triggers (Spirit-3, etc.)
-        if (trigger === 'after_draw') return `<div><span class='emphasis'>After you draw cards:</span> ${summary}</div>`;
-        if (trigger === 'after_delete') return `<div><span class='emphasis'>After a card is deleted:</span> ${summary}</div>`;
-        if (trigger === 'after_shift') return `<div><span class='emphasis'>After a card is shifted:</span> ${summary}</div>`;
-        if (trigger === 'after_flip') return `<div><span class='emphasis'>After a card is flipped:</span> ${summary}</div>`;
+        // NEW: Reactive triggers - text depends on reactiveTriggerActor
+        if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_shift' || trigger === 'after_flip') {
+            const triggerActor = effect.reactiveTriggerActor || 'self';
+            const actorText = triggerActor === 'self' ? 'you' :
+                             triggerActor === 'opponent' ? 'opponent' :
+                             'a card is';
+
+            let actionText = '';
+            if (trigger === 'after_draw') {
+                actionText = triggerActor === 'any' ? 'drawn' : 'draw cards';
+            } else if (trigger === 'after_delete') {
+                actionText = triggerActor === 'any' ? 'deleted' : 'delete cards';
+            } else if (trigger === 'after_shift') {
+                actionText = triggerActor === 'any' ? 'shifted' : 'shift cards';
+            } else if (trigger === 'after_flip') {
+                actionText = triggerActor === 'any' ? 'flipped' : 'flip cards';
+            }
+
+            const prefixText = triggerActor === 'any' ? `After ${actorText} ${actionText}` : `After ${actorText} ${actionText}`;
+            return `<div><span class='emphasis'>${prefixText}:</span> ${summary}</div>`;
+        }
 
         return summary;
     }).join(' ');
@@ -812,23 +877,19 @@ export const getAllCustomProtocolCards = (): Card[] => {
     try {
         const stored = localStorage.getItem('custom_protocols_v1');
         if (!stored) {
-            console.log('[Custom Protocols] No custom protocols in localStorage');
             return [];
         }
 
         const data = JSON.parse(stored);
         const protocols: CustomProtocolDefinition[] = data.protocols || [];
-        console.log('[Custom Protocols] Loaded protocols from localStorage:', protocols.map(p => p.name));
 
         const allCards: Card[] = [];
 
         for (const protocol of protocols) {
             const cards = convertCustomProtocolToCards(protocol);
-            console.log(`[Custom Protocols] Converted ${protocol.name} to ${cards.length} cards`);
             allCards.push(...cards);
         }
 
-        console.log('[Custom Protocols] Total custom cards:', allCards.length);
         return allCards;
     } catch (error) {
         console.error('Failed to load custom protocol cards:', error);

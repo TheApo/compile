@@ -172,6 +172,36 @@ export const useGameState = (
                         }
                     }, 10);
                 }, 500);
+            } else if (nextRequest.type === 'play') {
+                // NEW: Handle play animation (Life-0 multi-card effects, Life-3, etc.)
+                setGameState(s => ({ ...s, animationState: { type: 'playCard', cardId: nextRequest.cardId, owner: nextRequest.owner } as any }));
+
+                setTimeout(() => {
+                    setGameState(s => ({ ...s, animationState: null }));
+
+                    setTimeout(() => {
+                        if (rest.length > 0) {
+                            processNext(rest);
+                        } else {
+                            onComplete();
+                        }
+                    }, 10);
+                }, 500);
+            } else if (nextRequest.type === 'draw') {
+                // NEW: Handle draw animation (Life-4, refresh, custom protocol draws)
+                setGameState(s => ({ ...s, animationState: { type: 'draw', player: nextRequest.player, count: nextRequest.count } as any }));
+
+                setTimeout(() => {
+                    setGameState(s => ({ ...s, animationState: null }));
+
+                    setTimeout(() => {
+                        if (rest.length > 0) {
+                            processNext(rest);
+                        } else {
+                            onComplete();
+                        }
+                    }, 10);
+                }, 500);
             } else {
                 // Skip unknown animation types
                 setTimeout(() => {
@@ -959,22 +989,27 @@ export const useGameState = (
 
     // Hook 1: AI Turn Processing (Normal opponent turns)
     useEffect(() => {
+        // CRITICAL FIX: Don't trigger if an interrupt is active (_interruptedTurn is set)
+        // Interrupts are handled by Hook 2, not Hook 1
         if (gameState.turn === 'opponent' &&
             !gameState.winner &&
             !gameState.animationState &&
+            !gameState._interruptedTurn &&  // NEW: Don't trigger during interrupts
             !isProcessingAIRef.current) {
 
             isProcessingAIRef.current = true;
             const currentScenarioVersion = scenarioVersionRef.current;
 
+            // CRITICAL: Capture the state NOW, before setTimeout
+            const capturedState = gameState;
+
             const timer = setTimeout(() => {
                 // Check if scenario has changed - if so, abort this callback
                 if (scenarioVersionRef.current !== currentScenarioVersion) {
-                    console.log('[AI Hook 1] Scenario changed, aborting stale callback');
                     return;
                 }
 
-                aiManager.runOpponentTurn(gameState, setGameState, difficulty, {
+                aiManager.runOpponentTurn(capturedState, setGameState, difficulty, {
                     compileLane: (s, l) => resolvers.performCompile(s, l, onEndGame),
                     playCard: resolvers.playCard,
                     fillHand: resolvers.performFillHand,
@@ -1013,7 +1048,7 @@ export const useGameState = (
                 isProcessingAIRef.current = false;
             };
         }
-    }, [gameState.turn, gameState.winner, gameState.animationState, difficulty, onEndGame, processAnimationQueue, gameState.actionRequired]);
+    }, [gameState.turn, gameState.winner, gameState.animationState, gameState._interruptedTurn, difficulty, onEndGame, processAnimationQueue, gameState.actionRequired]);
 
     // Hook 2: Opponent Action During Player Turn (Higher priority - shorter timeout)
     useEffect(() => {
@@ -1031,47 +1066,42 @@ export const useGameState = (
         // We check !isProcessingAIRef.current AFTER all other conditions, and set it immediately
         if (isOpponentActionDuringPlayerTurn && !isProcessingAIRef.current) {
             isProcessingAIRef.current = true;
-            const currentScenarioVersion = scenarioVersionRef.current;
 
-            const timer = setTimeout(() => {
-                // Check if scenario has changed - if so, abort this callback
-                if (scenarioVersionRef.current !== currentScenarioVersion) {
-                    console.log('[AI Hook 2] Scenario changed, aborting stale callback');
-                    return;
-                }
+            // CRITICAL: Execute IMMEDIATELY without setTimeout to avoid React Hook race conditions
+            // The closure and cleanup functions were causing the wrong state to be used
+            aiManager.resolveRequiredOpponentAction(
+                gameState,
+                setGameState,
+                difficulty,
+                {
+                    discardCards: resolvers.discardCards,
+                    flipCard: resolvers.flipCard,
+                    returnCard: resolvers.returnCard,
+                    deleteCard: (s, c) => ({
+                        newState: s,
+                        animationRequests: [{ type: 'delete', cardId: c, owner: 'opponent'}]
+                    }),
+                    resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
+                    resolveLove1Prompt: resolvers.resolveLove1Prompt,
+                    resolveHate1Discard: resolvers.resolveHate1Discard,
+                    revealOpponentHand: resolvers.revealOpponentHand,
+                    resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
+                    resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
+                    resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
+                    resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
+                },
+                phaseManager,
+                processAnimationQueue,
+                resolvers.resolveActionWithCard,
+                resolvers.resolveActionWithLane,
+                trackPlayerRearrange
+            );
 
-                aiManager.resolveRequiredOpponentAction(
-                    gameState,
-                    setGameState,
-                    difficulty,
-                    {
-                        discardCards: resolvers.discardCards,
-                        flipCard: resolvers.flipCard,
-                        returnCard: resolvers.returnCard,
-                        deleteCard: (s, c) => ({
-                            newState: s,
-                            animationRequests: [{ type: 'delete', cardId: c, owner: 'opponent'}]
-                        }),
-                        resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
-                        resolveLove1Prompt: resolvers.resolveLove1Prompt,
-                        resolveHate1Discard: resolvers.resolveHate1Discard,
-                        revealOpponentHand: resolvers.revealOpponentHand,
-                        resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
-                        resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
-                        resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
-                        resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
-                    },
-                    phaseManager,
-                    processAnimationQueue,
-                    resolvers.resolveActionWithCard,
-                    resolvers.resolveActionWithLane,
-                    trackPlayerRearrange
-                );
-            }, 1400); // Shorter timeout - interrupts have priority!
-            return () => {
-                clearTimeout(timer);
+            // CRITICAL: Don't reset lock immediately - wait for React state updates to propagate
+            // Otherwise another hook execution might trigger before the state is updated
+            setTimeout(() => {
                 isProcessingAIRef.current = false;
-            };
+            }, 1000); // Keep lock for 1 second to prevent race conditions
         }
     }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue, onEndGame]);
 
