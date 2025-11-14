@@ -2138,6 +2138,84 @@ export const scenario40_LifeCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 41: Light_custom Playground
+ *
+ * Test all Light_custom cards
+ * - Light-0: Flip 1 card. Draw cards equal to that card's value.
+ * - Light-1: [Bottom end] End: Draw 1 card.
+ * - Light-2: Draw 2 cards. You may shift or flip 1 face-down card. (simplified: choice between shift/flip)
+ * - Light-3: Shift all face-down cards in this line to another line.
+ * - Light-4: Your opponent reveals their hand.
+ * - Light-5: Discard 1 card.
+ */
+export const scenario41_LightCustomPlayground: TestScenario = {
+    name: "Light_custom Test Playground",
+    description: "🆕 All Light_custom cards on hand - burn away the dark",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Light_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Light_custom cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Light_custom', 0, true),
+            createCard('Light_custom', 1, true),
+            createCard('Light_custom', 2, true),
+            createCard('Light_custom', 3, true),
+            createCard('Light_custom', 4, true),
+            createCard('Light_custom', 5, true),
+        ];
+
+        // Opponent: Mixed cards for Light-0 flip testing
+        // Lane 0: Fire-3 (face-down) - for Light-0 to flip → draws 3 cards if flipped face-up
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 3, false)); // Face-down (value 2) → flip to face-up (value 3)
+
+        // Lane 1: Metal-4 (face-up) - for Light-0 to flip → draws 2 cards if flipped face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, false)); // Face-up (value 4) → flip to face-down (value 2)
+
+        // Lane 2: Death-5 (face-up) for variety
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 5, true));
+
+        // Player Lane 1: Multiple face-down cards for Light-3 testing ("Shift all face-down cards in this line")
+        // Light-3 should shift ALL of these to another line
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, false)); // Face-down (will be shifted by Light-3)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, false)); // Face-down (covered, will be shifted)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, false)); // Face-down (uncovered, will be shifted)
+
+        // Player Lane 0: Mix of face-up and face-down
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 1, true)); // Face-up (won't be shifted by Light-3)
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 2, false)); // Face-down (will be shifted by Light-3 if in scope)
+
+        // Player Lane 2: Face-down card for Light-2 shift/flip choice
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 5, false)); // Face-down for Light-2 testing
+
+        // Ensure player has enough cards in deck for Light-0 draw effect
+        newState.player.deck = [
+            createCard('Water', 0, true),
+            createCard('Water', 1, true),
+            createCard('Spirit', 0, true),
+            createCard('Spirit', 3, true),
+            createCard('Spirit', 4, true),
+        ];
+
+        // Ensure opponent has cards in hand for Light-4 reveal testing
+        newState.opponent.hand = [
+            createCard('Metal', 1, true),
+            createCard('Death', 2, true),
+            createCard('Fire', 3, true),
+            createCard('Metal', 0, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2179,4 +2257,5 @@ export const allScenarios: TestScenario[] = [
     scenario38_FrostCustomPlayground,
     scenario39_HateCustomPlayground,
     scenario40_LifeCustomPlayground,
+    scenario41_LightCustomPlayground,
 ];

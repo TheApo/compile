@@ -12,6 +12,7 @@ import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 import { isFrost1Active, isFrost1BottomActive } from '../effects/common/frost1Check';
 import { executeOnCoverEffect } from '../effectExecutor';
+import { getEffectiveCardValue } from '../game/stateManager';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -21,7 +22,8 @@ export function executeCustomEffect(
     laneIndex: number,
     state: GameState,
     context: EffectContext,
-    effectDef: EffectDefinition
+    effectDef: EffectDefinition,
+    allEffects?: EffectDefinition[]  // NEW: Pass all effects to check for chains
 ): EffectResult {
     const params = effectDef.params as any;
     const action = params.action;
@@ -53,8 +55,10 @@ export function executeCustomEffect(
 
     // CRITICAL: Handle optional effects BEFORE executing them
     // If params.optional === true, create a prompt instead of executing directly
-    // This works for ALL effect types (discard, flip, delete, shift, return, etc.)
-    if (params.optional === true) {
+    // EXCEPTION: 'reveal' with source='board' handles optional internally (needs to check targets first)
+    const isRevealBoard = action === 'reveal' && params.source === 'board';
+
+    if (params.optional === true && !isRevealBoard) {
         console.log(`[Custom Effect] Optional effect detected (${action}) - creating prompt`);
         let newState = { ...state };
         newState.actionRequired = {
@@ -396,11 +400,37 @@ function executeDrawEffect(
     const countType = params.countType || 'fixed';
 
     switch (countType) {
-        case 'equal_to_card_value':
+        case 'equal_to_card_value': {
             // Light-0: "Flip 1 card. Draw cards equal to that card's value"
-            count = context.referencedCardValue || 0;
-            console.log(`[Draw Effect] Using referenced card value: ${count}`);
+            // Use lastCustomEffectTargetCardId from state (set by previous effect)
+            const targetCardId = state.lastCustomEffectTargetCardId;
+            console.log(`[Draw Effect - Light-0 DEBUG] Starting equal_to_card_value check`);
+            console.log(`[Draw Effect - Light-0 DEBUG] lastCustomEffectTargetCardId: ${targetCardId}`);
+            console.log(`[Draw Effect - Light-0 DEBUG] Full state keys:`, Object.keys(state));
+            console.log(`[Draw Effect - Light-0 DEBUG] actionRequired:`, state.actionRequired?.type);
+
+            if (targetCardId) {
+                const targetCardInfo = findCardOnBoard(state, targetCardId);
+                console.log(`[Draw Effect - Light-0 DEBUG] findCardOnBoard result:`, targetCardInfo ? `${targetCardInfo.card.protocol}-${targetCardInfo.card.value}` : 'null');
+
+                if (targetCardInfo) {
+                    const targetOwner = targetCardInfo.owner;
+                    const laneContext = state[targetOwner].lanes.find(l => l.some(c => c.id === targetCardId)) || [];
+                    count = getEffectiveCardValue(targetCardInfo.card, laneContext);
+                    console.log(`[Draw Effect] Using referenced card value: ${count} from card ${targetCardInfo.card.protocol}-${targetCardInfo.card.value}`);
+                } else {
+                    // Card was removed from board (e.g., Water-4 returned to hand after flip)
+                    count = 0;
+                    let newState = log(state, cardOwner, `Cannot draw cards - referenced card is no longer on board (was returned/deleted).`);
+                    console.log(`[Draw Effect] Referenced card not found on board - was likely returned/deleted by its own effect. Skipping draw.`);
+                    return { newState };
+                }
+            } else {
+                count = context.referencedCardValue || 0;
+                console.log(`[Draw Effect - Light-0 DEBUG] No lastCustomEffectTargetCardId, using context.referencedCardValue: ${count}`);
+            }
             break;
+        }
 
         case 'equal_to_discarded':
             // Fire-4: "Discard 1 or more cards. Draw the amount discarded plus 1"
@@ -440,6 +470,7 @@ function executeDrawEffect(
     // Prevent drawing 0 or negative cards
     if (count <= 0) {
         console.log(`[Draw Effect] Count is ${count}, skipping draw`);
+        console.log(`[Draw Effect DEBUG] Returning state - turn: ${state.turn}, phase: ${state.phase}, actionRequired: ${state.actionRequired?.type || 'null'}`);
         return { newState: state };
     }
 
@@ -507,10 +538,12 @@ function executeDrawEffect(
         newState = reactiveResult.newState;
     }
 
-    // Add draw animation request (Life-4 and other draw effects)
-    const animationRequests = drawnCards.length > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count: drawnCards.length }] : undefined;
+    // TEMPORARY FIX: Don't return animation for custom protocol draws to avoid blocking hand interactions
+    // The animation causes a race condition where Check Cache runs while animation is still playing
+    // TODO: Fix the async timing properly
+    // const animationRequests = drawnCards.length > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count: drawnCards.length }] : undefined;
 
-    return { newState, animationRequests };
+    return { newState };
 }
 
 /**
@@ -524,6 +557,37 @@ function executeFlipEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+
+    // NEW: Generic useCardFromPreviousEffect support
+    // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
+    if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
+        const targetCardId = state.lastCustomEffectTargetCardId;
+        const targetCardInfo = findCardOnBoard(state, targetCardId);
+
+        if (!targetCardInfo) {
+            // Card no longer exists
+            let newState = log(state, cardOwner, `Target card from previous effect no longer exists. Flip skipped.`);
+            return { newState };
+        }
+
+        // Flip the target card directly
+        let newState = { ...state };
+        const owner = targetCardInfo.owner;
+        const targetLaneIndex = newState[owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+
+        if (targetLaneIndex !== -1) {
+            const lane = newState[owner].lanes[targetLaneIndex];
+            const cardToFlip = lane.find(c => c.id === targetCardId);
+
+            if (cardToFlip) {
+                cardToFlip.isFaceUp = !cardToFlip.isFaceUp;
+                const direction = cardToFlip.isFaceUp ? 'face-up' : 'face-down';
+                newState = log(newState, cardOwner, `Flips that card ${direction}.`);
+            }
+        }
+
+        return { newState };
+    }
 
     // NEW: Each lane mode (Chaos-0: "In each line, flip 1 covered card")
     if (params.scope === 'each_lane') {
@@ -779,6 +843,63 @@ function executeDeleteEffect(
 ): EffectResult {
     const { cardOwner } = context;
     let count = params.count || 1;
+
+    // NEW: Generic useCardFromPreviousEffect support
+    // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
+    if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
+        const targetCardId = state.lastCustomEffectTargetCardId;
+        const targetCardInfo = findCardOnBoard(state, targetCardId);
+
+        if (!targetCardInfo) {
+            // Card no longer exists
+            let newState = log(state, cardOwner, `Target card from previous effect no longer exists. Delete skipped.`);
+            return { newState };
+        }
+
+        // Delete the target card directly
+        let newState = { ...state };
+        const owner = targetCardInfo.owner;
+        const targetLaneIndex = newState[owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+
+        if (targetLaneIndex !== -1) {
+            const lane = [...newState[owner].lanes[targetLaneIndex]];
+            const cardIndex = lane.findIndex(c => c.id === targetCardId);
+
+            if (cardIndex !== -1) {
+                const wasTopCard = cardIndex === lane.length - 1;
+                lane.splice(cardIndex, 1);
+
+                const newLanes = [...newState[owner].lanes];
+                newLanes[targetLaneIndex] = lane;
+
+                newState = {
+                    ...newState,
+                    [owner]: { ...newState[owner], lanes: newLanes }
+                };
+
+                const cardName = targetCardInfo.card.isFaceUp
+                    ? `${targetCardInfo.card.protocol}-${targetCardInfo.card.value}`
+                    : 'that card';
+                newState = log(newState, cardOwner, `Deletes ${cardName}.`);
+
+                // Update stats
+                const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
+                newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
+
+                // Handle uncover if was top card
+                if (wasTopCard && lane.length > 0) {
+                    const uncoverResult = handleUncoverEffect(newState, owner, targetLaneIndex);
+                    newState = uncoverResult.newState;
+                }
+
+                // Animation request
+                const animationRequests = [{ type: 'delete' as const, cardId: targetCardId, owner }];
+                return { newState, animationRequests };
+            }
+        }
+
+        return { newState };
+    }
 
     // NEW: Line Filter - Metal-3: "If there are 8 or more cards in this line"
     if (params.scope?.minCardsInLane) {
@@ -1299,6 +1420,67 @@ function executeShiftEffect(
     const { cardOwner } = context;
     let newState = { ...state };
 
+    // NEW: Generic useCardFromPreviousEffect support
+    // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
+    if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
+        const targetCardId = state.lastCustomEffectTargetCardId;
+        const targetCardInfo = findCardOnBoard(state, targetCardId);
+
+        if (!targetCardInfo) {
+            // Card no longer exists
+            let newState = log(state, cardOwner, `Target card from previous effect no longer exists. Shift skipped.`);
+            return { newState };
+        }
+
+        // Check if there's a fixed destination restriction (e.g., "to another line")
+        const destinationRestriction = params.destinationRestriction;
+        if (destinationRestriction?.type === 'to_this_lane') {
+            // Resolve 'current' laneIndex to actual lane number
+            const resolvedTargetLane = destinationRestriction.laneIndex === 'current'
+                ? laneIndex
+                : destinationRestriction.laneIndex;
+
+            if (resolvedTargetLane === undefined || resolvedTargetLane < 0 || resolvedTargetLane > 2) {
+                console.error(`[Shift Effect] Invalid target lane index: ${resolvedTargetLane}`);
+                return { newState: state };
+            }
+
+            // Execute shift immediately
+            console.log(`[Custom Shift with useCardFromPreviousEffect] Executing immediate shift to lane ${resolvedTargetLane}`);
+            const shiftResult = internalShiftCard(state, targetCardId, targetCardInfo.owner, resolvedTargetLane, cardOwner);
+
+            return {
+                newState: shiftResult.newState,
+                animationRequests: shiftResult.animationRequests
+            };
+        }
+
+        // No fixed destination - let user choose the lane (like Darkness-1)
+        // Find which lane the card is in
+        let originalLaneIndex = -1;
+        for (let i = 0; i < state[targetCardInfo.owner].lanes.length; i++) {
+            if (state[targetCardInfo.owner].lanes[i].some(c => c.id === targetCardId)) {
+                originalLaneIndex = i;
+                break;
+            }
+        }
+
+        if (originalLaneIndex === -1) {
+            return { newState: state };
+        }
+
+        newState.actionRequired = {
+            type: 'select_lane_for_shift',
+            cardToShiftId: targetCardId,
+            cardOwner: targetCardInfo.owner,
+            originalLaneIndex,
+            sourceCardId: card.id,
+            actor: cardOwner,
+            destinationRestriction: destinationRestriction,
+        } as any;
+        return { newState };
+    }
+
     // NEW: If using card from previous effect (e.g., "Flip 1 card. Shift THAT card"), use it directly
     const selectedCardId = (state as any)._selectedCardFromPreviousEffect;
 
@@ -1383,6 +1565,11 @@ function executeShiftEffect(
         if (ownerFilter === 'opponent' && player === cardOwner) continue;
 
         for (let i = 0; i < newState[player].lanes.length; i++) {
+            // CRITICAL: If scope is 'this_lane', only collect cards from the current lane
+            // This is for Light-3: "Shift all face-down cards in THIS line to another line"
+            // Must include BOTH players' cards in that lane
+            if (params.scope === 'this_lane' && i !== laneIndex) continue;
+
             const lane = newState[player].lanes[i];
 
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
@@ -1407,6 +1594,55 @@ function executeShiftEffect(
 
     if (potentialTargets.length === 0) {
         newState = log(newState, cardOwner, `[Custom Shift] No valid cards to shift.`);
+        return { newState };
+    }
+
+    // NEW: Handle "shift all" mode (Light-3: "Shift all face-down cards in this line to another line")
+    // When count is "all", collect all valid targets and ask user to select ONE destination lane
+    // Then shift ALL cards to that lane at once
+    const shouldShiftAll = count === 'all' || (typeof count !== 'number' && count !== 1);
+
+    if (shouldShiftAll && potentialTargets.length > 0) {
+
+        // Determine valid destination lanes based on destinationRestriction
+        const validDestinationLanes: number[] = [];
+        const destinationRestriction = params.destinationRestriction;
+
+        for (let targetLane = 0; targetLane < 3; targetLane++) {
+            // Check destination restriction
+            if (destinationRestriction?.type === 'to_another_line') {
+                // Can shift to any lane EXCEPT current lane
+                if (targetLane === laneIndex) continue;
+            } else if (destinationRestriction?.type === 'to_this_lane') {
+                // Can only shift to specified lane
+                const resolvedDestLaneIndex = destinationRestriction.laneIndex === 'current'
+                    ? laneIndex
+                    : destinationRestriction.laneIndex;
+                if (targetLane !== resolvedDestLaneIndex) continue;
+            } else if (!destinationRestriction) {
+                // No restriction - can't shift to same lane
+                if (targetLane === laneIndex) continue;
+            }
+
+            validDestinationLanes.push(targetLane);
+        }
+
+        if (validDestinationLanes.length === 0) {
+            newState = log(newState, cardOwner, `[Custom Shift] No valid destination lanes for shifting all cards.`);
+            return { newState };
+        }
+
+        // Ask user to select destination lane, then shift ALL cards to that lane
+        newState = log(newState, cardOwner, `Shifting ${potentialTargets.length} card(s) from this lane.`);
+        newState.actionRequired = {
+            type: 'select_lane_for_shift_all',
+            sourceCardId: card.id,
+            actor: cardOwner,
+            cardsToShift: potentialTargets.map(t => ({ cardId: t.card.id, owner: t.owner })),
+            validDestinationLanes,
+            sourceLaneIndex: laneIndex,
+        } as any;
+
         return { newState };
     }
 
@@ -1982,11 +2218,89 @@ function executeRevealGiveEffect(
     context: EffectContext,
     params: any
 ): EffectResult {
-    const { cardOwner } = context;
+    const { cardOwner, opponent } = context;
     const count = params.count || 1;
     const action = params.action;
+    const source = params.source || 'own_hand';
 
-    // CRITICAL: Check if player has any cards in hand
+    // NEW: Handle board card reveal (Light-2: "Reveal 1 face-down card. You may shift or flip that card.")
+    if (action === 'reveal' && source === 'board') {
+        const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'face_down' };
+        const followUpAction = params.followUpAction;  // 'flip' | 'shift' | undefined
+        const optional = params.optional !== false;  // Default true
+
+        // Find all valid target cards
+        const validTargets: PlayedCard[] = [];
+        const players = targetFilter.owner === 'own' ? [cardOwner]
+                      : targetFilter.owner === 'opponent' ? [opponent]
+                      : [cardOwner, opponent];
+
+        for (const p of players) {
+            for (let li = 0; li < state[p].lanes.length; li++) {
+                const lane = state[p].lanes[li];
+                if (lane.length > 0) {
+                    // Filter by position
+                    let cardsToCheck: PlayedCard[] = [];
+                    if (targetFilter.position === 'uncovered') {
+                        cardsToCheck = [lane[lane.length - 1]];
+                    } else if (targetFilter.position === 'covered') {
+                        cardsToCheck = lane.slice(0, -1);
+                    } else {
+                        cardsToCheck = [...lane];
+                    }
+
+                    // Filter by faceState
+                    const filtered = cardsToCheck.filter(c => {
+                        if (targetFilter.faceState === 'face_up') return c.isFaceUp;
+                        if (targetFilter.faceState === 'face_down') return !c.isFaceUp;
+                        return true;  // 'any'
+                    });
+
+                    validTargets.push(...filtered);
+                }
+            }
+        }
+
+        if (validTargets.length === 0) {
+            let newState = log(state, cardOwner, `No valid cards to reveal. Effect skipped.`);
+            return { newState };
+        }
+
+        let newState = { ...state };
+        newState.actionRequired = {
+            type: 'select_board_card_to_reveal_custom',
+            sourceCardId: card.id,
+            actor: cardOwner,
+            targetFilter,  // CRITICAL: Pass targetFilter to UI for card highlighting
+            followUpAction,
+            optional,
+        } as any;
+
+        return { newState };
+    }
+
+    // NEW: Handle opponent_hand reveal (Light-4: "Your opponent reveals their hand")
+    if (action === 'reveal' && source === 'opponent_hand') {
+        let newState = { ...state };
+        const opponentState = { ...newState[opponent] };
+
+        if (opponentState.hand.length > 0) {
+            // Mark all opponent's cards as revealed (count -1 = all cards)
+            opponentState.hand = opponentState.hand.map(c => ({ ...c, isRevealed: true }));
+            newState[opponent] = opponentState;
+
+            const cardName = `${card.protocol}-${card.value}`;
+            newState = log(newState, cardOwner, `${cardName}: Your opponent reveals their hand.`);
+        } else {
+            const cardName = `${card.protocol}-${card.value}`;
+            newState = log(newState, cardOwner, `${cardName}: Opponent has no cards to reveal.`);
+        }
+
+        // This effect resolves immediately
+        return { newState };
+    }
+
+    // CRITICAL: Check if player has any cards in hand (for own_hand reveal/give)
     if (state[cardOwner].hand.length === 0) {
         let newState = log(state, cardOwner, `No cards in hand to ${action}. Effect skipped.`);
         return { newState };

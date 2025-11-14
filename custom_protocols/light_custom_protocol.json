@@ -1,0 +1,159 @@
+{
+  "id": "light_custom_1",
+  "name": "Light_custom",
+  "description": "Burn away the dark. Light protocol reveals and manipulates through illumination.",
+  "author": "System",
+  "createdAt": "2025-11-14T00:00:00.000Z",
+  "color": "#F4D03F",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "light-0-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "light-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "countType": "equal_to_card_value"
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "useCardFromPreviousEffect": true
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "light-1-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "light-2-draw",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "light-2-reveal-board-card",
+          "params": {
+            "action": "reveal",
+            "source": "board",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "face_down"
+            },
+            "optional": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "light-3-shift-all",
+          "params": {
+            "action": "shift",
+            "count": "all",
+            "targetFilter": {
+              "owner": "any",
+              "position": "any",
+              "faceState": "face_down",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "to_another_line"
+            },
+            "scope": "this_lane"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "light-4-reveal",
+          "params": {
+            "action": "reveal",
+            "source": "opponent_hand",
+            "count": -1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "light-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

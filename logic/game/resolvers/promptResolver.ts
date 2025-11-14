@@ -605,3 +605,84 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
 
     return stateAfterRecalc;
 };
+
+/**
+ * NEW: Resolve Custom Protocol Reveal Board Card Prompt
+ * Similar to Light-2 but for custom protocols with flexible followUpAction
+ */
+export const resolveRevealBoardCardPrompt = (prevState: GameState, choice: 'shift' | 'flip' | 'skip'): GameState => {
+    if (prevState.actionRequired?.type !== 'prompt_shift_or_flip_board_card_custom') return prevState;
+
+    const { actor, sourceCardId, revealedCardId, followUpAction, optional } = prevState.actionRequired;
+    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+    const cardInfo = findCardOnBoard(prevState, revealedCardId);
+
+    if (!cardInfo) return prevState;
+
+    // If followUpAction specified, validate choice
+    if (followUpAction && choice !== 'skip' && choice !== followUpAction) {
+        console.error(`Invalid choice: ${choice}, followUpAction restricts to: ${followUpAction}`);
+        return prevState;
+    }
+
+    const owner = cardInfo.owner;
+    const laneIndex = prevState[owner].lanes.findIndex(l => l.some(c => c.id === revealedCardId));
+    if (laneIndex === -1) return prevState;
+
+    let newState = { ...prevState };
+
+    switch (choice) {
+        case 'shift': {
+            // CRITICAL: Flip card back to face-down BEFORE shifting
+            const lane = [...newState[owner].lanes[laneIndex]];
+            const cardIndex = lane.findIndex(c => c.id === revealedCardId);
+            if (cardIndex !== -1) {
+                lane[cardIndex] = { ...lane[cardIndex], isFaceUp: false };
+                const newLanes = [...newState[owner].lanes];
+                newLanes[laneIndex] = lane;
+                newState = {
+                    ...newState,
+                    [owner]: { ...newState[owner], lanes: newLanes }
+                };
+            }
+
+            newState = log(newState, actor, `${actorName} chooses to shift the revealed card (face-down).`);
+            newState.actionRequired = {
+                type: 'select_lane_to_shift_revealed_board_card_custom',
+                sourceCardId,
+                revealedCardId,
+                actor,
+            };
+            break;
+        }
+        case 'flip': {
+            // Card is already face-up from reveal, just trigger effects
+            newState = log(newState, actor, `${actorName} chooses to flip the revealed card face-up permanently.`);
+            const stateWithoutPrompt = { ...newState, actionRequired: null };
+
+            // Trigger on-flip effects
+            const result = handleOnFlipToFaceUp(stateWithoutPrompt, revealedCardId);
+            newState = result.newState;
+            break;
+        }
+        case 'skip': {
+            // CRITICAL: Flip card back to face-down
+            const lane = [...newState[owner].lanes[laneIndex]];
+            const cardIndex = lane.findIndex(c => c.id === revealedCardId);
+            if (cardIndex !== -1) {
+                lane[cardIndex] = { ...lane[cardIndex], isFaceUp: false };
+                const newLanes = [...newState[owner].lanes];
+                newLanes[laneIndex] = lane;
+                newState = {
+                    ...newState,
+                    [owner]: { ...newState[owner], lanes: newLanes }
+                };
+            }
+
+            newState = log(newState, actor, `${actorName} chooses to do nothing with the revealed card.`);
+            newState.actionRequired = null;
+            break;
+        }
+    }
+    return newState;
+};

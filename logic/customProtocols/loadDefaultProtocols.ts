@@ -16,6 +16,7 @@ import waterCustomData from '../../custom_protocols/water_custom_protocol.json';
 import spiritCustomData from '../../custom_protocols/spirit_custom_protocol.json';
 import gravityCustomData from '../../custom_protocols/gravity_custom_protocol.json';
 import lifeCustomData from '../../custom_protocols/life_custom_protocol.json';
+import lightCustomData from '../../custom_protocols/light_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -84,6 +85,11 @@ export const loadDefaultCustomProtocols = (): void => {
         console.log('[Default Protocols] Loading/Updating Life_custom protocol...');
         addCustomProtocol(lifeCustomData as any);
         console.log('[Default Protocols] Life_custom loaded/updated successfully!');
+
+        // ALWAYS update Light_custom to latest version (for testing/development)
+        console.log('[Default Protocols] Loading/Updating Light_custom protocol...');
+        addCustomProtocol(lightCustomData as any);
+        console.log('[Default Protocols] Light_custom loaded/updated successfully!');
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

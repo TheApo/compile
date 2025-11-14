@@ -220,9 +220,16 @@ export interface ProtocolEffectParams {
  */
 export interface RevealEffectParams {
     action: 'reveal' | 'give';
-    source: 'own_hand' | 'opponent_hand';
-    count: number;  // 1-6
+    source: 'own_hand' | 'opponent_hand' | 'board';  // NEW: 'board' for Light-2
+    count: number;  // 1-6 (or -1 for "entire hand")
     followUpAction?: 'flip' | 'shift';
+    // NEW: For board card reveal (Light-2: "Reveal 1 face-down card. You may shift or flip that card.")
+    targetFilter?: {
+        owner?: TargetOwner;
+        position?: TargetPosition;
+        faceState?: TargetFaceState;
+    };
+    optional?: boolean;  // "You may shift or flip" = optional follow-up
 }
 
 /**

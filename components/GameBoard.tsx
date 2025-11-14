@@ -259,6 +259,35 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 return targetOwner === 'player' && targetLaneIndex !== actionRequired.disallowedLaneIndex;
             case 'select_lane_to_shift_revealed_card_for_light_2':
                  return targetOwner === 'player'; // TODO: Check card owner
+            case 'select_lane_to_shift_revealed_board_card_custom': {
+                // Check which player owns the revealed card
+                const revealedCardId = actionRequired.revealedCardId;
+                const cardInfo = [...gameState.player.lanes.flat(), ...gameState.opponent.lanes.flat()]
+                    .find(c => c.id === revealedCardId);
+                if (!cardInfo) return false;
+
+                // Find card owner
+                let cardOwner: Player | null = null;
+                let originalLaneIndex = -1;
+                for (const owner of ['player', 'opponent'] as Player[]) {
+                    for (let i = 0; i < gameState[owner].lanes.length; i++) {
+                        if (gameState[owner].lanes[i].some(c => c.id === revealedCardId)) {
+                            cardOwner = owner;
+                            originalLaneIndex = i;
+                            break;
+                        }
+                    }
+                    if (cardOwner) break;
+                }
+
+                // Can only shift to same owner's lanes, and not to same lane
+                return targetOwner === cardOwner && targetLaneIndex !== originalLaneIndex;
+            }
+            case 'select_lane_for_shift_all': {
+                // GENERIC: Shift all cards from sourceLaneIndex to ANY other lane
+                const sourceLane = (actionRequired as any).sourceLaneIndex;
+                return targetLaneIndex !== sourceLane;
+            }
             case 'select_lane_to_shift_cards_for_light_3':
                  return targetLaneIndex !== actionRequired.sourceLaneIndex;
             default:

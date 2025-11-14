@@ -19,6 +19,7 @@ interface PhaseControllerProps {
     onResolveFire4Discard: (cardIds: string[]) => void;
     onResolveHate1Discard: (cardIds: string[]) => void;
     onResolveLight2Prompt: (choice: 'shift' | 'flip' | 'skip') => void;
+    onResolveRevealBoardCardPrompt: (choice: 'shift' | 'flip' | 'skip') => void;
     onResolveOptionalDrawPrompt: (accept: boolean) => void;
     onResolveDeath1Prompt: (accept: boolean) => void;
     onResolveLove1Prompt: (accept: boolean) => void;
@@ -37,7 +38,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt, onResolveOptionalDiscardCustomPrompt,
     onResolveOptionalEffectPrompt,
     onResolveSpeed3Prompt,
-    onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
+    onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
     onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
     onResolveControlMechanicPrompt, onResolveCustomChoice,
     selectedCardId, multiSelectedCardIds, actionRequiredClass
@@ -206,6 +207,16 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
+        if (actionRequired?.type === 'prompt_shift_or_flip_board_card_custom') {
+            return (
+                <>
+                    <button className="btn" onClick={() => onResolveRevealBoardCardPrompt('shift')}>Shift</button>
+                    <button className="btn" onClick={() => onResolveRevealBoardCardPrompt('flip')}>Flip</button>
+                    <button className="btn btn-back" onClick={() => onResolveRevealBoardCardPrompt('skip')}>Skip</button>
+                </>
+            );
+        }
+
         // NEW: Handle variable-count discard for custom protocols (Fire_custom-4)
         if (actionRequired?.type === 'discard' && (actionRequired as any).variableCount && actionRequired.actor === 'player') {
             return (
@@ -312,6 +323,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select one of your covered cards to shift';
                 case 'select_lane_for_shift':
                     return 'Action: Select a new lane for the card';
+                case 'select_lane_for_shift_all':
+                    return 'Action: Select a lane to shift all cards to';
                 case 'select_opponent_card_to_flip':
                     return 'Action: Select an opponent\'s card to flip';
                 case 'shift_flipped_card_optional':
@@ -404,7 +417,13 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a face-down card to reveal';
                 case 'prompt_shift_or_flip_for_light_2':
                     return 'Action: Choose to shift, flip back, or skip';
+                case 'prompt_shift_or_flip_board_card_custom':
+                    return 'Action: Choose to shift, flip, or skip';
+                case 'select_board_card_to_reveal_custom':
+                    return 'Action: Select a face-down card to reveal';
                 case 'select_lane_to_shift_revealed_card_for_light_2':
+                    return 'Action: Select a lane to shift the revealed card to';
+                case 'select_lane_to_shift_revealed_board_card_custom':
                     return 'Action: Select a lane to shift the revealed card to';
                 case 'select_lane_to_shift_cards_for_light_3':
                     return 'Action: Select a lane to shift all face-down cards to';

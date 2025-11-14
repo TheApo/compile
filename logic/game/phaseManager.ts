@@ -648,6 +648,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         // The interrupt is over. The original turn player's action that was
         // interrupted is now considered complete. Continue processing the rest
         // of their turn from this restored state, without returning early.
+        // This will fall through to phase advancement (hand_limit → end → turn switch)
         state = restoredState;
     }
 

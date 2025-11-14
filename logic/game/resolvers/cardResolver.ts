@@ -165,6 +165,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             newState = internalResolveTargetedFlip(prev, targetCardId);
 
+            // CRITICAL: Save this value to restore after handleOnFlipToFaceUp
+            const savedTargetCardId = targetCardId;
+            newState.lastCustomEffectTargetCardId = savedTargetCardId;
+
             if (draws && draws > 0) {
                 const { actor, sourceCardId } = prev.actionRequired as { actor: Player, sourceCardId: string };
                 const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
@@ -176,6 +180,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const result = handleOnFlipToFaceUp(newState, targetCardId);
                 newState = result.newState;
+                // CRITICAL: Restore lastCustomEffectTargetCardId after handleOnFlipToFaceUp
+                newState.lastCustomEffectTargetCardId = savedTargetCardId;
                 if (result.animationRequests) {
                     requiresAnimation = {
                         animationRequests: result.animationRequests,
@@ -332,6 +338,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
 
             const cardInfo = findCardOnBoard(prev, targetCardId);
+
+
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
                 let originalLaneIndex = -1;
@@ -377,6 +385,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev, requiresTurnEnd: true };
 
+
             const shiftResult = internalShiftCard(prev, targetCardId, cardInfo.owner, targetLaneIndex, actor);
             newState = shiftResult.newState;
 
@@ -396,6 +405,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_own_other_card_to_shift': {
             const cardInfo = findCardOnBoard(prev, targetCardId);
+
+
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
                 let originalLaneIndex = -1;
@@ -423,6 +434,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_opponent_face_down_card_to_shift': { // Speed-4
             const cardInfo = findCardOnBoard(prev, targetCardId);
+
+
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
                 let originalLaneIndex = -1;
@@ -450,6 +463,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_own_card_to_shift_for_speed_3': {
             const cardInfo = findCardOnBoard(prev, targetCardId);
+
+
             if (cardInfo) {
                 const { owner: cardOwner } = cardInfo;
                 let originalLaneIndex = -1;
@@ -482,6 +497,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
 
             if (!cardInfoToDelete || !sourceCardInfo) return { nextState: prev };
+
 
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfoToDelete.owner === 'player' ? "Player's" : "Opponent's";
@@ -614,6 +630,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
+
 
             // CRITICAL VALIDATION for Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
             if (prev.actionRequired.type === 'select_card_to_delete_for_anarchy_2') {
@@ -939,6 +956,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const actor = prev.actionRequired.actor; // The opponent is the one deleting
 
+
             newState = log(newState, actor, `Plague-4: Opponent deletes one of their face-down cards.`);
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
@@ -1004,6 +1022,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 newState = log(prev, actor, `Invalid selection: Card is not one of your highest value uncovered cards.`);
                 return { nextState: prev };
             }
+
 
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
@@ -1085,6 +1104,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 return { nextState: prev };
             }
 
+
             // CRITICAL: Set log context to Hate-2 to ensure correct source in logs
             // This is especially important if this action was queued after an interrupt
             newState = setLogSource(newState, 'Hate-2');
@@ -1128,6 +1148,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_card_to_return': {
+
             const result = internalReturnCard(prev, targetCardId);
             newState = result.newState;
             if (result.animationRequests) {
@@ -1144,6 +1165,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         case 'select_opponent_card_to_return': { // Psychic-4
             const { sourceCardId, actor } = prev.actionRequired;
+
+
             const result = internalReturnCard(prev, targetCardId);
             let stateAfterReturn = result.newState;
 
@@ -1187,6 +1210,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             break;
         }
         case 'select_own_card_to_return_for_water_4': {
+
             const result = internalReturnCard(prev, targetCardId);
             newState = result.newState;
             if (result.animationRequests) {
@@ -1464,6 +1488,49 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 sourceCardId,
                 revealedCardId: targetCardId,
                 optional: true,
+                actor,
+            };
+            requiresTurnEnd = false; // Action has a follow-up
+            break;
+        }
+        case 'select_board_card_to_reveal_custom': {
+            const { sourceCardId, actor, followUpAction, optional } = prev.actionRequired;
+            const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
+            const cardInfo = findCardOnBoard(prev, targetCardId);
+
+            if (!cardInfo) return { nextState: prev, requiresTurnEnd: true };
+
+            // CRITICAL: Temporarily flip the card face-up so the player can see it
+            const owner = cardInfo.owner;
+            const laneIndex = prev[owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            if (laneIndex === -1) return { nextState: prev, requiresTurnEnd: true };
+
+            const lane = [...prev[owner].lanes[laneIndex]];
+            const cardIndex = lane.findIndex(c => c.id === targetCardId);
+            if (cardIndex === -1) return { nextState: prev, requiresTurnEnd: true };
+
+            // Flip the card temporarily
+            lane[cardIndex] = { ...lane[cardIndex], isFaceUp: true };
+            const newLanes = [...prev[owner].lanes];
+            newLanes[laneIndex] = lane;
+
+            newState = {
+                ...prev,
+                [owner]: { ...prev[owner], lanes: newLanes }
+            };
+
+            const cardName = `${lane[cardIndex].protocol}-${lane[cardIndex].value}`;
+            newState = log(newState, actor, `${actorName} reveals ${cardName}.`);
+
+            // NOTE: No animation here - card is just revealed (temporarily shown), not flipped
+            // The visual update happens through state change (isFaceUp: true)
+
+            newState.actionRequired = {
+                type: 'prompt_shift_or_flip_board_card_custom',
+                sourceCardId,
+                revealedCardId: targetCardId,
+                followUpAction,
+                optional: optional !== false,
                 actor,
             };
             requiresTurnEnd = false; // Action has a follow-up

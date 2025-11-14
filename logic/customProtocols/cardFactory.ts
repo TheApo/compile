@@ -567,8 +567,43 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            const cardWord = params.count === 1 ? 'card' : 'cards';
             const actionText = params.action === 'give' ? 'Give' : 'Reveal';
+
+            // NEW: Handle board card reveal (Light-2)
+            if (params.source === 'board') {
+                const targetDesc = params.targetFilter?.faceState === 'face_down' ? 'face-down ' : '';
+                const count = params.count || 1;
+                const cardWord = count === 1 ? 'card' : 'cards';
+                let text = `Reveal ${count} ${targetDesc}${cardWord}`;
+
+                if (params.optional) {
+                    text += '. You may shift or flip that card';
+                } else if (params.followUpAction === 'flip') {
+                    text += '. Then flip it';
+                } else if (params.followUpAction === 'shift') {
+                    text += '. Then shift it';
+                }
+
+                mainText = text + '.';
+                break;
+            }
+
+            // NEW: Handle count=-1 for "reveal/give entire hand"
+            if (params.count === -1) {
+                if (params.source === 'opponent_hand') {
+                    mainText = params.action === 'reveal'
+                        ? 'Your opponent reveals their hand.'
+                        : 'Give your entire hand to your opponent.';
+                } else {
+                    // own_hand (or default)
+                    mainText = params.action === 'reveal'
+                        ? 'Reveal your hand.'
+                        : 'Give your entire hand.';
+                }
+                break;
+            }
+
+            const cardWord = params.count === 1 ? 'card' : 'cards';
             const sourceText = params.source === 'opponent_hand' ? "opponent's hand" : 'your hand';
 
             let text = `${actionText} ${params.count} ${cardWord} from ${sourceText}`;

@@ -344,6 +344,24 @@ export type ActionRequired = {
     revealedCardId: string;
     actor: Player;
 } | {
+    type: 'select_board_card_to_reveal_custom';
+    sourceCardId: string;
+    actor: Player;
+    followUpAction?: 'flip' | 'shift';
+    optional?: boolean;
+} | {
+    type: 'prompt_shift_or_flip_board_card_custom';
+    sourceCardId: string;
+    revealedCardId: string;
+    followUpAction?: 'flip' | 'shift';
+    optional: boolean;
+    actor: Player;
+} | {
+    type: 'select_lane_to_shift_revealed_board_card_custom';
+    sourceCardId: string;
+    revealedCardId: string;
+    actor: Player;
+} | {
     type: 'select_lane_to_shift_cards_for_light_3';
     sourceCardId: string;
     sourceLaneIndex: number;
@@ -485,6 +503,7 @@ export interface GameState {
     processedSpeed1TriggerThisTurn?: boolean;
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
+    lastCustomEffectTargetCardId?: string | null;  // NEW: For useCardFromPreviousEffect chains
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
     _logIndentLevel?: number; // Current indentation level for effect chains

@@ -278,6 +278,29 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
         case 'select_face_down_card_to_reveal_for_light_2':
             return !card.isFaceUp && isUncovered;
+        case 'select_board_card_to_reveal_custom': {
+            // Generic board card reveal for custom protocols (Light-2)
+            // Uses targetFilter from actionRequired
+            const targetFilter = (actionRequired as any).targetFilter;
+            if (!targetFilter) return !card.isFaceUp && isUncovered; // Default fallback
+
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+
+            // Check position filter
+            const position = targetFilter.position || 'uncovered';
+            if (position === 'uncovered' && !isUncovered) return false;
+            if (position === 'covered' && cardIndex >= lane.length - 1) return false;
+
+            // Check owner filter
+            if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
+            if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+
+            // Check face state filter
+            if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return false;
+            if (targetFilter.faceState === 'face_down' && card.isFaceUp) return false;
+
+            return true;
+        }
         case 'select_any_other_card_to_flip_for_water_0': {
             // Frost-1: Only face-up cards can be flipped (to face-down)
             const frost1Active = isFrost1Active(gameState);

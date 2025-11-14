@@ -336,13 +336,22 @@ export const useGameState = (
 
     const resolveActionWithCard = (targetCardId: string) => {
         setGameState(prev => {
+            const originalTurn = prev.turn;
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId);
 
             if (requiresAnimation) {
                 // FIX: Updated the call to `processAnimationQueue` to pass a callback, which aligns with the refactored, more flexible animation handling pattern. This fixes the original property access error.
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
-                    setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
+                    setGameState(s => {
+                        // FIX: If turn changed during animation (due to interrupt restoration),
+                        // turnProgressionCb was already called. Pass a no-op to prevent double progression.
+                        const endTurnCb = s.turn !== originalTurn
+                            ? (state: GameState) => state
+                            : turnProgressionCb;
+
+                        return requiresAnimation.onCompleteCallback(s, endTurnCb);
+                    });
                 });
                 return nextState;
             }
@@ -363,7 +372,7 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);
-            
+
             if (requiresAnimation) {
                 // FIX: Updated the call to `processAnimationQueue` to use the standardized callback pattern, resolving inconsistencies between card and lane action animations.
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
@@ -371,11 +380,11 @@ export const useGameState = (
                 });
                 return nextState;
             }
-    
+
             if (nextState.actionRequired) {
                 return nextState;
             }
-            
+
             return turnProgressionCb(nextState);
         });
     };
@@ -407,10 +416,11 @@ export const useGameState = (
             } else {
                 stateWithoutAnimation = resolvers.skipAction(stateWithoutAnimation);
             }
-            
+
             if (stateWithoutAnimation.actionRequired?.type === 'plague_4_player_flip_optional') {
                 return stateWithoutAnimation;
             }
+
             return turnProgressionCb(stateWithoutAnimation);
         });
     };
@@ -619,6 +629,17 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveLight2Prompt(prev, choice);
+            if (nextState.actionRequired) {
+                return nextState;
+            }
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
+    const resolveRevealBoardCardPrompt = useCallback((choice: 'shift' | 'flip' | 'skip') => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveRevealBoardCardPrompt(prev, choice);
             if (nextState.actionRequired) {
                 return nextState;
             }
@@ -1097,11 +1118,10 @@ export const useGameState = (
                 trackPlayerRearrange
             );
 
-            // CRITICAL: Don't reset lock immediately - wait for React state updates to propagate
-            // Otherwise another hook execution might trigger before the state is updated
-            setTimeout(() => {
-                isProcessingAIRef.current = false;
-            }, 1000); // Keep lock for 1 second to prevent race conditions
+            // CRITICAL FIX: Clear lock immediately instead of after 1 second
+            // The 1-second delay was causing softlocks when the interrupt resolved and switched turns,
+            // because useEffect #1 (opponent turn) would trigger but find the lock still set
+            isProcessingAIRef.current = false;
         }
     }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue, onEndGame]);
 
@@ -1118,7 +1138,7 @@ export const useGameState = (
         gameState, selectedCard, setSelectedCard, playSelectedCard, fillHand,
         discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane,
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
-        resolvePlague4Flip, resolveFire3Prompt, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt,
+        resolvePlague4Flip, resolveFire3Prompt, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt, resolveRevealBoardCardPrompt,
         resolveRearrangeProtocols, resolveSpeed3Prompt, resolveOptionalDrawPrompt, resolveDeath1Prompt, resolveLove1Prompt,
         resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
         resolveControlMechanicPrompt, resolveCustomChoice,

@@ -35,6 +35,72 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
     let requiresAnimation: LaneActionResult['requiresAnimation'] = null;
 
     switch (prev.actionRequired.type) {
+        case 'select_lane_for_shift_all': {
+            // GENERIC: Shift ALL cards to selected lane (works for ANY custom protocol with count="all")
+            const { cardsToShift, validDestinationLanes, sourceLaneIndex, actor, sourceCardId } = prev.actionRequired;
+
+            // Validate the selected lane is in the valid list
+            if (!validDestinationLanes.includes(targetLaneIndex)) {
+                console.error(`Illegal shift: Lane ${targetLaneIndex} is not a valid destination`);
+                return { nextState: prev };
+            }
+
+            // Validate cannot shift to same lane
+            if (targetLaneIndex === sourceLaneIndex) {
+                console.error(`Illegal shift: Cannot shift to the same lane ${sourceLaneIndex}`);
+                return { nextState: prev };
+            }
+
+            // Shift all cards to the target lane
+            let currentState = { ...prev };
+            const animationRequests: AnimationRequest[] = [];
+            const unaffectedCardIds: string[] = [];
+
+            for (const { cardId, owner } of cardsToShift) {
+                const cardInfo = findCardOnBoard(currentState, cardId);
+                if (!cardInfo) {
+                    // Card no longer exists (was deleted/returned during previous shifts)
+                    continue;
+                }
+
+                // Validate shift is allowed by passive rules
+                const currentLaneIdx = currentState[owner].lanes.findIndex(l => l.some(c => c.id === cardId));
+                if (currentLaneIdx === -1) continue;
+
+                const shiftCheck = canShiftCard(currentState, currentLaneIdx, targetLaneIndex);
+                if (!shiftCheck.allowed) {
+                    console.log(`Card ${cardId} cannot be shifted: ${shiftCheck.reason}`);
+                    unaffectedCardIds.push(cardId);
+                    continue;
+                }
+
+                // Perform the shift
+                const shiftResult = internalShiftCard(currentState, cardId, owner, targetLaneIndex, actor);
+                currentState = shiftResult.newState;
+
+                if (shiftResult.animationRequests) {
+                    animationRequests.push(...shiftResult.animationRequests);
+                }
+            }
+
+            newState = currentState;
+            newState = queuePendingCustomEffects(newState);
+            newState.actionRequired = null;
+
+            if (animationRequests.length > 0) {
+                requiresAnimation = {
+                    animationRequests,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        // Check if any uncover effects were triggered
+                        if (s.actionRequired) return s;
+                        // Check for queued actions
+                        if (s.queuedActions && s.queuedActions.length > 0) return s;
+                        return endTurnCb(s);
+                    }
+                };
+            }
+            break;
+        }
         case 'select_lane_for_shift': {
             const { cardToShiftId, cardOwner, actor, sourceEffect, originalLaneIndex, sourceCardId } = prev.actionRequired;
 
@@ -878,6 +944,24 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         animationRequests: shiftResult.animationRequests,
                         onCompleteCallback: (s, endTurnCb) => {
                             if (s.actionRequired) return s; // Handle potential interrupts from uncover
+                            return endTurnCb(s);
+                        }
+                    };
+                }
+            }
+            break;
+        }
+        case 'select_lane_to_shift_revealed_board_card_custom': {
+            const { revealedCardId, actor } = prev.actionRequired;
+            const cardInfo = findCardOnBoard(prev, revealedCardId);
+            if (cardInfo) {
+                const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
+                newState = shiftResult.newState;
+                if (shiftResult.animationRequests) {
+                    requiresAnimation = {
+                        animationRequests: shiftResult.animationRequests,
+                        onCompleteCallback: (s, endTurnCb) => {
+                            if (s.actionRequired) return s;
                             return endTurnCb(s);
                         }
                     };
