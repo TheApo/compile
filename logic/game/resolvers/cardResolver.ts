@@ -22,23 +22,76 @@ export type CardActionResult = {
     requiresTurnEnd?: boolean;
 };
 
+// List of action types that trigger Metal-6's self-delete (flip actions only)
+const METAL6_FLIP_ACTION_TYPES = [
+    'select_covered_card_to_flip_for_chaos_0',
+    'select_any_other_card_to_flip',
+    'select_opponent_face_up_card_to_flip',
+    'select_own_face_up_covered_card_to_flip',
+    'select_covered_card_in_line_to_flip_optional',
+    'select_any_card_to_flip_optional',
+    'select_any_face_down_card_to_flip_optional',
+    'select_card_to_flip_for_fire_3',
+    'select_card_to_flip',
+    'select_opponent_card_to_flip',
+    'select_any_card_to_flip',
+    'select_card_to_flip_for_light_0',
+    'select_any_other_card_to_flip_for_water_0',
+    'select_card_to_flip_and_shift_for_gravity_2',
+    'select_face_down_card_to_reveal_for_light_2',
+];
+
 function handleMetal6Flip(state: GameState, targetCardId: string, action: ActionRequired): CardActionResult | null {
+    // CRITICAL: Metal-6 should ONLY delete itself when FLIPPED, not when returned/shifted/deleted
+    // Check if this is a flip action before proceeding
+    if (!action || !METAL6_FLIP_ACTION_TYPES.includes(action.type)) {
+        return null; // Not a flip action - Metal-6 should not trigger
+    }
+
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (cardInfo && cardInfo.card.protocol === 'Metal' && cardInfo.card.value === 6) {
         // FIX: Use actor from action parameter, not state.turn (critical for interrupts)
         const actor = 'actor' in action ? action.actor : state.turn;
-        let newState = log(state, actor, `Metal-6 effect triggers on flip: deleting itself.`);
+        const actorName = actor === 'player' ? 'Player' : 'Opponent';
+        const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
+
+        // Determine source card name for better logging
+        let sourceCardName = 'An effect';
+        if ('sourceCardId' in action && action.sourceCardId) {
+            const sourceCard = findCardOnBoard(state, action.sourceCardId);
+            if (sourceCard) {
+                sourceCardName = `${sourceCard.card.protocol}-${sourceCard.card.value}`;
+            }
+        }
+
+        // Log which card is being flipped and by what
+        let newState = log(state, actor, `${sourceCardName}: ${actorName} flips ${ownerName} Metal-6.`);
+        newState = log(newState, actor, `Metal-6: Deletes itself when flipped.`);
 
         const newStats = { ...state.stats[actor], cardsDeleted: state.stats[actor].cardsDeleted + 1 };
         const newPlayerState = { ...state[actor], stats: newStats };
         newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-        
+
+        // CRITICAL: Store lane info BEFORE the callback (card will be gone after animation)
+        const cardOwner = cardInfo.owner;
+        const laneIndex = state[cardOwner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+        const lane = state[cardOwner].lanes[laneIndex];
+        const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+        const hadCardBelow = lane && lane.length > 1;
+
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             let stateAfterTriggers = checkForHate3Trigger(s, s.turn);
 
             // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
             const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: s.turn });
             stateAfterTriggers = reactiveResult.newState;
+
+            // CRITICAL: Handle uncover effect if Metal-6 was top card and there was a card below
+            if (wasTopCard && hadCardBelow) {
+                const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardOwner, laneIndex);
+                stateAfterTriggers = uncoverResult.newState;
+                console.log('[Metal-6 Delete] Uncover effect triggered. actionRequired:', stateAfterTriggers.actionRequired?.type || 'null');
+            }
 
             if (action?.type === 'select_card_to_flip_for_light_0') {
                 const cardValue = 6; // Metal-6 value in trash is always its face-up value
@@ -51,13 +104,39 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             }
 
             if (action?.type === 'select_any_other_card_to_flip_for_water_0') {
-                // The self-flip is already in the queue, so we don't need to add it again.
-                // We just need to ensure the turn proceeds correctly after this animation.
+                // CRITICAL FIX: When Metal-6 is deleted via handleMetal6Flip, the switch-block
+                // for 'select_any_other_card_to_flip_for_water_0' is NEVER executed (early return).
+                // This means the self-flip was NEVER added to the queue!
+                // We must add it here.
+                const selfFlipAction: ActionRequired = {
+                    type: 'flip_self_for_water_0',
+                    sourceCardId: action.sourceCardId,
+                    actor: action.actor,
+                };
+
+                // Check if Metal-1 (or another card) was uncovered and triggered an effect
+                if (stateAfterTriggers.actionRequired) {
+                    // An uncover effect created an interrupt - queue the self-flip at BEGINNING
+                    stateAfterTriggers.queuedActions = [
+                        selfFlipAction,  // Self-flip FIRST (before any other queued effects)
+                        ...(stateAfterTriggers.queuedActions || []),
+                    ];
+                    console.log('[WATER-0 + Metal-6] Interrupt detected, queued self-flip. Queue:', stateAfterTriggers.queuedActions.length);
+                    return stateAfterTriggers;
+                }
+
+                // No interrupt - queue the self-flip and process it
+                stateAfterTriggers.queuedActions = [selfFlipAction];
                 stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
-                stateAfterTriggers.actionRequired = null;
+                stateAfterTriggers = phaseManager.processQueuedActions(stateAfterTriggers);
+                console.log('[WATER-0 + Metal-6] No interrupt, processed self-flip. actionRequired:', stateAfterTriggers.actionRequired?.type || 'null');
+
+                if (stateAfterTriggers.actionRequired) {
+                    return stateAfterTriggers;
+                }
                 return endTurnCb(stateAfterTriggers);
             }
-            
+
             // FIX: Use a proper type guard for 'count' property and remove 'as any' cast.
             if (action && 'count' in action && action.count > 1) {
                 const remainingCount = action.count - 1;
@@ -88,7 +167,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         };
 
         return {
-            nextState: { ...state, actionRequired: null },
+            nextState: { ...newState, actionRequired: null },
             requiresAnimation: {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback,
@@ -671,7 +750,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const ownerName = cardInfo.owner === 'player' ? "Player's" : "Opponent's";
-            const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
+            const laneIdx = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
+            const protocolName = laneIdx !== -1 ? prev[cardInfo.owner].protocols[laneIdx] : 'unknown';
+            const cardName = cardInfo.card.isFaceUp
+                ? `${cardInfo.card.protocol}-${cardInfo.card.value}`
+                : `face-down card in Protocol ${protocolName}`;
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
             newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes ${ownerName} ${cardName}.`);
@@ -918,8 +1001,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                         if (canExecute) {
                             console.log('[Death-1 Follow-up] Executing follow-up effect after delete:', followUpEffect);
-                            // DEBUG: Add visible log
-                            stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `[DEBUG] Executing followUp: ${followUpEffect.id}`);
 
                             const cardLaneIndex = stateAfterTriggers[sourceCardInfo.owner].lanes.findIndex(l => l.some(c => c.id === originalAction.sourceCardId));
                             const opponent = originalAction.actor === 'player' ? 'opponent' : 'player';
@@ -945,7 +1026,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             }
                         } else {
                             console.log('[Death-1 Follow-up] Follow-up effect requires uncovered but card is covered');
-                            stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `[DEBUG] Follow-up skipped: middle effect but card is covered`);
                         }
                     } else {
                         console.log('[Death-1 Follow-up] No follow-up effect or source card not valid:', {
@@ -954,12 +1034,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             isFaceUp: sourceCardInfo?.card.isFaceUp,
                             isUncovered: sourceIsUncovered
                         });
-                        // DEBUG: Add visible log for why it's not executing
-                        if (!followUpEffect) {
-                            stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `[DEBUG] No followUpEffect on delete action!`);
-                        } else if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
-                            stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `[DEBUG] Source card not valid for followUp`);
-                        }
                     }
 
                     return endTurnCb(stateAfterTriggers);

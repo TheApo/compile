@@ -132,6 +132,7 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         const onCoverEffects = customCard.customEffects.bottomEffects.filter((e: any) => e.trigger === 'on_cover');
 
         if (onCoverEffects.length > 0) {
+            console.log('[DEBUG executeOnCoverEffect] Found', onCoverEffects.length, 'on-cover effects for', `${coveredCard.protocol}-${coveredCard.value}`);
             const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
             let stateWithContext = setLogSource(state, cardName);
             stateWithContext = setLogPhase(stateWithContext, undefined);
@@ -141,7 +142,9 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
 
             // Execute all on-cover effects sequentially
             for (const effectDef of onCoverEffects) {
+                console.log('[DEBUG executeOnCoverEffect] Executing effect:', JSON.stringify(effectDef.params));
                 const result = executeCustomEffect(coveredCard, laneIndex, currentState, context, effectDef);
+                console.log('[DEBUG executeOnCoverEffect] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null');
                 currentState = result.newState;
 
                 // CRITICAL: Collect animation requests (Hate-4: delete animation)

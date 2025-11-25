@@ -43,8 +43,11 @@ export function executeCustomEffect(
 
     // Check 3: ONLY top effects can execute when covered
     // Middle and Bottom effects require uncovered status
+    // EXCEPTION: on_cover triggers are MEANT to fire when the card is covered!
     const position = effectDef.position || 'middle';
-    const requiresUncovered = position !== 'top';
+    const trigger = effectDef.trigger;
+    const isOnCoverTrigger = trigger === 'on_cover';
+    const requiresUncovered = position !== 'top' && !isOnCoverTrigger;
 
     if (requiresUncovered) {
         const sourceIsUncovered = isCardUncovered(state, card.id);
@@ -558,6 +561,9 @@ function executeFlipEffect(
 ): EffectResult {
     const { cardOwner } = context;
 
+    console.log('[DEBUG executeFlipEffect] Called with params:', JSON.stringify(params));
+    console.log('[DEBUG executeFlipEffect] card:', `${card.protocol}-${card.value}`, 'laneIndex:', laneIndex, 'cardOwner:', cardOwner);
+
     // NEW: Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
     if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
@@ -670,6 +676,10 @@ function executeFlipEffect(
 
     // NEW: Flip self mode (Anarchy-6)
     if (params.flipSelf) {
+        console.log('[DEBUG executeFlipEffect] flipSelf mode - card:', `${card.protocol}-${card.value}`, 'laneIndex:', laneIndex, 'cardOwner:', cardOwner);
+        console.log('[DEBUG executeFlipEffect] Lanes:', state[cardOwner].lanes.map((l, i) => `Lane ${i}: ${l.map(c => c.id.substring(0, 8)).join(', ')}`));
+        console.log('[DEBUG executeFlipEffect] Looking for card.id:', card.id);
+
         // Check advanced conditional
         if (params.advancedConditional?.type === 'protocol_match') {
             const requiredProtocol = params.advancedConditional.protocol;
@@ -687,11 +697,16 @@ function executeFlipEffect(
         const lane = newState[cardOwner].lanes[laneIndex];
         const cardInLane = lane.find(c => c.id === card.id);
 
+        console.log('[DEBUG executeFlipEffect] cardInLane found?', !!cardInLane, 'lane length:', lane.length);
+
         if (cardInLane) {
             cardInLane.isFaceUp = !cardInLane.isFaceUp;
             const playerName = cardOwner === 'player' ? 'Player' : 'Opponent';
             const direction = cardInLane.isFaceUp ? 'face-up' : 'face-down';
             newState = log(newState, cardOwner, `${playerName} flips this card ${direction}.`);
+            console.log('[DEBUG executeFlipEffect] Flipped card to', direction);
+        } else {
+            console.log('[DEBUG executeFlipEffect] Card NOT found in lane! Lane cards:', lane.map(c => c.id));
         }
 
         return { newState };
@@ -1111,7 +1126,8 @@ function executeDeleteEffect(
         return { newState, animationRequests };
     }
 
-    let newState = log(state, cardOwner, `[Custom Delete effect - ${actor === cardOwner ? 'you' : 'opponent'} selecting ${count} card(s) to delete]`);
+    // NOTE: Don't log here - the actual delete log will be created in cardResolver.ts when the player selects a card
+    let newState = { ...state };
 
     // NEW: Handle deleteSelf (Life-0 on_cover: "then delete this card")
     // Directly delete the source card without prompting

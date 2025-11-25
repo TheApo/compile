@@ -500,6 +500,9 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         ? lanesAfterRemoval[targetLaneIndex][lanesAfterRemoval[targetLaneIndex].length - 1]
         : null;
 
+    console.log('[DEBUG internalShiftCard] Card to be covered:', cardToBeCovered ? `${cardToBeCovered.protocol}-${cardToBeCovered.value} (faceUp: ${cardToBeCovered.isFaceUp})` : 'null');
+    console.log('[DEBUG internalShiftCard] Target lane has', lanesAfterRemoval[targetLaneIndex].length, 'cards before shift');
+
     // Create another new lanes array with the card added to the target lane.
     const lanesAfterAddition = lanesAfterRemoval.map((lane, index) => {
         if (index === targetLaneIndex) {
@@ -537,6 +540,11 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     let resultAfterOnCover: EffectResult = { newState: stateAfterRecalc };
     if (cardToBeCovered) {
+        console.log('[DEBUG internalShiftCard] Executing on-cover effect for', `${cardToBeCovered.protocol}-${cardToBeCovered.value}`);
+        console.log('[DEBUG internalShiftCard] cardToBeCovered has customEffects?', !!(cardToBeCovered as any).customEffects);
+        if ((cardToBeCovered as any).customEffects) {
+            console.log('[DEBUG internalShiftCard] bottomEffects:', JSON.stringify((cardToBeCovered as any).customEffects.bottomEffects));
+        }
         const coverContext: EffectContext = {
             cardOwner: cardOwner,
             actor: actor,
@@ -545,6 +553,7 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
             triggerType: 'cover'
         };
         resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc, coverContext);
+        console.log('[DEBUG internalShiftCard] After executeOnCoverEffect, actionRequired:', resultAfterOnCover.newState.actionRequired?.type || 'null');
     }
 
     let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;

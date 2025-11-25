@@ -17,7 +17,11 @@ import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
 // NEW: Generic optional draw prompt resolver (composable for any card)
 export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_optional_draw') return prevState;
+    console.log('[DEBUG resolveOptionalDrawPrompt] Called with accept:', accept, 'actionRequired type:', prevState.actionRequired?.type);
+    if (prevState.actionRequired?.type !== 'prompt_optional_draw') {
+        console.log('[DEBUG resolveOptionalDrawPrompt] Type mismatch! Returning prev state.');
+        return prevState;
+    }
 
     const { sourceCardId, actor, count, drawingPlayer } = prevState.actionRequired as any;
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
@@ -31,8 +35,6 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
         // Check if there's a follow-up effect from conditional chaining
         const followUpEffect = (prevState.actionRequired as any).followUpEffect;
         if (followUpEffect) {
-            // DEBUG: Add visible log
-            newState = log(newState, actor, `[DEBUG] Draw accepted, executing followUp: ${followUpEffect.id}`);
 
             // Execute the follow-up effect (e.g., delete other card)
             const sourceCard = findCardOnBoard(newState, sourceCardId);
@@ -194,9 +196,11 @@ export const resolveOptionalDiscardCustomPrompt = (prevState: GameState, accept:
  * Works for ALL optional effects (flip, delete, shift, return, discard, etc.)
  */
 export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolean): GameState => {
+    console.log('[DEBUG resolveOptionalEffectPrompt] Called with accept:', accept, 'actionRequired type:', prevState.actionRequired?.type);
     if (prevState.actionRequired?.type !== 'prompt_optional_effect') return prevState;
 
     const { actor, sourceCardId, effectDef, laneIndex } = prevState.actionRequired as any;
+    console.log('[DEBUG resolveOptionalEffectPrompt] effectDef:', effectDef.id, 'has conditional?', !!effectDef.conditional);
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
@@ -205,13 +209,16 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         const action = effectDef.params.action;
         newState = log(newState, actor, `${actorName} chooses to execute the optional ${action} effect.`);
 
+        // CRITICAL: Clear actionRequired BEFORE executing the effect
+        // Otherwise the old prompt_optional_effect will be inherited by the new state
+        newState.actionRequired = null;
+
         // Find the card and execute the effect
         const sourceCard = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()]
             .find(c => c.id === sourceCardId);
 
         if (!sourceCard) {
             console.error('[Optional Effect] Source card not found!');
-            newState.actionRequired = null;
             return newState;
         }
 
@@ -223,12 +230,26 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         };
 
         // Execute the effect (without optional flag to avoid recursion)
+        // CRITICAL: Also remove the conditional to prevent re-evaluation
+        // The conditional will be handled by this function after the effect executes
         const effectToExecute = {
             ...effectDef,
-            params: { ...effectDef.params, optional: false }
+            params: { ...effectDef.params, optional: false },
+            conditional: undefined  // Remove conditional - we handle it here
         };
 
         const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
+        console.log('[DEBUG resolveOptionalEffectPrompt] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null');
+
+        // CRITICAL: Handle conditional follow-up effects (if_executed)
+        if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
+            console.log('[DEBUG resolveOptionalEffectPrompt] Executing if_executed followUp:', effectDef.conditional.thenEffect.id);
+
+            // Execute the follow-up effect
+            const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, effectDef.conditional.thenEffect);
+            return followUpResult.newState;
+        }
+
         return result.newState;
     } else {
         // User declines the optional effect

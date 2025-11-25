@@ -364,8 +364,22 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // This ensures effects like anarchy_0_conditional_draw are executed automatically
                         if (finalState.queuedActions && finalState.queuedActions.length > 0) {
                             const nextAction = finalState.queuedActions[0];
-                            finalState.queuedActions = finalState.queuedActions.slice(1);
-                            finalState.actionRequired = nextAction;
+
+                            // CRITICAL FIX: execute_remaining_custom_effects is an internal action
+                            // that should be processed via processQueuedActions, NOT set as actionRequired
+                            if (nextAction.type === 'execute_remaining_custom_effects') {
+                                finalState = processQueuedActions(finalState);
+
+                                // NOTE: If processQueuedActions set an animationState (e.g., draw animation),
+                                // we just continue - the animation was already displayed synchronously
+                                // and the state should now have the updated hand
+                                if (finalState.animationState) {
+                                    finalState = { ...finalState, animationState: null };
+                                }
+                            } else {
+                                finalState.queuedActions = finalState.queuedActions.slice(1);
+                                finalState.actionRequired = nextAction;
+                            }
                         }
 
                         return endTurnCb(finalState);
@@ -480,8 +494,32 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // This ensures effects like anarchy_0_conditional_draw are executed automatically
                     if (newState.queuedActions && newState.queuedActions.length > 0) {
                         const nextAction = newState.queuedActions[0];
-                        newState.queuedActions = newState.queuedActions.slice(1);
-                        newState.actionRequired = nextAction;
+
+                        // CRITICAL FIX: execute_remaining_custom_effects is an internal action
+                        // that should be processed via processQueuedActions, NOT set as actionRequired
+                        if (nextAction.type === 'execute_remaining_custom_effects') {
+                            newState = processQueuedActions(newState);
+
+                            // CRITICAL: If processQueuedActions set an animationState (e.g., draw animation),
+                            // we need to convert it to requiresAnimation so useGameState processes it correctly
+                            if (newState.animationState && !newState.actionRequired) {
+                                const animState = newState.animationState;
+                                if (animState.type === 'draw') {
+                                    requiresAnimation = {
+                                        animationRequests: [{ type: 'draw', player: (animState as any).player, count: (animState as any).count }],
+                                        onCompleteCallback: (s, endTurnCb) => {
+                                            // After draw animation, check hand limit and continue turn
+                                            const stateAfterAnim = { ...s, animationState: null };
+                                            return endTurnCb(stateAfterAnim);
+                                        }
+                                    };
+                                    newState = { ...newState, animationState: null };
+                                }
+                            }
+                        } else {
+                            newState.queuedActions = newState.queuedActions.slice(1);
+                            newState.actionRequired = nextAction;
+                        }
                     }
                 }
             }
