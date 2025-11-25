@@ -17,11 +17,19 @@ export const executeOnCover = (coveredCard: PlayedCard, laneIndex: number, state
     for (const player of players) {
         const lane = state[player].lanes[laneIndex];
         // A card is covered if it's not the last one in the array.
-        // We include the card that is about to be covered by the new card.
-        // The new card is not yet on the board when this is called.
-        // So, all cards in the lane are "covered" in the context of the new card being played on top.
-        for (let i = 0; i < lane.length; i++) {
-            allCoveredCardsInLine.push({ card: lane[i], owner: player });
+        // The Hate-4 card that is being covered is included (it's currently the top card of cardOwner's lane).
+        // But opponent's top card is NOT covered - only cards below the top are covered.
+        // Exception: The cardOwner's entire lane counts as covered because a new card is about to cover it.
+        if (player === cardOwner) {
+            // All cards in the owner's lane are about to be covered by the new card
+            for (let i = 0; i < lane.length; i++) {
+                allCoveredCardsInLine.push({ card: lane[i], owner: player });
+            }
+        } else {
+            // For opponent, only cards below the top card are covered (exclude the last card)
+            for (let i = 0; i < lane.length - 1; i++) {
+                allCoveredCardsInLine.push({ card: lane[i], owner: player });
+            }
         }
     }
     

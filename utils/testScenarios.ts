@@ -2337,6 +2337,40 @@ export const scenario43_Apathy5DoubleUncover: TestScenario = {
     }
 };
 
+export const scenario44_Psychic1Darkness2Test: TestScenario = {
+    name: "Psychic-1 facedown flip darkness 2 test",
+    description: "Psychic-1 facedown, darkness-2 flippt Karte nur noch facedown bug",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Frost', 'Gravity', 'Plague'],       // Player protocols
+            ['Psychic', 'Darkness', 'Speed'], // Opponent protocols
+            'player',
+            'action'
+        );
+
+        newState.player.hand = [
+            createCard('Darkness', 1, true),
+            createCard('Darkness', 2, true),
+            createCard('Speed', 3, true),
+        ];
+
+        newState = placeCard(newState, 'opponent', 0, createCard('Frost', 0, false)); // UNTEN
+        newState = placeCard(newState, 'opponent', 1, createCard('Gravity', 6, false)); // OBEN (wird gelöscht)
+
+		newState = placeCard(newState, 'player', 0, createCard('Psychic', 4, false)); // UNTEN
+        newState = placeCard(newState, 'player', 1, createCard('Psychic', 1, false)); // OBEN (wird gelöscht)
+
+        // Opponent braucht Karten in der Hand zum Discarden
+        newState.opponent.hand = [
+            createCard('Gravity', 1, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2381,4 +2415,5 @@ export const allScenarios: TestScenario[] = [
     scenario41_LightCustomPlayground,
     scenario42_Death2UncoverInterruptTurn,
     scenario43_Apathy5DoubleUncover,
+    scenario44_Psychic1Darkness2Test,
 ];

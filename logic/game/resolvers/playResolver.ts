@@ -53,7 +53,8 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         const opponentProtocol = prevState[opponent].protocols[laneIndex];
 
         // Check for modifiers on BOTH players' fields (these affect both players)
-        const anyPlayerHasPsychic1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
+        // FIXED: Psychic-1 only blocks the OPPONENT from playing face-up, not the owner
+        const opponentHasPsychic1 = prevState[opponent].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
         const anyPlayerHasAnarchy1 = [...prevState.player.lanes.flat(), ...prevState.opponent.lanes.flat()].some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
 
         // NEW: Check for custom cards with require_non_matching_protocol passive rule
@@ -76,11 +77,11 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play if protocol does NOT match
             const doesNotMatch = cardToPlay.protocol !== playerProtocol && cardToPlay.protocol !== opponentProtocol;
-            canPlayFaceUp = doesNotMatch && !anyPlayerHasPsychic1;
+            canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
         } else {
             // Normal rule: can only play if protocol DOES match (or Spirit-1/Chaos-3/custom rule override)
             const doesMatch = cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol;
-            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree || hasCustomAnyProtocolRule) && !anyPlayerHasPsychic1;
+            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree || hasCustomAnyProtocolRule) && !opponentHasPsychic1;
         }
 
         if (!canPlayFaceUp) {
