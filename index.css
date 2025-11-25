@@ -529,6 +529,20 @@ p {
     font-size: 0.65rem;
 }
 
+/* Larger log preview for big screens */
+@media (min-width: 1441px) {
+    .log-preview-area {
+        flex: 0 0 240px;
+        min-height: 380px;
+    }
+
+    .log-preview-area .card-component {
+        width: 220px;
+        height: 308px;
+        font-size: 0.85rem;
+    }
+}
+
 .log-preview-card {
     display: flex;
     flex-direction: column;
@@ -2073,6 +2087,78 @@ p {
     text-align: center;
 }
 
+/* Debug modal with preview layout */
+.debug-modal-with-preview {
+    width: 90% !important;
+    max-width: 1400px !important;
+}
+
+.debug-content-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    max-height: 65vh;
+    overflow: hidden;
+}
+
+.debug-preview-area {
+    flex: 0 0 180px;
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 1rem;
+    flex-shrink: 0;
+}
+
+.debug-preview-area .card-component {
+    width: 160px;
+    height: 224px;
+    font-size: 0.65rem;
+}
+
+/* Larger debug preview for big screens */
+@media (min-width: 1441px) {
+    .debug-preview-area {
+        flex: 0 0 240px;
+        min-height: 380px;
+    }
+
+    .debug-preview-area .card-component {
+        width: 220px;
+        height: 308px;
+        font-size: 0.85rem;
+    }
+}
+
+.debug-preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.debug-grids-area {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    max-height: 65vh;
+}
+
+.debug-grids-area h3:first-child {
+    margin-top: 0;
+}
+
+.debug-card-grid .card-component.in-hand {
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.debug-card-grid .card-component.in-hand:hover {
+    transform: scale(1.05);
+}
+
 /* --- Results Screen --- */
 .results-screen-content {
     display: flex;
@@ -2768,6 +2854,48 @@ p {
   .coin-choice-icon {
     font-size: 2.5rem; /* Reduced from 3rem */
   }
+
+  /* === Log Modal with Preview (tablet portrait) === */
+  .log-modal-with-preview {
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .log-preview-area {
+    flex: 0 0 150px;
+    min-height: 240px;
+  }
+
+  .log-preview-area .card-component {
+    width: 130px;
+    height: 182px;
+    font-size: 0.55rem;
+  }
+
+  /* === Debug Modal with Preview (tablet portrait) === */
+  .debug-modal-with-preview {
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .debug-content-wrapper {
+    max-height: 60vh;
+  }
+
+  .debug-preview-area {
+    flex: 0 0 130px;
+    min-height: 200px;
+  }
+
+  .debug-preview-area .card-component {
+    width: 110px;
+    height: 154px;
+    font-size: 0.5rem;
+  }
+
+  .debug-grids-area {
+    max-height: 60vh;
+  }
 }
 
 /* ===========================
@@ -3002,6 +3130,48 @@ p {
 
   .coin-choice-label {
     font-size: 1rem;
+  }
+
+  /* === Log Modal with Preview (smaller tablets) === */
+  .log-modal-with-preview {
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .log-preview-area {
+    flex: 0 0 140px;
+    min-height: 220px;
+  }
+
+  .log-preview-area .card-component {
+    width: 120px;
+    height: 168px;
+    font-size: 0.55rem;
+  }
+
+  /* === Debug Modal with Preview (smaller tablets) === */
+  .debug-modal-with-preview {
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .debug-content-wrapper {
+    max-height: 55vh;
+  }
+
+  .debug-preview-area {
+    flex: 0 0 110px;
+    min-height: 170px;
+  }
+
+  .debug-preview-area .card-component {
+    width: 95px;
+    height: 133px;
+    font-size: 0.45rem;
+  }
+
+  .debug-grids-area {
+    max-height: 55vh;
   }
 }
 

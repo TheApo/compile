@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card as CardData } from '../data/cards';
 import { Player, PlayerState, PlayedCard } from '../types';
 import { CardComponent } from './Card';
@@ -16,6 +16,16 @@ interface DebugModalProps {
 
 export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
   const playerName = player.charAt(0).toUpperCase() + player.slice(1);
+  const [previewCard, setPreviewCard] = useState<PlayedCard | null>(null);
+
+  const handleCardHover = (card: PlayedCard | null) => {
+    setPreviewCard(card);
+  };
+
+  const handleCardClick = (card: PlayedCard) => {
+    // Toggle: if clicking the same card, deselect; otherwise select it
+    setPreviewCard(prev => prev?.id === card.id ? null : card);
+  };
 
   const renderCardGrid = (cards: CardData[], title: string, showFaceUp: boolean) => {
     // Adapt CardData to PlayedCard for the component
@@ -31,12 +41,22 @@ export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
         <div className="debug-card-grid">
           {playedCards.length > 0 ? (
             playedCards.map(card => (
-              <CardComponent
+              <div
                 key={card.id}
-                card={card}
-                isFaceUp={showFaceUp}
-                additionalClassName="in-hand"
-              />
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewCard(card);
+                }}
+                onMouseEnter={() => handleCardHover(card)}
+                onMouseLeave={() => handleCardHover(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                <CardComponent
+                  card={card}
+                  isFaceUp={showFaceUp}
+                  additionalClassName="in-hand"
+                />
+              </div>
             ))
           ) : (
             <p className="no-cards">No cards in {title.toLowerCase()}.</p>
@@ -48,12 +68,29 @@ export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content debug-modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content debug-modal-content debug-modal-with-preview" onClick={(e) => e.stopPropagation()}>
         <button className="btn btn-back modal-close-btn" onClick={onClose}>X</button>
         <h2>{playerName}'s Info</h2>
-        
-        {renderCardGrid(playerState.deck, 'Deck', false)}
-        {renderCardGrid(playerState.discard, 'Discard Pile', true)}
+
+        <div className="debug-content-wrapper">
+          {/* Left preview area */}
+          <div className="debug-preview-area">
+            {previewCard && (
+              <div className="debug-preview-card">
+                <CardComponent
+                  card={previewCard}
+                  isFaceUp={previewCard.isFaceUp}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Card grids */}
+          <div className="debug-grids-area">
+            {renderCardGrid(playerState.deck, 'Deck', false)}
+            {renderCardGrid(playerState.discard, 'Discard Pile', true)}
+          </div>
+        </div>
       </div>
     </div>
   );
