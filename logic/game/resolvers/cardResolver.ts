@@ -881,10 +881,28 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                     // CRITICAL: If we just resolved an interrupt, DON'T call endTurnCb
                     // because it would progress phases based on the ORIGINAL phase (before interrupt).
-                    // Instead, just return the state and let the game continue in the current phase.
+                    // Instead, check if there are queued actions (like the second delete from Hate-1)
+                    // and process them before returning.
                     if (hadInterruptThatResolved) {
-                        // We had an interrupt that just resolved - stay in current phase
-                        console.log('[DELETE CALLBACK] Interrupt resolved, returning early');
+                        console.log('[DELETE CALLBACK] Interrupt resolved, checking for queued actions');
+
+                        // CRITICAL FIX: After interrupt resolves, we need to process any queued actions
+                        // (like the second delete from Hate-1) before returning.
+                        if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
+                            console.log('[DELETE CALLBACK] Found queued actions after interrupt:', stateAfterTriggers.queuedActions.length);
+                            const queueCopy = [...stateAfterTriggers.queuedActions];
+                            const nextAction = queueCopy.shift();
+
+                            // Return state with next queued action as actionRequired
+                            return {
+                                ...stateAfterTriggers,
+                                actionRequired: nextAction,
+                                queuedActions: queueCopy
+                            };
+                        }
+
+                        // No queued actions - just return the state without ending the turn
+                        console.log('[DELETE CALLBACK] No queued actions after interrupt, returning early');
                         return stateAfterTriggers;
                     }
 

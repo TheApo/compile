@@ -26,6 +26,7 @@ type ActionDispatchers = {
     resolveDeath1Prompt: (s: GameState, a: boolean) => GameState,
     resolveLove1Prompt: (s: GameState, a: boolean) => GameState,
     resolvePlague2Discard: (s: GameState, cardIds: string[]) => GameState,
+    resolvePlague2OpponentDiscard: (s: GameState, cardIds: string[]) => GameState,
     resolvePlague4Flip: (s: GameState, a: boolean, p: Player) => GameState,
     resolveFire3Prompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalDiscardCustomPrompt: (s: GameState, a: boolean) => GameState,
@@ -42,7 +43,7 @@ type ActionDispatchers = {
     revealOpponentHand: (s: GameState) => GameState,
 }
 
-type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit3Prompt'>;
+type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit3Prompt'>;
 
 
 type PhaseManager = {
@@ -87,10 +88,20 @@ export const resolveRequiredOpponentAction = (
         if (!isOpponentInterrupt) return state;
 
         const aiDecision = getAIAction(state, action, difficulty);
-        
+
         // --- Specific Handlers First ---
         if (aiDecision.type === 'discardCards' && action.type === 'discard') {
             const newState = actions.discardCards(state, aiDecision.cardIds, 'opponent');
+            if (newState.actionRequired) {
+                return newState;
+            }
+            return phaseManager.processEndOfAction(newState);
+        }
+
+        // CRITICAL FIX: Handle plague_2_opponent_discard during player's turn (interrupt scenario)
+        // This happens when Plague-2 is uncovered during the player's action (e.g., deleting a card)
+        if (aiDecision.type === 'resolvePlague2Discard' && action.type === 'plague_2_opponent_discard') {
+            const newState = actions.resolvePlague2OpponentDiscard(state, aiDecision.cardIds);
             if (newState.actionRequired) {
                 return newState;
             }
@@ -636,6 +647,12 @@ export const runOpponentTurn = (
         }
 
         // 5. If we reach here, no action was taken in compile/action phase.
+        // CRITICAL FIX: For end phase, use continueTurnProgression instead of processEndOfAction.
+        // This ensures end-phase effects (like Psychic-4's End effect) are executed via advancePhase.
+        // processEndOfAction doesn't call advancePhase for the 'end' case, it only handles post-action cleanup.
+        if (state.phase === 'end' || state.phase === 'hand_limit') {
+            return phaseManager.continueTurnProgression(state);
+        }
         return phaseManager.processEndOfAction(state);
     });
 };

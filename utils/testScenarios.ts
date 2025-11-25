@@ -146,7 +146,10 @@ function finalizeScenario(state: GameState): GameState {
         { player: 'player' as Player, message: `Player protocols: ${state.player.protocols.join(', ')}` },
         { player: 'opponent' as Player, message: `Opponent protocols: ${state.opponent.protocols.join(', ')}` },
         { player: state.turn, message: `${startingPlayer} goes first.` },
-        { player: 'player' as Player, message: '---' }
+        { player: 'player' as Player, message: '---' },
+        // CRITICAL: Add a 5th entry to prevent useGameState's coin-flip hook from overriding the turn
+        // The hook only triggers if log.length <= 4
+        { player: state.turn, message: `[Test Scenario] Phase: ${state.phase}` }
     ];
 
     // Return new state with all updates

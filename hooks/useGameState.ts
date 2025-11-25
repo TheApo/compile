@@ -1105,6 +1105,7 @@ export const useGameState = (
                     resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
                     resolveLove1Prompt: resolvers.resolveLove1Prompt,
                     resolveHate1Discard: resolvers.resolveHate1Discard,
+                    resolvePlague2OpponentDiscard: resolvers.resolvePlague2OpponentDiscard,
                     revealOpponentHand: resolvers.revealOpponentHand,
                     resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
                     resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
