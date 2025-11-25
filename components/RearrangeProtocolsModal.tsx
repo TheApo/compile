@@ -47,17 +47,10 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const otherPlayer = targetPlayer === 'player' ? 'opponent' : 'player';
     const otherPlayerState = gameState[otherPlayer];
 
-    // Create a stable mapping of protocol name to its original data (value, compiled status)
-    const originalProtocolData = useMemo(() => {
-        const data: { [key: string]: { value: number; compiled: boolean } } = {};
-        targetPlayerState.protocols.forEach((proto, index) => {
-            data[proto] = {
-                value: targetPlayerState.laneValues[index],
-                compiled: targetPlayerState.compiled[index],
-            };
-        });
-        return data;
-    }, [targetPlayerState.protocols, targetPlayerState.laneValues, targetPlayerState.compiled]);
+    // Lane values and compiled status stay with the LANE (index), not the protocol
+    // So we use the current index to get lane data, not the protocol name
+    const laneValues = targetPlayerState.laneValues;
+    const laneCompiled = targetPlayerState.compiled;
 
     const getProtocolClass = (baseClass: string, isCompiled: boolean) => {
         let classes = [baseClass];
@@ -78,8 +71,10 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const handleDragEnd = () => {
         if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
             const newProtocols = [...protocols];
-            const draggedItemContent = newProtocols.splice(dragItem.current, 1)[0];
-            newProtocols.splice(dragOverItem.current, 0, draggedItemContent);
+            // SWAP the two protocols directly (don't shift all in between)
+            const temp = newProtocols[dragItem.current];
+            newProtocols[dragItem.current] = newProtocols[dragOverItem.current];
+            newProtocols[dragOverItem.current] = temp;
             dragItem.current = null;
             dragOverItem.current = null;
             setProtocols(newProtocols);
@@ -121,8 +116,10 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const handleTouchEnd = () => {
         if (touchItem.current !== null && dragOverItem.current !== null && touchItem.current !== dragOverItem.current) {
             const newProtocols = [...protocols];
-            const touchedItemContent = newProtocols.splice(touchItem.current, 1)[0];
-            newProtocols.splice(dragOverItem.current, 0, touchedItemContent);
+            // SWAP the two protocols directly (don't shift all in between)
+            const temp = newProtocols[touchItem.current];
+            newProtocols[touchItem.current] = newProtocols[dragOverItem.current];
+            newProtocols[dragOverItem.current] = temp;
             setProtocols(newProtocols);
         }
         touchItem.current = null;
@@ -135,9 +132,8 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const title = isPlayerTarget ? "Rearrange Your Protocols" : "Rearrange Opponent's Protocols";
 
     const DraggableBar = (
-        <div className={`protocol-bar ${isPlayerTarget ? 'player-bar' : 'opponent-bar'}`} onDragOver={handleDragOver}>
+        <div className={`protocol-bar ${isPlayerTarget ? 'player-bar' : 'opponent-bar'} rearrange-editable`} onDragOver={handleDragOver}>
             {protocols.map((protocol, index) => {
-                const data = originalProtocolData[protocol];
                 const hasChanged = protocol !== initialProtocols[index];
 
                 // Check if this slot violates the Anarchy-3 restriction
@@ -145,11 +141,12 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                     && disallowedProtocolForLane.laneIndex === index
                     && protocol === disallowedProtocolForLane.protocol;
 
-                const classList = getProtocolClass('protocol-display rearrange-item', data.compiled);
+                // Lane values stay with the LANE index, not the protocol
+                const classList = getProtocolClass('protocol-display rearrange-item', laneCompiled[index]);
 
                 return (
                     <div
-                        key={protocol}
+                        key={`${protocol}-${index}`}
                         className={`${classList} ${hasChanged ? 'changed' : ''} ${isViolation ? 'violation' : ''}`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, index)}
@@ -160,7 +157,7 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                         onTouchEnd={handleTouchEnd}
                     >
                         <span className="protocol-name">{protocol}</span>
-                        <span className="protocol-value">{data.value}</span>
+                        <span className="protocol-value">{laneValues[index]}</span>
                     </div>
                 );
             })}

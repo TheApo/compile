@@ -1985,12 +1985,39 @@ p {
 .rearrange-board-view .protocol-bars-container {
     border: none;
     padding: 0;
-    gap: 0.5rem;
+    padding-top: 2rem;
+    gap: 0.75rem;
 }
 
 .rearrange-board-view .protocol-bar {
     border-radius: 4px;
     overflow: hidden;
+}
+
+/* Highlight the editable protocol bar */
+.rearrange-board-view .protocol-bar.rearrange-editable {
+    outline: 3px solid var(--primary-color);
+    outline-offset: 2px;
+    box-shadow: 0 0 15px rgba(97, 239, 255, 0.4);
+}
+
+.rearrange-board-view .protocol-bar.rearrange-editable::before {
+    content: "✎ Drag to swap";
+    position: absolute;
+    top: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.rearrange-board-view .protocol-bars-container {
+    position: relative;
+}
+
+.rearrange-board-view .protocol-bar {
+    position: relative;
 }
 
 .rearrange-board-view .protocol-display {
