@@ -476,12 +476,23 @@ export type AnimationState =
     | { type: 'discardCard', owner: Player, cardIds: string[], originalAction?: ActionRequired }
     | null;
 
+// Card reference for log preview
+export interface LogCardRef {
+    protocol: string;
+    value: number;
+    owner: Player;
+    isFaceUp: boolean;
+}
+
 export interface LogEntry {
     player: Player;
     message: string;
     indentLevel?: number; // Indentation level for effect chains (0 = top level)
     sourceCard?: string; // Card that triggered this effect (e.g., "Fire-3")
     phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile'; // Which phase/trigger caused this
+    // Card references for preview on click
+    sourceCardRef?: LogCardRef; // The card that triggered this action
+    targetCardRefs?: LogCardRef[]; // Target card(s) affected by this action
 }
 
 export interface GameState {

@@ -3,15 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, LogEntry } from '../../types';
+import { GameState, Player, LogEntry, LogCardRef, PlayedCard } from '../../types';
+
+/**
+ * Options for log entries with card references for preview
+ */
+export interface LogOptions {
+    sourceCardRef?: LogCardRef;
+    targetCardRefs?: LogCardRef[];
+}
+
+/**
+ * Helper to create a LogCardRef from a PlayedCard
+ */
+export const cardToRef = (card: PlayedCard, owner: Player): LogCardRef => ({
+    protocol: card.protocol,
+    value: card.value,
+    owner,
+    isFaceUp: card.isFaceUp,
+});
 
 /**
  * Enhanced logging function that supports:
  * - Indentation for effect chains
  * - Source card tracking
  * - Phase context (start/middle/end/uncover/compile)
+ * - Card references for preview on click
  */
-export const log = (state: GameState, player: Player, message: string): GameState => {
+export const log = (state: GameState, player: Player, message: string, options?: LogOptions): GameState => {
     // CRITICAL FIX: Calculate indent level intelligently
     // If we have a phase context (start/middle/end/uncover), we're in an effect -> minimum indent 1
     // If we have a source card but no phase (e.g., on-cover effects), use explicit indent level
@@ -26,6 +45,8 @@ export const log = (state: GameState, player: Player, message: string): GameStat
         indentLevel,
         sourceCard: state._currentEffectSource,
         phase: state._currentPhaseContext,
+        sourceCardRef: options?.sourceCardRef,
+        targetCardRefs: options?.targetCardRefs,
     };
 
     return { ...state, log: [...state.log, entry] };

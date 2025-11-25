@@ -141,6 +141,69 @@
     background-color: rgba(255, 255, 255, 0.05);
 }
 
+/* Log entry clickable (has card preview) */
+.log-entry.log-entry-clickable {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.log-entry.log-entry-clickable:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.log-entry.log-entry-selected {
+    background-color: rgba(0, 200, 255, 0.15);
+    border-radius: 4px;
+}
+
+/* Log modal with preview layout */
+.log-modal-with-preview {
+    width: 90% !important;
+    max-width: 1200px !important;
+}
+
+.log-content-wrapper {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.log-preview-area {
+    flex: 0 0 180px;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 0.5rem;
+}
+
+.log-preview-area .card-component {
+    width: 160px;
+    height: 224px;
+    font-size: 0.65rem;
+}
+
+.log-preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.log-preview-counter {
+    font-size: 0.75rem;
+    color: var(--secondary-color);
+    text-align: center;
+}
+
+.log-modal-with-preview .log-list {
+    flex: 1;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
 .card-component {
   width: 250px;
   height: 350px;
