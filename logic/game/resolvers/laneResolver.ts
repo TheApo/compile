@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired, EffectContext } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log, decreaseLogIndent } from '../../utils/log';
-import { findCardOnBoard, internalShiftCard } from '../helpers/actionUtils';
+import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
 import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
 import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
@@ -16,7 +16,7 @@ import { executeOnCoverEffect } from '../../effectExecutor';
 import { handleAnarchyConditionalDraw } from '../../effects/anarchy/Anarchy-0';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
-import { processQueuedActions, queuePendingCustomEffects } from '../phaseManager';
+import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
 import { canShiftCard } from '../passiveRuleChecker';
 
 export type LaneActionResult = {
@@ -380,6 +380,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 finalState.queuedActions = finalState.queuedActions.slice(1);
                                 finalState.actionRequired = nextAction;
                             }
+                        }
+
+                        // CRITICAL FIX: If we're inside an interrupt (created by a previous effect like Death-2's uncover),
+                        // we should NOT use endTurnCb (which uses the ORIGINAL turn player's phase progression).
+                        // Instead, use processEndOfAction which properly handles interrupt resolution and turn switching.
+                        if (finalState._interruptedTurn) {
+                            // We're still in an interrupt - let processEndOfAction handle the turn restoration
+                            return processEndOfAction(finalState);
                         }
 
                         return endTurnCb(finalState);
@@ -846,6 +854,18 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState = queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
+                // Track which lanes had top cards deleted for uncover effects
+                const lanesWithTopCardDeleted: { owner: Player, laneIndex: number }[] = [];
+                for (const deleteReq of cardsToDelete) {
+                    const lane = prev[deleteReq.owner].lanes[targetLaneIndex];
+                    if (lane.length > 0 && lane[lane.length - 1].id === deleteReq.cardId) {
+                        // Check if there's a card below that will be uncovered
+                        if (lane.length > 1) {
+                            lanesWithTopCardDeleted.push({ owner: deleteReq.owner, laneIndex: targetLaneIndex });
+                        }
+                    }
+                }
+
                 // FIX: Implemented `onCompleteCallback` to handle post-delete triggers (like Hate-3) after the animations have finished.
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
@@ -857,6 +877,25 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
+
+                        // CRITICAL FIX: Handle uncover effects for cards that were uncovered by the delete
+                        for (const { owner, laneIndex } of lanesWithTopCardDeleted) {
+                            const uncoverResult = handleUncoverEffect(stateAfterDelete, owner, laneIndex);
+                            stateAfterDelete = uncoverResult.newState;
+                            // If uncover created an actionRequired (interrupt), stop processing and return
+                            if (stateAfterDelete.actionRequired) {
+                                // If we're inside an interrupt, use processEndOfAction
+                                if (stateAfterDelete._interruptedTurn) {
+                                    return processEndOfAction(stateAfterDelete);
+                                }
+                                return stateAfterDelete;
+                            }
+                        }
+
+                        // If we're inside an interrupt, use processEndOfAction
+                        if (stateAfterDelete._interruptedTurn) {
+                            return processEndOfAction(stateAfterDelete);
+                        }
 
                         return endTurnCb(stateAfterDelete);
                     }

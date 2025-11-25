@@ -181,7 +181,6 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
 
     switch (sourceEffect) {
         case 'fire_1':
-            newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to delete 1 card.`);
             nextAction = {
                 type: 'select_cards_to_delete',
                 count: 1,
@@ -191,7 +190,6 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             };
             break;
         case 'fire_2':
-            newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to return 1 card.`);
             nextAction = {
                 type: 'select_card_to_return',
                 sourceCardId: sourceCardId,
@@ -199,7 +197,6 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             };
             break;
         case 'fire_3':
-            newState = log(newState, player, `${sourceCardName}: Discard successful. Prompting to flip 1 card.`);
             nextAction = {
                 type: 'select_card_to_flip_for_fire_3',
                 sourceCardId: sourceCardId,
@@ -313,9 +310,12 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     if (uncoveredCard.isFaceUp && isStillUncovered) {
         // Create a unique ID for this specific uncover event to prevent double-triggering.
         const eventId = `${uncoveredCard.id}-${laneIndex}`;
+        console.log('[UNCOVER] Checking eventId:', eventId, 'processedUncoverEventIds:', state.processedUncoverEventIds);
         if (state.processedUncoverEventIds?.includes(eventId)) {
+            console.log('[UNCOVER] SKIPPING - already processed');
             return { newState: state }; // This specific event has already been processed in this action chain.
         }
+        console.log('[UNCOVER] PROCESSING - not yet in list');
 
         // Set logging context for uncover
         const cardName = `${uncoveredCard.protocol}-${uncoveredCard.value}`;

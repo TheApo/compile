@@ -98,23 +98,13 @@ export const useGameState = (
 
                 setTimeout(() => {
                     setGameState(s => {
-                        const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
-                        const wasTopCard = laneIndex !== -1 &&
-                                           s[nextRequest.owner].lanes[laneIndex].length > 0 &&
-                                           s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
-
+                        // Just delete the card and recalculate values.
+                        // The uncover effect is handled by the resolver's onCompleteCallback,
+                        // which runs after this animation completes.
                         let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
                         stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
 
-                        // CRITICAL: Trigger uncover effect if the deleted card was a top card.
-                        // The processedUncoverEventIds mechanism prevents double-triggering if the resolver callback also calls handleUncoverEffect.
-                        // This is needed for direct deletes (e.g., AI actions) that don't have resolver callbacks.
-                        if (wasTopCard && laneIndex !== -1) {
-                            const uncoverResult = handleUncoverEffect(stateAfterDelete, nextRequest.owner, laneIndex);
-                            stateAfterDelete = uncoverResult.newState;
-                        }
-
-                        // Clear animation and return state with potential uncover effects
+                        // Clear animation - uncover effects are handled in onCompleteCallback
                         return { ...stateAfterDelete, animationState: null };
                     });
 

@@ -2219,6 +2219,124 @@ export const scenario41_LightCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 42: Death-2 Uncover Interrupt - Turn muss zu Opponent wechseln
+ *
+ * Setup:
+ * - Player's Turn, Action Phase
+ * - Player hat Death-2 in der Hand
+ * - Opponent hat Darkness-1 (oben) auf Darkness-4 (unten) auf Lane 1
+ * - Player hat eine face-down Karte auf Lane 0 (zum Shiften)
+ *
+ * Test:
+ * 1. Player spielt Death-2 → löscht Opponent's Darkness-1
+ * 2. Darkness-4 wird uncovered → Opponent muss eine face-down Karte shiften
+ * 3. Opponent shiftet Player's face-down Karte
+ * 4. Nach dem Shift sollte der Turn zu OPPONENT wechseln (nicht zu Player's Start Phase!)
+ *
+ * Bug vorher: Nach dem Shift ging es zu Player's Start Phase (Death-1 Effekt triggerte)
+ * Erwartet: Turn wechselt zu Opponent
+ */
+export const scenario42_Death2UncoverInterruptTurn: TestScenario = {
+    name: "Death-2 Uncover Interrupt - Turn Wechsel Test",
+    description: "Death-2 löscht → Darkness-4 uncovered → Opponent shiftet → Turn muss zu Opponent wechseln",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Death', 'Fire', 'Hate'],      // Player protocols
+            ['Water', 'Darkness', 'Spirit'], // Opponent protocols
+            'player',
+            'action'
+        );
+
+        // Player: Death-2 in Hand (zum Spielen)
+        newState.player.hand = [
+            createCard('Death', 2, true),
+            createCard('Fire', 1, true),
+            createCard('Hate', 1, true),
+        ];
+
+        // Player: Eine face-down Karte auf Lane 0 (die vom Opponent geshiftet werden kann)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 0, false));
+
+        // Opponent: Darkness-4 (unten) mit Darkness-1 (oben) auf Lane 1
+        // Darkness-4: "Shift 1 face-down card" wenn uncovered
+        // Darkness-1 wird gelöscht → Darkness-4 uncovered
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 4, true)); // UNTEN
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 1, true)); // OBEN (wird gelöscht)
+		
+		newState = placeCard(newState, 'opponent', 0, createCard('Water', 0, false)); // OBEN (wird gelöscht)
+
+        // Opponent braucht auch etwas in der Hand
+        newState.opponent.hand = [
+            createCard('Water', 1, true),
+            createCard('Spirit', 1, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 43: Apathy-5 Uncover - darf nur einmal triggern
+ *
+ * Setup:
+ * - Player's Turn, Action Phase
+ * - Player hat Hate-0 in der Hand
+ * - Opponent hat Apathy-4 (oben) auf Apathy-5 (unten) auf Lane 0
+ *
+ * Test:
+ * 1. Player spielt Hate-0 auf Hate Lane
+ * 2. Player wählt Opponent's Apathy-4 zum Löschen (Wert 4 ist NICHT 0 oder 1!)
+ *    -> Warte, Hate-0 kann nur Wert 0-1 löschen, also brauchen wir eine andere Karte oben
+ *
+ * Korrektur: Apathy-0 (Wert 0) auf Apathy-5
+ *
+ * Test:
+ * 1. Player spielt Hate-0 → löscht Apathy-0 (Wert 0)
+ * 2. Apathy-5 wird uncovered → "Opponent discards 1 card"
+ * 3. Apathy-5 darf NUR EINMAL triggern, nicht zweimal!
+ *
+ * Bug vorher: Apathy-5 triggerte zweimal und Opponent musste 2 Karten discarden
+ * Erwartet: Apathy-5 triggert nur einmal
+ */
+export const scenario43_Apathy5DoubleUncover: TestScenario = {
+    name: "Apathy-5 Uncover - darf nur einmal triggern",
+    description: "Hate-0 löscht Apathy-0 → Apathy-5 uncovered → darf nur 1x triggern",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Fire', 'Death'],       // Player protocols
+            ['Apathy', 'Darkness', 'Plague'], // Opponent protocols
+            'player',
+            'action'
+        );
+
+        // Player: Hate-0 in Hand (löscht 1 Karte mit Wert 0 oder 1)
+        newState.player.hand = [
+            createCard('Hate', 0, true),
+            createCard('Fire', 2, true),
+            createCard('Death', 2, true),
+        ];
+
+        // Opponent: Apathy-5 (unten) mit Apathy-0 (oben, Wert 0 - kann gelöscht werden) auf Lane 0
+        // Wenn Apathy-0 gelöscht wird → Apathy-5 uncovered → "Opponent discards 1 card"
+        newState = placeCard(newState, 'opponent', 0, createCard('Apathy', 5, true)); // UNTEN
+        newState = placeCard(newState, 'opponent', 0, createCard('Apathy', 4, true)); // OBEN (wird gelöscht)
+
+        // Opponent braucht Karten in der Hand zum Discarden
+        newState.opponent.hand = [
+            createCard('Darkness', 1, true),
+            createCard('Apathy', 1, true),
+            createCard('Darkness', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2261,4 +2379,6 @@ export const allScenarios: TestScenario[] = [
     scenario39_HateCustomPlayground,
     scenario40_LifeCustomPlayground,
     scenario41_LightCustomPlayground,
+    scenario42_Death2UncoverInterruptTurn,
+    scenario43_Apathy5DoubleUncover,
 ];

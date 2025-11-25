@@ -286,11 +286,7 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
                         finalPlayerValues[i] += (playerFaceDownCount + opponentFaceDownCount);
                         break;
                     }
-                     case 'Darkness-2': { // All face-down cards in this stack have a value of 4.
-                        const faceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalPlayerValues[i] += faceDownCount * 2; // Add 2 for each, since base is 2.
-                        break;
-                    }
+                    // NOTE: Darkness-2 is handled in getEffectiveCardValue, not here (to avoid double-counting)
                 }
             }
         }
@@ -304,11 +300,7 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
                         finalOpponentValues[i] += (playerFaceDownCount + opponentFaceDownCount);
                         break;
                     }
-                     case 'Darkness-2': {
-                        const faceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalOpponentValues[i] += faceDownCount * 2;
-                        break;
-                    }
+                    // NOTE: Darkness-2 is handled in getEffectiveCardValue, not here (to avoid double-counting)
                 }
             }
         }

@@ -695,6 +695,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_low_value_card_to_delete':
         case 'select_card_from_other_lanes_to_delete':
         case 'select_card_to_delete_for_anarchy_2': {
+            console.log('[CARD RESOLVER] DELETE CASE ENTERED:', prev.actionRequired.type);
             // Rule: An effect is cancelled if its source card is no longer active (face-up on the board).
             const { sourceCardId, actor } = prev.actionRequired;
             const sourceCardInfoCheck = findCardOnBoard(prev, sourceCardId);
@@ -863,9 +864,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                     // 3. Handle uncovering with the pre-computed next delete action
                     let hadInterruptThatResolved = false;
+                    console.log('[DELETE CALLBACK] wasTopCard:', wasTopCard, 'laneIndex:', laneIndex, 'cardInfo.owner:', cardInfo.owner);
+                    console.log('[DELETE CALLBACK] Lane after delete:', stateAfterTriggers[cardInfo.owner].lanes[laneIndex]?.map(c => `${c.protocol}-${c.value}`));
                     if (wasTopCard) {
                         const stateBeforeUncover = stateAfterTriggers;
+                        console.log('[DELETE CALLBACK] Calling handleUncoverEffect for lane', laneIndex);
                         const uncoverResult = handleUncoverEffect(stateBeforeUncover, cardInfo.owner, laneIndex);
+                        console.log('[DELETE CALLBACK] Uncover result actionRequired:', uncoverResult.newState.actionRequired?.type);
 
                         // Check if the uncover created an interrupt (turn switch)
                         const uncoverCreatedInterrupt = uncoverResult.newState._interruptedTurn !== undefined;
