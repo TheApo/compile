@@ -96,20 +96,38 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     compilerState = { ...newState[compiler] };
     nonCompilerState = { ...newState[nonCompiler] };
 
-    // Intercept Speed-2 cards before they are deleted.
-    const compilerSpeed2sToShift: PlayedCard[] = [];
-    const nonCompilerSpeed2sToShift: PlayedCard[] = [];
+    // Intercept Speed-2 cards AND custom cards with before_compile_delete shift before they are deleted.
+    // Helper function to check if a card has before_compile_delete with shiftSelf
+    const hasBeforeCompileDeleteShift = (card: PlayedCard): boolean => {
+        // Original Speed-2
+        if (card.protocol === 'Speed' && card.value === 2 && card.isFaceUp) {
+            return true;
+        }
+        // Custom cards with before_compile_delete + shiftSelf effect
+        const customCard = card as any;
+        if (customCard.customEffects && customCard.customEffects.topEffects && card.isFaceUp) {
+            return customCard.customEffects.topEffects.some(
+                (effect: any) => effect.trigger === 'before_compile_delete' &&
+                                 effect.params?.action === 'shift' &&
+                                 effect.params?.shiftSelf === true
+            );
+        }
+        return false;
+    };
+
+    const compilerCardsToShift: PlayedCard[] = [];
+    const nonCompilerCardsToShift: PlayedCard[] = [];
 
     const compilerDeletedCards = compilerState.lanes[laneIndex].filter(c => {
-        if (c.protocol === 'Speed' && c.value === 2 && c.isFaceUp) {
-            compilerSpeed2sToShift.push(c);
+        if (hasBeforeCompileDeleteShift(c)) {
+            compilerCardsToShift.push(c);
             return false;
         }
         return true;
     });
     const nonCompilerDeletedCards = nonCompilerState.lanes[laneIndex].filter(c => {
-        if (c.protocol === 'Speed' && c.value === 2 && c.isFaceUp) {
-            nonCompilerSpeed2sToShift.push(c);
+        if (hasBeforeCompileDeleteShift(c)) {
+            nonCompilerCardsToShift.push(c);
             return false;
         }
         return true;
@@ -125,11 +143,11 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     nonCompilerState.discard = [...nonCompilerState.discard, ...nonCompilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
 
     const newCompilerLanes = [...compilerState.lanes];
-    newCompilerLanes[laneIndex] = compilerSpeed2sToShift;
+    newCompilerLanes[laneIndex] = compilerCardsToShift;
     compilerState.lanes = newCompilerLanes;
 
     const newNonCompilerLanes = [...nonCompilerState.lanes];
-    newNonCompilerLanes[laneIndex] = nonCompilerSpeed2sToShift;
+    newNonCompilerLanes[laneIndex] = nonCompilerCardsToShift;
     nonCompilerState.lanes = newNonCompilerLanes;
 
     const newCompiled = [...compilerState.compiled];
@@ -177,10 +195,12 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     }
 
     // --- Centralized Post-Compile Logic ---
-    const allSpeed2s = [...compilerSpeed2sToShift, ...nonCompilerSpeed2sToShift];
-    const queuedSpeed2Actions = allSpeed2s.map(card => {
+    // Handle all cards that survived compile due to before_compile_delete shift effect (Speed-2, custom cards)
+    const allCardsToShift = [...compilerCardsToShift, ...nonCompilerCardsToShift];
+    const queuedShiftActions = allCardsToShift.map(card => {
         const owner = findCardOnBoard(newState, card.id)!.owner;
-        newState = log(newState, owner, `Speed-2 survives compilation and must be shifted.`);
+        const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'Card';
+        newState = log(newState, owner, `${cardName} survives compilation and must be shifted.`);
         return {
             // FIX: Explicitly cast 'type' to a literal type to match the ActionRequired discriminated union.
             type: 'select_lane_for_shift' as const,
@@ -192,11 +212,11 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         };
     });
 
-    // Handle Speed-2 actions if any
-    if (queuedSpeed2Actions.length > 0) {
-        const firstAction = queuedSpeed2Actions.shift()!;
+    // Handle shift actions if any
+    if (queuedShiftActions.length > 0) {
+        const firstAction = queuedShiftActions.shift()!;
         newState.actionRequired = firstAction;
-        newState.queuedActions = queuedSpeed2Actions;
+        newState.queuedActions = queuedShiftActions;
 
         if (firstAction.actor !== compiler) {
             newState._interruptedTurn = compiler;

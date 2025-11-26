@@ -2371,6 +2371,60 @@ export const scenario44_Psychic1Darkness2Test: TestScenario = {
     }
 };
 
+/**
+ * Szenario 45: Speed_custom Playground
+ *
+ * Test all Speed_custom cards
+ * - Speed-0: Play 1 card.
+ * - Speed-1: [Top] After you clear cache: Draw 1 card. [Middle] Draw 2 cards.
+ * - Speed-2: [Top] When this card would be deleted by compiling: Shift this card, even if covered.
+ * - Speed-3: [Middle] Shift 1 of your other cards. [Bottom] End: You may shift 1 of your cards. If you do, flip this card.
+ * - Speed-4: Shift 1 of your opponent's face-down cards.
+ * - Speed-5: Discard 1 card.
+ */
+export const scenario45_SpeedCustomPlayground: TestScenario = {
+    name: "Speed_custom Test Playground",
+    description: "🆕 All Speed_custom cards on hand - swift and adaptive",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Speed_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Speed_custom cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Speed_custom', 0, true),
+            createCard('Speed_custom', 1, true),
+            createCard('Speed_custom', 2, true),
+            createCard('Speed_custom', 3, true),
+            createCard('Speed_custom', 4, true),
+            createCard('Speed_custom', 5, true),
+        ];
+
+        // Setup for Speed-3 testing (shift 1 of your other cards)
+        // Player Lane 0: Own cards to shift
+        newState = placeCard(newState, 'player', 0, createCard('Water', 2, true)); // Face-up uncovered card to shift
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 3, true)); // Another own card to shift
+
+        // Setup for Speed-4 testing (shift opponent's face-down cards)
+        // Opponent lanes with face-down cards
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down for Speed-4
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, false)); // Face-down for Speed-4
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));   // Face-up (not targetable by Speed-4)
+
+        // Setup for Speed-2 compile testing
+        // Player Lane 2: High value to potentially compile
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 4, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2416,4 +2470,5 @@ export const allScenarios: TestScenario[] = [
     scenario42_Death2UncoverInterruptTurn,
     scenario43_Apathy5DoubleUncover,
     scenario44_Psychic1Darkness2Test,
+    scenario45_SpeedCustomPlayground,
 ];

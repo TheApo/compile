@@ -555,6 +555,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 player={debugModalPlayer}
                 playerState={gameState[debugModalPlayer]}
                 onClose={() => setDebugModalPlayer(null)}
+                difficulty={difficulty}
             />
         )}
         {showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (

@@ -1,0 +1,168 @@
+{
+  "id": "speed_custom_1",
+  "name": "Speed_custom",
+  "description": "Swift and adaptive. Custom protocol migration of original Speed protocol.",
+  "color": "#33E6E6",
+  "pattern": "cross",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "speed_0_play",
+          "trigger": "on_play",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "speed_1_reactive_draw",
+          "trigger": "after_clear_cache",
+          "reactiveTriggerActor": "self",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "speed_1_draw",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "speed_2_before_compile",
+          "trigger": "before_compile_delete",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "shiftSelf": true,
+            "allowCoveredSelf": true,
+            "targetFilter": {
+              "owner": "own",
+              "position": "any",
+              "faceState": "any"
+            }
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "speed_3_shift_other",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "targetFilter": {
+              "owner": "own",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": true
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "speed_3_end_shift",
+          "trigger": "end",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "own",
+              "position": "uncovered",
+              "faceState": "any"
+            }
+          },
+          "position": "bottom",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "speed_3_flip_self",
+              "trigger": "on_play",
+              "params": {
+                "action": "flip",
+                "flipSelf": true
+              },
+              "position": "bottom"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "speed_4_shift_opponent",
+          "trigger": "on_play",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "uncovered",
+              "faceState": "face_down"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "speed_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

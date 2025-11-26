@@ -183,6 +183,16 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         case 'shift': {
             const mayShift = params.optional ? 'You may shift' : 'Shift';
 
+            // NEW: Handle explicit shiftSelf parameter (Speed-2)
+            if (params.shiftSelf) {
+                let text = `${mayShift} this card`;
+                if (params.allowCoveredSelf) {
+                    text += ', even if this card is covered';
+                }
+                mainText = text + '.';
+                break;
+            }
+
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 let text = `${mayShift} that card`;
@@ -226,43 +236,57 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             // CRITICAL: Spirit-3 special case - "shift this card"
-            // This is ONLY for cards that shift themselves, with very specific conditions:
-            // - owner MUST be "own" (not "any" or "opponent")
-            // - excludeSelf MUST be false (explicitly allows self-targeting)
-            // - NO specific faceState filter (or faceState === "any")
-            // - NO specific destinationRestriction (or type === "any")
+            // This is ONLY for cards that shift themselves, with POSITION = 'any' (even if covered)
+            // - owner MUST be "own"
+            // - position MUST be "any" (this is the key differentiator!)
+            // - NO excludeSelf
             // Example: Spirit-3 "You may shift this card, even if this card is covered"
-            const isShiftSelf = params.targetFilter?.owner === 'own' &&
-                               params.targetFilter?.excludeSelf === false &&
-                               (!params.targetFilter?.faceState || params.targetFilter?.faceState === 'any') &&
-                               (!params.destinationRestriction || params.destinationRestriction?.type === 'any') &&
-                               count === 1;
+            //
+            // DIFFERENCE from "shift 1 of your cards" (Speed-3 End):
+            // - Speed-3 has position: 'uncovered' (default) = normal card selection
+            // - Spirit-3 has position: 'any' = shift THIS card specifically
+            const isShiftThisCard = params.targetFilter?.owner === 'own' &&
+                                    params.targetFilter?.position === 'any' &&
+                                    !params.targetFilter?.excludeSelf &&
+                                    count === 1;
 
-            if (isShiftSelf) {
-                let text = `${mayShift} this card`;
+            if (isShiftThisCard) {
+                let text = `${mayShift} this card, even if this card is covered`;
+                mainText = text + '.';
+                break;
+            }
 
-                // NEW: Add "even if covered" for position="any"
-                if (params.targetFilter?.position === 'any') {
-                    text += ', even if this card is covered';
-                }
-
+            // "Shift 1 of your cards" - normal selection from own uncovered cards (Speed-3 End)
+            if (isOwn && !isCovered && !params.targetFilter?.excludeSelf && count === 1) {
+                let text = `${mayShift} 1 of your cards`;
                 mainText = text + '.';
                 break;
             }
 
             let targetDesc = '';
+            const isOpponent = params.targetFilter?.owner === 'opponent';
+            const excludeSelf = params.targetFilter?.excludeSelf;
 
-            // CRITICAL: "of your" before "opponent's" (Darkness-0: "Shift 1 of your opponent's covered cards")
-            if (params.targetFilter?.owner === 'opponent') targetDesc += "of your opponent's ";
-            // NEW: Add "other" before position/faceState descriptors (Anarchy-1)
-            if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
+            // CRITICAL: Handle "of your" phrasing for own/opponent
+            // Speed-3: "Shift 1 of your other cards"
+            // Darkness-0: "Shift 1 of your opponent's covered cards"
+            if (isOwn && excludeSelf) {
+                targetDesc += "of your other ";
+            } else if (isOpponent) {
+                targetDesc += "of your opponent's ";
+            } else if (excludeSelf) {
+                targetDesc += 'other ';
+            }
+
             // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
             if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
 
             const countText = params.count === 'all' ? 'all' : '1';
-            const cardWord = countText === '1' ? 'card' : 'cards';
+            // Use plural "cards" for "of your other/opponent's" phrasing
+            const usePluralCards = (isOwn && excludeSelf) || isOpponent;
+            const cardWord = usePluralCards ? 'cards' : (countText === '1' ? 'card' : 'cards');
             let text = `${mayShift} ${countText} ${targetDesc}${cardWord}`;
 
             // NEW: Better destination text (Anarchy-1, Gravity-1, Gravity-2, Gravity-4)
@@ -467,14 +491,15 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         case 'play': {
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
-                const faceState = params.faceDown ? 'face-down' : 'face-up';
-                mainText = `Play that card ${faceState}.`;
+                const faceState = params.faceDown === true ? 'face-down' : params.faceDown === false ? 'face-up' : '';
+                mainText = faceState ? `Play that card ${faceState}.` : 'Play that card.';
                 break;
             }
 
             const actor = params.actor;
             const count = params.count || 1;
-            const faceState = params.faceDown ? 'face-down' : 'face-up';
+            // Only specify face state if explicitly set; undefined means player chooses
+            const faceState = params.faceDown === true ? ' face-down' : params.faceDown === false ? ' face-up' : '';
 
             let actorText = '';
             let cardPart = '';
@@ -491,7 +516,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 if (params.source === 'deck') {
                     cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
                 } else {
-                    cardPart = count === 1 ? 'a card from your hand' : `${count} cards from your hand`;
+                    // Speed-0: Simple "Play 1 card" without "from your hand"
+                    cardPart = count === 1 ? '1 card' : `${count} cards`;
                 }
             }
 
@@ -504,7 +530,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 actorText = actorText.toLowerCase();
             }
 
-            let text = `${conditionalPrefix}${actorText} ${cardPart} ${faceState}`;
+            let text = `${conditionalPrefix}${actorText} ${cardPart}${faceState}`;
 
             if (params.destinationRule?.type === 'other_lines') {
                 text += ' to other lines';
@@ -830,7 +856,7 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         if (trigger === 'on_cover') return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
 
         // NEW: Reactive triggers - text depends on reactiveTriggerActor
-        if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_shift' || trigger === 'after_flip') {
+        if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_shift' || trigger === 'after_flip' || trigger === 'after_clear_cache') {
             const triggerActor = effect.reactiveTriggerActor || 'self';
             const actorText = triggerActor === 'self' ? 'you' :
                              triggerActor === 'opponent' ? 'opponent' :
@@ -845,10 +871,17 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
                 actionText = triggerActor === 'any' ? 'shifted' : 'shift cards';
             } else if (trigger === 'after_flip') {
                 actionText = triggerActor === 'any' ? 'flipped' : 'flip cards';
+            } else if (trigger === 'after_clear_cache') {
+                actionText = 'clear cache';
             }
 
             const prefixText = triggerActor === 'any' ? `After ${actorText} ${actionText}` : `After ${actorText} ${actionText}`;
             return `<div><span class='emphasis'>${prefixText}:</span> ${summary}</div>`;
+        }
+
+        // NEW: Before compile delete trigger (Speed-2)
+        if (trigger === 'before_compile_delete') {
+            return `<div><span class='emphasis'>When this card would be deleted by compiling:</span> ${summary}</div>`;
         }
 
         return summary;

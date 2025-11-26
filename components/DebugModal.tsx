@@ -5,17 +5,20 @@
 
 import React, { useState } from 'react';
 import { Card as CardData } from '../data/cards';
-import { Player, PlayerState, PlayedCard } from '../types';
+import { Player, PlayerState, PlayedCard, Difficulty } from '../types';
 import { CardComponent } from './Card';
 
 interface DebugModalProps {
   player: Player;
   playerState: PlayerState;
   onClose: () => void;
+  difficulty?: Difficulty;
 }
 
-export function DebugModal({ player, playerState, onClose }: DebugModalProps) {
-  const playerName = player.charAt(0).toUpperCase() + player.slice(1);
+export function DebugModal({ player, playerState, onClose, difficulty }: DebugModalProps) {
+  const playerName = player === 'player'
+    ? 'Player'
+    : `Opponent${difficulty ? ` (${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)})` : ''}`;
   const [previewCard, setPreviewCard] = useState<PlayedCard | null>(null);
 
   const handleCardHover = (card: PlayedCard | null) => {

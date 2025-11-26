@@ -577,6 +577,26 @@ p {
     z-index: 100;
 }
 
+.phase-button {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 100;
+    cursor: default;
+}
+
+.phase-button.player-turn {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
+.phase-button.opponent-turn {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+    box-shadow: 0 0 10px var(--danger-color);
+}
+
 .game-screen-layout {
     display: flex;
     width: 100%;
@@ -619,6 +639,7 @@ p {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    position: relative;
 }
 
 .compile-prompt-container {
@@ -1780,6 +1801,7 @@ p {
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease-in-out, background-color 0.2s ease;
+    position: relative;
 }
 .info-section:hover {
     background-color: var(--surface-hover);
@@ -1818,8 +1840,35 @@ p {
     text-transform: uppercase;
     font-family: 'Orbitron', sans-serif;
 }
+
+.phase-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-size: 0.65rem;
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+    padding: 0.15rem 0.3rem;
+    border-radius: 3px;
+    background-color: var(--surface-color);
+}
+
+.player-info .phase-badge {
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.opponent-info .phase-badge {
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
 .player-info h3 {
     color: var(--primary-color);
+}
+
+.opponent-info h3 {
+    color: var(--danger-color);
+    font-size: 0.85rem;
 }
 
 .info-section-body {

@@ -384,7 +384,22 @@ function executeDrawEffect(
         };
 
         const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''} from non-matching protocols.`);
+        // Generate log text based on conditional type
+        let reasonText = '';
+        switch (params.conditional.type) {
+            case 'non_matching_protocols':
+                reasonText = ' from non-matching protocols';
+                break;
+            case 'is_covering':
+                reasonText = ' (this card is covering another)';
+                break;
+            case 'count_face_down':
+                reasonText = ' (for face-down cards)';
+                break;
+            default:
+                reasonText = '';
+        }
+        newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${reasonText}.`);
 
         // CRITICAL: Trigger reactive effects after draw (Spirit-3)
         if (count > 0) {
@@ -829,7 +844,7 @@ function executeFlipEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom Flip effect - selecting ${count} card(s) to flip]`);
+    let newState = { ...state };
 
     // Set actionRequired for player to select cards - use generic type
     newState.actionRequired = {
@@ -1548,6 +1563,20 @@ function executeShiftEffect(
         return { newState };
     }
 
+    // NEW: shiftSelf parameter - this card shifts itself (Speed-2, Spirit-3)
+    // This bypasses all target filtering and directly shifts the source card
+    if (params.shiftSelf) {
+        newState.actionRequired = {
+            type: 'shift_flipped_card_optional',
+            cardId: card.id,
+            sourceCardId: card.id,
+            optional: params.optional || false,
+            actor: cardOwner,
+            allowCovered: params.allowCoveredSelf || false,  // Speed-2: can shift even if covered
+        } as any;
+        return { newState };
+    }
+
     const targetFilter = params.targetFilter || {};
     const position = targetFilter.position || 'uncovered';
     const faceState = targetFilter.faceState || 'any';
@@ -1555,13 +1584,13 @@ function executeShiftEffect(
     const excludeSelf = targetFilter.excludeSelf || false;
     const count = params.count || 1;
 
-    // CRITICAL: Spirit-3 special case - "shift this card" (no specific filters)
+    // CRITICAL: Spirit-3 special case - "shift this card" (position: 'any' = even if covered)
     // Auto-select the source card, only ask for destination lane
-    // BUT: Only if no specific position filter like 'covered' (Chaos-2 needs card selection!)
-    const hasSpecificTargetFilter = position === 'covered' || position === 'uncovered' || faceState !== 'any' || excludeSelf;
-    if (!hasSpecificTargetFilter && count === 1 && ownerFilter === 'own') {
+    // Key differentiator: position === 'any' means "this card, even if covered"
+    // position === 'uncovered' (default) means normal card selection
+    const isShiftThisCard = position === 'any' && ownerFilter === 'own' && !excludeSelf && count === 1;
+    if (isShiftThisCard) {
         // This card should shift itself, skip card selection (Spirit-3)
-        newState = log(newState, cardOwner, `[Custom Shift effect - selecting destination lane for this card]`);
         newState.actionRequired = {
             type: 'shift_flipped_card_optional',
             cardId: card.id,
@@ -1609,7 +1638,7 @@ function executeShiftEffect(
     }
 
     if (potentialTargets.length === 0) {
-        newState = log(newState, cardOwner, `[Custom Shift] No valid cards to shift.`);
+        newState = log(newState, cardOwner, `No valid cards to shift.`);
         return { newState };
     }
 
@@ -1644,7 +1673,7 @@ function executeShiftEffect(
         }
 
         if (validDestinationLanes.length === 0) {
-            newState = log(newState, cardOwner, `[Custom Shift] No valid destination lanes for shifting all cards.`);
+            newState = log(newState, cardOwner, `No valid destination lanes for shifting all cards.`);
             return { newState };
         }
 
@@ -1717,12 +1746,11 @@ function executeShiftEffect(
     }
 
     if (!hasValidTarget) {
-        newState = log(newState, cardOwner, `[Custom Shift] No valid shift destinations available.`);
+        newState = log(newState, cardOwner, `No valid shift destinations available.`);
         return { newState };
     }
 
     // Set actionRequired - use generic 'select_card_to_shift' type
-    newState = log(newState, cardOwner, `[Custom Shift effect - selecting card to shift]`);
 
     // NEW: Resolve destination restriction with resolved laneIndex
     const resolvedDestinationRestriction = destinationRestriction && resolvedDestLaneIndex !== undefined
@@ -1765,7 +1793,7 @@ function executeReturnEffect(
     // NEW: Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
     // User first selects a lane, then all matching cards in that lane are returned
     if (params.selectLane) {
-        let newState = log(state, cardOwner, `[Custom Return effect - selecting lane to return cards]`);
+        let newState = { ...state };
         newState.actionRequired = {
             type: 'select_lane_for_return',
             sourceCardId: card.id,
@@ -1792,7 +1820,7 @@ function executeReturnEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom Return effect - selecting ${count} card(s) to return]`);
+    let newState = { ...state };
 
     // FIX: Use 'select_card_to_return' (same as Fire-2)
     // Pass owner filter so UI can restrict clickable cards
@@ -2322,7 +2350,7 @@ function executeRevealGiveEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom ${action} effect - selecting ${count} card(s)]`);
+    let newState = { ...state };
 
     if (action === 'reveal') {
         newState.actionRequired = {

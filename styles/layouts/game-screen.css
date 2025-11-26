@@ -8,6 +8,7 @@
     max-width: none;
     padding: 1rem 1rem 5px;
     justify-content: flex-start;
+    position: relative;
 }
 
 .log-button {
@@ -15,6 +16,26 @@
     top: 2rem;
     right: 2rem;
     z-index: 100;
+}
+
+.game-screen .phase-button {
+    position: absolute !important;
+    top: 2rem !important;
+    left: 2rem !important;
+    z-index: 100;
+    cursor: default;
+}
+
+.game-screen .phase-button.player-turn {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
+.game-screen .phase-button.opponent-turn {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+    box-shadow: 0 0 10px var(--danger-color);
 }
 
 .game-screen-layout {

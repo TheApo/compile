@@ -17,6 +17,7 @@ import spiritCustomData from '../../custom_protocols/spirit_custom_protocol.json
 import gravityCustomData from '../../custom_protocols/gravity_custom_protocol.json';
 import lifeCustomData from '../../custom_protocols/life_custom_protocol.json';
 import lightCustomData from '../../custom_protocols/light_custom_protocol.json';
+import speedCustomData from '../../custom_protocols/speed_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -26,70 +27,20 @@ export const loadDefaultCustomProtocols = (): void => {
     try {
         const existingProtocols = loadCustomProtocols();
 
-        // ALWAYS update Anarchy_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Anarchy_custom protocol...');
         addCustomProtocol(anarchyCustomData as any);
-        console.log('[Default Protocols] Anarchy_custom loaded/updated successfully!');
-
-        // ALWAYS update Apathy_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Apathy_custom protocol...');
         addCustomProtocol(apathyCustomData as any);
-        console.log('[Default Protocols] Apathy_custom loaded/updated successfully!');
-
-        // ALWAYS update Dark_cust to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Dark_cust protocol...');
         addCustomProtocol(darkCustData as any);
-        console.log('[Default Protocols] Dark_cust loaded/updated successfully!');
-
-        // ALWAYS update Death_cust to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Death_cust protocol...');
         addCustomProtocol(deathCustomData as any);
-        console.log('[Default Protocols] Death_cust loaded/updated successfully!');
-
-        // ALWAYS update Fire to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Fire protocol...');
         addCustomProtocol(fireCustomData as any);
-        console.log('[Default Protocols] Fire loaded/updated successfully!');
-
-        // ALWAYS update Water_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Water_custom protocol...');
         addCustomProtocol(waterCustomData as any);
-        console.log('[Default Protocols] Water_custom loaded/updated successfully!');
-
-        // ALWAYS update Spirit_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Spirit_custom protocol...');
         addCustomProtocol(spiritCustomData as any);
-        console.log('[Default Protocols] Spirit_custom loaded/updated successfully!');
-
-        // ALWAYS update Chaos_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Chaos_custom protocol...');
         addCustomProtocol(chaosCustomData as any);
-        console.log('[Default Protocols] Chaos_custom loaded/updated successfully!');
-
-        // ALWAYS update Gravity_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Gravity_custom protocol...');
         addCustomProtocol(gravityCustomData as any);
-        console.log('[Default Protocols] Gravity_custom loaded/updated successfully!');
-
-        // ALWAYS update Frost_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Frost_custom protocol...');
         addCustomProtocol(frostCustomData as any);
-        console.log('[Default Protocols] Frost_custom loaded/updated successfully!');
-
-        // ALWAYS update Hate_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Hate_custom protocol...');
         addCustomProtocol(hateCustomData as any);
-        console.log('[Default Protocols] Hate_custom loaded/updated successfully!');
-
-        // ALWAYS update Life_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Life_custom protocol...');
         addCustomProtocol(lifeCustomData as any);
-        console.log('[Default Protocols] Life_custom loaded/updated successfully!');
-
-        // ALWAYS update Light_custom to latest version (for testing/development)
-        console.log('[Default Protocols] Loading/Updating Light_custom protocol...');
         addCustomProtocol(lightCustomData as any);
-        console.log('[Default Protocols] Light_custom loaded/updated successfully!');
+        addCustomProtocol(speedCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }
