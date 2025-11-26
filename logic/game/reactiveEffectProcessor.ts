@@ -34,6 +34,10 @@ export function processReactiveEffects(
     // Set flag to prevent recursion
     newState = { ...newState, _processingReactiveEffects: true } as any;
 
+    // CRITICAL: Track processed clear_cache triggers to prevent infinite loops
+    // (like Speed_custom-1: after_clear_cache draws a card, which triggers another clear_cache)
+    const processedClearCacheTriggerIds = (newState as any).processedClearCacheTriggerIds || [];
+
     // Find all face-up custom protocol cards with matching reactive trigger
     const reactiveCards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; box: 'top' }> = [];
 
@@ -46,10 +50,21 @@ export function processReactiveEffects(
                     const customCard = card as any;
                     if (customCard.customEffects && customCard.customEffects.topEffects) {
                         const matchingEffects = customCard.customEffects.topEffects.filter(
-                            (effect: any) => effect.trigger === triggerType
+                            (effect: any) => {
+                                // Match exact trigger
+                                if (effect.trigger === triggerType) return true;
+                                // Also match on_cover_or_flip for both on_cover and on_flip events
+                                if (effect.trigger === 'on_cover_or_flip' && (triggerType === 'on_cover' || triggerType === 'on_flip')) return true;
+                                return false;
+                            }
                         );
 
                         if (matchingEffects.length > 0) {
+                            // CRITICAL: Skip if this card already triggered for after_clear_cache this turn
+                            if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
+                                console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
+                                return;
+                            }
                             reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
                         }
                     }
@@ -120,6 +135,17 @@ export function processReactiveEffects(
                 return true;
             }
 
+            // Special case: after_opponent_discard
+            // context.player is the OPPONENT of the discarding player (i.e., the one who should benefit)
+            // The card should trigger if its owner IS context.player (they are the opponent of the discarder)
+            if (triggerType === 'after_opponent_discard') {
+                if (context.player !== owner) {
+                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - card owner (${owner}) is not the opponent of discarder (${context.player})`);
+                    return false;
+                }
+                return true;
+            }
+
             // Check if this effect should trigger based on who performed the action
             if (triggerActor === 'self') {
                 // Only trigger if card owner performed the action
@@ -163,6 +189,13 @@ export function processReactiveEffects(
             opponent,
             triggerType: triggerType as any,
         };
+
+        // CRITICAL: Mark this card as processed for after_clear_cache to prevent infinite loops
+        if (triggerType === 'after_clear_cache') {
+            const currentProcessedIds = (newState as any).processedClearCacheTriggerIds || [];
+            (newState as any).processedClearCacheTriggerIds = [...currentProcessedIds, card.id];
+            console.log(`[Reactive Effects] Marked ${cardName} as processed for after_clear_cache`);
+        }
 
         // Execute all filtered effects for this card
         for (const effectDef of filteredEffects) {

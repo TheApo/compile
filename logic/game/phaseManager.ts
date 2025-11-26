@@ -199,6 +199,7 @@ export const advancePhase = (state: GameState): GameState => {
                 processedStartEffectIds: [],
                 processedEndEffectIds: [],
                 processedSpeed1TriggerThisTurn: false,
+                processedClearCacheTriggerIds: [], // Reset for custom protocol after_clear_cache triggers
                 processedUncoverEventIds: [],
                 // CRITICAL: Clear interrupt state when starting a new turn
                 _interruptedTurn: undefined,
@@ -636,6 +637,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     processedStartEffectIds: [],
                     processedEndEffectIds: [],
                     processedSpeed1TriggerThisTurn: false,
+                    processedClearCacheTriggerIds: [], // Reset for custom protocol after_clear_cache triggers
                     processedUncoverEventIds: [],
                     // CRITICAL: Clear interrupt state when starting a new turn
                     _interruptedTurn: undefined,

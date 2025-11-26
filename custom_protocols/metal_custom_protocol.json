@@ -1,0 +1,155 @@
+{
+  "id": "metal_custom_1",
+  "name": "Metal_custom",
+  "description": "Unyielding defense. Custom protocol migration of original Metal protocol.",
+  "color": "#B0BEC5",
+  "pattern": "grid",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "metal_0_reduce_opponent",
+          "trigger": "passive",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_to_total",
+              "value": -2,
+              "target": "opponent_total",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "metal_0_flip",
+          "trigger": "on_play",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "metal_1_draw",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        },
+        {
+          "id": "metal_1_block_compile",
+          "trigger": "on_play",
+          "params": {
+            "action": "block_compile",
+            "target": "opponent"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "metal_2_block_face_down",
+          "trigger": "passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_face_down_play",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "metal_3_draw",
+          "trigger": "on_play",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle"
+        },
+        {
+          "id": "metal_3_delete_lane",
+          "trigger": "on_play",
+          "params": {
+            "action": "delete_all_in_lane",
+            "laneCondition": {
+              "type": "min_cards",
+              "count": 8
+            },
+            "excludeCurrentLane": true
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "metal_5_discard",
+          "trigger": "on_play",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "metal_6_delete_on_cover_or_flip",
+          "trigger": "on_cover_or_flip",
+          "params": {
+            "action": "delete",
+            "deleteSelf": true
+          },
+          "position": "top"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ]
+}

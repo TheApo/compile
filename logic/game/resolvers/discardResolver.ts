@@ -78,6 +78,12 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player: 'player' });
             stateAfterDiscard = reactiveResult.newState;
 
+            // CRITICAL: If any after_clear_cache effect was triggered, advance to 'end' phase
+            // to prevent infinite hand_limit loops (like original Speed-1 does)
+            if ((stateAfterDiscard as any).processedClearCacheTriggerIds?.length > 0) {
+                stateAfterDiscard.phase = 'end';
+            }
+
             // CRITICAL: Queue pending custom effects before clearing actionRequired
             stateAfterDiscard = queuePendingCustomEffects(stateAfterDiscard);
             stateAfterDiscard.actionRequired = null;
@@ -178,6 +184,12 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
             const reactiveClearResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player });
             stateAfterDiscard = reactiveClearResult.newState;
+
+            // CRITICAL: If any after_clear_cache effect was triggered, advance to 'end' phase
+            // to prevent infinite hand_limit loops (like original Speed-1 does)
+            if ((stateAfterDiscard as any).processedClearCacheTriggerIds?.length > 0) {
+                stateAfterDiscard.phase = 'end';
+            }
         }
         const stateAfterPlagueTrigger = checkForPlague1Trigger(stateAfterDiscard, player);
 
@@ -225,6 +237,12 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
         const reactiveClearResult = processReactiveEffects(finalState, 'after_clear_cache', { player });
         finalState = reactiveClearResult.newState;
+
+        // CRITICAL: If any after_clear_cache effect was triggered, advance to 'end' phase
+        // to prevent infinite hand_limit loops (like original Speed-1 does)
+        if ((finalState as any).processedClearCacheTriggerIds?.length > 0) {
+            finalState.phase = 'end';
+        }
     }
 
     return finalState;

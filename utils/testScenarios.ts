@@ -2425,6 +2425,118 @@ export const scenario45_SpeedCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 46: Metal_custom Playground
+ *
+ * Test all Metal_custom cards (values 0,1,2,3,5,6 - no 4!)
+ * - Metal-0: [Top] Opponent total in this line -2. [Middle] Flip 1 card.
+ * - Metal-1: Draw 2 cards. Your opponent cannot compile next turn.
+ * - Metal-2: [Top] Opponent cannot play face-down in this line.
+ * - Metal-3: Draw 1 card. Delete all cards in 1 other line with 8+ cards.
+ * - Metal-5: Discard 1 card.
+ * - Metal-6: [Top] When this card would be covered or flipped: First, delete this card.
+ */
+export const scenario46_MetalCustomPlayground: TestScenario = {
+    name: "Metal_custom Test Playground",
+    description: "🆕 All Metal_custom cards on hand - unyielding defense",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Metal_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Metal_custom cards in hand (0,1,2,3,5,6 - no 4!)
+        newState.player.hand = [
+            createCard('Metal_custom', 0, true),
+            createCard('Metal_custom', 1, true),
+            createCard('Metal_custom', 2, true),
+            createCard('Metal_custom', 3, true),
+            createCard('Metal_custom', 5, true),
+            createCard('Metal_custom', 6, true),
+        ];
+
+        // Setup for Metal-0 testing (flip 1 card, opponent total -2)
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, false)); // Face-down to flip
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true));  // Face-up to flip
+
+        // Setup for Metal-6 testing (delete on cover/flip)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true)); // Card to cover Metal-6
+
+        // Setup for Metal-3 testing (delete all in lane with 8+ cards)
+        // Create a lane with many cards for testing
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 0, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 1, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 5, true));
+
+        // Player cards to shift/test
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 47: Plague_custom Playground
+ *
+ * Test all Plague_custom cards (values 0,1,2,3,4,5)
+ * - Plague-0: [Middle] Opponent discards 1 card. [Bottom] Opponent cannot play cards in this line.
+ * - Plague-1: [Top] After opponent discards: Draw 1 card. [Middle] Opponent discards 1 card.
+ * - Plague-2: Discard 1 or more cards. Opponent discards amount+1.
+ * - Plague-3: Flip all other face-up cards.
+ * - Plague-4: [Bottom End] Opponent deletes 1 of their face-down cards. You may flip this card.
+ * - Plague-5: Discard 1 card.
+ */
+export const scenario47_PlagueCustomPlayground: TestScenario = {
+    name: "Plague_custom Test Playground",
+    description: "🦠 All Plague_custom cards on hand - spread suffering",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Plague_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Plague_custom cards in hand (0,1,2,3,4,5)
+        newState.player.hand = [
+            createCard('Plague_custom', 0, true),
+            createCard('Plague_custom', 1, true),
+            createCard('Plague_custom', 2, true),
+            createCard('Plague_custom', 3, true),
+            createCard('Plague_custom', 4, true),
+            createCard('Plague_custom', 5, true),
+        ];
+
+        // Opponent has some cards to discard
+        newState.opponent.hand = [
+            createCard('Fire', 2, true),
+            createCard('Death', 3, true),
+            createCard('Water', 1, true),
+        ];
+
+        // Setup some face-up cards for Plague-3 testing (flip all other face-up)
+        newState.player.lanes[0] = [createCard('Spirit', 2, true)];  // Face-up card
+        newState.player.lanes[1] = [];
+        newState.player.lanes[2] = [];
+
+        newState.opponent.lanes[0] = [createCard('Metal', 1, true)];  // Face-up card
+        newState.opponent.lanes[1] = [createCard('Death', 2, false)]; // Face-down for Plague-4
+        newState.opponent.lanes[2] = [createCard('Fire', 3, true)];   // Face-up card
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2471,4 +2583,6 @@ export const allScenarios: TestScenario[] = [
     scenario43_Apathy5DoubleUncover,
     scenario44_Psychic1Darkness2Test,
     scenario45_SpeedCustomPlayground,
+    scenario46_MetalCustomPlayground,
+    scenario47_PlagueCustomPlayground,
 ];

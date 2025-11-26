@@ -372,6 +372,12 @@ export type ActionRequired = {
     disallowedLaneIndex: number;
     actor: Player;
 } | {
+    type: 'select_lane_for_delete_all';
+    sourceCardId: string;
+    validLanes: number[];
+    minCards: number;
+    actor: Player;
+} | {
     type: 'select_any_other_card_to_flip_for_water_0';
     sourceCardId: string;
     actor: Player;

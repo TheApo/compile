@@ -1,0 +1,183 @@
+{
+  "id": "plague-custom-001",
+  "name": "Plague_custom",
+  "description": "Focused on forcing opponent discards and restricting their plays. Spread suffering.",
+  "author": "System Migration",
+  "createdAt": "2025-11-26T00:00:00.000Z",
+  "color": "#8FBC3A",
+  "pattern": "dual-radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "plague-0-opponent-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "plague-0-block-play",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_all_play",
+              "target": "opponent",
+              "scope": "this_lane"
+            }
+          },
+          "position": "bottom",
+          "trigger": "passive"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "plague-1-reactive-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top",
+          "trigger": "after_opponent_discard"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "plague-1-opponent-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "plague-2-self-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self",
+            "variableCount": true
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "plague-2-opponent-discard",
+              "params": {
+                "action": "discard",
+                "actor": "opponent",
+                "countType": "equal_to_discarded",
+                "countOffset": 1
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "plague-3-flip-each-other",
+          "params": {
+            "action": "flip",
+            "count": "all",
+            "scope": {
+              "type": "anywhere"
+            },
+            "targetFilter": {
+              "faceState": "face_up",
+              "owner": "any",
+              "position": "uncovered",
+              "excludeSelf": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "text": {
+        "bottom": "<div><span class='emphasis'>End:</span> Your opponent deletes 1 of their face-down cards. You may flip this card.</div>"
+      },
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "plague-4-opponent-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "faceState": "face_down",
+              "owner": "opponent",
+              "position": "uncovered"
+            },
+            "scope": {
+              "type": "anywhere"
+            },
+            "actorChooses": "card_owner"
+          },
+          "position": "bottom",
+          "trigger": "end"
+        },
+        {
+          "id": "plague-4-may-flip-self",
+          "params": {
+            "action": "flip",
+            "flipSelf": true,
+            "optional": true
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "plague-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

@@ -274,6 +274,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                                 <option value="after_shift">After cards are shifted</option>
                                 <option value="after_play">After cards are played</option>
                                 <option value="on_flip">When this card would be flipped</option>
+                                <option value="on_cover_or_flip">When this card would be covered or flipped</option>
                             </optgroup>
                         </select>
 
@@ -296,6 +297,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                             <option value="choice">Either/Or Choice</option>
                             <option value="passive_rule">Passive Rule</option>
                             <option value="value_modifier">Value Modifier</option>
+                            <option value="block_compile">Block Compile</option>
+                            <option value="delete_all_in_lane">Delete All in Lane</option>
                         </select>
 
                         <button
@@ -362,6 +365,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         <option value="choice">Either/Or Choice</option>
                         <option value="passive_rule">Passive Rule</option>
                         <option value="value_modifier">Value Modifier</option>
+                        <option value="block_compile">Block Compile</option>
+                        <option value="delete_all_in_lane">Delete All in Lane</option>
                     </select>
                 </div>
 
@@ -410,6 +415,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                             <option value="choice">Either/Or Choice</option>
                             <option value="passive_rule">Passive Rule</option>
                             <option value="value_modifier">Value Modifier</option>
+                            <option value="block_compile">Block Compile</option>
+                            <option value="delete_all_in_lane">Delete All in Lane</option>
                         </select>
 
                         <button

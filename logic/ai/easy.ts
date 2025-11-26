@@ -232,11 +232,31 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
-        case 'select_card_to_delete_for_death_1':
-        case 'plague_4_opponent_delete': {
+        case 'select_card_to_delete_for_death_1': {
             const disallowedIds = ('disallowedIds' in action && action.disallowedIds) ? action.disallowedIds : [];
-            // Prioritize player cards, but otherwise make a simple choice.
-            // FIX: Only target uncovered cards.
+            const targetFilter = 'targetFilter' in action ? action.targetFilter : undefined;
+            const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
+
+            // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
+            // This handles custom effects like "Your opponent deletes 1 of their face-down cards"
+            if (actorChooses === 'card_owner' && targetFilter?.owner === 'opponent') {
+                const ownValidCards: PlayedCard[] = [];
+                state.opponent.lanes.forEach((lane) => {
+                    if (lane.length > 0) {
+                        const topCard = lane[lane.length - 1]; // Only uncovered
+                        if (targetFilter.faceState === 'face_down' && topCard.isFaceUp) return;
+                        if (targetFilter.faceState === 'face_up' && !topCard.isFaceUp) return;
+                        ownValidCards.push(topCard);
+                    }
+                });
+
+                if (ownValidCards.length > 0) {
+                    return { type: 'deleteCard', cardId: ownValidCards[0].id };
+                }
+                return { type: 'skip' };
+            }
+
+            // Standard behavior: Prioritize player cards
             const getUncoveredCards = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                 .filter((c): c is PlayedCard => c !== null);
@@ -245,10 +265,28 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (allowedPlayerCards.length > 0) {
                 return { type: 'deleteCard', cardId: allowedPlayerCards[0].id };
             }
-            
+
             const allowedOpponentCards = getUncoveredCards('opponent').filter(c => !disallowedIds.includes(c.id));
             if (allowedOpponentCards.length > 0) {
                 return { type: 'deleteCard', cardId: allowedOpponentCards[0].id };
+            }
+            return { type: 'skip' };
+        }
+
+        case 'plague_4_opponent_delete': {
+            // Original Plague-4: Opponent (AI) must delete their OWN uncovered face-down card
+            const ownFaceDownUncovered: PlayedCard[] = [];
+            state.opponent.lanes.forEach((lane) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
+                        ownFaceDownUncovered.push(topCard);
+                    }
+                }
+            });
+
+            if (ownFaceDownUncovered.length > 0) {
+                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
             }
             return { type: 'skip' };
         }
@@ -762,6 +800,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'selectLane', laneIndex: randomLane };
             }
             // If no valid lanes, skip
+            return { type: 'skip' };
+        }
+        case 'select_lane_for_delete_all': {
+            // Generic handler for delete all in lane (custom protocols)
+            const validLanes = 'validLanes' in action ? action.validLanes : [0, 1, 2];
+            if (validLanes.length > 0) {
+                const randomLane = validLanes[Math.floor(Math.random() * validLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
             return { type: 'skip' };
         }
         case 'select_lane_for_water_3': {

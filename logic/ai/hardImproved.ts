@@ -1241,7 +1241,42 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete':
         case 'select_card_to_delete_for_death_1': {
-            const disallowedIds = action.type === 'select_cards_to_delete' ? action.disallowedIds : [action.sourceCardId];
+            const disallowedIds = action.type === 'select_cards_to_delete' ? (action.disallowedIds || []) : [action.sourceCardId];
+            const targetFilter = 'targetFilter' in action ? action.targetFilter : undefined;
+            const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
+
+            // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
+            // This handles custom effects like "Your opponent deletes 1 of their face-down cards"
+            if (actorChooses === 'card_owner' && targetFilter?.owner === 'opponent') {
+                // AI must select its OWN cards matching the filter
+                const ownValidCards: { card: PlayedCard; laneIndex: number }[] = [];
+                state.opponent.lanes.forEach((lane, laneIndex) => {
+                    if (lane.length > 0) {
+                        const topCard = lane[lane.length - 1]; // Only uncovered
+                        // Check faceState filter
+                        if (targetFilter.faceState === 'face_down' && topCard.isFaceUp) return;
+                        if (targetFilter.faceState === 'face_up' && !topCard.isFaceUp) return;
+                        ownValidCards.push({ card: topCard, laneIndex });
+                    }
+                });
+
+                if (ownValidCards.length > 0) {
+                    // Strategic: Delete from non-compiled lanes first, prefer lowest value
+                    const scored = ownValidCards.map(({ card, laneIndex }) => {
+                        const isCompiled = state.opponent.compiled[laneIndex];
+                        const compiledPenalty = isCompiled ? 1000 : 0; // Huge penalty to avoid compiled lanes
+                        return {
+                            cardId: card.id,
+                            score: card.value + compiledPenalty // Lower is better
+                        };
+                    });
+                    scored.sort((a, b) => a.score - b.score);
+                    return { type: 'deleteCard', cardId: scored[0].cardId };
+                }
+                return { type: 'skip' };
+            }
+
+            // Standard behavior: Target player's high-value cards
             const getUncovered = (p: Player) => state[p].lanes
                 .map((lane, laneIndex) => lane.length > 0 ? { card: lane[lane.length - 1], laneIndex } : null)
                 .filter((c): c is { card: PlayedCard, laneIndex: number } => c !== null);
@@ -2631,6 +2666,21 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             scoredLanes.sort((a, b) => b.score - a.score);
             return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+        }
+        case 'select_lane_for_delete_all': {
+            // Generic handler for delete all in lane (custom protocols)
+            // Strategic: Pick lane where opponent has most value
+            const validLanes = 'validLanes' in action ? action.validLanes : [0, 1, 2];
+            if (validLanes.length > 0) {
+                const scoredLanes = validLanes.map((laneIndex: number) => {
+                    const playerCards = state.player.lanes[laneIndex];
+                    const playerValue = playerCards.reduce((sum, c) => sum + (c.isFaceUp ? c.value : 2), 0);
+                    return { laneIndex, score: playerValue };
+                });
+                scoredLanes.sort((a, b) => b.score - a.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+            return { type: 'skip' };
         }
 
         case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: true };

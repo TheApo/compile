@@ -243,6 +243,14 @@ export function executeCustomEffect(
             result = executeChoiceEffect(card, laneIndex, state, context, params);
             break;
 
+        case 'block_compile':
+            result = executeBlockCompileEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'delete_all_in_lane':
+            result = executeDeleteAllInLaneEffect(card, laneIndex, state, context, params);
+            break;
+
         default:
             console.error(`[Custom Effect] Unknown action: ${action}`);
             result = { newState: state };
@@ -727,13 +735,16 @@ function executeFlipEffect(
         return { newState };
     }
 
-    // NEW: Flip all in lane mode (Apathy-1)
+    // NEW: Flip all mode (Apathy-1: this_lane, Plague-3: anywhere)
     // ONLY if count is not specified (or explicitly set to 'all')
     // If count is specified (e.g., 1), use normal selection flow below
     const count = params.count || 1;
-    const shouldAutoFlipAll = params.scope === 'this_lane' && (count === 'all' || typeof count !== 'number');
+    const scopeType = params.scope?.type || params.scope || 'anywhere';
+    const isFlipAll = count === 'all' || typeof count !== 'number';
+    const shouldAutoFlipAllInLane = scopeType === 'this_lane' && isFlipAll;
+    const shouldAutoFlipAllGlobal = scopeType === 'anywhere' && isFlipAll;
 
-    if (shouldAutoFlipAll) {
+    if (shouldAutoFlipAllInLane || shouldAutoFlipAllGlobal) {
         let newState = { ...state };
         const opponent = cardOwner === 'player' ? 'opponent' : 'player';
         const targetFilter = params.targetFilter || {};
@@ -743,38 +754,56 @@ function executeFlipEffect(
 
         const cardsToFlip = new Set<string>();
 
-        // Collect cards from player's side of the lane
-        const playerLane = newState[cardOwner].lanes[laneIndex];
-        for (const c of playerLane) {
-            // Check excludeSelf
-            if (targetFilter.excludeSelf && c.id === card.id) continue;
-            // Check faceState
-            if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
-            if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
-            // Check owner
-            if (targetFilter.owner === 'opponent') continue; // Skip own cards if only opponent wanted
-            // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
-            if (frost1Active && !c.isFaceUp) continue;
+        // Determine which lanes to process
+        const lanesToProcess = shouldAutoFlipAllGlobal ? [0, 1, 2] : [laneIndex];
 
-            cardsToFlip.add(c.id);
-        }
+        for (const currentLaneIdx of lanesToProcess) {
+            // Collect cards from player's side of the lane
+            const playerLane = newState[cardOwner].lanes[currentLaneIdx];
+            for (const c of playerLane) {
+                // Check excludeSelf
+                if (targetFilter.excludeSelf && c.id === card.id) continue;
+                // Check faceState
+                if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
+                if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
+                // Check owner
+                if (targetFilter.owner === 'opponent') continue; // Skip own cards if only opponent wanted
+                // Check position - default is uncovered for flip effects
+                const isUncovered = playerLane.indexOf(c) === playerLane.length - 1;
+                if (targetFilter.position === 'uncovered' && !isUncovered) continue;
+                if (targetFilter.position === 'covered' && isUncovered) continue;
+                // For global flip all without explicit position filter, default to uncovered
+                if (shouldAutoFlipAllGlobal && !targetFilter.position && !isUncovered) continue;
+                // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
+                if (frost1Active && !c.isFaceUp) continue;
 
-        // Collect cards from opponent's side of the lane
-        const opponentLane = newState[opponent].lanes[laneIndex];
-        for (const c of opponentLane) {
-            // Check faceState
-            if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
-            if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
-            // Check owner
-            if (targetFilter.owner === 'own') continue; // Skip opponent cards if only own wanted
-            // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
-            if (frost1Active && !c.isFaceUp) continue;
+                cardsToFlip.add(c.id);
+            }
 
-            cardsToFlip.add(c.id);
+            // Collect cards from opponent's side of the lane
+            const opponentLane = newState[opponent].lanes[currentLaneIdx];
+            for (const c of opponentLane) {
+                // Check faceState
+                if (targetFilter.faceState === 'face_up' && !c.isFaceUp) continue;
+                if (targetFilter.faceState === 'face_down' && c.isFaceUp) continue;
+                // Check owner
+                if (targetFilter.owner === 'own') continue; // Skip opponent cards if only own wanted
+                // Check position - default is uncovered for flip effects
+                const isUncovered = opponentLane.indexOf(c) === opponentLane.length - 1;
+                if (targetFilter.position === 'uncovered' && !isUncovered) continue;
+                if (targetFilter.position === 'covered' && isUncovered) continue;
+                // For global flip all without explicit position filter, default to uncovered
+                if (shouldAutoFlipAllGlobal && !targetFilter.position && !isUncovered) continue;
+                // CRITICAL: Frost-1 restriction - only face-up cards can be flipped
+                if (frost1Active && !c.isFaceUp) continue;
+
+                cardsToFlip.add(c.id);
+            }
         }
 
         if (cardsToFlip.size > 0) {
-            newState = log(newState, cardOwner, `Flipping ${cardsToFlip.size} card(s) in this lane.`);
+            const scopeText = shouldAutoFlipAllGlobal ? '' : ' in this lane';
+            newState = log(newState, cardOwner, `Flipping ${cardsToFlip.size} card(s)${scopeText}.`);
             // Flip the cards
             for (const cardId of cardsToFlip) {
                 for (const player of ['player', 'opponent'] as const) {
@@ -788,7 +817,8 @@ function executeFlipEffect(
             }
             return { newState };
         } else {
-            newState = log(newState, cardOwner, `No cards to flip in this lane.`);
+            const scopeText = shouldAutoFlipAllGlobal ? '' : ' in this lane';
+            newState = log(newState, cardOwner, `No cards to flip${scopeText}.`);
             return { newState };
         }
     }
@@ -972,9 +1002,10 @@ function executeDeleteEffect(
 
                 // Check excludeSelf
                 if (params.excludeSelf && c.id === card.id) continue;
-                // Check owner
-                if (targetFilter.owner === 'own' && player !== actor) continue;
-                if (targetFilter.owner === 'opponent' && player === actor) continue;
+                // Check owner - CRITICAL: owner filter is relative to cardOwner, NOT actor
+                // "opponent" means opponent of the card owner (effect source)
+                if (targetFilter.owner === 'own' && player !== cardOwner) continue;
+                if (targetFilter.owner === 'opponent' && player === cardOwner) continue;
                 // Check position (using default 'uncovered' if not specified)
                 if (position === 'uncovered' && !isUncovered) continue;
                 if (position === 'covered' && isUncovered) continue;
@@ -1323,11 +1354,13 @@ function executeDeleteEffect(
     }
 
     // Set actionRequired for player to select cards
+    // FLEXIBLE: Pass actorChooses so AI can determine who selects targets
     newState.actionRequired = {
-        type: 'select_cards_to_delete',  // CRITICAL: Must be plural 'select_cards_to_delete'
+        type: 'select_cards_to_delete',  // CRITICAL: Always use generic type, AI reads targetFilter
         count,
         sourceCardId: card.id,
         actor,
+        actorChooses,  // NEW: Pass actorChooses so AI knows if opponent selects their own cards
         disallowedIds: params.excludeSelf ? [card.id] : [],
         allowedIds: filteredTargets.length < validTargets.length ? filteredTargets : undefined, // NEW: Restrict to filtered targets if calculation was applied
         targetFilter: params.targetFilter,      // Pass filter to resolver/UI
@@ -1357,8 +1390,10 @@ function executeDiscardEffect(
 
     if (countType === 'equal_to_discarded') {
         // Use discardedCount from context (from previous discard in the chain)
-        count = (context.discardedCount || 0) + (params.countOffset || 0);
-        console.log(`[Discard Effect] Using dynamic count: ${context.discardedCount} + ${params.countOffset} = ${count}`);
+        const rawCount = (context.discardedCount || 0) + (params.countOffset || 0);
+        // CRITICAL: Limit to actual hand size (like original Plague-2)
+        count = Math.min(rawCount, state[actor].hand.length);
+        console.log(`[Discard Effect] Using dynamic count: ${context.discardedCount} + ${params.countOffset} = ${rawCount}, limited to hand size: ${count}`);
 
         // If count is 0 or negative, skip the discard
         if (count <= 0) {
@@ -1379,6 +1414,12 @@ function executeDiscardEffect(
         const originalCount = count;
         count = Math.min(count, state[actor].hand.length);
         console.log(`[Discard Effect] upTo mode: requesting ${originalCount}, adjusted to ${count} (hand size: ${state[actor].hand.length})`);
+    }
+
+    // CRITICAL: Always limit count to actual hand size (prevents softlock)
+    if (typeof count === 'number' && count > state[actor].hand.length) {
+        console.log(`[Discard Effect] Count ${count} exceeds hand size ${state[actor].hand.length}, limiting.`);
+        count = state[actor].hand.length;
     }
 
     // NEW: Auto-execute "discard all" (Chaos-4: "Discard your hand")
@@ -1847,7 +1888,9 @@ function executePlayEffect(
     const { cardOwner, opponent } = context;
     const count = params.count || 1;
     const source = params.source || 'hand';
-    const faceDown = params.faceDown || false;
+    // CRITICAL: Only set faceDown if explicitly defined in params
+    // If undefined, the resolver will use normal game rules (face-down if not matching protocol)
+    const faceDown = params.faceDown; // Can be true, false, or undefined
     const actor = params.actor === 'opponent' ? opponent : cardOwner;
 
     // CRITICAL: Water-1 logic - Automatic play from deck to each other line
@@ -2431,6 +2474,76 @@ function executeChoiceEffect(
         sourceCardId: card.id,
         actor: cardOwner,
         laneIndex,
+    } as any;
+
+    return { newState };
+}
+
+/**
+ * Execute BLOCK_COMPILE effect (Metal-1: Your opponent cannot compile next turn)
+ */
+function executeBlockCompileEffect(
+    card: PlayedCard,
+    laneIndex: number,
+    state: GameState,
+    context: EffectContext,
+    params: any
+): EffectResult {
+    const { cardOwner, opponent } = context;
+    const target = params.target || 'opponent';
+    const targetPlayer = target === 'opponent' ? opponent : cardOwner;
+
+    // Set cannotCompile flag on target player
+    const targetState = { ...state[targetPlayer], cannotCompile: true };
+    let newState = { ...state, [targetPlayer]: targetState };
+
+    const sourceCardInfo = findCardOnBoard(state, card.id);
+    const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+    const targetName = targetPlayer === 'player' ? 'Player' : 'Opponent';
+    newState = log(newState, cardOwner, `${sourceCardName}: ${targetName} cannot compile next turn.`);
+
+    return { newState };
+}
+
+/**
+ * Execute DELETE_ALL_IN_LANE effect (Metal-3: Delete all cards in 1 other line with 8 or more cards)
+ */
+function executeDeleteAllInLaneEffect(
+    card: PlayedCard,
+    laneIndex: number,
+    state: GameState,
+    context: EffectContext,
+    params: any
+): EffectResult {
+    const { cardOwner } = context;
+    const excludeCurrentLane = params.excludeCurrentLane !== false;
+    const minCards = params.laneCondition?.count || 8;
+
+    // Find lanes that meet the condition
+    const validLanes: number[] = [];
+    for (let i = 0; i < 3; i++) {
+        if (excludeCurrentLane && i === laneIndex) continue;
+        const totalCards = state.player.lanes[i].length + state.opponent.lanes[i].length;
+        if (totalCards >= minCards) {
+            validLanes.push(i);
+        }
+    }
+
+    if (validLanes.length === 0) {
+        // No lanes meet the condition - skip effect with log message
+        const sourceCardName = `${card.protocol}-${card.value}`;
+        let newState = log(state, cardOwner, `${sourceCardName}: No line has ${minCards} or more cards. Effect skipped.`);
+        return { newState };
+    }
+
+    // Set actionRequired for player to select a lane
+    let newState = { ...state };
+    newState.actionRequired = {
+        type: 'select_lane_for_delete_all',
+        sourceCardId: card.id,
+        actor: cardOwner,
+        validLanes,
+        minCards,
     } as any;
 
     return { newState };

@@ -18,6 +18,8 @@ import gravityCustomData from '../../custom_protocols/gravity_custom_protocol.js
 import lifeCustomData from '../../custom_protocols/life_custom_protocol.json';
 import lightCustomData from '../../custom_protocols/light_custom_protocol.json';
 import speedCustomData from '../../custom_protocols/speed_custom_protocol.json';
+import metalCustomData from '../../custom_protocols/metal_custom_protocol.json';
+import plagueCustomData from '../../custom_protocols/plague_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -41,6 +43,8 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(lifeCustomData as any);
         addCustomProtocol(lightCustomData as any);
         addCustomProtocol(speedCustomData as any);
+        addCustomProtocol(metalCustomData as any);
+        addCustomProtocol(plagueCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

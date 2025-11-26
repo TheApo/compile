@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { FlipEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface FlipEffectEditorProps {
     params: FlipEffectParams;
@@ -14,6 +15,8 @@ interface FlipEffectEditorProps {
 export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onChange }) => {
     // Ensure targetFilter exists
     const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'any', excludeSelf: false };
+    // Ensure count exists with default value
+    const count = params.count ?? 1;
 
     return (
         <div className="param-editor flip-effect-editor">
@@ -22,7 +25,7 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 Card Count/Scope
                 <select
-                    value={params.count === 'all' ? 'all' : params.count === 'each' ? 'each' : params.count.toString()}
+                    value={count === 'all' ? 'all' : count === 'each' ? 'each' : count.toString()}
                     onChange={e => {
                         const val = e.target.value;
                         if (val === 'all') {
@@ -82,19 +85,25 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             <label>
                 <input
                     type="checkbox"
-                    checked={params.selfFlipAfter || false}
-                    onChange={e => onChange({ ...params, selfFlipAfter: e.target.checked })}
+                    checked={params.flipSelf || false}
+                    onChange={e => onChange({ ...params, flipSelf: e.target.checked })}
                 />
-                Then flip this card
+                Flip ONLY this card (no target selection)
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    The card flips itself, ignoring count and target filter.
+                </small>
             </label>
 
             <label>
                 <input
                     type="checkbox"
-                    checked={params.flipSelf || false}
-                    onChange={e => onChange({ ...params, flipSelf: e.target.checked })}
+                    checked={params.selfFlipAfter || false}
+                    onChange={e => onChange({ ...params, selfFlipAfter: e.target.checked })}
                 />
-                Flip this card (instead of selecting target)
+                ALSO flip this card after flipping targets
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    After flipping target(s), also flip this card as bonus.
+                </small>
             </label>
 
             <h5>Advanced Conditional</h5>
@@ -197,13 +206,14 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateFlipText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateFlipText = (params: FlipEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateFlipText = (params: FlipEffectParams): string => {
     // NEW: Flip self mode
     if (params.flipSelf) {
         let text = params.optional ? 'May flip this card' : 'Flip this card';
@@ -217,8 +227,9 @@ const generateFlipText = (params: FlipEffectParams): string => {
         return text;
     }
 
-    // Ensure targetFilter exists
+    // Ensure targetFilter and count exist
     const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'any', excludeSelf: false };
+    const count = params.count ?? 1;
 
     const may = params.optional ? 'May flip' : 'Flip';
     let targetDesc = '';
@@ -231,9 +242,9 @@ const generateFlipText = (params: FlipEffectParams): string => {
     if (targetFilter.excludeSelf) targetDesc += 'other ';
 
     let countText = '';
-    if (params.count === 'all') {
+    if (count === 'all') {
         countText = 'all';
-    } else if (params.count === 'each') {
+    } else if (count === 'each') {
         const eachScope = (params as any).eachLineScope;
         if (eachScope === 'each_line') {
             countText = '1';
@@ -242,10 +253,10 @@ const generateFlipText = (params: FlipEffectParams): string => {
             countText = 'each';
         }
     } else {
-        countText = params.count.toString();
+        countText = count.toString();
     }
 
-    const cardWord = (params.count === 1) ? 'card' : 'cards';
+    const cardWord = (count === 1) ? 'card' : 'cards';
     let text = `${may} ${countText} ${targetDesc}${cardWord}`;
 
     // NEW: Add scope text (Chaos-0: "In each line, flip 1 covered card")

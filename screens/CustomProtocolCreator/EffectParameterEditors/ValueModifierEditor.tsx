@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { ValueModifierParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface ValueModifierEditorProps {
     params: ValueModifierParams;
@@ -214,13 +215,14 @@ export const ValueModifierEditor: React.FC<ValueModifierEditorProps> = ({ params
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateValueModifierText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'passive', position: 'top', params })}
             </div>
         </div>
     );
 };
 
-const generateValueModifierText = (params: ValueModifierParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateValueModifierText = (params: ValueModifierParams): string => {
     const modifierType = params.modifier?.type || 'add_per_condition';
     const value = params.modifier?.value || 0;
     const condition = params.modifier?.condition || 'per_face_down_card';

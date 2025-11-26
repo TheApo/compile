@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { ShiftEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: (params: ShiftEffectParams) => void }> = ({
     params,
@@ -113,13 +114,14 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateShiftText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateShiftText = (params: ShiftEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateShiftText = (params: ShiftEffectParams): string => {
     const mayShift = params.optional ? 'You may shift' : 'Shift';
     let targetDesc = '';
 

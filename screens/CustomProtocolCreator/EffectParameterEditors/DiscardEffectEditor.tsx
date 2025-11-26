@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { DiscardEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChange: (params: DiscardEffectParams) => void }> = ({
     params,
@@ -81,13 +82,14 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateDiscardText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateDiscardText = (params: DiscardEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateDiscardText = (params: DiscardEffectParams): string => {
     const isVariable = (params as any).variableCount;
     const countType = params.countType || 'fixed';
     let countText = '';

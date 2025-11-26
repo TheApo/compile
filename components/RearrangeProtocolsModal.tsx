@@ -15,6 +15,8 @@ interface RearrangeProtocolsModalProps {
 export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: RearrangeProtocolsModalProps) {
     const [initialProtocols] = useState([...gameState[targetPlayer].protocols]);
     const [protocols, setProtocols] = useState([...gameState[targetPlayer].protocols]);
+    // Track original indices so compiled status follows the protocol
+    const [originalIndices, setOriginalIndices] = useState([0, 1, 2]);
     const dragItem = useRef<number | null>(null);
     const dragOverItem = useRef<number | null>(null);
     const touchStartY = useRef<number>(0);
@@ -71,13 +73,19 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const handleDragEnd = () => {
         if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
             const newProtocols = [...protocols];
+            const newOriginalIndices = [...originalIndices];
             // SWAP the two protocols directly (don't shift all in between)
             const temp = newProtocols[dragItem.current];
             newProtocols[dragItem.current] = newProtocols[dragOverItem.current];
             newProtocols[dragOverItem.current] = temp;
+            // Also swap the original indices so compiled status follows the protocol
+            const tempIdx = newOriginalIndices[dragItem.current];
+            newOriginalIndices[dragItem.current] = newOriginalIndices[dragOverItem.current];
+            newOriginalIndices[dragOverItem.current] = tempIdx;
             dragItem.current = null;
             dragOverItem.current = null;
             setProtocols(newProtocols);
+            setOriginalIndices(newOriginalIndices);
         }
     };
     
@@ -116,11 +124,17 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
     const handleTouchEnd = () => {
         if (touchItem.current !== null && dragOverItem.current !== null && touchItem.current !== dragOverItem.current) {
             const newProtocols = [...protocols];
+            const newOriginalIndices = [...originalIndices];
             // SWAP the two protocols directly (don't shift all in between)
             const temp = newProtocols[touchItem.current];
             newProtocols[touchItem.current] = newProtocols[dragOverItem.current];
             newProtocols[dragOverItem.current] = temp;
+            // Also swap the original indices so compiled status follows the protocol
+            const tempIdx = newOriginalIndices[touchItem.current];
+            newOriginalIndices[touchItem.current] = newOriginalIndices[dragOverItem.current];
+            newOriginalIndices[dragOverItem.current] = tempIdx;
             setProtocols(newProtocols);
+            setOriginalIndices(newOriginalIndices);
         }
         touchItem.current = null;
         dragOverItem.current = null;
@@ -141,8 +155,11 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
                     && disallowedProtocolForLane.laneIndex === index
                     && protocol === disallowedProtocolForLane.protocol;
 
-                // Lane values stay with the LANE index, not the protocol
-                const classList = getProtocolClass('protocol-display rearrange-item', laneCompiled[index]);
+                // Compiled status follows the PROTOCOL, not the lane position
+                // Use originalIndices to find which lane was originally compiled
+                const originalIndex = originalIndices[index];
+                const isCompiled = laneCompiled[originalIndex];
+                const classList = getProtocolClass('protocol-display rearrange-item', isCompiled);
 
                 return (
                     <div

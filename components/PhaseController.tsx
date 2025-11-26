@@ -429,6 +429,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a lane to shift all face-down cards to';
                 case 'select_lane_for_metal_3_delete':
                     return 'Action: Select a lane with 8+ cards to delete';
+                case 'select_lane_for_delete_all':
+                    return 'Action: Select a lane to delete all cards';
                 case 'select_any_other_card_to_flip_for_water_0':
                     return 'Action: Select any other card to flip';
                 case 'prompt_rearrange_protocols':

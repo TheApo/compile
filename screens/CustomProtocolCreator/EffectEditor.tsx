@@ -21,6 +21,8 @@ import { TakeEffectEditor } from './EffectParameterEditors/TakeEffectEditor';
 import { ChoiceEffectEditor } from './EffectParameterEditors/ChoiceEffectEditor';
 import { PassiveRuleEditor } from './EffectParameterEditors/PassiveRuleEditor';
 import { ValueModifierEditor } from './EffectParameterEditors/ValueModifierEditor';
+import { BlockCompileEffectEditor } from './EffectParameterEditors/BlockCompileEffectEditor';
+import { DeleteAllInLaneEffectEditor } from './EffectParameterEditors/DeleteAllInLaneEffectEditor';
 
 interface EffectEditorProps {
     effect: EffectDefinition;
@@ -83,6 +85,10 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'passive_rule', rule: { type: 'block_all_play', target: 'opponent', scope: 'this_lane' } };
         case 'value_modifier':
             return { action: 'value_modifier', modifier: { type: 'add_per_condition', value: 1, condition: 'per_face_down_card', target: 'own_total', scope: 'this_lane' } };
+        case 'block_compile':
+            return { action: 'block_compile', target: 'opponent' };
+        case 'delete_all_in_lane':
+            return { action: 'delete_all_in_lane', laneCondition: { type: 'min_cards', count: 8 }, excludeCurrentLane: true };
         default:
             return {};
     }
@@ -278,13 +284,88 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                 return <PassiveRuleEditor params={effectToRender.params} onChange={onChange} />;
             case 'value_modifier':
                 return <ValueModifierEditor params={effectToRender.params} onChange={onChange} />;
+            case 'block_compile':
+                return <BlockCompileEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'delete_all_in_lane':
+                return <DeleteAllInLaneEffectEditor params={effectToRender.params} onChange={onChange} />;
             default:
-                return <div>Unknown effect type</div>;
+                return <div>Unknown effect type: {effectToRender.params.action}</div>;
         }
+    };
+
+    // Get trigger label for display
+    const getTriggerLabel = (trigger: string): string => {
+        const triggerLabels: Record<string, string> = {
+            'on_play': 'On Play',
+            'passive': 'Passive (always active)',
+            'start': 'Start Phase',
+            'end': 'End Phase',
+            'on_cover': 'When Covered',
+            'on_flip': 'When Flipped',
+            'on_cover_or_flip': 'When Covered or Flipped',
+            'after_delete': 'After Delete',
+            'after_draw': 'After Draw',
+            'after_shift': 'After Shift',
+            'after_flip': 'After Flip',
+            'after_play': 'After Play',
+            'after_clear_cache': 'After Clear Cache',
+            'after_opponent_discard': 'After Opponent Discards',
+            'before_compile_delete': 'Before Compile Delete',
+        };
+        return triggerLabels[trigger] || trigger;
     };
 
     return (
         <div className="effect-editor">
+            {/* Trigger & Position Info */}
+            <div className="trigger-info" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#1A113B', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.3)' }}>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ flex: 1, minWidth: '200px' }}>
+                        <strong>Trigger:</strong>
+                        <select
+                            value={effect.trigger}
+                            onChange={(e) => onChange({ ...effect, trigger: e.target.value as any })}
+                            style={{
+                                width: '100%',
+                                padding: '6px',
+                                marginTop: '4px',
+                                backgroundColor: '#2c1d63',
+                                color: '#F0F0F0',
+                                border: '1px solid rgba(97, 239, 255, 0.3)',
+                                borderRadius: '4px',
+                            }}
+                        >
+                            <optgroup label="Immediate">
+                                <option value="on_play">On Play</option>
+                            </optgroup>
+                            <optgroup label="Passive (Top Box)">
+                                <option value="passive">Passive (always active)</option>
+                            </optgroup>
+                            <optgroup label="Phase Triggers (Bottom Box)">
+                                <option value="start">Start Phase</option>
+                                <option value="end">End Phase</option>
+                                <option value="on_cover">When Covered</option>
+                            </optgroup>
+                            <optgroup label="Reactive (Top Box)">
+                                <option value="on_flip">When this card would be flipped</option>
+                                <option value="on_cover_or_flip">When covered or flipped</option>
+                                <option value="after_delete">After you delete cards</option>
+                                <option value="after_draw">After you draw cards</option>
+                                <option value="after_shift">After cards are shifted</option>
+                                <option value="after_flip">After cards are flipped</option>
+                                <option value="after_play">After cards are played</option>
+                                <option value="after_clear_cache">After you clear cache</option>
+                                <option value="after_opponent_discard">After opponent discards</option>
+                                <option value="before_compile_delete">Before deleted by compile</option>
+                            </optgroup>
+                        </select>
+                    </label>
+                    <div style={{ color: '#8A79E8', fontSize: '13px' }}>
+                        <strong>Position:</strong> {effect.position.charAt(0).toUpperCase() + effect.position.slice(1)} Box
+                    </div>
+                </div>
+            </div>
+
             {/* Main Effect */}
             <div className="main-effect">
                 <h3>Main Effect</h3>

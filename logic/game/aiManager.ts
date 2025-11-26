@@ -360,6 +360,7 @@ const handleRequiredAction = (
         action.type === 'select_lane_for_play' ||
         action.type === 'select_lane_for_water_3' ||
         action.type === 'select_lane_for_metal_3_delete' ||
+        action.type === 'select_lane_for_delete_all' ||
         action.type === 'select_lane_for_life_3_play' ||
         action.type === 'shift_flipped_card_optional' ||
         action.type === 'gravity_2_shift_after_flip' ||

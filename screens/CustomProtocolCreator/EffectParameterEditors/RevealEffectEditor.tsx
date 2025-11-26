@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { RevealEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const RevealEffectEditor: React.FC<{ params: RevealEffectParams; onChange: (params: RevealEffectParams) => void }> = ({
     params,
@@ -57,13 +58,14 @@ export const RevealEffectEditor: React.FC<{ params: RevealEffectParams; onChange
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateRevealText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateRevealText = (params: RevealEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateRevealText = (params: RevealEffectParams): string => {
     const cardWord = params.count === 1 ? 'card' : 'cards';
     const actionText = params.action === 'give' ? 'Give' : 'Reveal';
     const sourceText = params.source === 'opponent_hand' ? "opponent's hand" : 'your hand';

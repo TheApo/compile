@@ -27,7 +27,9 @@ export type EffectActionType =
     | 'take'
     | 'choice'
     | 'passive_rule'
-    | 'value_modifier';
+    | 'value_modifier'
+    | 'block_compile'
+    | 'delete_all_in_lane';
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 

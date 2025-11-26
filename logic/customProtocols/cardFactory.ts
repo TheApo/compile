@@ -430,6 +430,29 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // Plague-2: "Your opponent discards the amount of cards discarded plus 1."
+            if (params.countType === 'equal_to_discarded') {
+                const offset = params.countOffset || 0;
+                if (params.actor === 'opponent') {
+                    if (offset === 1) {
+                        mainText = 'Your opponent discards the amount of cards discarded plus 1.';
+                    } else if (offset === 0) {
+                        mainText = 'Your opponent discards the same amount of cards.';
+                    } else {
+                        mainText = `Your opponent discards the amount discarded plus ${offset}.`;
+                    }
+                } else {
+                    if (offset === 1) {
+                        mainText = 'Discard 1 more card than the amount discarded.';
+                    } else if (offset === 0) {
+                        mainText = 'Discard the same amount of cards.';
+                    } else {
+                        mainText = `Discard the amount discarded plus ${offset}.`;
+                    }
+                }
+                break;
+            }
+
             const isVariable = params.variableCount;
             let countText = '';
 
@@ -444,13 +467,15 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             // NEW: Handle optional discard (Fire-3: "You may discard 1 card")
-            const mayPrefix = params.optional ? 'You may discard' : params.count === 'all' ? 'Discard' : 'You discard';
+            // Plague-2: variableCount uses "Discard" without "You" prefix
+            const mayPrefix = params.optional ? 'You may discard' :
+                              (params.count === 'all' || isVariable) ? 'Discard' : 'You discard';
 
             if (params.actor === 'opponent') {
                 if (params.count === 'all') {
                     mainText = `Opponent discards their hand.`;
                 } else {
-                    mainText = `Opponent discards ${countText}.`;
+                    mainText = `Your opponent discards ${countText}.`;
                 }
             } else {
                 mainText = `${mayPrefix} ${countText}.`;
@@ -691,7 +716,13 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     mainText = 'Cards can only be played without matching protocols.';
                     break;
                 case 'block_all_play':
-                    mainText = 'Cards cannot be played in this line.';
+                    if (rule.target === 'opponent') {
+                        mainText = 'Your opponent cannot play cards in this line.';
+                    } else if (rule.target === 'self') {
+                        mainText = 'You cannot play cards in this line.';
+                    } else {
+                        mainText = 'Cards cannot be played in this line.';
+                    }
                     break;
                 case 'ignore_middle_commands':
                     mainText = 'Ignore all middle commands of cards in this line.';
@@ -779,14 +810,55 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     break;
                 }
                 case 'add_to_total': {
-                    const targetText = mod.target === 'opponent_total' ? 'Opponent total' : 'Your total';
-                    const sign = mod.value >= 0 ? '+' : '';
-                    mainText = `${targetText} ${sign}${mod.value}.`;
+                    const scopeText = mod.scope === 'this_lane' ? ' in this line' : '';
+                    if (mod.target === 'opponent_total') {
+                        if (mod.value < 0) {
+                            mainText = `Your opponent's total value${scopeText} is reduced by ${Math.abs(mod.value)}.`;
+                        } else {
+                            mainText = `Your opponent's total value${scopeText} is increased by ${mod.value}.`;
+                        }
+                    } else {
+                        if (mod.value < 0) {
+                            mainText = `Your total value${scopeText} is reduced by ${Math.abs(mod.value)}.`;
+                        } else {
+                            mainText = `Your total value${scopeText} is increased by ${mod.value}.`;
+                        }
+                    }
                     break;
                 }
                 default:
                     mainText = 'Value modifier effect.';
             }
+            break;
+        }
+
+        case 'block_compile': {
+            // Metal-1: Your opponent cannot compile next turn
+            const targetText = params.target === 'opponent' ? 'Your opponent' : 'You';
+            mainText = `${targetText} cannot compile next turn.`;
+            break;
+        }
+
+        case 'delete_all_in_lane': {
+            // Metal-3: Delete all cards in 1 other line with 8 or more cards
+            const minCards = params.laneCondition?.count || 8;
+            const excludeText = params.excludeCurrentLane ? '1 other line' : '1 line';
+            mainText = `Delete all cards in ${excludeText} with ${minCards} or more cards.`;
+            break;
+        }
+
+        case 'modify_value': {
+            // Metal-0: Your opponent's total value in this line is reduced by X
+            const modifier = params.modifier || 0;
+            const targetText = params.target === 'opponent' ? "Your opponent's" : 'Your';
+            const changeText = modifier < 0 ? `reduced by ${Math.abs(modifier)}` : `increased by ${modifier}`;
+            mainText = `${targetText} total value in this line is ${changeText}.`;
+            break;
+        }
+
+        case 'block_play_face_down': {
+            // Metal-2: Your opponent cannot play cards face-down in this line
+            mainText = 'Your opponent cannot play cards face-down in this line.';
             break;
         }
 
@@ -854,6 +926,8 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         if (trigger === 'start') return `<div><span class='emphasis'>Start:</span> ${summary}</div>`;
         if (trigger === 'end') return `<div><span class='emphasis'>End:</span> ${summary}</div>`;
         if (trigger === 'on_cover') return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
+        if (trigger === 'on_flip') return `<div><span class='emphasis'>When this card would be flipped:</span> First, ${summary.toLowerCase()}</div>`;
+        if (trigger === 'on_cover_or_flip') return `<div><span class='emphasis'>When this card would be covered or flipped:</span> First, ${summary.toLowerCase()}</div>`;
 
         // NEW: Reactive triggers - text depends on reactiveTriggerActor
         if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_shift' || trigger === 'after_flip' || trigger === 'after_clear_cache') {
@@ -877,6 +951,11 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
 
             const prefixText = triggerActor === 'any' ? `After ${actorText} ${actionText}` : `After ${actorText} ${actionText}`;
             return `<div><span class='emphasis'>${prefixText}:</span> ${summary}</div>`;
+        }
+
+        // Plague-1: "After your opponent discards cards: Draw 1 card."
+        if (trigger === 'after_opponent_discard') {
+            return `<div><span class='emphasis'>After your opponent discards cards:</span> ${summary}</div>`;
         }
 
         // NEW: Before compile delete trigger (Speed-2)

@@ -5,11 +5,15 @@
 
 import React from 'react';
 import { PlayEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (params: PlayEffectParams) => void }> = ({
     params,
     onChange,
 }) => {
+    // Ensure destinationRule exists with default value
+    const destinationRule = params.destinationRule || { type: 'other_lines' };
+
     return (
         <div className="param-editor">
             <h4>Play Effect</h4>
@@ -58,8 +62,8 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
             <label>
                 Destination
                 <select
-                    value={params.destinationRule.type}
-                    onChange={e => onChange({ ...params, destinationRule: { ...params.destinationRule, type: e.target.value as any } })}
+                    value={destinationRule.type}
+                    onChange={e => onChange({ ...params, destinationRule: { ...destinationRule, type: e.target.value as any } })}
                 >
                     <option value="other_lines">Other lines (choose 1)</option>
                     <option value="each_other_line">Each other line (1 per line)</option>
@@ -111,16 +115,18 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
             )}
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generatePlayText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generatePlayText = (params: PlayEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generatePlayText = (params: PlayEffectParams): string => {
     const actor = (params as any).actor;
     const cardWord = params.count === 1 ? 'card' : 'cards';
     const faceState = params.faceDown ? 'face-down' : 'face-up';
+    const destinationRule = params.destinationRule || { type: 'other_lines' };
 
     let actorText = '';
     let source = '';
@@ -147,15 +153,15 @@ const generatePlayText = (params: PlayEffectParams): string => {
         text = `${actorText} ${params.count} ${cardWord} ${faceState} ${source}`;
     }
 
-    if (params.destinationRule.type === 'other_lines') {
+    if (destinationRule.type === 'other_lines') {
         text += ' to other lines';
-    } else if (params.destinationRule.type === 'each_other_line') {
+    } else if (destinationRule.type === 'each_other_line') {
         text += ' in each other line';
-    } else if (params.destinationRule.type === 'under_this_card') {
+    } else if (destinationRule.type === 'under_this_card') {
         text += ' under this card';
-    } else if (params.destinationRule.type === 'each_line_with_card') {
+    } else if (destinationRule.type === 'each_line_with_card') {
         text += ' to each line with a card';
-    } else if (params.destinationRule.type === 'specific_lane') {
+    } else if (destinationRule.type === 'specific_lane') {
         text += ' in this line';
     }
 

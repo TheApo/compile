@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { DrawEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface DrawEffectEditorProps {
     params: DrawEffectParams;
@@ -178,13 +179,14 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             )}
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateDrawText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateDrawText = (params: DrawEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateDrawText = (params: DrawEffectParams): string => {
     if (params.conditional) {
         switch (params.conditional.type) {
             case 'count_face_down':

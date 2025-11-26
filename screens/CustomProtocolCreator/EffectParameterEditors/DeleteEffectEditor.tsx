@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { DeleteEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface DeleteEffectEditorProps {
     params: DeleteEffectParams;
@@ -28,7 +29,7 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3">3</option>
-                    <option value="all">Alle in einer Lane</option>
+                    <option value="all">All in a lane</option>
                 </select>
             </label>
 
@@ -229,13 +230,14 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateDeleteText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateDeleteText = (params: DeleteEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateDeleteText = (params: DeleteEffectParams): string => {
     let text = 'Delete ';
 
     if (params.count === 'all_in_lane') {

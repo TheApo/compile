@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { ReturnEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange: (params: ReturnEffectParams) => void }> = ({
     params,
@@ -108,13 +109,14 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
             )}
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateReturnText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateReturnText = (params: ReturnEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateReturnText = (params: ReturnEffectParams): string => {
     const selectLane = (params as any).selectLane || false;
 
     if (params.targetFilter?.valueEquals !== undefined) {

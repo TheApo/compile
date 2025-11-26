@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { ProtocolEffectParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 export const ProtocolEffectEditor: React.FC<{ params: ProtocolEffectParams; onChange: (params: ProtocolEffectParams) => void }> = ({
     params,
@@ -88,13 +89,14 @@ export const ProtocolEffectEditor: React.FC<{ params: ProtocolEffectParams; onCh
             )}
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateProtocolText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateProtocolText = (params: ProtocolEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateProtocolText = (params: ProtocolEffectParams): string => {
     const targetText =
         params.target === 'opponent'
             ? "opponent's"

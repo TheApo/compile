@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { PassiveRuleParams } from '../../../types/customProtocol';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface PassiveRuleEditorProps {
     params: PassiveRuleParams;
@@ -87,13 +88,14 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generatePassiveRuleText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'passive', position: 'top', params })}
             </div>
         </div>
     );
 };
 
-const generatePassiveRuleText = (params: PassiveRuleParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generatePassiveRuleText = (params: PassiveRuleParams): string => {
     const ruleType = params.rule?.type || 'block_all_play';
     const target = params.rule?.target || 'opponent';
     const scope = params.rule?.scope || 'this_lane';

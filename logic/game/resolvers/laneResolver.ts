@@ -955,6 +955,64 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             }
             break;
         }
+        case 'select_lane_for_delete_all': {
+            // Generic handler for deleting all cards in a lane (used by Metal-3 custom, etc.)
+            const actor = prev.actionRequired.actor;
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            const targetProtocolName = prev.player.protocols[targetLaneIndex];
+            const minCards = prev.actionRequired.minCards || 8;
+            const validLanes = prev.actionRequired.validLanes || [0, 1, 2];
+
+            // Validate that the selected lane is in the valid list
+            if (!validLanes.includes(targetLaneIndex)) {
+                newState = log(newState, actor, `Cannot select this lane for deletion.`);
+                break;
+            }
+
+            // Validate card count
+            const totalCardsInLane = prev.player.lanes[targetLaneIndex].length + prev.opponent.lanes[targetLaneIndex].length;
+            if (totalCardsInLane < minCards) {
+                newState = log(newState, actor, `Cannot delete ${targetProtocolName} line (only ${totalCardsInLane} cards, need ${minCards}+).`);
+                newState = queuePendingCustomEffects(newState);
+                newState.actionRequired = null;
+                break;
+            }
+
+            // Find source card for log message
+            const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+            newState = log(newState, actor, `${sourceCardName}: ${actorName} deletes all cards in ${targetProtocolName} line.`);
+
+            const cardsToDelete: AnimationRequest[] = [];
+            for (const p of ['player', 'opponent'] as Player[]) {
+                for (const card of prev[p].lanes[targetLaneIndex]) {
+                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                }
+            }
+
+            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
+            const newPlayerState = { ...newState[actor], stats: newStats };
+            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            newState = queuePendingCustomEffects(newState);
+            newState.actionRequired = null;
+
+            if (cardsToDelete.length > 0) {
+                requiresAnimation = {
+                    animationRequests: cardsToDelete,
+                    onCompleteCallback: (s, endTurnCb) => {
+                        let stateAfterDelete = s;
+                        for (let i = 0; i < cardsToDelete.length; i++) {
+                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
+                        }
+                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
+                        stateAfterDelete = reactiveResult.newState;
+                        return endTurnCb(stateAfterDelete);
+                    }
+                };
+            }
+            break;
+        }
         case 'select_lane_for_life_3_play': {
             const { actor } = prev.actionRequired;
             const stateBeforePlay = { ...prev, actionRequired: null };

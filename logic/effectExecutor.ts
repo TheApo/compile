@@ -282,11 +282,23 @@ function processTriggeredEffects(
                 const laneIndex = newState[player].lanes.findIndex(l => l.some(c => c.id === card.id));
 
                 // Execute all matching effects sequentially
-                for (const effectDef of matchingEffects) {
+                for (let effectIdx = 0; effectIdx < matchingEffects.length; effectIdx++) {
+                    const effectDef = matchingEffects[effectIdx];
                     const result = executeCustomEffect(card, laneIndex, newState, context, effectDef);
                     newState = recalculateAllLaneValues(result.newState);
 
                     if (newState.actionRequired) {
+                        // Store remaining effects to execute after this action resolves
+                        const remainingEffects = matchingEffects.slice(effectIdx + 1);
+                        if (remainingEffects.length > 0) {
+                            // CRITICAL: Use _pendingCustomEffects pattern (same as middleEffects)
+                            (newState as any)._pendingCustomEffects = {
+                                sourceCardId: card.id,
+                                laneIndex,
+                                context,
+                                effects: remainingEffects
+                            };
+                        }
                         // Mark as processed before returning
                         const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
                         newState[processedKey] = [...(newState[processedKey] || []), card.id];

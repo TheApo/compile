@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface TakeEffectParams {
     action: 'take';
@@ -50,13 +51,14 @@ export const TakeEffectEditor: React.FC<TakeEffectEditorProps> = ({ params, onCh
             </label>
 
             <div className="effect-preview">
-                <strong>Preview:</strong> {generateTakeText(params)}
+                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>
         </div>
     );
 };
 
-const generateTakeText = (params: TakeEffectParams): string => {
+// Keeping for reference but using getEffectSummary from cardFactory instead
+const _generateTakeText = (params: TakeEffectParams): string => {
     const cardWord = params.count === 1 ? 'card' : 'cards';
     const randomText = params.random ? 'random ' : '';
 

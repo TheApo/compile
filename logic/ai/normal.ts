@@ -376,12 +376,38 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete':
         case 'select_card_to_delete_for_death_1': {
-            const disallowedIds = action.type === 'select_cards_to_delete' ? action.disallowedIds : [action.sourceCardId];
+            const disallowedIds = action.type === 'select_cards_to_delete' ? (action.disallowedIds || []) : [action.sourceCardId];
+            const targetFilter = 'targetFilter' in action ? action.targetFilter : undefined;
+            const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
+
+            // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
+            // This handles custom effects like "Your opponent deletes 1 of their face-down cards"
+            if (actorChooses === 'card_owner' && targetFilter?.owner === 'opponent') {
+                // AI must select its OWN cards matching the filter
+                const ownValidCards: PlayedCard[] = [];
+                state.opponent.lanes.forEach((lane) => {
+                    if (lane.length > 0) {
+                        const topCard = lane[lane.length - 1]; // Only uncovered
+                        // Check faceState filter
+                        if (targetFilter.faceState === 'face_down' && topCard.isFaceUp) return;
+                        if (targetFilter.faceState === 'face_up' && !topCard.isFaceUp) return;
+                        ownValidCards.push(topCard);
+                    }
+                });
+
+                if (ownValidCards.length > 0) {
+                    // Delete lowest value card (minimize loss)
+                    ownValidCards.sort((a, b) => a.value - b.value);
+                    return { type: 'deleteCard', cardId: ownValidCards[0].id };
+                }
+                return { type: 'skip' };
+            }
+
+            // Standard behavior: Target player's high-value cards
             const getUncovered = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                 .filter((c): c is PlayedCard => c !== null);
 
-            // Target player's high-value cards
             const playerCards = getUncovered('player').filter(c => !disallowedIds.includes(c.id));
             if (playerCards.length > 0) {
                 const scored = playerCards.map(c => {
@@ -802,6 +828,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'selectLane', laneIndex: randomLane };
             }
             // If no valid lanes, skip
+            return { type: 'skip' };
+        }
+        case 'select_lane_for_delete_all': {
+            // Generic handler for delete all in lane (custom protocols)
+            const validLanes = 'validLanes' in action ? action.validLanes : [0, 1, 2];
+            if (validLanes.length > 0) {
+                const randomLane = validLanes[Math.floor(Math.random() * validLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
             return { type: 'skip' };
         }
 
@@ -1328,21 +1363,22 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'plague_4_opponent_delete': {
-            const disallowedIds = ('disallowedIds' in action && Array.isArray(action.disallowedIds)) ? action.disallowedIds : [];
-            // Prioritize player cards, but otherwise make a simple choice.
-            // FIX: Only target uncovered cards.
-            const getUncoveredCards = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
+            // Plague-4: Opponent (AI) must delete their OWN uncovered face-down card
+            // IMPORTANT: Only UNCOVERED (top) cards can be deleted, not covered ones!
+            const ownFaceDownUncovered: PlayedCard[] = [];
+            state.opponent.lanes.forEach((lane) => {
+                if (lane.length > 0) {
+                    const topCard = lane[lane.length - 1]; // UNCOVERED card
+                    if (!topCard.isFaceUp) {
+                        ownFaceDownUncovered.push(topCard);
+                    }
+                }
+            });
 
-            const allowedPlayerCards = getUncoveredCards('player').filter(c => !disallowedIds.includes(c.id));
-            if (allowedPlayerCards.length > 0) {
-                return { type: 'deleteCard', cardId: allowedPlayerCards[0].id };
-            }
-
-            const allowedOpponentCards = getUncoveredCards('opponent').filter(c => !disallowedIds.includes(c.id));
-            if (allowedOpponentCards.length > 0) {
-                return { type: 'deleteCard', cardId: allowedOpponentCards[0].id };
+            if (ownFaceDownUncovered.length > 0) {
+                // Delete lowest value face-down UNCOVERED card (minimize loss)
+                ownFaceDownUncovered.sort((a, b) => a.value - b.value);
+                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
             }
             return { type: 'skip' };
         }

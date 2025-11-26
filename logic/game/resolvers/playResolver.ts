@@ -96,14 +96,30 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     const targetLaneBeforePlay = prevState[player].lanes[laneIndex];
     if (targetLaneBeforePlay.length > 0) {
         const topCard = targetLaneBeforePlay[targetLaneBeforePlay.length - 1];
-        const coverContext: EffectContext = {
-            cardOwner: player,
-            actor: player,
-            currentTurn: prevState.turn,
-            opponent: player === 'player' ? 'opponent' : 'player',
-            triggerType: 'cover'
-        };
-        onCoverResult = executeOnCoverEffect(topCard, laneIndex, prevState, coverContext);
+
+        // NEW: Trigger reactive effects BEFORE cover (Metal-6: "When this card would be covered")
+        // This allows cards like Metal-6 to delete themselves before being covered
+        const beforeCoverResult = processReactiveEffects(prevState, 'on_cover', { player, cardId: topCard.id });
+        let stateBeforeCover = beforeCoverResult.newState;
+
+        // Check if the card still exists after on_cover effects (Metal-6 might delete itself)
+        const laneAfterReactive = stateBeforeCover[player].lanes[laneIndex];
+        const cardStillExists = laneAfterReactive.some(c => c.id === topCard.id);
+
+        if (cardStillExists && topCard.isFaceUp) {
+            // Card still exists - execute normal on_cover bottom effects
+            const coverContext: EffectContext = {
+                cardOwner: player,
+                actor: player,
+                currentTurn: stateBeforeCover.turn,
+                opponent: player === 'player' ? 'opponent' : 'player',
+                triggerType: 'cover'
+            };
+            onCoverResult = executeOnCoverEffect(topCard, laneIndex, stateBeforeCover, coverContext);
+        } else {
+            // Card was deleted by reactive effect - skip bottom on_cover effects
+            onCoverResult = { newState: stateBeforeCover };
+        }
     }
     const stateAfterOnCover = onCoverResult.newState;
 
