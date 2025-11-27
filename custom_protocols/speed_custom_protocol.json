@@ -1,6 +1,6 @@
 {
   "id": "speed_custom_1",
-  "name": "Speed_custom",
+  "name": "Speed",
   "description": "Swift and adaptive. Custom protocol migration of original Speed protocol.",
   "color": "#33E6E6",
   "pattern": "cross",
@@ -164,5 +164,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

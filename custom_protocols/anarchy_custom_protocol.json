@@ -1,6 +1,6 @@
 {
   "id": "anarchy-custom-001",
-  "name": "Anarchy_custom",
+  "name": "Anarchy",
   "description": "Custom recreation of Anarchy protocol to validate editor capabilities",
   "author": "System Validation",
   "createdAt": "2025-11-08T00:00:00.000Z",
@@ -176,5 +176,6 @@
       "middleEffects": [],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Fan-Content"
 }

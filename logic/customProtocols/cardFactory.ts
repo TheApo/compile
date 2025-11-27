@@ -1018,7 +1018,7 @@ export const convertCustomCardToCard = (
         middle: middleText,
         bottom: bottomText,
         keywords,
-        category: 'Custom',
+        category: protocol.category || 'Custom',  // Use protocol's category, default to 'Custom' for user-created
         color: protocol.color,  // Custom protocol color
         pattern: protocol.pattern,  // Custom protocol pattern
         // Store the effect definitions for runtime execution

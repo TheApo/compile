@@ -3,21 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Card, cards as baseCards } from "../data/cards";
+import { Card } from "../data/cards";
 import { getAllCustomProtocolCards } from "../logic/customProtocols/cardFactory";
+import { loadCustomProtocols } from "../logic/customProtocols/storage";
+import { isSystemProtocol } from "../screens/CustomProtocolCreator/ProtocolList";
 import { isCustomProtocolEnabled } from "./customProtocolSettings";
 
 // Cached merged cards to avoid reloading on every buildDeck call
 let cachedMergedCards: Card[] | null = null;
 
 /**
- * Get all available cards (base + custom protocols if enabled)
+ * Get all available cards from custom protocols only
+ * System protocols are always loaded, user protocols only if custom content is enabled
  */
 function getAllCards(): Card[] {
     if (!cachedMergedCards) {
         const customEnabled = isCustomProtocolEnabled();
-        const customCards = customEnabled ? getAllCustomProtocolCards() : [];
-        cachedMergedCards = [...baseCards, ...customCards];
+        const allCustomCards = getAllCustomProtocolCards();
+
+        // Get list of system protocol names
+        const protocols = loadCustomProtocols();
+        const systemProtocolNames = new Set(
+            protocols.filter(p => isSystemProtocol(p)).map(p => p.name)
+        );
+
+        // System protocols are always loaded, user protocols only if custom content is enabled
+        cachedMergedCards = allCustomCards.filter(card => {
+            const isSystem = systemProtocolNames.has(card.protocol);
+            return isSystem || customEnabled;
+        });
     }
     return cachedMergedCards;
 }

@@ -181,8 +181,34 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
                 }
 
                 // Check owner filter
-                if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
-                if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+                // CRITICAL: targetFilter.owner is relative to the SOURCE CARD OWNER, not the actor
+                // For Plague-4: "Your opponent deletes 1 of their cards" - the actor (player) deletes their OWN cards
+                // actorChooses: 'card_owner' means the opponent of the card owner is the actor
+                const actorChooses = (actionRequired as any).actorChooses;
+                const sourceCardId = actionRequired.sourceCardId;
+
+                // Find the source card owner
+                let sourceCardOwner: Player | null = null;
+                for (const p of ['player', 'opponent'] as Player[]) {
+                    if (gameState[p].lanes.flat().some(c => c.id === sourceCardId)) {
+                        sourceCardOwner = p;
+                        break;
+                    }
+                }
+
+                // Determine whose cards can be targeted based on owner filter
+                // 'own' = cards of the source card owner
+                // 'opponent' = cards of the opponent of the source card owner
+                if (actorChooses === 'card_owner' && sourceCardOwner) {
+                    // The actor is the OPPONENT of the card owner, targeting their OWN cards
+                    // So 'opponent' (from card owner's perspective) means actor's cards
+                    if (targetFilter.owner === 'own' && owner !== sourceCardOwner) return false;
+                    if (targetFilter.owner === 'opponent' && owner === sourceCardOwner) return false;
+                } else {
+                    // Standard case: owner filter is relative to actor
+                    if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;
+                    if (targetFilter.owner === 'opponent' && owner === actionRequired.actor) return false;
+                }
 
                 // Check protocolMatching (handled in cardResolver, but we can pre-filter here)
                 const protocolMatching = (actionRequired as any).protocolMatching;

@@ -18,7 +18,8 @@ export const execute = (card: PlayedCard, laneIndex: number, state: GameState, c
             count: 1,
             sourceCardId: card.id,
             sourceEffect: 'fire_2',
-        };
+            previousHandSize: newState[cardOwner].hand.length, // Track for "If you do" check
+        } as any;
     }
     return { newState };
 }

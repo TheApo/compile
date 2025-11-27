@@ -1,6 +1,6 @@
 {
   "id": "fire-custom-001",
-  "name": "Fire_custom",
+  "name": "Fire",
   "description": "Fire protocol - discard cards to fuel powerful effects",
   "author": "System",
   "createdAt": "2025-11-09T00:00:00.000Z",
@@ -192,5 +192,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

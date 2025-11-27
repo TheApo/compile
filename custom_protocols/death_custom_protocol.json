@@ -1,6 +1,6 @@
 {
   "id": "death_custom_v1",
-  "name": "Death_cust",
+  "name": "Death",
   "description": "Custom Death protocol - delete cards with various conditions",
   "author": "System",
   "createdAt": "2025-01-09T00:00:00Z",
@@ -157,5 +157,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

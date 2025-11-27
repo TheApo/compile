@@ -1,6 +1,6 @@
 {
   "id": "love_custom_v1",
-  "name": "Love_custom",
+  "name": "Love",
   "description": "Custom Love protocol - hand manipulation, giving and taking cards",
   "author": "System",
   "createdAt": "2025-01-08T00:00:00Z",
@@ -173,5 +173,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Aux 1"
 }

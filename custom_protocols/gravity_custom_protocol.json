@@ -1,6 +1,6 @@
 {
   "id": "gravity_custom_1",
-  "name": "Gravity_custom",
+  "name": "Gravity",
   "description": "Pull everything together. Gravity draws cards towards this line.",
   "color": "#7599EB",
   "pattern": "grid",
@@ -175,5 +175,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

@@ -1039,8 +1039,10 @@ export const useGameState = (
                     resolveLove1Prompt: resolvers.resolveLove1Prompt,
                     resolvePlague4Flip: (s, a) => resolvers.resolvePlague4Flip(s, a, 'opponent'),
                     resolvePlague2Discard: resolvers.resolvePlague2OpponentDiscard,
+                    resolvePlague2OpponentDiscard: resolvers.resolvePlague2OpponentDiscard,
                     resolveFire3Prompt: resolvers.resolveFire3Prompt,
                     resolveOptionalDiscardCustomPrompt: resolvers.resolveOptionalDiscardCustomPrompt,
+                    resolveOptionalEffectPrompt: resolvers.resolveOptionalEffectPrompt,
                     resolveSpeed3Prompt: resolvers.resolveSpeed3Prompt,
                     resolveFire4Discard: resolvers.resolveFire4Discard,
                     resolveHate1Discard: resolvers.resolveHate1Discard,
@@ -1052,6 +1054,7 @@ export const useGameState = (
                     resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
                     resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
                     revealOpponentHand: resolvers.revealOpponentHand,
+                    resolveCustomChoice: resolvers.resolveCustomChoice,
                 }, processAnimationQueue, phaseManager, trackPlayerRearrange);
             }, 1500);
             return () => {

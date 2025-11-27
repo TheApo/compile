@@ -1,6 +1,6 @@
 {
   "id": "apathy_custom",
-  "name": "Apathy_custom",
+  "name": "Apathy",
   "description": "Custom implementation of Apathy protocol",
   "author": "System",
   "createdAt": "2025-01-08T00:00:00Z",
@@ -154,5 +154,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Aux 1"
 }

@@ -154,7 +154,8 @@ export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameS
             count: 1,
             sourceCardId: prevState.actionRequired.sourceCardId,
             sourceEffect: 'fire_3',
-        };
+            previousHandSize: newState[actor].hand.length, // Track for "If you do" check
+        } as any;
     } else {
         newState = log(newState, actor, `Fire-3 End: ${actorName} skips the effect.`);
         newState.actionRequired = null;

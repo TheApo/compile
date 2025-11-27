@@ -3,8 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { CustomProtocolDefinition, CardPattern } from '../../types/customProtocol';
+
+// System protocol IDs - these are read-only and cannot be edited
+const SYSTEM_PROTOCOL_IDS = [
+    'anarchy-custom-001',
+    'apathy_custom',
+    'chaos_custom_1',
+    'darkness_custom_v1',
+    'death_custom_v1',
+    'fire-custom-001',
+    'frost_custom_1',
+    'gravity_custom_1',
+    'hate-custom-001',
+    'life_custom_1',
+    'light_custom_1',
+    'love_custom_v1',
+    'metal_custom_1',
+    'plague-custom-001',
+    'psychic_custom_v1',
+    'speed_custom_1',
+    'spirit_custom_1',
+    'water_custom_1',
+];
+
+export const isSystemProtocol = (protocol: CustomProtocolDefinition): boolean => {
+    return SYSTEM_PROTOCOL_IDS.includes(protocol.id);
+};
 
 interface ProtocolListProps {
     protocols: CustomProtocolDefinition[];
@@ -170,15 +196,21 @@ const getPatternPreviewStyle = (pattern: CardPattern, color: string): React.CSSP
 };
 
 export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateNew, onEdit, onDelete, onBack }) => {
+    const [showSystemProtocols, setShowSystemProtocols] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importJson, setImportJson] = useState('');
+    const [importError, setImportError] = useState('');
+
     const handleDelete = (id: string, name: string) => {
         if (confirm(`Really delete "${name}"?`)) {
             onDelete(id);
         }
     };
 
-    const [showImportModal, setShowImportModal] = React.useState(false);
-    const [importJson, setImportJson] = React.useState('');
-    const [importError, setImportError] = React.useState('');
+    // Filter protocols based on checkbox state
+    const filteredProtocols = showSystemProtocols
+        ? protocols
+        : protocols.filter(p => !isSystemProtocol(p));
 
     const handleImport = () => {
         setImportError('');
@@ -230,6 +262,14 @@ export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateN
             <div className="list-header">
                 <h2>Custom Protocols</h2>
                 <div className="header-actions">
+                    <label className="system-protocols-toggle">
+                        <input
+                            type="checkbox"
+                            checked={showSystemProtocols}
+                            onChange={(e) => setShowSystemProtocols(e.target.checked)}
+                        />
+                        Show System Protocols
+                    </label>
                     <button onClick={() => setShowImportModal(true)} className="btn">
                         Import Protocol
                     </button>
@@ -284,19 +324,23 @@ export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateN
                 </div>
 
                 {/* Existing Protocol Cards */}
-                {protocols.map(protocol => (
-                    <div
-                        key={protocol.id}
-                        className="protocol-card"
-                        style={getPatternPreviewStyle(protocol.pattern, protocol.color)}
-                        onClick={() => onEdit(protocol)}
-                    >
-                        <div className="protocol-header-content">
-                            <h3>{protocol.name}</h3>
-                            {protocol.description && <p className="header-description">{protocol.description}</p>}
+                {filteredProtocols.map(protocol => {
+                    const isSystem = isSystemProtocol(protocol);
+                    return (
+                        <div
+                            key={protocol.id}
+                            className={`protocol-card ${isSystem ? 'system-protocol' : ''}`}
+                            style={getPatternPreviewStyle(protocol.pattern, protocol.color)}
+                            onClick={() => onEdit(protocol)}
+                        >
+                            <div className="protocol-header-content">
+                                <h3>{protocol.name}</h3>
+                                {isSystem && <span className="system-badge">System</span>}
+                                {protocol.description && <p className="header-description">{protocol.description}</p>}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

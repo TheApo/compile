@@ -23,6 +23,7 @@ type ActionDispatchers = {
     deleteCard: (s: GameState, c: string) => { newState: GameState, animationRequests: AnimationRequest[] },
     returnCard: (s: GameState, c: string) => GameState,
     skipAction: (s: GameState) => GameState,
+    resolveOptionalDrawPrompt: (s: GameState, a: boolean) => GameState,
     resolveDeath1Prompt: (s: GameState, a: boolean) => GameState,
     resolveLove1Prompt: (s: GameState, a: boolean) => GameState,
     resolvePlague2Discard: (s: GameState, cardIds: string[]) => GameState,
@@ -30,6 +31,7 @@ type ActionDispatchers = {
     resolvePlague4Flip: (s: GameState, a: boolean, p: Player) => GameState,
     resolveFire3Prompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalDiscardCustomPrompt: (s: GameState, a: boolean) => GameState,
+    resolveOptionalEffectPrompt: (s: GameState, a: boolean) => GameState,
     resolveSpeed3Prompt: (s: GameState, a: boolean) => GameState,
     resolveFire4Discard: (s: GameState, cardIds: string[]) => GameState,
     resolveHate1Discard: (s: GameState, cardIds: string[]) => GameState,
@@ -41,15 +43,17 @@ type ActionDispatchers = {
     resolveSpirit3Prompt: (s: GameState, accept: boolean) => GameState,
     resolveSwapProtocols: (s: GameState, indices: [number, number]) => GameState,
     revealOpponentHand: (s: GameState) => GameState,
+    resolveCustomChoice: (s: GameState, choiceIndex: number) => GameState,
 }
 
-type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit3Prompt'>;
+type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit1Prompt' | 'resolveSpirit3Prompt' | 'resolvePsychic4Prompt'>;
 
 
 type PhaseManager = {
     processEndOfAction: (s: GameState) => GameState,
     processStartOfTurn: (s: GameState) => GameState,
     continueTurnAfterStartPhaseAction: (s: GameState) => GameState,
+    continueTurnProgression: (s: GameState) => GameState,
 }
 
 type TrackPlayerRearrange = (actor: 'player' | 'opponent') => void;
@@ -288,7 +292,8 @@ const handleRequiredAction = (
         return phaseManager.processEndOfAction(nextState); // Skipped, so end turn
     }
 
-    if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_effect') {
+    // GENERIC: Handle ALL optional effect prompts
+    if (aiDecision.type === 'resolveOptionalEffectPrompt') {
         const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action created, re-run processor
         return phaseManager.processEndOfAction(nextState); // Skipped or completed
@@ -323,6 +328,12 @@ const handleRequiredAction = (
         return phaseManager.processEndOfAction(nextState);
     }
 
+    if (aiDecision.type === 'resolveCustomChoice' && action.type === 'custom_choice') {
+        const nextState = actions.resolveCustomChoice(state, aiDecision.choiceIndex);
+        if (nextState.actionRequired) return nextState; // Choice may create follow-up action
+        return phaseManager.processEndOfAction(nextState);
+    }
+
     if (aiDecision.type === 'resolveFire4Discard' && action.type === 'select_cards_from_hand_to_discard_for_fire_4') {
         const nextState = actions.resolveFire4Discard(state, aiDecision.cardIds);
         return phaseManager.processEndOfAction(nextState);
@@ -334,7 +345,8 @@ const handleRequiredAction = (
         return nextState;
     }
     
-    if (aiDecision.type === 'resolveLight2Prompt' && action.type === 'prompt_shift_or_flip_for_light_2') {
+    // GENERIC: Handle ALL Light-2 style prompts (shift/flip/skip choice)
+    if (aiDecision.type === 'resolveLight2Prompt') {
         const nextState = actions.resolveLight2Prompt(state, aiDecision.choice);
         if (nextState.actionRequired) return nextState; // may need to select a lane to shift
         return phaseManager.processEndOfAction(nextState);
@@ -354,19 +366,9 @@ const handleRequiredAction = (
         return finalState;
     }
 
-    if (aiDecision.type === 'selectLane' && (
-        action.type === 'select_lane_for_shift' ||
-        action.type === 'select_lane_for_death_2' ||
-        action.type === 'select_lane_for_play' ||
-        action.type === 'select_lane_for_water_3' ||
-        action.type === 'select_lane_for_metal_3_delete' ||
-        action.type === 'select_lane_for_delete_all' ||
-        action.type === 'select_lane_for_life_3_play' ||
-        action.type === 'shift_flipped_card_optional' ||
-        action.type === 'gravity_2_shift_after_flip' ||
-        action.type === 'select_lane_to_shift_revealed_card_for_light_2' ||
-        action.type === 'select_lane_to_shift_cards_for_light_3'
-    )) {
+    // GENERIC: Handle ALL selectLane decisions - no whitelist needed
+    // The AI returns selectLane for any lane selection action, and resolveActionWithLane handles it
+    if (aiDecision.type === 'selectLane') {
         const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;

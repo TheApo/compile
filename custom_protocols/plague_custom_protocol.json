@@ -1,6 +1,6 @@
 {
   "id": "plague-custom-001",
-  "name": "Plague_custom",
+  "name": "Plague",
   "description": "Focused on forcing opponent discards and restricting their plays. Spread suffering.",
   "author": "System Migration",
   "createdAt": "2025-11-26T00:00:00.000Z",
@@ -179,5 +179,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

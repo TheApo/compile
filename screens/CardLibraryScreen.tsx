@@ -6,9 +6,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Header } from '../components/Header';
 import { CardComponent } from '../components/Card';
-import { cards as baseCards, Card as CardData, uniqueProtocols as baseUniqueProtocols } from '../data/cards';
+import { Card as CardData } from '../data/cards';
 import { PlayedCard } from '../types';
 import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
+import { loadCustomProtocols } from '../logic/customProtocols/storage';
+import { isSystemProtocol } from './CustomProtocolCreator/ProtocolList';
 import { invalidateCardCache } from '../utils/gameLogic';
 import { isCustomProtocolEnabled } from '../utils/customProtocolSettings';
 
@@ -26,14 +28,28 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
     setRefreshKey(prev => prev + 1);
   }, []);
 
-  // Merge base cards with custom protocol cards (only if enabled)
+  // Load all cards from custom protocols only (no more baseCards)
+  // System protocols are identified by their category (Main 1, Main 2, Aux 1, Fan-Content)
+  // User-created protocols have category "Custom"
   const cards = useMemo(() => {
     console.log('[Card Library] Loading cards, refreshKey:', refreshKey);
     const customEnabled = isCustomProtocolEnabled();
-    const customCards = customEnabled ? getAllCustomProtocolCards() : [];
-    const merged = [...baseCards, ...customCards];
-    console.log('[Card Library] Total cards:', merged.length, '(base:', baseCards.length, ', custom:', customCards.length, ', enabled:', customEnabled, ')');
-    return merged;
+    const allCustomCards = getAllCustomProtocolCards();
+
+    // Get list of system protocol names
+    const protocols = loadCustomProtocols();
+    const systemProtocolNames = new Set(
+      protocols.filter(p => isSystemProtocol(p)).map(p => p.name)
+    );
+
+    // System protocols are always loaded, user protocols only if custom content is enabled
+    const filteredCards = allCustomCards.filter(card => {
+      const isSystem = systemProtocolNames.has(card.protocol);
+      return isSystem || customEnabled;
+    });
+
+    console.log('[Card Library] Total cards:', filteredCards.length, '(custom enabled:', customEnabled, ')');
+    return filteredCards;
   }, [refreshKey]);
 
   // Get unique protocols from merged cards

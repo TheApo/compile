@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { CustomProtocolDefinition, CustomCardDefinition, CardPattern } from '../../types/customProtocol';
 import { v4 as uuidv4 } from 'uuid';
 import { CardEditor } from './CardEditor';
+import { isSystemProtocol } from './ProtocolList';
 
 /**
  * Helper function to generate pattern preview styles
@@ -225,7 +226,10 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
     const [exportJson, setExportJson] = useState('');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-    console.log('ProtocolWizard render - initialProtocol:', initialProtocol);
+    // Check if this is a system protocol (read-only)
+    const isReadOnly = initialProtocol ? isSystemProtocol(initialProtocol) : false;
+
+    console.log('ProtocolWizard render - initialProtocol:', initialProtocol, 'isReadOnly:', isReadOnly);
 
     // Protocol data
     const [protocolName, setProtocolName] = useState(initialProtocol?.name || '');
@@ -350,7 +354,12 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
         <div className="protocol-wizard">
             <div className="wizard-header">
                 <h2>
-                    {initialProtocol ? `Edit Protocol: ${protocolName}` : 'Create New Protocol'}
+                    {isReadOnly
+                        ? `View Protocol: ${protocolName}`
+                        : initialProtocol
+                            ? `Edit Protocol: ${protocolName}`
+                            : 'Create New Protocol'}
+                    {isReadOnly && <span className="read-only-badge">Read-Only</span>}
                 </h2>
                 <div className="wizard-progress">
                     <button
@@ -398,9 +407,11 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                             <input
                                 type="text"
                                 value={protocolName}
-                                onChange={e => setProtocolName(e.target.value)}
+                                onChange={e => !isReadOnly && setProtocolName(e.target.value)}
                                 placeholder="e.g. Lightning, Shadow, Void"
                                 autoFocus
+                                readOnly={isReadOnly}
+                                className={isReadOnly ? 'read-only' : ''}
                             />
                         </label>
 
@@ -408,9 +419,11 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                             Description
                             <textarea
                                 value={protocolDescription}
-                                onChange={e => setProtocolDescription(e.target.value)}
+                                onChange={e => !isReadOnly && setProtocolDescription(e.target.value)}
                                 placeholder="Describe the strategy and theme of your protocol"
                                 rows={4}
+                                readOnly={isReadOnly}
+                                className={isReadOnly ? 'read-only' : ''}
                             />
                         </label>
                     </div>
@@ -426,14 +439,15 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                         </div>
 
                         <h4>Predefined Colors</h4>
-                        <div className="color-grid">
+                        <div className={`color-grid ${isReadOnly ? 'read-only' : ''}`}>
                             {PREDEFINED_COLORS.map(color => (
                                 <button
                                     key={color.hex}
                                     className={`color-option ${protocolColor === color.hex ? 'selected' : ''}`}
                                     style={{ backgroundColor: color.hex }}
-                                    onClick={() => setProtocolColor(color.hex)}
+                                    onClick={() => !isReadOnly && setProtocolColor(color.hex)}
                                     title={color.name}
+                                    disabled={isReadOnly}
                                 >
                                     {protocolColor === color.hex && '✓'}
                                 </button>
@@ -445,13 +459,16 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                             <input
                                 type="color"
                                 value={protocolColor}
-                                onChange={e => setProtocolColor(e.target.value)}
+                                onChange={e => !isReadOnly && setProtocolColor(e.target.value)}
+                                disabled={isReadOnly}
                             />
                             <input
                                 type="text"
                                 value={protocolColor}
-                                onChange={e => setProtocolColor(e.target.value)}
+                                onChange={e => !isReadOnly && setProtocolColor(e.target.value)}
                                 placeholder="#1976D2"
+                                readOnly={isReadOnly}
+                                className={isReadOnly ? 'read-only' : ''}
                             />
                         </div>
                     </div>
@@ -462,14 +479,14 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                     <div className="wizard-step pattern-step">
                         <h3>Step 3: Choose Card Pattern</h3>
 
-                        <div className="pattern-selection-grid">
+                        <div className={`pattern-selection-grid ${isReadOnly ? 'read-only' : ''}`}>
                             {CARD_PATTERNS.map(pattern => {
                                 const previewStyle = getPatternPreviewStyle(pattern.value, protocolColor);
                                 return (
                                     <div
                                         key={pattern.value}
                                         className={`pattern-option ${protocolPattern === pattern.value ? 'selected' : ''}`}
-                                        onClick={() => setProtocolPattern(pattern.value)}
+                                        onClick={() => !isReadOnly && setProtocolPattern(pattern.value)}
                                     >
                                         <div className={`pattern-preview`} style={previewStyle}>
                                             {protocolName || 'Protocol'}-0
@@ -509,6 +526,7 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                             protocolColor={protocolColor}
                             protocolPattern={protocolPattern as any}
                             onChange={handleUpdateCard}
+                            readOnly={isReadOnly}
                         />
                     </div>
                 )}
@@ -517,10 +535,11 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
             <div className="wizard-actions">
                 <div className="wizard-actions-left">
                     <button onClick={onCancel} className="btn btn-back">
-                        Cancel
+                        {isReadOnly ? 'Back' : 'Cancel'}
                     </button>
 
-                    {initialProtocol && onDelete && (
+                    {/* Only show Delete for editable protocols */}
+                    {initialProtocol && onDelete && !isReadOnly && (
                         <button onClick={() => setShowDeleteModal(true)} className="btn btn-delete">
                             Delete Protocol
                         </button>
@@ -528,15 +547,17 @@ export const ProtocolWizard: React.FC<ProtocolWizardProps> = ({ onSave, onCancel
                 </div>
 
                 <div className="wizard-actions-right">
-                    {/* For existing protocols: always show Export JSON and Save */}
+                    {/* For existing protocols: always show Export JSON, only show Save if editable */}
                     {initialProtocol && (
                         <>
                             <button onClick={handleExport} className="btn btn-export">
                                 Export JSON
                             </button>
-                            <button onClick={handleFinish} className="btn">
-                                Save
-                            </button>
+                            {!isReadOnly && (
+                                <button onClick={handleFinish} className="btn">
+                                    Save
+                                </button>
+                            )}
                         </>
                     )}
 

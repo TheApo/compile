@@ -193,6 +193,17 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     }, 2000);
   };
 
+  // Debug: Force Win/Lose handlers for DebugPanel
+  const handleForceWin = useCallback(() => {
+    console.log('Debug: Forcing player win via DebugPanel.');
+    wrappedOnEndGame('player', gameState);
+  }, [wrappedOnEndGame, gameState]);
+
+  const handleForceLose = useCallback(() => {
+    console.log('Debug: Forcing player loss via DebugPanel.');
+    wrappedOnEndGame('opponent', gameState);
+  }, [wrappedOnEndGame, gameState]);
+
   const lastPlayedCardInfo = useMemo(() => {
     if (gameState.lastPlayedCardId) {
         const cardInfo = findCardOnBoard(gameState, gameState.lastPlayedCardId);
@@ -673,7 +684,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             </div>
         </div>
         {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
-        {showDebugButton && <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} />}
+        {showDebugButton && <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} onForceWin={handleForceWin} onForceLose={handleForceLose} />}
     </div>
   );
 }

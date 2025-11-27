@@ -1,6 +1,6 @@
 {
   "id": "metal_custom_1",
-  "name": "Metal_custom",
+  "name": "Metal",
   "description": "Unyielding defense. Custom protocol migration of original Metal protocol.",
   "color": "#B0BEC5",
   "pattern": "grid",
@@ -151,5 +151,6 @@
       "middleEffects": [],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

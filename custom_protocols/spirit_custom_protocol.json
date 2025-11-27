@@ -1,6 +1,6 @@
 {
   "id": "spirit_custom_1",
-  "name": "Spirit_custom",
+  "name": "Spirit",
   "description": "True strength from within. Custom protocol migration of original Spirit protocol.",
   "color": "#5DD9C1",
   "pattern": "dual-radial",
@@ -188,5 +188,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

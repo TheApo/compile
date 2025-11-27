@@ -2273,7 +2273,7 @@ p {
 
 .results-body {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1.2fr 1fr;
     gap: 2.5rem;
 }
 
@@ -2295,6 +2295,33 @@ p {
 .final-score-section .protocol-bars-container {
     border: none;
     padding: 0;
+}
+
+/* Results screen: Give protocol names more space to avoid overlap */
+.final-score-section .protocol-bar {
+    gap: 1rem;
+}
+
+.final-score-section .protocol-display {
+    min-width: 150px;
+    gap: 0.75rem;
+    padding: 0.4rem 1rem;
+}
+
+.final-score-section .protocol-display .protocol-name {
+    flex: 1;
+    min-width: 5.5rem; /* ~8 characters at 0.85rem font size */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+.final-score-section .protocol-display .protocol-value {
+    flex-shrink: 0;
+    min-width: 2rem;
+    text-align: right;
+    font-size: 1.3rem;
 }
 
 .results-label {
@@ -2570,6 +2597,11 @@ p {
   /* Wider buttons in Main Menu so "CUSTOM PROTOCOLS" fits in one line */
   .main-menu-start-group, .main-menu-other-actions {
     width: 280px;
+  }
+
+  /* Results screen: wider on large desktops */
+  .results-screen-content {
+    max-width: 1200px;
   }
 }
 
@@ -2905,7 +2937,7 @@ p {
   /* === Results Screen === */
   .results-screen-content {
     padding: 2rem; /* Reduced from 2.5rem */
-    max-width: 750px; /* Reduced from 900px */
+    max-width: 900px; /* Increased for iPad Mini landscape (1024px width) */
   }
 
   .results-header h1 {
@@ -3155,7 +3187,7 @@ p {
   /* === Results Screen === */
   .results-screen-content {
     padding: 1.5rem;
-    max-width: 650px;
+    max-width: 720px; /* Increased for iPad Mini portrait (768px width) */
     gap: 2rem;
   }
 

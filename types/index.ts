@@ -471,6 +471,21 @@ export type ActionRequired = {
     currentLaneIndex?: number;  // Optional: Restricts selection to this lane
     remainingLanes?: number[];  // Optional: Lanes to process after this one
     params?: any;
+} | {
+    // Generic optional effect prompt for custom protocols
+    type: 'prompt_optional_effect';
+    sourceCardId: string;
+    actor: Player;
+    effectDef: any;  // The effect definition from customEffects
+    context: EffectContext;
+    optional?: boolean;
+} | {
+    // Generic optional discard prompt for custom protocols
+    type: 'prompt_optional_discard_custom';
+    sourceCardId: string;
+    actor: Player;
+    count: number;
+    context?: EffectContext;
 } | null;
 
 export type AnimationState = 
@@ -559,7 +574,9 @@ export type AIAction =
     | { type: 'resolveSwapProtocols', indices: [number, number] }
     | { type: 'resolveSpeed3Prompt', accept: boolean }
     | { type: 'resolvePsychic4Prompt', accept: boolean }
-    | { type: 'resolveControlMechanicPrompt', choice: 'player' | 'opponent' | 'skip' };
+    | { type: 'resolveControlMechanicPrompt', choice: 'player' | 'opponent' | 'skip' }
+    | { type: 'resolveOptionalEffectPrompt', accept: boolean }
+    | { type: 'resolveOptionalDiscardCustomPrompt', accept: boolean };
 
 
 /**
@@ -575,6 +592,8 @@ export type AnimationRequest =
     | { type: 'shift'; cardId: string; fromLane: number; toLane: number; owner: Player }
     | { type: 'return'; cardId: string; owner: Player }
     | { type: 'discard'; cardId: string; owner: Player }
+    | { type: 'play'; cardId: string; owner: Player }
+    | { type: 'draw'; player: Player; count: number }
     | {
         type: 'compile_delete';
         laneIndex: number;

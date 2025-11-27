@@ -10,9 +10,11 @@ import { allScenarios, TestScenario } from '../utils/testScenarios';
 interface DebugPanelProps {
     onLoadScenario: (setup: (state: GameState) => GameState) => void;
     onSkipCoinFlip?: () => void;
+    onForceWin?: () => void;
+    onForceLose?: () => void;
 }
 
-export const DebugPanel: React.FC<DebugPanelProps> = ({ onLoadScenario, onSkipCoinFlip }) => {
+export const DebugPanel: React.FC<DebugPanelProps> = ({ onLoadScenario, onSkipCoinFlip, onForceWin, onForceLose }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     if (!isOpen) {
@@ -120,6 +122,59 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ onLoadScenario, onSkipCo
                     </div>
                 ))}
             </div>
+
+            {/* Force Win/Lose Buttons */}
+            {(onForceWin || onForceLose) && (
+                <div style={{
+                    marginTop: '20px',
+                    paddingTop: '15px',
+                    borderTop: '1px solid #444',
+                    display: 'flex',
+                    gap: '10px',
+                    justifyContent: 'center'
+                }}>
+                    {onForceWin && (
+                        <button
+                            onClick={() => {
+                                onForceWin();
+                                setIsOpen(false);
+                            }}
+                            style={{
+                                padding: '10px 20px',
+                                backgroundColor: '#4ecdc4',
+                                color: '#1a1a1a',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                fontSize: '14px',
+                            }}
+                        >
+                            🏆 Force Win
+                        </button>
+                    )}
+                    {onForceLose && (
+                        <button
+                            onClick={() => {
+                                onForceLose();
+                                setIsOpen(false);
+                            }}
+                            style={{
+                                padding: '10px 20px',
+                                backgroundColor: '#ff6b6b',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                fontSize: '14px',
+                            }}
+                        >
+                            💀 Force Lose
+                        </button>
+                    )}
+                </div>
+            )}
 
             <div style={{ marginTop: '20px', fontSize: '11px', color: '#666', textAlign: 'center' }}>
                 Drücke ESC oder klicke ✕ zum Schließen

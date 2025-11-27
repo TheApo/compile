@@ -5,9 +5,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '../components/Header';
-import { uniqueProtocols as baseUniqueProtocols, cards as baseCards, Card as CardData } from '../data/cards';
+import { Card as CardData } from '../data/cards';
 import { CardComponent } from '../components/Card';
 import { getAllCustomProtocolCards } from '../logic/customProtocols/cardFactory';
+import { loadCustomProtocols } from '../logic/customProtocols/storage';
+import { isSystemProtocol } from './CustomProtocolCreator/ProtocolList';
 import { invalidateCardCache } from '../utils/gameLogic';
 import { isCustomProtocolEnabled } from '../utils/customProtocolSettings';
 import '../styles/layouts/protocol-selection.css';
@@ -43,14 +45,27 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
     setRefreshKey(prev => prev + 1);
   }, []);
 
-  // Merge base cards with custom protocol cards (only if enabled)
-  // Depends on refreshKey to reload when custom protocols change
+  // Load all cards from custom protocols only (no more baseCards)
+  // System protocols are identified by their category (Main 1, Main 2, Aux 1, Fan-Content)
+  // User-created protocols have category "Custom"
   const cards = useMemo(() => {
     const customEnabled = isCustomProtocolEnabled();
-    const customCards = customEnabled ? getAllCustomProtocolCards() : [];
-    const merged = [...baseCards, ...customCards];
-    console.log('[Protocol Selection] Total cards loaded:', merged.length, '(base:', baseCards.length, ', custom:', customCards.length, ', enabled:', customEnabled, ')');
-    return merged;
+    const allCustomCards = getAllCustomProtocolCards();
+
+    // Get list of system protocol IDs and user protocol IDs
+    const protocols = loadCustomProtocols();
+    const systemProtocolNames = new Set(
+      protocols.filter(p => isSystemProtocol(p)).map(p => p.name)
+    );
+
+    // System protocols are always loaded, user protocols only if custom content is enabled
+    const filteredCards = allCustomCards.filter(card => {
+      const isSystem = systemProtocolNames.has(card.protocol);
+      return isSystem || customEnabled;
+    });
+
+    console.log('[Protocol Selection] Total cards loaded:', filteredCards.length, '(custom enabled:', customEnabled, ')');
+    return filteredCards;
   }, [refreshKey]);
 
   // Get unique protocols from merged cards
@@ -194,13 +209,26 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
         const debugProtocols = [];
 
         // Select protocols
-        // IMPORTANT: Filter out custom protocols - AI should only pick from base game protocols
-        const availableForOpponent = uniqueProtocols.filter(p => {
+        // AI should only pick from ENABLED categories (matching the checkbox filters)
+        // But if enabled categories are exhausted, fall back to ALL protocols
+        const availableFromEnabledCategories = uniqueProtocols.filter(p => {
             if (chosenProtocols.has(p)) return false;
             const protocolCategory = getProtocolCategory(p);
-            if (protocolCategory === 'Custom') return false; // Block AI from selecting custom protocols
+            // Only allow protocols from enabled categories
+            return enabledCategories.has(protocolCategory);
+        });
+
+        // Fallback: If enabled categories don't have enough protocols, use ALL available
+        const availableFromAllCategories = uniqueProtocols.filter(p => {
+            if (chosenProtocols.has(p)) return false;
             return true;
         });
+
+        // Use enabled categories first, fall back to all if not enough
+        const availableForOpponent = availableFromEnabledCategories.length >= currentStepInfo.picks
+            ? [...availableFromEnabledCategories]
+            : [...availableFromAllCategories];
+
         const opponentChoices: string[] = [];
         
         const availableDebugProtocols = debugProtocols.filter(p => availableForOpponent.includes(p));
@@ -240,7 +268,7 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
 
       runOpponentTurn();
     }
-  }, [step, isOpponentTurn, isAnimating, chosenProtocols, currentStepInfo]);
+  }, [step, isOpponentTurn, isAnimating, chosenProtocols, currentStepInfo, enabledCategories, uniqueProtocols, getProtocolCategory]);
 
 
   // Finalizing and starting the game

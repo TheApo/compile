@@ -17,11 +17,12 @@ interface CardEditorProps {
     protocolColor: string;
     protocolPattern: CardPattern;
     onChange: (card: CustomCardDefinition) => void;
+    readOnly?: boolean;
 }
 
 type BoxType = 'top' | 'middle' | 'bottom';
 
-export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, protocolColor, protocolPattern, onChange }) => {
+export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, protocolColor, protocolPattern, onChange, readOnly = false }) => {
     const [editingEffect, setEditingEffect] = useState<{
         box: BoxType;
         effectIndex: number;
@@ -241,19 +242,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     <div className="effects-list">
                         {card.topEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
-                                <span onClick={() => handleEditEffect('top', index)}>
+                                <span onClick={() => handleEditEffect('top', index)} className={readOnly ? 'read-only-clickable' : ''}>
                                     {effect.trigger !== 'passive' && (
                                         <strong>{getTriggerLabel(effect.trigger)}:</strong>
                                     )}{' '}
                                     {getEffectSummary(effect)}
                                 </span>
-                                <button onClick={() => handleRemoveEffect('top', index)}>×</button>
+                                {!readOnly && <button onClick={() => handleRemoveEffect('top', index)}>×</button>}
                             </div>
                         ))}
                         {card.topEffects.length === 0 && <p className="empty-box">No effects</p>}
                     </div>
 
-                    <div className="add-effect-controls">
+                    {!readOnly && <div className="add-effect-controls">
                         <select id="top-trigger" defaultValue="">
                             <option value="">Choose Trigger</option>
                             <optgroup label="Passive">
@@ -320,7 +321,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         >
                             +
                         </button>
-                    </div>
+                    </div>}
                 </div>
 
                 {/* Middle Box */}
@@ -331,16 +332,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     <div className="effects-list">
                         {card.middleEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
-                                <span onClick={() => handleEditEffect('middle', index)}>
+                                <span onClick={() => handleEditEffect('middle', index)} className={readOnly ? 'read-only-clickable' : ''}>
                                     {getEffectSummary(effect)}
                                 </span>
-                                <button onClick={() => handleRemoveEffect('middle', index)}>×</button>
+                                {!readOnly && <button onClick={() => handleRemoveEffect('middle', index)}>×</button>}
                             </div>
                         ))}
                         {card.middleEffects.length === 0 && <p className="empty-box">No effects</p>}
                     </div>
 
-                    <select
+                    {!readOnly && <select
                         onChange={e => {
                             if (e.target.value) {
                                 handleAddEffect('middle', e.target.value as EffectActionType, 'on_play');
@@ -367,7 +368,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         <option value="value_modifier">Value Modifier</option>
                         <option value="block_compile">Block Compile</option>
                         <option value="delete_all_in_lane">Delete All in Lane</option>
-                    </select>
+                    </select>}
                 </div>
 
                 {/* Bottom Box */}
@@ -378,17 +379,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                     <div className="effects-list">
                         {card.bottomEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
-                                <span onClick={() => handleEditEffect('bottom', index)}>
+                                <span onClick={() => handleEditEffect('bottom', index)} className={readOnly ? 'read-only-clickable' : ''}>
                                     <strong>{getTriggerLabel(effect.trigger)}:</strong>{' '}
                                     {getEffectSummary(effect)}
                                 </span>
-                                <button onClick={() => handleRemoveEffect('bottom', index)}>×</button>
+                                {!readOnly && <button onClick={() => handleRemoveEffect('bottom', index)}>×</button>}
                             </div>
                         ))}
                         {card.bottomEffects.length === 0 && <p className="empty-box">No effects</p>}
                     </div>
 
-                    <div className="bottom-effect-add">
+                    {!readOnly && <div className="bottom-effect-add">
                         <select id="bottom-trigger">
                             <option value="">1. Choose Trigger</option>
                             <option value="start">Start Phase</option>
@@ -438,7 +439,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         >
                             +
                         </button>
-                    </div>
+                    </div>}
                 </div>
             </div>
                 </div>
@@ -447,10 +448,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
             {/* Effect Parameter Editor */}
             {editingEffect && (
                 <div className="effect-parameter-editor">
-                    <h3>Configure Effect</h3>
-                    <EffectEditor effect={editingEffect.effect} onChange={handleUpdateEffect} />
+                    <h3>{readOnly ? 'View Effect' : 'Configure Effect'}</h3>
+                    {readOnly && <div className="read-only-notice">This effect is read-only</div>}
+                    <EffectEditor effect={editingEffect.effect} onChange={handleUpdateEffect} readOnly={readOnly} />
                     <button onClick={() => setEditingEffect(null)} className="btn">
-                        Done
+                        {readOnly ? 'Close' : 'Done'}
                     </button>
                 </div>
             )}

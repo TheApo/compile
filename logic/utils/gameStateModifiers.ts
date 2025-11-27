@@ -116,11 +116,9 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         newState = log(newState, player, `${playerName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
     }
 
-    // After drawing, check for the trigger
-    if (drawnCards.length > 0) {
-        newState = checkForSpirit3Trigger(newState, player);
-    }
-    
+    // NOTE: Spirit-3 after_draw trigger is now handled by custom protocol reactive effects
+    // The old checkForSpirit3Trigger call was removed to avoid double-triggering
+
     return newState;
 }
 
@@ -174,8 +172,7 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
             newState = log(newState, drawingPlayer, `${opponentName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
         }
 
-        // After drawing, check for the trigger for the player who just drew.
-        newState = checkForSpirit3Trigger(newState, drawingPlayer);
+        // NOTE: Spirit-3 after_draw trigger is now handled by custom protocol reactive effects
     }
 
     return newState;

@@ -1,6 +1,6 @@
 {
   "id": "hate-custom-001",
-  "name": "Hate_custom",
+  "name": "Hate",
   "description": "Focused on deletion and sacrifice. Delete cards to gain advantage.",
   "author": "System Migration",
   "createdAt": "2025-11-13T00:00:00.000Z",
@@ -192,5 +192,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Aux 1"
 }

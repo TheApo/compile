@@ -1110,7 +1110,116 @@
 
 .header-actions {
     display: flex;
+    align-items: center;
     gap: 1rem;
+}
+
+/* System Protocols Toggle Checkbox */
+.system-protocols-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.system-protocols-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+/* System Protocol Badge */
+.system-badge {
+    display: inline-block;
+    background-color: rgba(100, 100, 100, 0.6);
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.protocol-card.system-protocol {
+    opacity: 0.85;
+}
+
+/* Read-Only Badge in Wizard Header */
+.read-only-badge {
+    display: inline-block;
+    background-color: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin-left: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+/* Read-Only Inputs */
+input.read-only,
+textarea.read-only {
+    background-color: var(--surface-hover);
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* Read-Only Color/Pattern grids */
+.color-grid.read-only,
+.pattern-selection-grid.read-only {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Read-Only Effect Text (clickable to view) */
+.read-only-clickable {
+    cursor: pointer !important;
+    opacity: 0.9;
+}
+
+.read-only-clickable:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+/* Read-Only Notice in Effect Editor */
+.read-only-notice {
+    background-color: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* Read-Only Mode for Effect Editor */
+.effect-editor.read-only-mode select,
+.effect-editor.read-only-mode input,
+.effect-editor.read-only-mode textarea,
+.effect-editor.read-only-mode button:not(.btn) {
+    pointer-events: none;
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.effect-editor.read-only-mode input[type="checkbox"] {
+    pointer-events: none;
+}
+
+.effect-editor.read-only-mode .btn {
+    /* Allow the Close/Done button to work */
+    pointer-events: auto;
+    opacity: 1;
 }
 
 /* Card Navigation Buttons */

@@ -327,7 +327,7 @@
   /* === Results Screen === */
   .results-screen-content {
     padding: 2rem; /* Reduced from 2.5rem */
-    max-width: 750px; /* Reduced from 900px */
+    max-width: 900px; /* Increased for iPad Mini landscape (1024px width) */
   }
 
   .results-header h1 {
@@ -530,7 +530,7 @@
   /* === Results Screen === */
   .results-screen-content {
     padding: 1.5rem;
-    max-width: 650px;
+    max-width: 720px; /* Increased for iPad Mini portrait (768px width) */
     gap: 2rem;
   }
 

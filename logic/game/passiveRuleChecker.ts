@@ -172,6 +172,22 @@ export function canPlayCard(
         }
     }
 
+    // CRITICAL: Check if there's an 'allow_any_protocol_play' rule that would bypass protocol matching
+    const hasAnyProtocolRule = rules.some(({ rule, cardOwner, laneIndex: ruleLaneIndex }) => {
+        if (rule.type !== 'allow_any_protocol_play') return false;
+        const appliesToLane = rule.scope === 'global' || ruleLaneIndex === laneIndex;
+        const appliesToPlayer =
+            rule.target === 'all' ||
+            (rule.target === 'self' && cardOwner === player) ||
+            (rule.target === 'opponent' && cardOwner === opponent);
+        return appliesToLane && appliesToPlayer;
+    });
+
+    // BASE RULE: Face-up play requires matching protocol (unless bypassed by passive rule)
+    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule) {
+        return { allowed: false, reason: `Face-up play requires matching protocol` };
+    }
+
     return { allowed: true };
 }
 

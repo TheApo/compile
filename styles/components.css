@@ -1169,6 +1169,33 @@
     padding: 0;
 }
 
+/* Results screen: Give protocol names more space to avoid overlap */
+.final-score-section .protocol-bar {
+    gap: 1rem;
+}
+
+.final-score-section .protocol-display {
+    min-width: 150px;
+    gap: 0.75rem;
+    padding: 0.4rem 1rem;
+}
+
+.final-score-section .protocol-display .protocol-name {
+    flex: 1;
+    min-width: 5.5rem; /* ~8 characters at 0.85rem font size */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+.final-score-section .protocol-display .protocol-value {
+    flex-shrink: 0;
+    min-width: 2rem;
+    text-align: right;
+    font-size: 1.3rem;
+}
+
 .results-label {
     font-family: 'Orbitron', sans-serif;
     font-size: 1.1rem;

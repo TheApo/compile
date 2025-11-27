@@ -1,6 +1,6 @@
 {
   "id": "light_custom_1",
-  "name": "Light_custom",
+  "name": "Light",
   "description": "Burn away the dark. Light protocol reveals and manipulates through illumination.",
   "author": "System",
   "createdAt": "2025-11-14T00:00:00.000Z",
@@ -155,5 +155,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

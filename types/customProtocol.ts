@@ -376,15 +376,18 @@ export type CardPattern =
 /**
  * Custom Protocol Definition - Complete protocol set (6 cards)
  */
+export type ProtocolCategory = 'Main 1' | 'Main 2' | 'Aux 1' | 'Aux 2' | 'Fan-Content' | 'Custom';
+
 export interface CustomProtocolDefinition {
     id: string;  // Unique ID for this protocol
     name: string;  // Protocol name (e.g., "Lightning", "Shadow")
     description: string;
-    author: string;
-    createdAt: string;  // ISO date string
+    author?: string;
+    createdAt?: string;  // ISO date string
     color: string;  // Hex color (e.g., "#1976D2")
     pattern: CardPattern;  // Card background pattern
     cards: CustomCardDefinition[];  // Exactly 6 cards (values 0-5 or 1-6)
+    category?: ProtocolCategory;  // Category for protocol selection (Main 1, Main 2, Aux 1, Aux 2, Fan-Content, Custom)
 }
 
 /**

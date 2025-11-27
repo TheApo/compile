@@ -1,6 +1,6 @@
 {
   "id": "frost_custom_1",
-  "name": "Frost_custom",
+  "name": "Frost",
   "description": "Freeze the game state. Frost blocks actions and preserves face-down cards.",
   "color": "#87CEEB",
   "pattern": "frost",
@@ -135,5 +135,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Fan-Content"
 }

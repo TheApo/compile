@@ -1,6 +1,6 @@
 {
   "id": "water_custom_1",
-  "name": "Water_custom",
+  "name": "Water",
   "description": "Wash away and renew. Custom protocol migration of original Water protocol.",
   "color": "#5DADE2",
   "pattern": "multi-radial",
@@ -140,5 +140,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

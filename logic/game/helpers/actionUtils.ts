@@ -169,6 +169,18 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
         return newState; // No chained effect, but actionRequired is now cleared
     }
 
+    // CRITICAL FIX: For "If you do" effects (Fire-1, Fire-2, Fire-3), check if discard actually happened
+    // These effects have the pattern: "Discard X. If you do, [effect]."
+    // The chained effect should ONLY trigger if at least one card was actually discarded.
+    const previousHandSize = (state.actionRequired as any)?.previousHandSize || 0;
+    const currentHandSize = newState[player].hand.length;
+    const discardedCount = Math.max(0, previousHandSize - currentHandSize);
+
+    if (discardedCount === 0) {
+        console.log(`[Fire Effect] Skipping chained effect for ${sourceEffect} - no cards were discarded (previousHandSize: ${previousHandSize}, currentHandSize: ${currentHandSize})`);
+        return newState;
+    }
+
     const sourceCard = findCardOnBoard(newState, sourceCardId)?.card;
     const sourceCardName = sourceCard ? `${sourceCard.protocol}-${sourceCard.value}` : 'A card effect';
 

@@ -1,6 +1,6 @@
 {
   "id": "life_custom_1",
-  "name": "Life_custom",
+  "name": "Life",
   "description": "Life begets more life. Play cards from your deck to grow your presence.",
   "color": "#3CE076",
   "pattern": "hexagons",
@@ -172,5 +172,6 @@
       ],
       "bottomEffects": []
     }
-  ]
+  ],
+  "category": "Main 1"
 }

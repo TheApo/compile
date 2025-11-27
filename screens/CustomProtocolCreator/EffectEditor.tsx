@@ -27,6 +27,7 @@ import { DeleteAllInLaneEffectEditor } from './EffectParameterEditors/DeleteAllI
 interface EffectEditorProps {
     effect: EffectDefinition;
     onChange: (effect: EffectDefinition) => void;
+    readOnly?: boolean;
 }
 
 const createDefaultParams = (action: EffectActionType): any => {
@@ -94,8 +95,9 @@ const createDefaultParams = (action: EffectActionType): any => {
     }
 };
 
-export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) => {
+export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, readOnly = false }) => {
     const handleParamsChange = (newParams: any) => {
+        if (readOnly) return;
         onChange({ ...effect, params: newParams });
     };
 
@@ -316,7 +318,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
     };
 
     return (
-        <div className="effect-editor">
+        <div className={`effect-editor ${readOnly ? 'read-only-mode' : ''}`}>
             {/* Trigger & Position Info */}
             <div className="trigger-info" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#1A113B', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.3)' }}>
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -324,7 +326,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange }) 
                         <strong>Trigger:</strong>
                         <select
                             value={effect.trigger}
-                            onChange={(e) => onChange({ ...effect, trigger: e.target.value as any })}
+                            onChange={(e) => !readOnly && onChange({ ...effect, trigger: e.target.value as any })}
+                            disabled={readOnly}
                             style={{
                                 width: '100%',
                                 padding: '6px',
