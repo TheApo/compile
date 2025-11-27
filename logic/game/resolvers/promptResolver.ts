@@ -243,9 +243,25 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
 
         // CRITICAL: Handle conditional follow-up effects (if_executed)
         if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
-            console.log('[DEBUG resolveOptionalEffectPrompt] Executing if_executed followUp:', effectDef.conditional.thenEffect.id);
+            console.log('[DEBUG resolveOptionalEffectPrompt] Has if_executed followUp:', effectDef.conditional.thenEffect.id);
 
-            // Execute the follow-up effect
+            // If the effect created an actionRequired (user needs to select something),
+            // we need to attach the followUp to it so it executes AFTER the action completes
+            if (result.newState.actionRequired) {
+                console.log('[DEBUG resolveOptionalEffectPrompt] Effect has actionRequired, attaching followUp for later execution');
+                const stateWithFollowUp = {
+                    ...result.newState,
+                    actionRequired: {
+                        ...result.newState.actionRequired,
+                        followUpEffect: effectDef.conditional.thenEffect,
+                        conditionalType: 'if_executed',
+                    } as any
+                };
+                return stateWithFollowUp;
+            }
+
+            // Effect completed immediately (no actionRequired), execute followUp now
+            console.log('[DEBUG resolveOptionalEffectPrompt] Executing if_executed followUp immediately:', effectDef.conditional.thenEffect.id);
             const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, effectDef.conditional.thenEffect);
             return followUpResult.newState;
         }

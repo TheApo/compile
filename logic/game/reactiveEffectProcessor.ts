@@ -176,10 +176,6 @@ export function processReactiveEffects(
         newState = setLogSource(newState, cardName);
         newState = setLogPhase(newState, undefined); // Top box effects have no phase marker
 
-        // Log trigger activation
-        const triggerLabel = getTriggerLabel(triggerType);
-        newState = log(newState, owner, `${triggerLabel}: ${cardName} triggers.`);
-
         // Build effect context
         const opponent = owner === 'player' ? 'opponent' : 'player';
         const effectContext: EffectContext = {
@@ -220,23 +216,4 @@ export function processReactiveEffects(
     // Clear recursion flag before returning
     delete (newState as any)._processingReactiveEffects;
     return { newState };
-}
-
-/**
- * Get human-readable label for trigger type
- */
-function getTriggerLabel(trigger: EffectTrigger): string {
-    switch (trigger) {
-        case 'after_delete': return 'After you delete cards';
-        case 'after_opponent_discard': return 'After opponent discards';
-        case 'after_draw': return 'After you draw cards';
-        case 'after_clear_cache': return 'After you clear cache';
-        case 'before_compile_delete': return 'Before deleted by compile';
-        case 'after_flip': return 'After cards are flipped';
-        case 'after_shift': return 'After cards are shifted';
-        case 'after_play': return 'After cards are played';
-        case 'on_flip': return 'When this card would be flipped';
-        case 'on_cover_or_flip': return 'When this card would be covered or flipped';
-        default: return trigger;
-    }
 }

@@ -855,6 +855,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: false };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: false };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
+        // Generic optional effect prompt for custom protocols - Easy AI rarely accepts
+        case 'prompt_optional_effect': return { type: 'resolveOptionalEffectPrompt', accept: false };
         
         case 'prompt_shift_or_flip_for_light_2': {
             const { revealedCardId } = action;

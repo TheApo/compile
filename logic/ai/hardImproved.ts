@@ -2826,6 +2826,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: true };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
+        // Generic optional effect prompt for custom protocols - Hard AI always accepts
+        case 'prompt_optional_effect': return { type: 'resolveOptionalEffectPrompt', accept: true };
 
         case 'flip_self_for_water_0': {
             // Water-0: Flip self after playing

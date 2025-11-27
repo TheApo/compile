@@ -1,0 +1,177 @@
+{
+  "id": "love_custom_v1",
+  "name": "Love_custom",
+  "description": "Custom Love protocol - hand manipulation, giving and taking cards",
+  "author": "System",
+  "createdAt": "2025-01-08T00:00:00Z",
+  "color": "#f2a3d7",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-1-draw-opponent-deck",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "opponent_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "love-1-end-give",
+          "params": {
+            "action": "give",
+            "count": 1,
+            "source": "own_hand",
+            "optional": true
+          },
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "love-1-end-draw",
+              "params": {
+                "action": "draw",
+                "count": 2,
+                "target": "self",
+                "source": "own_deck"
+              },
+              "position": "bottom",
+              "trigger": "on_play"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-2-opponent-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "opponent",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "love-2-refresh",
+          "params": {
+            "action": "refresh",
+            "target": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-3-take",
+          "params": {
+            "action": "take",
+            "count": 1,
+            "random": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "love-3-give",
+          "params": {
+            "action": "give",
+            "count": 1,
+            "source": "own_hand",
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-4-reveal",
+          "params": {
+            "action": "reveal",
+            "count": 1,
+            "source": "own_hand"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "love-4-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "love-6-opponent-draw",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "opponent",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

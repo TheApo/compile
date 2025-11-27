@@ -90,7 +90,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const optionalPrefix = params.optional ? 'You may ' : '';
 
             if (params.source === 'opponent_deck') {
-                text += `${optionalPrefix}Draw ${params.count} card${params.count !== 1 ? 's' : ''} from opponent's deck.`;
+                // Love-1: "Draw the top card of your opponent's deck"
+                const cardWord = params.count === 1 ? 'the top card' : `the top ${params.count} cards`;
+                text += `${optionalPrefix}Draw ${cardWord} of your opponent's deck.`;
             } else if (params.target === 'opponent') {
                 text += `Opponent draws ${params.count} card${params.count !== 1 ? 's' : ''}.`;
             } else {
@@ -506,10 +508,12 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (owner === 'own') {
                 ownerText = ' of your';
             } else if (owner === 'opponent') {
-                ownerText = " of opponent's";
+                ownerText = " of your opponent's";
             }
 
-            mainText = `Return ${countText}${ownerText}${laneText}.`;
+            // Handle optional return (Psychic-4: "You may return 1 of your opponent's cards")
+            const optionalPrefix = params.optional ? 'You may r' : 'R';
+            mainText = `${optionalPrefix}eturn ${countText}${ownerText}${laneText}.`;
             break;
         }
 
@@ -657,7 +661,22 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const cardWord = params.count === 1 ? 'card' : 'cards';
             const sourceText = params.source === 'opponent_hand' ? "opponent's hand" : 'your hand';
 
-            let text = `${actionText} ${params.count} ${cardWord} from ${sourceText}`;
+            // NEW: Handle optional give (Love-1 End: "You may give 1 card...")
+            const mayText = params.optional ? 'You may ' : '';
+            const actionTextLower = params.action === 'give' ? 'give' : 'reveal';
+            const actionTextCapitalized = params.action === 'give' ? 'Give' : 'Reveal';
+
+            let text: string;
+            if (params.optional) {
+                text = `${mayText}${actionTextLower} ${params.count} ${cardWord} from ${sourceText}`;
+            } else {
+                text = `${actionTextCapitalized} ${params.count} ${cardWord} from ${sourceText}`;
+            }
+
+            // Add destination for 'give' action
+            if (params.action === 'give' && params.source !== 'opponent_hand') {
+                text += ' to your opponent';
+            }
 
             if (params.followUpAction === 'flip') {
                 text += '. Then flip it.';
@@ -673,9 +692,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
         case 'take': {
             const cardWord = params.count === 1 ? 'card' : 'cards';
-            const randomText = params.random ? 'random ' : '';
+            const randomText = params.random !== false ? 'random ' : '';
 
-            mainText = `Take ${params.count} ${randomText}${cardWord} from opponent's hand.`;
+            mainText = `Take ${params.count} ${randomText}${cardWord} from your opponent's hand.`;
             break;
         }
 
@@ -731,7 +750,10 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     mainText = "Opponent can't play cards face-down in this line.";
                     break;
                 case 'require_face_down_play':
-                    mainText = 'Opponent can only play cards face-down in this line.';
+                    // Psychic-1: "Your opponent can only play cards face-down." (global)
+                    mainText = rule.scope === 'global'
+                        ? 'Your opponent can only play cards face-down.'
+                        : 'Opponent can only play cards face-down in this line.';
                     break;
                 case 'allow_any_protocol_play':
                     mainText = 'You may play cards without matching protocols.';

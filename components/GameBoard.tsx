@@ -113,7 +113,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             return { isPlayable: false, isMatching: false, isCompilable };
         }
 
-        // CRITICAL: Force face-down play if required by effect (e.g., Darkness-3, Dark_cust-3)
+        // CRITICAL: Force face-down play if required by effect (e.g., Darkness-3, Darkness_custom-3)
         if (isPlayFromEffect && (actionRequired.isFaceDown || (actionRequired as any).faceDown)) {
             return { isPlayable: true, isMatching: false, isCompilable };
         }

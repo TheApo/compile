@@ -1286,30 +1286,30 @@ const scenario25_Water0SoftlockFix: TestScenario = {
 };
 
 /**
- * Szenario 26: Dark_cust-1 Flip and Shift Chain
+ * Szenario 26: Darkness_custom-1 Flip and Shift Chain
  *
  * Setup:
- * - Player has Dark_cust protocol in Lane 0
+ * - Player has Darkness_custom protocol in Lane 0
  * - Opponent has Metal-2 (face-down) in Lane 0
  * - Opponent has Fire-1 (face-up) in Lane 1
- * - Player has Dark_cust-1 in hand
+ * - Player has Darkness_custom-1 in hand
  * - Player's Turn, Action Phase
  *
- * Test: Dark_cust-1 should flip opponent card, then allow shifting that card
+ * Test: Darkness_custom-1 should flip opponent card, then allow shifting that card
  * Expected:
- *   1. Player plays Dark_cust-1 in Lane 0
+ *   1. Player plays Darkness_custom-1 in Lane 0
  *   2. [Middle Effect 1] Flip 1 opponent card -> Prompts to select Metal-2
  *   3. Metal-2 flips face-up
  *   4. [Middle Effect 2] "You may shift that card" -> Prompts to shift the FLIPPED card (Metal-2)
  *   5. Player can choose to shift Metal-2 to another lane OR skip (optional)
  */
 const scenario26_DarkCust1FlipShift: TestScenario = {
-    name: "Dark_cust-1 Flip and Shift Chain",
-    description: "Dark_cust-1 should flip opponent card, then allow shifting that same card",
+    name: "Darkness_custom-1 Flip and Shift Chain",
+    description: "Darkness_custom-1 should flip opponent card, then allow shifting that same card",
     setup: (state: GameState): GameState => {
         let newState = initScenarioBase(
             state,
-            ['Dark_cust', 'Water', 'Fire'],
+            ['Darkness_custom', 'Water', 'Fire'],
             ['Metal', 'Fire', 'Death'],
             'player',
             'action'
@@ -1323,9 +1323,9 @@ const scenario26_DarkCust1FlipShift: TestScenario = {
 
 		newState = placeCard(newState, 'opponent', 2, createCard('Hate', 0, false));
 
-        // Player: Dark_cust-1 in hand
+        // Player: Darkness_custom-1 in hand
         newState.player.hand = [
-            createCard('Dark_cust', 1, true),
+            createCard('Darkness_custom', 1, true),
             createCard('Water', 2, true),
             createCard('Fire', 3, true),
         ];
@@ -1336,32 +1336,32 @@ const scenario26_DarkCust1FlipShift: TestScenario = {
 };
 
 /**
- * Szenario 27: Dark_cust-1 Flips Speed-3 - Middle Effect Should Execute
+ * Szenario 27: Darkness_custom-1 Flips Speed-3 - Middle Effect Should Execute
  *
  * Setup:
- * - Player has Dark_cust protocol in Lane 0
+ * - Player has Darkness_custom protocol in Lane 0
  * - Opponent has Speed-3 (face-down, uncovered) in Lane 1
  * - Opponent has Fire-1 (face-up, uncovered) in Lane 2 (target for Speed-3's shift effect)
- * - Player has Dark_cust-1 in hand
+ * - Player has Darkness_custom-1 in hand
  * - Player's Turn, Action Phase
  *
- * Test: When Dark_cust-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
+ * Test: When Darkness_custom-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
  * Expected:
- *   1. Player plays Dark_cust-1 in Lane 0
- *   2. [Middle Effect 1] Dark_cust-1: Flip 1 opponent card -> Player selects Speed-3
+ *   1. Player plays Darkness_custom-1 in Lane 0
+ *   2. [Middle Effect 1] Darkness_custom-1: Flip 1 opponent card -> Player selects Speed-3
  *   3. Speed-3 flips face-up
  *   4. [CRITICAL] Speed-3's Middle Effect triggers: "Shift 1 of your other cards" (Opponent's effect!)
  *   5. Opponent must select one of their cards to shift (e.g., Fire-1)
- *   6. AFTER Speed-3's effect completes, Dark_cust-1's shift effect should execute
+ *   6. AFTER Speed-3's effect completes, Darkness_custom-1's shift effect should execute
  *   7. Player can choose to shift Speed-3 OR skip
  */
 const scenario27_DarkCust1FlipSpeed3: TestScenario = {
-    name: "Dark_cust-1 Flips Speed-3 - Middle Effect Execution",
-    description: "When Dark_cust-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Dark_cust-1's shift",
+    name: "Darkness_custom-1 Flips Speed-3 - Middle Effect Execution",
+    description: "When Darkness_custom-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Darkness_custom-1's shift",
     setup: (state: GameState): GameState => {
         let newState = initScenarioBase(
             state,
-            ['Dark_cust', 'Water', 'Fire'],
+            ['Darkness_custom', 'Water', 'Fire'],
             ['Speed', 'Fire', 'Metal'],
             'player',
             'action'
@@ -1376,9 +1376,9 @@ const scenario27_DarkCust1FlipSpeed3: TestScenario = {
         // Opponent: Metal-2 (face-up, uncovered) in Lane 2 - another target
         newState = placeCard(newState, 'opponent', 2, createCard('Metal', 2, true));
 
-        // Player: Dark_cust-1 in hand
+        // Player: Darkness_custom-1 in hand
         newState.player.hand = [
-            createCard('Dark_cust', 1, true),
+            createCard('Darkness_custom', 1, true),
             createCard('Water', 2, true),
             createCard('Fire', 3, true),
         ];
@@ -1389,28 +1389,28 @@ const scenario27_DarkCust1FlipSpeed3: TestScenario = {
 };
 
 /**
- * Szenario 27: Dark_cust-1 Flips Speed-3 - Middle Effect Should Execute
+ * Szenario 27: Darkness_custom-1 Flips Speed-3 - Middle Effect Should Execute
  *
  * Setup:
- * - Player has Dark_cust protocol in Lane 0
+ * - Player has Darkness_custom protocol in Lane 0
  * - Opponent has Speed-3 (face-down, uncovered) in Lane 1
  * - Opponent has Fire-1 (face-up, uncovered) in Lane 2 (target for Speed-3's shift effect)
- * - Player has Dark_cust-1 in hand
+ * - Player has Darkness_custom-1 in hand
  * - Player's Turn, Action Phase
  *
- * Test: When Dark_cust-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
+ * Test: When Darkness_custom-1 flips Speed-3, Speed-3's middle effect should execute BEFORE shift
  * Expected:
- *   1. Player plays Dark_cust-1 in Lane 0
- *   2. [Middle Effect 1] Dark_cust-1: Flip 1 opponent card -> Player selects Speed-3
+ *   1. Player plays Darkness_custom-1 in Lane 0
+ *   2. [Middle Effect 1] Darkness_custom-1: Flip 1 opponent card -> Player selects Speed-3
  *   3. Speed-3 flips face-up
  *   4. [CRITICAL] Speed-3's Middle Effect triggers: "Shift 1 of your other cards" (Opponent's effect!)
  *   5. Opponent must select one of their cards to shift (e.g., Fire-1)
- *   6. AFTER Speed-3's effect completes, Dark_cust-1's shift effect should execute
+ *   6. AFTER Speed-3's effect completes, Darkness_custom-1's shift effect should execute
  *   7. Player can choose to shift Speed-3 OR skip
  */
 const scenario28_Darkness1FlipSpeed3: TestScenario = {
-    name: "Dark_cust-1 Flips Speed-3 - Middle Effect Execution",
-    description: "When Dark_cust-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Dark_cust-1's shift",
+    name: "Darkness_custom-1 Flips Speed-3 - Middle Effect Execution",
+    description: "When Darkness_custom-1 flips Speed-3, Speed-3's middle effect (shift) should execute before Darkness_custom-1's shift",
     setup: (state: GameState): GameState => {
         let newState = initScenarioBase(
             state,
@@ -1429,7 +1429,7 @@ const scenario28_Darkness1FlipSpeed3: TestScenario = {
         // Opponent: Metal-2 (face-up, uncovered) in Lane 2 - another target
         newState = placeCard(newState, 'opponent', 2, createCard('Metal', 2, true));
 
-        // Player: Dark_cust-1 in hand
+        // Player: Darkness_custom-1 in hand
         newState.player.hand = [
             createCard('Darkness', 1, true),
             createCard('Water', 2, true),
@@ -1555,34 +1555,34 @@ export const scenario30_AnarchyCustomPlayground: TestScenario = {
 };
 
 /**
- * Szenario 31: Dark_cust Test Playground
+ * Szenario 31: Darkness_custom Test Playground
  *
  * Setup:
- * - Player has Dark_cust protocol in Lane 0
- * - Player has all Dark_cust cards in hand (0, 1, 2, 3, 4, 5)
+ * - Player has Darkness_custom protocol in Lane 0
+ * - Player has all Darkness_custom cards in hand (0, 1, 2, 3, 4, 5)
  * - Opponent has cards on board for testing
  * - Player's Turn, Action Phase
  */
 export const scenario31_DarkCustPlayground: TestScenario = {
-    name: "Dark_cust Test Playground",
-    description: "🆕 All Dark_cust cards on hand for testing",
+    name: "Darkness_custom Test Playground",
+    description: "🆕 All Darkness_custom cards on hand for testing",
     setup: (state: GameState) => {
         let newState = initScenarioBase(
             state,
-            ['Dark_cust', 'Water', 'Spirit'],
+            ['Darkness_custom', 'Water', 'Spirit'],
             ['Metal', 'Death', 'Fire'],
             'player',
             'action'
         );
 
-        // Player: All Dark_cust cards in hand
+        // Player: All Darkness_custom cards in hand
         newState.player.hand = [
-            createCard('Dark_cust', 0, true),
-            createCard('Dark_cust', 1, true),
-            createCard('Dark_cust', 2, true),
-            createCard('Dark_cust', 3, true),
-            createCard('Dark_cust', 4, true),
-            createCard('Dark_cust', 5, true),
+            createCard('Darkness_custom', 0, true),
+            createCard('Darkness_custom', 1, true),
+            createCard('Darkness_custom', 2, true),
+            createCard('Darkness_custom', 3, true),
+            createCard('Darkness_custom', 4, true),
+            createCard('Darkness_custom', 5, true),
         ];
 
         // Opponent: At least one card in each lane (mixed face-up/down for testing)
@@ -2537,6 +2537,114 @@ export const scenario47_PlagueCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Scenario 48: Love_custom Playground
+ * Test all Love_custom effects:
+ * - Love-1: Draw top card of opponent's deck. End: May give 1 card → draw 2.
+ * - Love-2: Opponent draws 1 card. Refresh.
+ * - Love-3: Take 1 random card from opponent's hand. Give 1 card to opponent.
+ * - Love-4: Reveal 1 card from your hand. Flip 1 card.
+ * - Love-5: Discard 1 card.
+ * - Love-6: Opponent draws 2 cards.
+ */
+export const scenario48_LoveCustomPlayground: TestScenario = {
+    name: "Love_custom Test Playground",
+    description: "💕 All Love_custom cards on hand - share the love",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Love_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Love_custom cards in hand (1,2,3,4,5,6)
+        newState.player.hand = [
+            createCard('Love_custom', 1, true),
+            createCard('Love_custom', 2, true),
+            createCard('Love_custom', 3, true),
+            createCard('Love_custom', 4, true),
+            createCard('Love_custom', 5, true),
+            createCard('Love_custom', 6, true),
+        ];
+
+        // Opponent has cards in hand for Love-3 (take) and to see effects
+        newState.opponent.hand = [
+            createCard('Fire', 2, true),
+            createCard('Death', 3, true),
+            createCard('Water', 1, true),
+            createCard('Metal', 4, true),
+        ];
+
+        // Setup some cards for Love-4 testing (flip any uncovered card)
+        newState.player.lanes[0] = [createCard('Spirit', 2, true)];   // Face-up - can flip to face-down
+        newState.player.lanes[1] = [];
+        newState.player.lanes[2] = [];
+
+        newState.opponent.lanes[0] = [createCard('Metal', 1, true)];  // Face-up - can flip
+        newState.opponent.lanes[1] = [createCard('Death', 2, false)]; // Face-down - can flip to face-up
+        newState.opponent.lanes[2] = [createCard('Fire', 3, true)];   // Face-up - can flip
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 49: Psychic_custom Playground
+ * Test all Psychic_custom effects:
+ * - Psychic-0: Draw 2 cards. Opponent discards 2. Reveal opponent's hand.
+ * - Psychic-1: Top: Opponent can only play face-down (global). Start: Flip self.
+ * - Psychic-2: Opponent discards 2. Rearrange opponent's protocols.
+ * - Psychic-3: Opponent discards 1. Shift 1 opponent's card.
+ * - Psychic-4: End: May return 1 opponent's card. If you do, flip self.
+ * - Psychic-5: Discard 1 card.
+ */
+export const scenario49_PsychicCustomPlayground: TestScenario = {
+    name: "Psychic_custom Test Playground",
+    description: "🔮 All Psychic_custom cards on hand - read minds and control",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Psychic_custom', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Psychic_custom cards in hand (0,1,2,3,4,5)
+        newState.player.hand = [
+            createCard('Psychic_custom', 0, true),
+            createCard('Psychic_custom', 1, true),
+            createCard('Psychic_custom', 2, true),
+            createCard('Psychic_custom', 3, true),
+            createCard('Psychic_custom', 4, true),
+            createCard('Psychic_custom', 5, true),
+        ];
+
+        // Opponent has cards for discard effects (Psychic-0, 2, 3)
+        newState.opponent.hand = [
+            createCard('Fire', 2, true),
+            createCard('Death', 3, true),
+            createCard('Water', 1, true),
+            createCard('Metal', 4, true),
+        ];
+
+        // Setup opponent cards for shift (Psychic-3) and return (Psychic-4)
+        newState.player.lanes[0] = [createCard('Spirit', 2, true)];
+        newState.player.lanes[1] = [];
+        newState.player.lanes[2] = [];
+
+        newState.opponent.lanes[0] = [createCard('Metal', 1, true)];   // Can be shifted/returned
+        newState.opponent.lanes[1] = [createCard('Death', 2, false)];  // Face-down - can shift/return
+        newState.opponent.lanes[2] = [createCard('Fire', 3, true)];    // Can be shifted/returned
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2585,4 +2693,6 @@ export const allScenarios: TestScenario[] = [
     scenario45_SpeedCustomPlayground,
     scenario46_MetalCustomPlayground,
     scenario47_PlagueCustomPlayground,
+    scenario48_LoveCustomPlayground,
+    scenario49_PsychicCustomPlayground,
 ];

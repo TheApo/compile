@@ -275,9 +275,6 @@ function processTriggeredEffects(
                 newState = setLogSource(newState, cardName);
                 newState = setLogPhase(newState, phaseContext);
 
-                // Log that the effect is triggering
-                newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
-
                 // Find lane index
                 const laneIndex = newState[player].lanes.findIndex(l => l.some(c => c.id === card.id));
 
@@ -331,9 +328,6 @@ function processTriggeredEffects(
             const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
             newState = setLogSource(newState, cardName);
             newState = setLogPhase(newState, phaseContext);
-
-            // Log that the effect is triggering with Start/End marker
-            newState = log(newState, player, `${effectKeyword} Effect: ${card.protocol}-${card.value} triggers.`);
 
             // FIXED: Now calls execute with proper signature (card, state, context)
             const result = execute(card, newState, context);

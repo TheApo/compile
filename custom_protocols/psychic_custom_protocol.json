@@ -1,0 +1,205 @@
+{
+  "id": "psychic_custom_v1",
+  "name": "Psychic_custom",
+  "description": "Custom Psychic protocol - mind control, discard, reveal, and protocol manipulation",
+  "author": "System",
+  "createdAt": "2025-01-08T00:00:00Z",
+  "color": "#c78dd9",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "psychic-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "psychic-0-opponent-discard",
+          "params": {
+            "action": "discard",
+            "count": 2,
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "psychic-0-reveal-hand",
+          "params": {
+            "action": "reveal",
+            "source": "opponent_hand",
+            "count": -1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "psychic-1-force-face-down",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "require_face_down_play",
+              "target": "opponent",
+              "scope": "global"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "psychic-1-start-flip-self",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "self",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "flipSelf": true
+          },
+          "position": "bottom",
+          "trigger": "start"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "psychic-2-opponent-discard",
+          "params": {
+            "action": "discard",
+            "count": 2,
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "psychic-2-rearrange",
+          "params": {
+            "action": "rearrange_protocols",
+            "target": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "psychic-3-opponent-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "opponent"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "psychic-3-shift-opponent",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "destinationRestriction": {
+              "type": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "psychic-4-end-return",
+          "params": {
+            "action": "return",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "any",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "psychic-4-end-flip-self",
+              "params": {
+                "action": "flip",
+                "count": 1,
+                "flipSelf": true,
+                "targetFilter": {
+                  "owner": "self",
+                  "position": "any",
+                  "faceState": "any",
+                  "excludeSelf": false
+                }
+              },
+              "position": "bottom",
+              "trigger": "end"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "psychic-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

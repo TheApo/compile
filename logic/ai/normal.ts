@@ -849,6 +849,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: !shouldMakeMistake() };
         case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
         case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
+        // Generic optional effect prompt for custom protocols - Normal AI accepts sometimes
+        case 'prompt_optional_effect': return { type: 'resolveOptionalEffectPrompt', accept: !shouldMakeMistake() };
 
         case 'select_card_from_other_lanes_to_delete': {
             const { disallowedLaneIndex, lanesSelected } = action;

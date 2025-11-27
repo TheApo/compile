@@ -102,7 +102,8 @@ export function executeCustomEffect(
                     }
                 };
 
-                newState = log(newState, actor, `[Refresh] Drew ${drawnCards.length} cards to reach hand size 5.`);
+                const cardNamesRefresh = drawnCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+                newState = log(newState, actor, `[Refresh] Drew ${drawnCards.length} cards to reach hand size 5 (${cardNamesRefresh}).`);
 
                 // CRITICAL: Trigger reactive effects after draw (Spirit-3)
                 const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: actor, count: drawnCards.length });
@@ -155,7 +156,8 @@ export function executeCustomEffect(
 
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
-                    newState = log(newState, actor, `${actorName} drew ${drawnCards.length} card(s) from ${opponentName}'s deck.`);
+                    const cardNamesActor = newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+                    newState = log(newState, actor, `${actorName} drew ${drawnCards.length} card(s) from ${opponentName}'s deck (${cardNamesActor}).`);
                 }
             }
 
@@ -189,7 +191,8 @@ export function executeCustomEffect(
 
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
-                    newState = log(newState, opponent, `${opponentName} drew ${drawnCards.length} card(s) from ${actorName}'s deck.`);
+                    const cardNamesOpponent = newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+                    newState = log(newState, opponent, `${opponentName} drew ${drawnCards.length} card(s) from ${actorName}'s deck (${cardNamesOpponent}).`);
                 }
             }
 
@@ -378,7 +381,7 @@ function executeDrawEffect(
         }
 
         // Jump to draw execution
-        const { drawnCards, remainingDeck } = drawCardsUtil(
+        const { drawnCards, remainingDeck, newCards } = drawCardsUtil(
             state[drawingPlayer].deck,
             state[drawingPlayer].hand,
             count
@@ -407,7 +410,10 @@ function executeDrawEffect(
             default:
                 reasonText = '';
         }
-        newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${reasonText}.`);
+        // Format the drawn card names for log
+        const drawnCardNames = newCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+        const drawnCardsText = newCards.length > 0 ? ` (${drawnCardNames})` : '';
+        newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${reasonText}${drawnCardsText}.`);
 
         // CRITICAL: Trigger reactive effects after draw (Spirit-3)
         if (count > 0) {
@@ -542,21 +548,41 @@ function executeDrawEffect(
         return { newState };
     }
 
+    // NEW: Handle source = 'opponent_deck' (Love-1: "Draw the top card of your opponent's deck")
+    const source = params.source || 'own_deck';
+    const sourcePlayer = source === 'opponent_deck' ? context.opponent : drawingPlayer;
+
     // Simple draw without conditionals for now
-    const { drawnCards, remainingDeck } = drawCardsUtil(
-        newState[drawingPlayer].deck,
+    const { drawnCards, remainingDeck, newCards } = drawCardsUtil(
+        newState[sourcePlayer].deck,
         newState[drawingPlayer].hand,
         count
     );
 
+    // Update the source player's deck (might be opponent's deck!)
+    newState[sourcePlayer] = {
+        ...newState[sourcePlayer],
+        deck: remainingDeck,
+    };
+
+    // Update the drawing player's hand
     newState[drawingPlayer] = {
         ...newState[drawingPlayer],
-        deck: remainingDeck,
         hand: drawnCards,
     };
 
     const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
-    newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}.`);
+
+    // Format the drawn card names for log
+    const drawnCardNames = newCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+    const drawnCardsText = newCards.length > 0 ? ` (${drawnCardNames})` : '';
+
+    if (source === 'opponent_deck') {
+        const opponentName = sourcePlayer === 'player' ? "Player's" : "Opponent's";
+        newState = log(newState, drawingPlayer, `${playerName} draws the top ${count === 1 ? 'card' : `${count} cards`} of ${opponentName} deck${drawnCardsText}.`);
+    } else {
+        newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${drawnCardsText}.`);
+    }
 
     // CRITICAL: Trigger reactive effects after draw (Spirit-3)
     if (drawnCards.length > 0) {
@@ -2416,6 +2442,12 @@ function executeRevealGiveEffect(
 
 /**
  * Execute TAKE effect
+ * Love-3: "Take 1 random card from your opponent's hand."
+ *
+ * Parameters:
+ * - count: number of cards to take (default 1)
+ * - random: if true (default), takes random card(s) immediately without user selection
+ *           if false, requires user to select which card(s) to take (NOT YET IMPLEMENTED)
  */
 function executeTakeEffect(
     card: PlayedCard,
@@ -2434,17 +2466,62 @@ function executeTakeEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom Take effect - taking ${count} card(s) from opponent's hand]`);
+    let newState = { ...state };
+    const opponentState = { ...newState[opponent] };
+    const cardOwnerState = { ...newState[cardOwner] };
 
-    // Set actionRequired for player to take cards
-    newState.actionRequired = {
-        type: random ? 'take_random_from_opponent_hand' : 'take_from_opponent_hand',
-        count,
-        sourceCardId: card.id,
-        actor: cardOwner,
-    } as any;
+    if (random) {
+        // Random take - execute immediately (like original Love-3)
+        const actualCount = Math.min(count, opponentState.hand.length);
+        const takenCards: any[] = [];
 
-    return { newState };
+        for (let i = 0; i < actualCount; i++) {
+            const randomIndex = Math.floor(Math.random() * opponentState.hand.length);
+            const takenCard = opponentState.hand.splice(randomIndex, 1)[0];
+            cardOwnerState.hand.push(takenCard);
+            takenCards.push(takenCard);
+        }
+
+        newState = {
+            ...newState,
+            [cardOwner]: cardOwnerState,
+            [opponent]: opponentState,
+        };
+
+        const actorName = cardOwner === 'player' ? 'Player' : 'Opponent';
+        const cardName = `${card.protocol}-${card.value}`;
+
+        // Log taken cards - only reveal to player if they took the card
+        const takenCardNames = takenCards.map(c =>
+            cardOwner === 'player' ? `${c.protocol}-${c.value}` : 'a card'
+        ).join(', ');
+
+        newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardNames} from the opponent's hand.`);
+
+        return { newState };
+    } else {
+        // Non-random take - requires user selection (future feature)
+        // For now, fall back to random behavior
+        console.warn('[Take Effect] Non-random take not yet implemented, falling back to random');
+
+        const randomIndex = Math.floor(Math.random() * opponentState.hand.length);
+        const takenCard = opponentState.hand.splice(randomIndex, 1)[0];
+        cardOwnerState.hand.push(takenCard);
+
+        newState = {
+            ...newState,
+            [cardOwner]: cardOwnerState,
+            [opponent]: opponentState,
+        };
+
+        const actorName = cardOwner === 'player' ? 'Player' : 'Opponent';
+        const cardName = `${card.protocol}-${card.value}`;
+        const takenCardName = cardOwner === 'player' ? `${takenCard.protocol}-${takenCard.value}` : 'a card';
+
+        newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardName} from the opponent's hand.`);
+
+        return { newState };
+    }
 }
 
 /**
@@ -2556,7 +2633,7 @@ function drawCardsUtil(
     deck: any[],
     hand: any[],
     count: number
-): { drawnCards: any[]; remainingDeck: any[] } {
+): { drawnCards: any[]; remainingDeck: any[]; newCards: any[] } {
     const actualDrawCount = Math.min(count, deck.length);
     // Convert deck cards to PlayedCard objects with unique IDs
     const newCards = deck.slice(0, actualDrawCount).map(c => ({
@@ -2566,6 +2643,6 @@ function drawCardsUtil(
     }));
     const drawnCards = [...hand, ...newCards];
     const remainingDeck = deck.slice(actualDrawCount);
-    return { drawnCards, remainingDeck };
+    return { drawnCards, remainingDeck, newCards };
 }
 
