@@ -242,6 +242,16 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
         console.log('[DEBUG resolveOptionalEffectPrompt] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null');
 
+        // CRITICAL: Check if effect was skipped due to no valid targets
+        const effectWasSkipped = (result.newState as any)._effectSkippedNoTargets;
+        if (effectWasSkipped) {
+            console.log('[DEBUG resolveOptionalEffectPrompt] Effect was skipped (no valid targets), NOT executing if_executed followUp');
+            // Clean up the marker
+            const cleanedState = { ...result.newState };
+            delete (cleanedState as any)._effectSkippedNoTargets;
+            return cleanedState;
+        }
+
         // CRITICAL: Handle conditional follow-up effects (if_executed)
         if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
             console.log('[DEBUG resolveOptionalEffectPrompt] Has if_executed followUp:', effectDef.conditional.thenEffect.id);

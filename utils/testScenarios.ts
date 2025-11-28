@@ -2641,6 +2641,113 @@ export const scenario49_PsychicCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 50: Gravity-2 AI Single Card Bug Test
+ *
+ * Setup:
+ * - Opponent (AI) hat Gravity-2 in Hand + Death-1
+ * - Player hat eine face-up Karte auf Lane 1 (für Flip-Target)
+ * - Opponent's Turn, Action Phase
+ *
+ * Test: AI spielt Gravity-2 → flippt Player's Karte → shiftet diese Karte → Turn endet
+ * Erwartet:
+ *   1. AI spielt Gravity-2 (EINE Karte)
+ *   2. AI flippt Player's Karte (z.B. Hate-4)
+ *   3. AI shiftet die geflippte Karte zur Gravity Lane
+ *   4. Turn endet → Player ist dran
+ *   5. AI spielt NICHT Death-1 oder andere Karte!
+ *
+ * Bug (VORHER): AI spielte 2 Karten (Gravity-2 + Death-1) weil queuedActions nicht verarbeitet wurde
+ * Fix (NACHHER): queuedActions wird vor dem Turn-Ende verarbeitet
+ */
+export const scenario50_Gravity2SingleCardBug: TestScenario = {
+    name: "🐛 Gravity-2 AI Single Card Bug",
+    description: "AI spielt Gravity-2 → Flip → Shift → Turn endet (NUR 1 Karte!)",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Hate', 'Fire', 'Water'],
+            ['Gravity', 'Death', 'Metal'],
+            'opponent',
+            'action'
+        );
+
+        // Opponent (AI): Gravity-2 + Death-1 in Hand
+        // Bug: AI spielte BEIDE Karten in einem Zug!
+        newState.opponent.hand = [
+            createCard('Gravity', 2, true),
+            createCard('Death', 1, true),
+            createCard('Metal', 3, true),
+        ];
+
+        // Player: Face-up Karte auf Lane 1 (Flip-Target für Gravity-2)
+        newState = placeCard(newState, 'player', 1, createCard('Hate', 5, true));
+        newState = placeCard(newState, 'player', 1, createCard('Hate', 4, true));
+
+        // Mehr Player-Karten für realistisches Setup
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 3, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 51: Speed-3 End-Effekt Softlock Test
+ *
+ * Setup:
+ * - Opponent's Turn, End Phase
+ * - Opponent hat NUR Speed-3 als uncovered Karte (keine anderen eigenen uncovered Karten)
+ * - Speed-3 hat Bottom-Effekt: "End: You may shift 1 of your uncovered cards. If you do, flip this card."
+ *
+ * Test:
+ * 1. End Phase beginnt
+ * 2. Speed-3 End-Effekt triggert: "prompt_optional_effect" für Shift
+ * 3. AI akzeptiert den optionalen Shift
+ * 4. Speed-3 sollte sich SELBST als gültiges Target finden (kein excludeSelf im End-Effekt!)
+ * 5. AI wählt Speed-3 zum Shiften
+ * 6. Nach dem Shift: Speed-3 flippt sich selbst (if_executed)
+ *
+ * Bug vorher: AI akzeptierte den Effekt, aber fand keine gültigen Targets → Softlock
+ * Erwartet: Speed-3 kann sich selbst shiften
+ */
+export const scenario51_Speed3EndEffectSoftlock: TestScenario = {
+    name: "Speed-3 End-Effekt Softlock Test",
+    description: "Speed-3 als einzige uncovered Karte sollte sich selbst im End-Effekt shiften können",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Death'],      // Player protocols
+            ['Speed', 'Gravity', 'Light'],   // Opponent protocols - Speed ist wichtig!
+            'opponent',
+            'end'  // End Phase - hier triggert Speed-3's Bottom-Effekt
+        );
+
+        // Player: Ein paar Karten damit das Spiel realistisch aussieht
+        newState.player.hand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 2, true),
+            createCard('Death', 0, true),
+        ];
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 1, true));
+
+        // Opponent: NUR Speed-3 als uncovered Karte!
+        // Das ist der kritische Fall - Speed-3 muss sich selbst shiften können
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, true));
+
+        // Opponent braucht auch Karten in der Hand
+        newState.opponent.hand = [
+            createCard('Gravity', 1, true),
+            createCard('Light', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2691,4 +2798,6 @@ export const allScenarios: TestScenario[] = [
     scenario47_PlagueCustomPlayground,
     scenario48_LoveCustomPlayground,
     scenario49_PsychicCustomPlayground,
+    scenario50_Gravity2SingleCardBug,
+    scenario51_Speed3EndEffectSoftlock,
 ];

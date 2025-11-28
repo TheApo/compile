@@ -308,3 +308,21 @@ export function shouldIgnoreMiddleCommand(state: GameState, laneIndex: number): 
         return rule.scope === 'global' || ruleLaneIndex === laneIndex;
     });
 }
+
+/**
+ * Check if any Frost-1 (block_flips) is active globally
+ * Legacy helper for code that needs a simple boolean check
+ */
+export function isFrost1Active(state: GameState): boolean {
+    const rules = getActivePassiveRules(state);
+    return rules.some(({ rule }) => rule.type === 'block_flips' && rule.scope === 'global');
+}
+
+/**
+ * Check if Frost-1 bottom effect (block_protocol_rearrange) is active
+ * Legacy helper for code that needs a simple boolean check
+ */
+export function isFrost1BottomActive(state: GameState): boolean {
+    const rules = getActivePassiveRules(state);
+    return rules.some(({ rule }) => rule.type === 'block_protocol_rearrange');
+}

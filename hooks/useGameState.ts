@@ -16,7 +16,7 @@ import { log } from '../logic/utils/log';
 import { buildDeck, shuffleDeck } from '../utils/gameLogic';
 import { handleUncoverEffect } from '../logic/game/helpers/actionUtils';
 import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
-import { checkForHate3Trigger } from '../logic/effects/hate/Hate-3';
+// NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
 export const useGameState = (
     playerProtocols: string[],
@@ -1062,7 +1062,7 @@ export const useGameState = (
                 isProcessingAIRef.current = false;
             };
         }
-    }, [gameState.turn, gameState.winner, gameState.animationState, gameState._interruptedTurn, difficulty, onEndGame, processAnimationQueue, gameState.actionRequired]);
+    }, [gameState.turn, gameState.phase, gameState.winner, gameState.animationState, gameState._interruptedTurn, difficulty, onEndGame, processAnimationQueue, gameState.actionRequired]);
 
     // Hook 2: Opponent Action During Player Turn (Higher priority - shorter timeout)
     useEffect(() => {

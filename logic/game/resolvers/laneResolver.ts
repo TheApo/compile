@@ -10,10 +10,8 @@ import { log, decreaseLogIndent } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
 import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
-import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
-import { effectRegistryOnCover } from '../../effects/effectRegistryOnCover';
+// NOTE: Old hardcoded effects removed - all protocols now use custom effects
 import { executeOnCoverEffect } from '../../effectExecutor';
-import { handleAnarchyConditionalDraw } from '../../effects/anarchy/Anarchy-0';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
@@ -300,21 +298,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             finalState = findAndFlipCards(new Set([speed3CardId]), finalState);
                             finalState.animationState = { type: 'flipCard', cardId: speed3CardId };
                         }
-                        // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
-                        // CRITICAL: Only execute if Anarchy-0 is still uncovered AND face-up
-                        const sourceCard = findCardOnBoard(finalState, sourceCardId);
-                        if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0 && sourceCard.card.isFaceUp) {
-                            const anarchyLane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                            const isStillUncovered = anarchyLane && anarchyLane.length > 0 && anarchyLane[anarchyLane.length - 1].id === sourceCardId;
+                        // NOTE: Anarchy-0 conditional draw is now handled via custom protocol pending effects
 
-                            if (isStillUncovered) {
-                                finalState = handleAnarchyConditionalDraw(finalState, actor);
-                            } else {
-                                finalState = log(finalState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
-                            }
-                        }
-
-                        // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0)
+                        // Execute pending effects from custom cards (e.g., Anarchy_custom-0)
                         const pendingEffects = (finalState as any)._pendingCustomEffects;
                         if (pendingEffects) {
                             console.log(`[laneResolver] Executing ${pendingEffects.effects.length} pending effects after shift`);
@@ -471,18 +457,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     }
 
                     // Anarchy-0: After shift is resolved, check for non-matching protocols and draw
-                    // CRITICAL: Only execute if Anarchy-0 is still uncovered AND face-up
-                    const sourceCard = findCardOnBoard(newState, sourceCardId);
-                    if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0 && sourceCard.card.isFaceUp) {
-                        const anarchyLane = newState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                        const isStillUncovered = anarchyLane && anarchyLane.length > 0 && anarchyLane[anarchyLane.length - 1].id === sourceCardId;
+                    // NOTE: Anarchy-0 conditional draw is now handled via custom protocol pending effects
 
-                        if (isStillUncovered) {
-                            newState = handleAnarchyConditionalDraw(newState, actor);
-                        } else {
-                            newState = log(newState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
-                        }
-                    }
                     // CRITICAL FIX: Decrease log indent and clear actionRequired after completing follow-up effects
                     // Without this, the game would softlock with the old 'select_card_to_shift' action still active
                     // Decrease indent if this shift was triggered by an effect (has sourceCardId)
@@ -731,9 +707,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
                         let stateAfterDelete = s;
-                        for (let i = 0; i < cardsToDelete.length; i++) {
-                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
-                        }
+                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
 
@@ -866,15 +840,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     }
                 }
 
-                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers (like Hate-3) after the animations have finished.
+                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers after the animations have finished.
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
                         let stateAfterDelete = s;
-                        for (let i = 0; i < cardsToDelete.length; i++) {
-                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
-                        }
-                        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
 
@@ -942,10 +913,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
                         let stateAfterDelete = s;
-                        for (let i = 0; i < cardsToDelete.length; i++) {
-                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
-                        }
-                        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
 
@@ -1002,9 +970,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
                         let stateAfterDelete = s;
-                        for (let i = 0; i < cardsToDelete.length; i++) {
-                            stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor);
-                        }
+                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
                         return endTurnCb(stateAfterDelete);

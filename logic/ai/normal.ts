@@ -13,7 +13,7 @@ import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../t
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
-import { isFrost1Active } from '../effects/common/frost1Check';
+import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
     canPlayCard,
     hasAnyProtocolPlayRule,
@@ -1478,6 +1478,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const validTargets: PlayedCard[] = [];
 
+            console.log('[AI select_card_to_shift] targetFilter:', JSON.stringify(targetFilter), 'cardOwner:', cardOwner);
+
             for (const playerKey of ['player', 'opponent'] as const) {
                 // CRITICAL: owner filter is relative to cardOwner, NOT hardcoded to 'opponent'
                 // 'own' = cards belonging to cardOwner
@@ -1510,10 +1512,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 }
             }
 
+            console.log('[AI select_card_to_shift] Found validTargets:', validTargets.length, validTargets.map(c => `${c.protocol}-${c.value}`));
+
             if (validTargets.length > 0) {
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
+                console.log('[AI select_card_to_shift] Selecting:', `${randomTarget.protocol}-${randomTarget.value}`);
                 return { type: 'deleteCard', cardId: randomTarget.id };
             }
+            console.log('[AI select_card_to_shift] No valid targets, returning skip');
             return { type: 'skip' };
         }
 
@@ -1725,6 +1731,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         // Fallback for other actions - use simple random/first selection
         default: {
+            console.log('[AI DEFAULT] Unhandled action type:', action.type, 'optional:', (action as any).optional);
             // Generic handlers for unimplemented actions
             if ('optional' in action && action.optional) return { type: 'skip' };
 

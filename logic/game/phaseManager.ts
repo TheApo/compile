@@ -9,7 +9,7 @@ import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManag
 import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase, decreaseLogIndent } from '../utils/log';
-import { handleAnarchyConditionalDraw } from '../effects/anarchy/Anarchy-0';
+// NOTE: handleAnarchyConditionalDraw removed - old Anarchy-0 code is no longer used, custom protocol handles this
 import { getActivePassiveRules } from './passiveRuleChecker';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 
@@ -336,21 +336,13 @@ export const processQueuedActions = (state: GameState): GameState => {
         }
 
         if (nextAction.type === 'anarchy_0_conditional_draw') {
-            const { sourceCardId, actor } = nextAction as { type: 'anarchy_0_conditional_draw', sourceCardId: string, actor: Player };
-            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-
-            // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
-                mutableState = handleAnarchyConditionalDraw(mutableState, actor);
-                // Decrease log indent after queued effect completes (was increased when effect started)
-                mutableState = decreaseLogIndent(mutableState);
-            } else {
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
-                mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
-                // Decrease log indent even when cancelled (was increased when effect started)
-                mutableState = decreaseLogIndent(mutableState);
-            }
-            continue; // Action resolved (or cancelled), move to next in queue
+            // NOTE: This is DEAD CODE - old Anarchy-0 (protocol === 'Anarchy') no longer exists
+            // Custom protocol Anarchy_custom handles its conditional draw via effectInterpreter
+            // Keeping for backwards compatibility with any saved game states
+            const { actor } = nextAction as { type: 'anarchy_0_conditional_draw', actor: Player };
+            mutableState = log(mutableState, actor, `Legacy anarchy_0_conditional_draw triggered - this should not happen with custom protocols.`);
+            mutableState = decreaseLogIndent(mutableState);
+            continue;
         }
 
         if (nextAction.type === 'execute_remaining_custom_effects') {
@@ -787,21 +779,12 @@ export const processEndOfAction = (state: GameState): GameState => {
             }
 
             if (nextAction.type === 'anarchy_0_conditional_draw') {
-                const { sourceCardId, actor } = nextAction as { type: 'anarchy_0_conditional_draw', sourceCardId: string, actor: Player };
-                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-
-                // CRITICAL: Only execute if Anarchy-0 is still on the board and face-up
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp) {
-                    mutableState = handleAnarchyConditionalDraw(mutableState, actor);
-                    // Decrease log indent after queued effect completes (was increased when effect started)
-                    mutableState = decreaseLogIndent(mutableState);
-                } else {
-                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Anarchy-0';
-                    mutableState = log(mutableState, actor, `The conditional draw from ${cardName} was cancelled because the source is no longer active.`);
-                    // Decrease log indent even when cancelled (was increased when effect started)
-                    mutableState = decreaseLogIndent(mutableState);
-                }
-                continue; // Action resolved (or cancelled), move to next in queue
+                // NOTE: This is DEAD CODE - old Anarchy-0 (protocol === 'Anarchy') no longer exists
+                // Custom protocol Anarchy_custom handles its conditional draw via effectInterpreter
+                const { actor } = nextAction as { type: 'anarchy_0_conditional_draw', actor: Player };
+                mutableState = log(mutableState, actor, `Legacy anarchy_0_conditional_draw triggered - this should not happen with custom protocols.`);
+                mutableState = decreaseLogIndent(mutableState);
+                continue;
             }
 
             if (nextAction.type === 'speed_3_self_flip_after_shift') {
@@ -969,16 +952,19 @@ export const continueTurnProgression = (state: GameState): GameState => {
 };
 
 export const continueTurnAfterStartPhaseAction = (state: GameState): GameState => {
+    console.log('[continueTurnAfterStartPhaseAction] Called with phase:', state.phase, 'turn:', state.turn);
     // The previous action has been resolved, clear it.
     let stateAfterAction = { ...state, actionRequired: null };
 
     // Now, re-evaluate the start phase to see if there are other start effects to process.
     // The `processedStartEffectIds` will prevent the same effect from running again.
     const stateAfterRecheck = executeStartPhaseEffects(stateAfterAction).newState;
+    console.log('[continueTurnAfterStartPhaseAction] After executeStartPhaseEffects, actionRequired:', stateAfterRecheck.actionRequired?.type);
 
     // If re-checking triggered another prompt (e.g., a second start-phase card),
     // then return the state immediately and wait for the new action.
     if (stateAfterRecheck.actionRequired) {
+        console.log('[continueTurnAfterStartPhaseAction] Returning early due to actionRequired');
         return stateAfterRecheck;
     }
 
@@ -988,11 +974,14 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     if (nextState.phase !== 'control') {
         nextState = { ...nextState, phase: 'control' };
     }
+    console.log('[continueTurnAfterStartPhaseAction] Phase set to control, advancing...');
 
     nextState = advancePhase(nextState); // -> compile
+    console.log('[continueTurnAfterStartPhaseAction] After first advancePhase, phase:', nextState.phase, 'actionRequired:', nextState.actionRequired?.type);
     if(nextState.actionRequired) return nextState;
 
     nextState = advancePhase(nextState); // -> action OR stays in compile if compilableLanes > 0
+    console.log('[continueTurnAfterStartPhaseAction] After second advancePhase, phase:', nextState.phase, 'turn:', nextState.turn);
     return nextState;
 };
 

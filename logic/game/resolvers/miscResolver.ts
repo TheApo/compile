@@ -7,7 +7,7 @@ import { GameState, Player, PlayedCard, AnimationRequest } from '../../../types'
 import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
-import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
+// NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
 // FIX: Import internal helpers to be used by new functions.
 import { findCardOnBoard, internalReturnCard, internalResolveTargetedFlip } from '../helpers/actionUtils';
 import { performFillHand } from './playResolver';
@@ -187,9 +187,7 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
 
     const totalDeleted = compilerDeletedCards.length + nonCompilerDeletedCards.length;
     if (totalDeleted > 0) {
-        newState = checkForHate3Trigger(newState, compiler);
-
-        // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
+        // Trigger reactive effects after delete (Hate-3 custom protocol)
         const reactiveResult = processReactiveEffects(newState, 'after_delete', { player: compiler });
         newState = reactiveResult.newState;
     }

@@ -7,7 +7,7 @@ import { GameState, ActionRequired, AIAction, Player, PlayedCard } from '../../t
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { shuffleDeck } from '../../utils/gameLogic';
 import { handleControlRearrange } from './controlMechanicLogic';
-import { isFrost1Active } from '../effects/common/frost1Check';
+import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
     canPlayCard,
     hasAnyProtocolPlayRule,

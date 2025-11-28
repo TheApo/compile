@@ -208,8 +208,24 @@ const handleRequiredAction = (
     const action = state.actionRequired!; // Action is guaranteed to exist here
     
     if (aiDecision.type === 'skip') {
+        console.log('[AI SKIP] Skipping action, phase:', state.phase, 'turn:', state.turn);
         const newState = actions.skipAction(state);
-        return state.phase === 'start' ? phaseManager.continueTurnAfterStartPhaseAction(newState) : phaseManager.processEndOfAction(newState);
+        const stateAfterSkip = state.phase === 'start' ? phaseManager.continueTurnAfterStartPhaseAction(newState) : phaseManager.processEndOfAction(newState);
+        console.log('[AI SKIP] After skip processing, phase:', stateAfterSkip.phase, 'turn:', stateAfterSkip.turn, 'actionRequired:', stateAfterSkip.actionRequired?.type);
+
+        // CRITICAL FIX: After skipping a start-phase action, the turn should continue!
+        // If there's no actionRequired and it's still opponent's turn, we need to continue processing.
+        // Schedule a recursive call to runOpponentTurn to handle the next phase (action/compile).
+        if (!stateAfterSkip.actionRequired && stateAfterSkip.turn === 'opponent' && !stateAfterSkip.winner) {
+            console.log('[AI SKIP] Scheduling runOpponentTurn continuation in 500ms');
+            setTimeout(() => {
+                console.log('[AI SKIP] Running scheduled runOpponentTurn');
+                runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+            }, 500);
+        } else {
+            console.log('[AI SKIP] NOT scheduling continuation - actionRequired:', !!stateAfterSkip.actionRequired, 'turn:', stateAfterSkip.turn, 'winner:', !!stateAfterSkip.winner);
+        }
+        return stateAfterSkip;
     }
 
     if (aiDecision.type === 'resolveControlMechanicPrompt' && action.type === 'prompt_use_control_mechanic') {
@@ -260,7 +276,15 @@ const handleRequiredAction = (
     if (aiDecision.type === 'resolveDeath1Prompt' && action.type === 'prompt_death_1_effect') {
         const nextState = actions.resolveDeath1Prompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // Accepted, now needs to select card
-        return phaseManager.continueTurnAfterStartPhaseAction(nextState); // Skipped, continue turn
+        // Skipped, continue turn
+        const stateAfterSkip = phaseManager.continueTurnAfterStartPhaseAction(nextState);
+        // CRITICAL FIX: Schedule continuation of opponent's turn after skipping
+        if (!stateAfterSkip.actionRequired && stateAfterSkip.turn === 'opponent' && !stateAfterSkip.winner) {
+            setTimeout(() => {
+                runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+            }, 500);
+        }
+        return stateAfterSkip;
     }
     
     if (aiDecision.type === 'resolveLove1Prompt' && action.type === 'prompt_give_card_for_love_1') {
@@ -294,8 +318,22 @@ const handleRequiredAction = (
 
     // GENERIC: Handle ALL optional effect prompts
     if (aiDecision.type === 'resolveOptionalEffectPrompt') {
+        console.log('[AI resolveOptionalEffectPrompt] accept:', aiDecision.accept, 'phase:', state.phase);
         const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action created, re-run processor
+
+        // CRITICAL FIX: For start phase, use continueTurnAfterStartPhaseAction and schedule continuation
+        if (state.phase === 'start') {
+            console.log('[AI resolveOptionalEffectPrompt] Start phase - using continueTurnAfterStartPhaseAction');
+            const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(nextState);
+            if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
+                console.log('[AI resolveOptionalEffectPrompt] Scheduling runOpponentTurn continuation');
+                setTimeout(() => {
+                    runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                }, 500);
+            }
+            return stateAfterAction;
+        }
         return phaseManager.processEndOfAction(nextState); // Skipped or completed
     }
 
@@ -314,7 +352,14 @@ const handleRequiredAction = (
     if (aiDecision.type === 'resolveSpirit1Prompt' && action.type === 'prompt_spirit_1_start') {
         const nextState = actions.resolveSpirit1Prompt(state, aiDecision.choice);
         if(nextState.actionRequired) return nextState;
-        return phaseManager.continueTurnAfterStartPhaseAction(nextState);
+        const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(nextState);
+        // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
+        if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
+            setTimeout(() => {
+                runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+            }, 500);
+        }
+        return stateAfterAction;
     }
 
     if (aiDecision.type === 'resolveSpirit3Prompt' && action.type === 'prompt_shift_for_spirit_3') {
@@ -374,9 +419,16 @@ const handleRequiredAction = (
             const { animationRequests, onCompleteCallback } = requiresAnimation;
             processAnimationQueue(animationRequests, () => {
                 setGameState(s => onCompleteCallback(s, (finalState) => {
-                    return state.phase === 'start' 
+                    const stateAfterAction = state.phase === 'start'
                         ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
                         : phaseManager.processEndOfAction(finalState);
+                    // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
+                    if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
+                        setTimeout(() => {
+                            runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                        }, 500);
+                    }
+                    return stateAfterAction;
                 }));
             });
             return nextState;
@@ -390,12 +442,29 @@ const handleRequiredAction = (
             const { animationRequests, onCompleteCallback } = requiresAnimation;
             processAnimationQueue(animationRequests, () => {
                 setGameState(s => onCompleteCallback(s, (finalState) => {
+                    // CRITICAL FIX: Check for queuedActions BEFORE checking actionRequired
+                    // Otherwise Gravity-2's shift gets skipped and AI plays another card
+                    if (finalState.queuedActions && finalState.queuedActions.length > 0) {
+                        const stateAfterQueue = phaseManager.processEndOfAction(finalState);
+                        if (stateAfterQueue.actionRequired) {
+                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                            return stateAfterQueue;
+                        }
+                        return stateAfterQueue;
+                    }
                     if (finalState.actionRequired) {
                         runOpponentTurn(finalState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                         return finalState;
                     }
                     if (finalState.phase === 'start') {
-                        return phaseManager.continueTurnAfterStartPhaseAction(finalState);
+                        const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(finalState);
+                        // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
+                        if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
+                            setTimeout(() => {
+                                runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                            }, 500);
+                        }
+                        return stateAfterAction;
                     } else {
                         return phaseManager.processEndOfAction(finalState);
                     }
@@ -407,7 +476,13 @@ const handleRequiredAction = (
         if (requiresTurnEnd) {
             return phaseManager.processEndOfAction(nextState);
         } else {
-            return nextState; // Action has a follow up, re-run manager
+            // CRITICAL FIX: If there are queuedActions (e.g., Gravity-2 shift after flip),
+            // we MUST process them via processEndOfAction. Otherwise the turn continues
+            // without executing the queued effects, causing the AI to play another card!
+            if (nextState.queuedActions && nextState.queuedActions.length > 0) {
+                return phaseManager.processEndOfAction(nextState);
+            }
+            return nextState; // Action has a follow up actionRequired, re-run manager
         }
     }
 
@@ -479,8 +554,11 @@ export const runOpponentTurn = (
     phaseManager: PhaseManager,
     trackPlayerRearrange?: TrackPlayerRearrange
 ) => {
+    console.log('[runOpponentTurn] Called with currentGameState phase:', currentGameState.phase, 'turn:', currentGameState.turn);
     setGameState(currentState => {
+        console.log('[runOpponentTurn] Inside setGameState, currentState phase:', currentState.phase, 'turn:', currentState.turn, 'actionRequired:', currentState.actionRequired?.type);
         if (currentState.turn !== 'opponent' || currentState.winner || currentState.animationState) {
+            console.log('[runOpponentTurn] Early return - turn:', currentState.turn, 'winner:', !!currentState.winner, 'animationState:', !!currentState.animationState);
             return currentState;
         }
 
@@ -610,6 +688,15 @@ export const runOpponentTurn = (
                 
                             const onAllAnimsComplete = () => {
                                 setGameState(s_after_all_anims => {
+                                    // CRITICAL FIX: Process queuedActions before checking actionRequired
+                                    // This ensures multi-effect cards (like Gravity-2) complete all effects
+                                    if (s_after_all_anims.queuedActions && s_after_all_anims.queuedActions.length > 0) {
+                                        const stateAfterQueue = phaseManager.processEndOfAction(s_after_all_anims);
+                                        if (stateAfterQueue.actionRequired) {
+                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                        }
+                                        return stateAfterQueue;
+                                    }
                                     if (s_after_all_anims.actionRequired) {
                                         runOpponentTurn(s_after_all_anims, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                     } else {
@@ -618,11 +705,19 @@ export const runOpponentTurn = (
                                     return s_after_all_anims;
                                 });
                             };
-                
+
                             if (onPlayAnims && onPlayAnims.length > 0) {
                                 processAnimationQueue(onPlayAnims, onAllAnimsComplete);
-                                return stateAfterOnPlayLogic; 
+                                return stateAfterOnPlayLogic;
                             } else {
+                                // CRITICAL FIX: Process queuedActions before checking actionRequired
+                                if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
+                                    const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
+                                    if (stateAfterQueue.actionRequired) {
+                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                    }
+                                    return stateAfterQueue;
+                                }
                                 if (stateAfterOnPlayLogic.actionRequired) {
                                     runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                 } else {

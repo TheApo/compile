@@ -18,7 +18,7 @@ import {
 } from "../../types/customProtocol";
 import { drawForPlayer, drawFromOpponentDeck, refreshHandForPlayer } from "../../utils/gameStateModifiers";
 import { log } from "../utils/log";
-import { isFrost1Active, isFrost1BottomActive } from "../effects/common/frost1Check";
+import { isFrost1Active, isFrost1BottomActive } from "../game/passiveRuleChecker";
 
 /**
  * Effect Generator - Converts custom effect definitions into executable effect functions

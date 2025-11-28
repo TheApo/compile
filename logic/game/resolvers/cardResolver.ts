@@ -7,7 +7,7 @@ import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, Effect
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
-import { checkForHate3Trigger } from '../../effects/hate/Hate-3';
+// NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
 import { getEffectiveCardValue } from '../stateManager';
 import * as phaseManager from '../phaseManager';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
@@ -80,11 +80,9 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const hadCardBelow = lane && lane.length > 1;
 
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
-            let stateAfterTriggers = checkForHate3Trigger(s, s.turn);
-
-            // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-            const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: s.turn });
-            stateAfterTriggers = reactiveResult.newState;
+            // Trigger reactive effects after delete (Hate-3 custom protocol)
+            const reactiveResult = processReactiveEffects(s, 'after_delete', { player: s.turn });
+            let stateAfterTriggers = reactiveResult.newState;
 
             // CRITICAL: Handle uncover effect if Metal-6 was top card and there was a card below
             if (wasTopCard && hadCardBelow) {
@@ -605,12 +603,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     { type: 'delete', cardId: sourceCardId, owner: sourceCardInfo.owner }
                 ],
                 onCompleteCallback: (s, endTurnCb) => {
-                    let stateAfterDelete = checkForHate3Trigger(s, actor); // Trigger for target
-                    stateAfterDelete = checkForHate3Trigger(stateAfterDelete, actor); // Trigger for self-delete
-
-                    // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
-                    stateAfterDelete = reactiveResult.newState;
+                    // Trigger reactive effects after delete (Hate-3 custom protocol)
+                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
+                    let stateAfterDelete = reactiveResult.newState;
 
                     // --- Uncover Logic Execution ---
                     if (targetWasTopCard) {
@@ -778,12 +773,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                     console.log('[DELETE CALLBACK] Started! followUpEffect?', !!(originalAction as any).followUpEffect);
 
-                    // 1. Apply post-animation triggers
-                    let stateAfterTriggers = checkForHate3Trigger(s, deletingPlayer);
-
-                    // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: deletingPlayer });
-                    stateAfterTriggers = reactiveResult.newState;
+                    // Trigger reactive effects after delete (Hate-3 custom protocol)
+                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: deletingPlayer });
+                    let stateAfterTriggers = reactiveResult.newState;
 
                     // CRITICAL: Queue pending custom effects after delete completes (Hate-1: multiple deletes)
                     stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
@@ -1069,11 +1061,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
-                    let stateWithTriggers = checkForHate3Trigger(s, actor);
-
-                    // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(stateWithTriggers, 'after_delete', { player: actor });
-                    stateWithTriggers = reactiveResult.newState;
+                    // Trigger reactive effects after delete (Hate-3 custom protocol)
+                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
+                    let stateWithTriggers = reactiveResult.newState;
 
                     if (wasTopCard) {
                         const uncoverResult = handleUncoverEffect(stateWithTriggers, cardInfo.owner, laneIndex);
@@ -1138,11 +1128,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
-                    let stateAfterTriggers = checkForHate3Trigger(s, actor);
-
-                    // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: actor });
-                    stateAfterTriggers = reactiveResult.newState;
+                    // Trigger reactive effects after delete (Hate-3 custom protocol)
+                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
+                    let stateAfterTriggers = reactiveResult.newState;
 
                     // Handle uncovering
                     if (wasTopCard) {
@@ -1225,11 +1213,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
-                    let stateAfterTriggers = checkForHate3Trigger(s, actor);
-
-                    // NEW: Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(stateAfterTriggers, 'after_delete', { player: actor });
-                    stateAfterTriggers = reactiveResult.newState;
+                    // Trigger reactive effects after delete (Hate-3 custom protocol)
+                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
+                    let stateAfterTriggers = reactiveResult.newState;
 
                     // Handle uncovering
                     if (wasTopCard) {

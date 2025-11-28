@@ -9,7 +9,8 @@ import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../t
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
-import { isFrost1Active } from '../effects/common/frost1Check';
+import { isFrost1Active } from '../game/passiveRuleChecker';
+import { getLaneFaceDownValueBoost } from './aiEffectUtils';
 
 // AI MEMORY: Tracks known information about cards
 interface AIMemory {

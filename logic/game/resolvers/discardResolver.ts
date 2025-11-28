@@ -7,7 +7,7 @@ import { GameState, Player } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
-import { checkForPlague1Trigger } from '../../effects/plague/Plague-1-trigger';
+// NOTE: checkForPlague1Trigger removed - Plague-1 is now custom protocol, triggers via processReactiveEffects
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { queuePendingCustomEffects } from '../phaseManager';
 
@@ -191,12 +191,10 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 stateAfterDiscard.phase = 'end';
             }
         }
-        const stateAfterPlagueTrigger = checkForPlague1Trigger(stateAfterDiscard, player);
-
-        // NEW: Trigger reactive effects after opponent discards (Plague-1 custom protocol)
+        // Trigger reactive effects after opponent discards (Plague-1 custom protocol)
         // Trigger for the opponent of the discarding player
         const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
-        const reactiveResult = processReactiveEffects(stateAfterPlagueTrigger, 'after_opponent_discard', { player: opponentOfDiscarder });
+        const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: opponentOfDiscarder });
         const stateAfterReactive = reactiveResult.newState;
 
         return handleChainedEffectsOnDiscard(stateAfterReactive, player, action?.sourceEffect, action?.sourceCardId);
@@ -224,12 +222,11 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     }
     
     const isHandLimitDiscard = (prevState.phase === 'hand_limit');
-    let finalState = checkForPlague1Trigger(newState, player);
 
-    // NEW: Trigger reactive effects after opponent discards (Plague-1 custom protocol)
+    // Trigger reactive effects after opponent discards (Plague-1 custom protocol)
     const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
-    const reactiveResult = processReactiveEffects(finalState, 'after_opponent_discard', { player: opponentOfDiscarder });
-    finalState = reactiveResult.newState;
+    const reactiveResult = processReactiveEffects(newState, 'after_opponent_discard', { player: opponentOfDiscarder });
+    let finalState = reactiveResult.newState;
 
     if (isHandLimitDiscard) {
         finalState = checkForSpeed1Trigger(finalState, player);

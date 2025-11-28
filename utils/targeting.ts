@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player } from "../types";
 import { findAllHighestUncoveredCards } from "../logic/game/helpers/actionUtils";
-import { isFrost1Active } from "../logic/effects/common/frost1Check";
+import { isFrost1Active } from "../logic/game/passiveRuleChecker";
 import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
 
 /**
@@ -65,9 +65,14 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const targetFilter = (actionRequired as any).targetFilter || {};
             const cardIndex = lane.findIndex(c => c.id === card.id);
             const currentLaneIndex = (actionRequired as any).currentLaneIndex;
+            const scopedLaneIndex = (actionRequired as any).laneIndex; // For scope: 'this_lane'
+            const scope = (actionRequired as any).scope;
 
             // NEW: If currentLaneIndex is set (scope: 'each_lane'), only cards in that lane are targetable
             if (currentLaneIndex !== undefined && laneIndex !== currentLaneIndex) return false;
+
+            // NEW: If scope is 'this_lane', only cards in the source card's lane are targetable (Darkness-2)
+            if (scope === 'this_lane' && scopedLaneIndex !== undefined && laneIndex !== scopedLaneIndex) return false;
 
             // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
             // This matches the game rules: "flip 1 card" means "flip 1 uncovered card"

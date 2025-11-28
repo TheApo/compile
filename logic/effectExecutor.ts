@@ -4,11 +4,14 @@
  */
 
 import { GameState, PlayedCard, EffectResult, Player, EffectContext } from "../types";
-import { effectRegistry } from "./effects/effectRegistry";
-import { effectRegistryStart } from "./effects/effectRegistryStart";
-import { effectRegistryEnd } from "./effects/effectRegistryEnd";
-import { effectRegistryOnCover } from "./effects/effectRegistryOnCover";
 import { recalculateAllLaneValues } from "./game/stateManager";
+
+// NOTE: All protocols now use custom effects defined in JSON
+// These empty registries are kept for compatibility - they will never match any cards
+const effectRegistry: Record<string, any> = {};
+const effectRegistryStart: Record<string, any> = {};
+const effectRegistryEnd: Record<string, any> = {};
+const effectRegistryOnCover: Record<string, any> = {};
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "./utils/log";
 import { executeCustomEffect } from "./customProtocols/effectInterpreter";
 import { shouldIgnoreMiddleCommand } from "./game/passiveRuleChecker";

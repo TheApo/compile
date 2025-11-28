@@ -195,7 +195,7 @@ const getPatternPreviewStyle = (pattern: CardPattern, color: string): React.CSSP
     }
 };
 
-export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateNew, onEdit, onDelete, onBack }) => {
+export const ProtocolList: React.FC<ProtocolListProps> = ({ protocols, onCreateNew, onEdit, onDelete, onImport, onBack }) => {
     const [showSystemProtocols, setShowSystemProtocols] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [importJson, setImportJson] = useState('');

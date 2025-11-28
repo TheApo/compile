@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, EffectResult, EffectContext } from '../../types';
+import { GameState, PlayedCard, EffectResult, EffectContext, Player, AnimationRequest } from '../../types';
 import { EffectDefinition } from '../../types/customProtocol';
 import { log } from '../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard } from '../game/helpers/actionUtils';
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
-import { isFrost1Active, isFrost1BottomActive } from '../effects/common/frost1Check';
+import { isFrost1Active, isFrost1BottomActive } from '../game/passiveRuleChecker';
 import { executeOnCoverEffect } from '../effectExecutor';
 import { getEffectiveCardValue } from '../game/stateManager';
 
@@ -102,8 +102,11 @@ export function executeCustomEffect(
                     }
                 };
 
-                const cardNamesRefresh = drawnCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-                newState = log(newState, actor, `[Refresh] Drew ${drawnCards.length} cards to reach hand size 5 (${cardNamesRefresh}).`);
+                // Only show card names to the player who drew them
+                const cardNamesRefresh = actor === 'player'
+                    ? ` (${drawnCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
+                    : '';
+                newState = log(newState, actor, `[Refresh] Drew ${drawnCards.length} cards to reach hand size 5${cardNamesRefresh}.`);
 
                 // CRITICAL: Trigger reactive effects after draw (Spirit-3)
                 const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: actor, count: drawnCards.length });
@@ -156,8 +159,11 @@ export function executeCustomEffect(
 
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
-                    const cardNamesActor = newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-                    newState = log(newState, actor, `${actorName} drew ${drawnCards.length} card(s) from ${opponentName}'s deck (${cardNamesActor}).`);
+                    // Only show card names to the player who drew them
+                    const cardNamesActor = actor === 'player'
+                        ? ` (${newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
+                        : '';
+                    newState = log(newState, actor, `${actorName} drew ${drawnCards.length} card(s) from ${opponentName}'s deck${cardNamesActor}.`);
                 }
             }
 
@@ -191,8 +197,11 @@ export function executeCustomEffect(
 
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
-                    const cardNamesOpponent = newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-                    newState = log(newState, opponent, `${opponentName} drew ${drawnCards.length} card(s) from ${actorName}'s deck (${cardNamesOpponent}).`);
+                    // Only show card names to the player who drew them
+                    const cardNamesOpponent = opponent === 'player'
+                        ? ` (${newHandCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
+                        : '';
+                    newState = log(newState, opponent, `${opponentName} drew ${drawnCards.length} card(s) from ${actorName}'s deck${cardNamesOpponent}.`);
                 }
             }
 
@@ -280,7 +289,25 @@ export function executeCustomEffect(
             };
             result = { newState: stateWithFollowUp };
         } else {
-            // Effect completed immediately, execute conditional now
+            // Effect completed immediately - check if we should execute conditional now
+            console.log('[Custom Effect] Effect completed immediately, conditional type:', effectDef.conditional.type);
+
+            // CRITICAL FIX: For "if_executed" conditionals, check if the effect actually did something
+            // This handles "Discard 1. If you do, delete 1" when player has no cards to discard
+            if (effectDef.conditional.type === 'if_executed') {
+                // Check if a discard actually happened
+                const discardContext = (newState as any)._discardContext;
+                const discardedCount = discardContext?.discardedCount || 0;
+
+                if (discardedCount === 0) {
+                    console.log('[Custom Effect] Skipping if_executed follow-up - no action was executed (no discard)');
+                    // Clean up and return without executing follow-up
+                    delete (newState as any)._discardContext;
+                    result = { newState };
+                    return result;
+                }
+            }
+
             console.log('[Custom Effect] Executing conditional follow-up effect immediately');
 
             // NEW: Propagate discard context for Chaos-4 "Discard your hand. Draw the same amount of cards"
@@ -410,9 +437,10 @@ function executeDrawEffect(
             default:
                 reasonText = '';
         }
-        // Format the drawn card names for log
-        const drawnCardNames = newCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-        const drawnCardsText = newCards.length > 0 ? ` (${drawnCardNames})` : '';
+        // Format the drawn card names for log - only show to player who drew them
+        const drawnCardsText = (newCards.length > 0 && drawingPlayer === 'player')
+            ? ` (${newCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
+            : '';
         newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${reasonText}${drawnCardsText}.`);
 
         // CRITICAL: Trigger reactive effects after draw (Spirit-3)
@@ -573,9 +601,10 @@ function executeDrawEffect(
 
     const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
 
-    // Format the drawn card names for log
-    const drawnCardNames = newCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-    const drawnCardsText = newCards.length > 0 ? ` (${drawnCardNames})` : '';
+    // Format the drawn card names for log - only show to player who drew them
+    const drawnCardsText = (newCards.length > 0 && drawingPlayer === 'player')
+        ? ` (${newCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
+        : '';
 
     if (source === 'opponent_deck') {
         const opponentName = sourcePlayer === 'player' ? "Player's" : "Opponent's";
@@ -701,6 +730,8 @@ function executeFlipEffect(
             let newState = log(state, cardOwner, frost1Active
                 ? "No valid face-up targets to flip (Frost-1 is active)."
                 : "No valid targets to flip in any lane.");
+            // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
+            (newState as any)._effectSkippedNoTargets = true;
             return { newState };
         }
 
@@ -897,6 +928,8 @@ function executeFlipEffect(
     // If no valid targets, skip the effect (both optional and non-optional)
     if (validTargets.length === 0) {
         let newState = log(state, cardOwner, `No valid cards to flip. Effect skipped.`);
+        // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
+        (newState as any)._effectSkippedNoTargets = true;
         return { newState };
     }
 
@@ -1075,6 +1108,8 @@ function executeDeleteEffect(
     // If no valid targets, skip the effect
     if (validTargets.length === 0) {
         let newState = log(state, cardOwner, `No valid cards to delete. Effect skipped.`);
+        // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
+        (newState as any)._effectSkippedNoTargets = true;
         return { newState };
     }
 
@@ -1327,6 +1362,8 @@ function executeDeleteEffect(
 
         if (lanesWithTargets.length === 0) {
             newState = log(newState, cardOwner, "No valid targets to delete in any lane.");
+            // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
+            (newState as any)._effectSkippedNoTargets = true;
             return { newState };
         }
 
@@ -1431,7 +1468,9 @@ function executeDiscardEffect(
     // CRITICAL FIX: Check if actor has any cards to discard
     if (state[actor].hand.length === 0) {
         console.log(`[Discard Effect] ${actor} has no cards to discard - skipping effect.`);
-        return { newState: state };
+        const actorName = actor === 'player' ? 'Player' : 'Opponent';
+        const newState = log(state, actor, `${actorName} has no cards to discard - effect skipped.`);
+        return { newState };
     }
 
     // NEW: "upTo" mode (Hate-1: "Discard up to 3 cards")
@@ -1443,10 +1482,14 @@ function executeDiscardEffect(
     }
 
     // CRITICAL: Always limit count to actual hand size (prevents softlock)
+    // Also log when partial discard happens
+    const requestedCount = count;
     if (typeof count === 'number' && count > state[actor].hand.length) {
         console.log(`[Discard Effect] Count ${count} exceeds hand size ${state[actor].hand.length}, limiting.`);
         count = state[actor].hand.length;
     }
+    // Log partial discard (only when not in upTo mode, since upTo is already voluntary)
+    const willLogPartialDiscard = !params.upTo && typeof requestedCount === 'number' && requestedCount > count;
 
     // NEW: Auto-execute "discard all" (Chaos-4: "Discard your hand")
     // When count is 'all', automatically discard entire hand without user selection
@@ -1493,6 +1536,13 @@ function executeDiscardEffect(
     // No need for special optional logic here anymore
 
     let newState = { ...state };
+
+    // Log partial discard info (before the action is set)
+    if (willLogPartialDiscard) {
+        const actorName = actor === 'player' ? 'Player' : 'Opponent';
+        newState = log(newState, actor, `${actorName} only has ${count} card${count !== 1 ? 's' : ''} (${requestedCount} required) - discarding all.`);
+    }
+
     newState.actionRequired = {
         type: 'discard',
         actor,
@@ -1671,6 +1721,9 @@ function executeShiftEffect(
     // Collect all potential target cards based on filters
     const potentialTargets: Array<{ card: PlayedCard, currentLane: number, owner: 'player' | 'opponent' }> = [];
 
+    console.log(`[Shift Effect DEBUG] cardOwner: ${cardOwner}, ownerFilter: ${ownerFilter}, position: ${position}, faceState: ${faceState}, excludeSelf: ${excludeSelf}`);
+    console.log(`[Shift Effect DEBUG] Source card: ${card.protocol}-${card.value} (id: ${card.id})`);
+
     for (const player of ['player', 'opponent'] as const) {
         // Skip if owner filter doesn't match
         if (ownerFilter === 'own' && player !== cardOwner) continue;
@@ -1699,13 +1752,18 @@ function executeShiftEffect(
                 if (faceState === 'face_up' && !targetCard.isFaceUp) continue;
                 if (faceState === 'face_down' && targetCard.isFaceUp) continue;
 
+                console.log(`[Shift Effect DEBUG] Found potential target: ${targetCard.protocol}-${targetCard.value} in lane ${i} (owner: ${player})`);
                 potentialTargets.push({ card: targetCard, currentLane: i, owner: player });
             }
         }
     }
 
+    console.log(`[Shift Effect DEBUG] Total potential targets: ${potentialTargets.length}`);
+
     if (potentialTargets.length === 0) {
         newState = log(newState, cardOwner, `No valid cards to shift.`);
+        // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
+        (newState as any)._effectSkippedNoTargets = true;
         return { newState };
     }
 
