@@ -407,9 +407,11 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             }
 
             // Check position filter (covered vs uncovered)
+            // CRITICAL: Default to 'uncovered' if position is not specified (just like other effects)
+            const position = targetFilter.position || 'uncovered';
             const cardIndex = lane.findIndex(c => c.id === card.id);
-            if (targetFilter.position === 'uncovered' && !isUncovered) return false;
-            if (targetFilter.position === 'covered' && cardIndex >= lane.length - 1) return false;
+            if (position === 'uncovered' && !isUncovered) return false;
+            if (position === 'covered' && cardIndex >= lane.length - 1) return false;
 
             // Check owner filter if specified (but 'any' allows both players)
             if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;

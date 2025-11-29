@@ -62,6 +62,143 @@ export function executeCustomEffect(
     const isRevealBoard = action === 'reveal' && params.source === 'board';
 
     if (params.optional === true && !isRevealBoard) {
+        // CRITICAL FIX: Check if the optional effect CAN be executed before showing the prompt
+        // Don't show "Do you want to X?" if there are no valid targets for X
+        const actor = params.actor === 'opponent' ? context.opponent : context.cardOwner;
+        const opponent = actor === 'player' ? 'opponent' : 'player';
+        const targetFilter = params.targetFilter || {};
+
+        // Helper to check if there are valid targets on board
+        const hasValidBoardTargets = (checkFn: (card: PlayedCard, owner: Player, laneIdx: number, cardIdx: number) => boolean): boolean => {
+            for (const owner of ['player', 'opponent'] as Player[]) {
+                for (let laneIdx = 0; laneIdx < state[owner].lanes.length; laneIdx++) {
+                    const lane = state[owner].lanes[laneIdx];
+                    for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
+                        if (checkFn(lane[cardIdx], owner, laneIdx, cardIdx)) return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // Check preconditions for each action type
+        let canExecute = true;
+        let skipReason = '';
+
+        switch (action) {
+            case 'discard':
+                if (state[actor].hand.length === 0) {
+                    canExecute = false;
+                    skipReason = 'No cards to discard';
+                }
+                break;
+
+            case 'flip': {
+                const isFrost1Active = state.passiveEffects?.some((e: any) => e.type === 'prevent_flip_to_face_up' && e.isActive);
+                canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
+                    // Check excludeSelf
+                    if (targetFilter.excludeSelf && c.id === card.id) return false;
+                    // Check owner filter
+                    if (targetFilter.owner === 'own' && owner !== actor) return false;
+                    if (targetFilter.owner === 'opponent' && owner === actor) return false;
+                    // Check position filter
+                    const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                    if (targetFilter.position === 'uncovered' && !isUncovered) return false;
+                    if (targetFilter.position === 'covered' && isUncovered) return false;
+                    // Check faceState filter
+                    if (targetFilter.faceState === 'face_up' && !c.isFaceUp) return false;
+                    if (targetFilter.faceState === 'face_down' && c.isFaceUp) return false;
+                    // Check Frost-1 (can't flip face-down to face-up)
+                    if (isFrost1Active && !c.isFaceUp) return false;
+                    return true;
+                });
+                if (!canExecute) skipReason = 'No valid cards to flip';
+                break;
+            }
+
+            case 'delete': {
+                canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
+                    // Check excludeSelf
+                    if (targetFilter.excludeSelf && c.id === card.id) return false;
+                    // Check owner filter
+                    if (targetFilter.owner === 'own' && owner !== actor) return false;
+                    if (targetFilter.owner === 'opponent' && owner === actor) return false;
+                    // Check position filter (default: uncovered)
+                    const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                    const posFilter = targetFilter.position || 'uncovered';
+                    if (posFilter === 'uncovered' && !isUncovered) return false;
+                    if (posFilter === 'covered' && isUncovered) return false;
+                    // Check faceState filter
+                    if (targetFilter.faceState === 'face_up' && !c.isFaceUp) return false;
+                    if (targetFilter.faceState === 'face_down' && c.isFaceUp) return false;
+                    return true;
+                });
+                if (!canExecute) skipReason = 'No valid cards to delete';
+                break;
+            }
+
+            case 'shift': {
+                canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
+                    // Check excludeSelf
+                    if (targetFilter.excludeSelf && c.id === card.id) return false;
+                    // Check owner filter
+                    if (targetFilter.owner === 'own' && owner !== actor) return false;
+                    if (targetFilter.owner === 'opponent' && owner === actor) return false;
+                    // Check position filter (default: uncovered)
+                    const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                    const posFilter = targetFilter.position || 'uncovered';
+                    if (posFilter === 'uncovered' && !isUncovered) return false;
+                    if (posFilter === 'covered' && isUncovered) return false;
+                    return true;
+                });
+                if (!canExecute) skipReason = 'No valid cards to shift';
+                break;
+            }
+
+            case 'return': {
+                // Check if there are cards to return based on targetFilter
+                const returnOwner = targetFilter.owner === 'opponent' ? opponent : actor;
+                canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
+                    if (owner !== returnOwner) return false;
+                    // Check position filter
+                    const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                    const posFilter = targetFilter.position || 'uncovered';
+                    if (posFilter === 'uncovered' && !isUncovered) return false;
+                    if (posFilter === 'covered' && isUncovered) return false;
+                    return true;
+                });
+                if (!canExecute) skipReason = 'No valid cards to return';
+                break;
+            }
+
+            case 'draw':
+                // Check if there are cards to draw
+                if (state[actor].deck.length === 0 && state[actor].discard.length === 0) {
+                    canExecute = false;
+                    skipReason = 'No cards to draw';
+                }
+                break;
+
+            case 'play':
+                // Check if there are cards to play
+                if (state[actor].hand.length === 0) {
+                    canExecute = false;
+                    skipReason = 'No cards to play';
+                }
+                break;
+        }
+
+        if (!canExecute) {
+            console.log(`[Custom Effect] Optional ${action} skipped - ${skipReason}`);
+            let newState = log(state, actor, `${skipReason} - effect skipped.`);
+            // Mark effect as not executed for if_executed conditionals
+            (newState as any)._effectSkippedNoTargets = true;
+            if (action === 'discard') {
+                (newState as any)._discardContext = { discardedCount: 0 };
+            }
+            return { newState };
+        }
+
         console.log(`[Custom Effect] Optional effect detected (${action}) - creating prompt`);
         let newState = { ...state };
         newState.actionRequired = {
@@ -1469,7 +1606,10 @@ function executeDiscardEffect(
     if (state[actor].hand.length === 0) {
         console.log(`[Discard Effect] ${actor} has no cards to discard - skipping effect.`);
         const actorName = actor === 'player' ? 'Player' : 'Opponent';
-        const newState = log(state, actor, `${actorName} has no cards to discard - effect skipped.`);
+        let newState = log(state, actor, `${actorName} has no cards to discard - effect skipped.`);
+        // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals like Fire-3)
+        (newState as any)._effectSkippedNoTargets = true;
+        (newState as any)._discardContext = { discardedCount: 0 };
         return { newState };
     }
 

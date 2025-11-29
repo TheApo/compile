@@ -10,6 +10,7 @@ import { hardAI } from '../ai/hardImproved';
 import { Dispatch, SetStateAction } from 'react';
 import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
+import { findCardOnBoard } from './helpers/actionUtils';
 import { CardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
@@ -91,11 +92,63 @@ export const resolveRequiredOpponentAction = (
 
         if (!isOpponentInterrupt) return state;
 
+        // CRITICAL FIX: Handle 'discard_completed' automatically - no AI decision needed
+        // This happens after AI discards cards with a conditional follow-up effect (like Fire-3)
+        if (action.type === 'discard_completed') {
+            const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
+
+            if (followUpEffect && sourceCardId) {
+                const sourceCardInfo = findCardOnBoard(state, sourceCardId);
+                if (sourceCardInfo) {
+                    const currentHandSize = state[actor].hand.length;
+                    const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
+                    const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+                    if (shouldExecute) {
+                        console.log(`[AI Interrupt discard_completed] Executing follow-up effect`);
+
+                        let laneIndex = -1;
+                        for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
+                            if (state[sourceCardInfo.owner].lanes[i].some((c: any) => c.id === sourceCardId)) {
+                                laneIndex = i;
+                                break;
+                            }
+                        }
+
+                        if (laneIndex !== -1) {
+                            const context: EffectContext = {
+                                cardOwner: sourceCardInfo.owner,
+                                opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
+                                currentTurn: state.turn,
+                                actor: actor,
+                                discardedCount: discardedCount,
+                            };
+
+                            const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
+                            const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
+                            return result.newState;
+                        }
+                    }
+                }
+            }
+            return { ...state, actionRequired: null };
+        }
+
         const aiDecision = getAIAction(state, action, difficulty);
 
         // --- Specific Handlers First ---
         if (aiDecision.type === 'discardCards' && action.type === 'discard') {
-            const newState = actions.discardCards(state, aiDecision.cardIds, 'opponent');
+            // CRITICAL FIX: Ensure AI only discards exactly action.count cards
+            // This prevents bugs where AI might try to discard more than allowed
+            const isVariableCount = (action as any).variableCount === true;
+            const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
+            const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
+
+            if (cardIdsToDiscard.length !== aiDecision.cardIds.length) {
+                console.warn(`[AI Manager] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+            }
+
+            const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
             if (newState.actionRequired) {
                 return newState;
             }
@@ -204,9 +257,62 @@ const handleRequiredAction = (
     trackPlayerRearrange?: TrackPlayerRearrange
 ): GameState => {
 
-    const aiDecision = getAIAction(state, state.actionRequired, difficulty);
     const action = state.actionRequired!; // Action is guaranteed to exist here
-    
+
+    // CRITICAL FIX: Handle 'discard_completed' automatically - no AI decision needed
+    // This happens after AI discards cards with a conditional follow-up effect (like Fire-3)
+    if (action.type === 'discard_completed') {
+        const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
+
+        // Execute the follow-up effect if conditions are met
+        if (followUpEffect && sourceCardId) {
+            const sourceCardInfo = findCardOnBoard(state, sourceCardId);
+            if (sourceCardInfo) {
+                // Check conditional type
+                const currentHandSize = state[actor].hand.length;
+                const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
+
+                // For "if_executed", only execute if at least one card was discarded
+                const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+                if (shouldExecute) {
+                    console.log(`[AI discard_completed] Executing follow-up effect (type: ${conditionalType}, discarded: ${discardedCount})`);
+
+                    // Find lane index
+                    let laneIndex = -1;
+                    for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
+                        if (state[sourceCardInfo.owner].lanes[i].some((c: any) => c.id === sourceCardId)) {
+                            laneIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (laneIndex !== -1) {
+                        const context: EffectContext = {
+                            cardOwner: sourceCardInfo.owner,
+                            opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
+                            currentTurn: state.turn,
+                            actor: actor,
+                            discardedCount: discardedCount,
+                        };
+
+                        // Import and execute the custom effect
+                        const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
+                        const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
+                        return result.newState;
+                    }
+                } else {
+                    console.log(`[AI discard_completed] Skipping follow-up - conditional type: ${conditionalType}, discarded: ${discardedCount}`);
+                }
+            }
+        }
+
+        // Clear actionRequired and continue
+        return { ...state, actionRequired: null };
+    }
+
+    const aiDecision = getAIAction(state, state.actionRequired, difficulty);
+
     if (aiDecision.type === 'skip') {
         console.log('[AI SKIP] Skipping action, phase:', state.phase, 'turn:', state.turn);
         const newState = actions.skipAction(state);
@@ -390,9 +496,15 @@ const handleRequiredAction = (
         return nextState;
     }
     
-    // GENERIC: Handle ALL Light-2 style prompts (shift/flip/skip choice)
+    // GENERIC: Handle ALL shift/flip/skip choice prompts (Light-2 style and custom protocols)
     if (aiDecision.type === 'resolveLight2Prompt') {
-        const nextState = actions.resolveLight2Prompt(state, aiDecision.choice);
+        let nextState: GameState;
+        // CRITICAL: Use the correct resolver based on action type
+        if (action.type === 'prompt_shift_or_flip_board_card_custom') {
+            nextState = resolvers.resolveRevealBoardCardPrompt(state, aiDecision.choice);
+        } else {
+            nextState = actions.resolveLight2Prompt(state, aiDecision.choice);
+        }
         if (nextState.actionRequired) return nextState; // may need to select a lane to shift
         return phaseManager.processEndOfAction(nextState);
     }
@@ -422,17 +534,23 @@ const handleRequiredAction = (
                     const stateAfterAction = state.phase === 'start'
                         ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
                         : phaseManager.processEndOfAction(finalState);
-                    // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
+                    // Schedule continuation after animated action completes
                     if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
                         setTimeout(() => {
                             runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
                         }, 500);
+                    } else if (stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent') {
+                        // There's another action to handle
+                        setTimeout(() => {
+                            runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                        }, 300);
                     }
                     return stateAfterAction;
                 }));
             });
             return nextState;
         }
+        // Non-animated case: return state, runOpponentTurn will handle continuation
         return phaseManager.processEndOfAction(nextState);
     }
 
@@ -523,7 +641,16 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'discardCards' && action.type === 'discard') {
-        const newState = actions.discardCards(state, aiDecision.cardIds, 'opponent');
+        // CRITICAL FIX: Ensure AI only discards exactly action.count cards
+        const isVariableCount = (action as any).variableCount === true;
+        const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
+        const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
+
+        if (cardIdsToDiscard.length !== aiDecision.cardIds.length) {
+            console.warn(`[AI Manager] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+        }
+
+        const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
         if (newState.actionRequired) return newState; // Handle chained effects
         return phaseManager.processEndOfAction(newState);
     }
@@ -614,7 +741,20 @@ export const runOpponentTurn = (
         // 2. If an action is required (e.g. from start phase), handle it.
         // This might result in a new state that needs further processing.
         if (state.actionRequired) {
-            return handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+            const stateAfterAction = handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+
+            // CRITICAL FIX: After handling required action, AI turn must continue!
+            // Schedule continuation if AI is still active and no immediate action required
+            // (handlers with animations already schedule their own continuations)
+            if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
+                // Don't continue if we just finished the turn (hand_limit phase)
+                if (stateAfterAction.phase !== 'hand_limit') {
+                    setTimeout(() => {
+                        runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                    }, 300);
+                }
+            }
+            return stateAfterAction;
         }
         
         // 3. Handle Compile Phase

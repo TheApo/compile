@@ -342,6 +342,31 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         const reactiveShiftResult = processReactiveEffects(finalState, 'after_shift', { player: actor, cardId: cardToShiftId });
                         finalState = reactiveShiftResult.newState;
 
+                        // NEW: Handle generic followUpEffect for custom protocols ("Shift 1. If you do, draw 2.")
+                        const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                        const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                        if (followUpEffect && sourceCardId) {
+                            // For 'if_executed' conditionals, only execute if the shift actually happened
+                            const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId; // shift happened if cardToShiftId exists
+
+                            if (shouldExecute) {
+                                console.log('[laneResolver] Executing followUpEffect after shift');
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIndex = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: sourceCard.owner === 'player' ? 'opponent' : 'player',
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIndex, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                }
+                            }
+                        }
+
                         // CRITICAL: Queue pending custom effects before clearing actionRequired
                         finalState = queuePendingCustomEffects(finalState);
                         finalState.actionRequired = null;
@@ -544,7 +569,13 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_play': {
-            const { cardInHandId, isFaceDown, actor, source } = prev.actionRequired as any;
+            const { cardInHandId, isFaceDown, actor, source, disallowedLaneIndex } = prev.actionRequired as any;
+
+            // CRITICAL: Server-side validation for disallowedLaneIndex (e.g., Darkness-3: "Play to other lines")
+            if (disallowedLaneIndex !== undefined && targetLaneIndex === disallowedLaneIndex) {
+                console.log(`[Lane Validation] Rejected: Cannot play to disallowed lane ${disallowedLaneIndex}`);
+                return { nextState: prev, requiresTurnEnd: false }; // Silently reject
+            }
 
             // NEW: Life-3 - play from deck to selected lane
             if (source === 'deck') {
@@ -1033,28 +1064,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             }
             break;
         }
-        case 'select_lane_to_shift_revealed_card_for_light_2': {
-            const { revealedCardId, actor } = prev.actionRequired;
-            const cardInfo = findCardOnBoard(prev, revealedCardId);
-            if (cardInfo) {
-                const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
-                newState = shiftResult.newState;
-                if (shiftResult.animationRequests) {
-                    // FIX: Implemented `onCompleteCallback` for consistency.
-                    requiresAnimation = {
-                        animationRequests: shiftResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired) return s; // Handle potential interrupts from uncover
-                            return endTurnCb(s);
-                        }
-                    };
-                }
-            }
-            break;
-        }
+        // LEGACY REMOVED: select_lane_to_shift_revealed_card_for_light_2 - now uses generic select_lane_for_shift
         case 'select_lane_to_shift_revealed_board_card_custom': {
             const { revealedCardId, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, revealedCardId);
+            console.log('[DEBUG Light-2 Shift] Card before shift:', cardInfo?.card.protocol, cardInfo?.card.value, 'isFaceUp:', cardInfo?.card.isFaceUp);
             if (cardInfo) {
                 const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
                 newState = shiftResult.newState;

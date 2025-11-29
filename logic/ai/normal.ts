@@ -93,9 +93,32 @@ const getBestMove = (state: GameState): AIAction => {
             const playCheckFaceUp = canPlayCard(state, 'opponent', i, true, card.protocol);
             const playCheckFaceDown = canPlayCard(state, 'opponent', i, false, card.protocol);
 
-            // Skip if neither face-up nor face-down play is allowed
+                    // Skip if neither face-up nor face-down play is allowed
             if (!playCheckFaceUp.allowed && !playCheckFaceDown.allowed) continue;
             if (state.opponent.compiled[i]) continue; // Don't play in compiled lanes
+
+            // CRITICAL: Check if player can compile this lane and we can't block
+            // If player has 10+ and we can't overtake them, DON'T play here (waste of card)
+            const playerCanCompileHere = state.player.laneValues[i] >= 10 &&
+                state.player.laneValues[i] > state.opponent.laneValues[i] &&
+                !state.player.compiled[i];
+
+            if (playerCanCompileHere) {
+                // Can ANY of our plays overtake them?
+                const maxValueWeCanAdd = Math.max(
+                    playCheckFaceUp.allowed ? card.value : 0,
+                    playCheckFaceDown.allowed ? getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]) : 0
+                );
+
+                const ourPotentialValue = state.opponent.laneValues[i] + maxValueWeCanAdd;
+                if (ourPotentialValue <= state.player.laneValues[i]) {
+                    // We can't block - SKIP this lane entirely for this card
+                    // (unless we want to try disruption effects, which we evaluate later)
+                    if (!DISRUPTION_KEYWORDS.some(kw => card.keywords[kw])) {
+                        continue;
+                    }
+                }
+            }
 
             // GENERIC: Check if card has "return own card" effect (like Water-4)
             // Only play face-up if we have OTHER uncovered cards we want to return.
@@ -120,9 +143,8 @@ const getBestMove = (state: GameState): AIAction => {
                 if (valueAfterPlaying <= playerValue) continue;
             }
 
-            const canPlayerCompileThisLane = state.player.laneValues[i] >= 10
-                && state.player.laneValues[i] > state.opponent.laneValues[i]
-                && !state.player.compiled[i];
+            // Use the already computed playerCanCompileHere check
+            const canPlayerCompileThisLane = playerCanCompileHere;
             const baseScore = getCardPower(card);
 
             // GENERIC: Check if card has "delete highest own card" effect (like Hate-2)
@@ -231,15 +253,15 @@ const getBestMove = (state: GameState): AIAction => {
         }
     }
 
-    // Evaluate filling hand
-    if (state.opponent.hand.length < 5) {
+    // Evaluate filling hand - only draw when hand is very low (0-1 cards)
+    if (state.opponent.hand.length <= 1) {
         let fillHandScore = 8;
-        const avgHandPower = state.opponent.hand.reduce((sum, c) => sum + getCardPower(c), 0) / (state.opponent.hand.length || 1);
 
         if (state.opponent.hand.length === 0) {
-            fillHandScore = 500; // Must draw
-        } else if (avgHandPower < 12) {
-            fillHandScore = 35; // Weak hand
+            fillHandScore = 500; // Must draw - no cards
+        } else {
+            // 1 card left - prefer drawing but not as urgently
+            fillHandScore = 80;
         }
 
         possibleMoves.push({ move: { type: 'fillHand' }, score: addNoise(fillHandScore), reason: "Refill hand" });
@@ -251,25 +273,55 @@ const getBestMove = (state: GameState): AIAction => {
 
     possibleMoves.sort((a, b) => b.score - a.score);
 
+    // SAFETY CHECK: Validate the chosen move is actually legal
+    // This prevents returning face-up plays that shouldn't be allowed
+    const validateMove = (move: AIAction): boolean => {
+        if (move.type === 'playCard' && move.isFaceUp) {
+            const card = state.opponent.hand.find(c => c.id === move.cardId);
+            if (!card) return false;
+            const check = canPlayCard(state, 'opponent', move.laneIndex, true, card.protocol);
+            if (!check.allowed) {
+                console.warn(`[AI Safety] Rejecting invalid face-up play: ${card.protocol}-${card.value} in lane ${move.laneIndex} - ${check.reason}`);
+                return false;
+            }
+        }
+        return true;
+    };
+
     // 20% chance to pick second-best move for human-like play
     if (shouldMakeMistake() && possibleMoves.length > 1 && possibleMoves[1].score > 0) {
-        return possibleMoves[1].move;
+        if (validateMove(possibleMoves[1].move)) {
+            return possibleMoves[1].move;
+        }
     }
 
-    return possibleMoves[0].move;
+    // Find the best valid move
+    for (const scored of possibleMoves) {
+        if (validateMove(scored.move)) {
+            return scored.move;
+        }
+    }
+
+    // All moves invalid, fallback to fillHand
+    console.warn('[AI Safety] No valid moves found, falling back to fillHand');
+    return { type: 'fillHand' };
 };
 
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
             // CRITICAL FIX: Check if rearrange would ACTUALLY be beneficial BEFORE deciding
+            // Get the compiling lane index if this is during a compile
+            const compilingLaneIndex = state.compilableLanes.length > 0 ? state.compilableLanes[0] : null;
+
             // Priority 1: Try to disrupt player if it actually hurts them
-            if (canBenefitFromPlayerRearrange(state)) {
+            // Pass compilingLaneIndex so that compiling lanes are treated as value 0
+            if (canBenefitFromPlayerRearrange(state, compilingLaneIndex)) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
             // Priority 2: Rearrange own protocols ONLY if it actually helps
-            if (canBenefitFromOwnRearrange(state) && !shouldMakeMistake()) {
+            if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
 
@@ -278,7 +330,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'discard': {
-            // Discard weakest cards
+            // Discard weakest cards - ALWAYS use action.count (no variable logic here)
             const sortedHand = [...state.opponent.hand].sort((a, b) => {
                 const aHasDisruption = DISRUPTION_KEYWORDS.some(kw => a.keywords[kw]);
                 const bHasDisruption = DISRUPTION_KEYWORDS.some(kw => b.keywords[kw]);
@@ -309,55 +361,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: scored[0].cardId };
         }
 
-        case 'select_card_to_delete_for_anarchy_2': {
-            // Anarchy-2: "Delete a covered or uncovered FACE-UP card in a line with a matching protocol"
-            // CRITICAL: Only FACE-UP cards can be selected (covered or uncovered)
-            // Card's protocol must match the lane protocol
+        // LEGACY REMOVED: select_card_to_delete_for_anarchy_2 - now uses generic select_cards_to_delete
 
-            // Helper to check if card's protocol matches the lane protocol
-            const hasMatchingProtocol = (card: PlayedCard, owner: Player, laneIndex: number): boolean => {
-                const laneProtocol = state[owner].protocols[laneIndex];
-                return card.protocol === laneProtocol;
-            };
-
-            // Get all face-up player cards with matching protocol
-            const validPlayerCards: PlayedCard[] = [];
-            state.player.lanes.forEach((lane, laneIndex) => {
-                lane.forEach(card => {
-                    if (card.isFaceUp && hasMatchingProtocol(card, 'player', laneIndex)) {
-                        validPlayerCards.push(card);
-                    }
-                });
-            });
-
-            if (validPlayerCards.length > 0) {
-                // Normal AI: Pick a somewhat strategic card (highest value)
-                const sorted = validPlayerCards.sort((a, b) => b.value - a.value);
-                return { type: 'deleteCard', cardId: sorted[0].id };
-            }
-
-            // Fallback: Get all face-up opponent cards with matching protocol
-            const validOpponentCards: PlayedCard[] = [];
-            state.opponent.lanes.forEach((lane, laneIndex) => {
-                lane.forEach(card => {
-                    if (card.isFaceUp && hasMatchingProtocol(card, 'opponent', laneIndex)) {
-                        validOpponentCards.push(card);
-                    }
-                });
-            });
-
-            if (validOpponentCards.length > 0) {
-                // Pick lowest value to minimize self-damage
-                const sorted = validOpponentCards.sort((a, b) => a.value - b.value);
-                return { type: 'deleteCard', cardId: sorted[0].id };
-            }
-
-            return { type: 'skip' };
-        }
-
-        case 'select_cards_to_delete':
-        case 'select_card_to_delete_for_death_1': {
-            const disallowedIds = action.type === 'select_cards_to_delete' ? (action.disallowedIds || []) : [action.sourceCardId];
+        case 'select_cards_to_delete': {
+            const disallowedIds = action.disallowedIds || [];
             const targetFilter = 'targetFilter' in action ? action.targetFilter as { owner?: string; faceState?: string; position?: string } : undefined;
             const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
 
@@ -621,24 +628,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'revealCard', cardId: sortedHand[0].id };
         }
 
-        case 'select_lane_for_death_2': {
-            const scoredLanes = [0, 1, 2].map(laneIndex => {
-                let playerCount = 0;
-                let opponentCount = 0;
-
-                state.player.lanes[laneIndex].forEach(c => {
-                    if (c.isFaceUp && (c.value === 1 || c.value === 2)) playerCount++;
-                });
-                state.opponent.lanes[laneIndex].forEach(c => {
-                    if (c.isFaceUp && (c.value === 1 || c.value === 2)) opponentCount++;
-                });
-
-                return { laneIndex, score: playerCount * 10 - opponentCount * 5 };
-            });
-
-            scoredLanes.sort((a, b) => b.score - a.score);
-            return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
-        }
+        // LEGACY REMOVED: select_lane_for_death_2 - now uses generic select_lane_for_delete
 
         case 'select_card_to_return':
         case 'select_opponent_card_to_return': {
@@ -695,8 +685,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_lane_for_play':
-        case 'select_lane_for_life_3_play': {
+        // LEGACY REMOVED: select_lane_for_life_3_play - now uses generic select_lane_for_play
+        case 'select_lane_for_play': {
             // FIX: Filter out blocked lanes
             let playableLanes = [0, 1, 2].filter(i => !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex);
             playableLanes = playableLanes.filter(laneIndex => {
@@ -840,40 +830,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             return { type: 'selectLane', laneIndex: 0 };
         }
-        case 'select_lane_for_water_3':
-        case 'select_lane_to_shift_cards_for_light_3': {
-            const possibleLanes = [0, 1, 2].filter(i =>
-                !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex
-            ).filter(i =>
-                !('originalLaneIndex' in action) || i !== action.originalLaneIndex
-            );
+        // LEGACY REMOVED: select_lane_to_shift_cards_for_light_3 - now uses generic select_lane_for_shift_all
+        // LEGACY REMOVED: select_lane_for_metal_3_delete - now uses generic select_lane_for_delete
 
-            if (possibleLanes.length > 0) {
-                // Pick random lane (human-like)
-                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-                return { type: 'selectLane', laneIndex: randomLane };
-            }
-            return { type: 'selectLane', laneIndex: 0 };
-        }
-        case 'select_lane_for_metal_3_delete': {
-            // FIX: Metal-3 can only delete lanes with 8 or more cards
-            const possibleLanes = [0, 1, 2].filter(i =>
-                !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex
-            ).filter(i =>
-                !('originalLaneIndex' in action) || i !== action.originalLaneIndex
-            ).filter(i => {
-                const totalCards = state.player.lanes[i].length + state.opponent.lanes[i].length;
-                return totalCards >= 8;
-            });
-
-            if (possibleLanes.length > 0) {
-                // Pick random lane (human-like)
-                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-                return { type: 'selectLane', laneIndex: randomLane };
-            }
-            // If no valid lanes, skip
-            return { type: 'skip' };
-        }
         case 'select_lane_for_delete_all': {
             // Generic handler for delete all in lane (custom protocols)
             const validLanes = 'validLanes' in action ? action.validLanes : [0, 1, 2];
@@ -1027,26 +986,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'deleteCard', cardId: highestCards[0].card.id };
         }
 
-        case 'select_opponent_highest_card_to_delete_for_hate_2': {
-            const actor = action.actor;
-            const opponent = actor === 'player' ? 'opponent' : 'player';
-            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
-
-            state[opponent].lanes.forEach((lane, laneIndex) => {
-                if (lane.length > 0) {
-                    const uncovered = lane[lane.length - 1];
-                    const value = uncovered.isFaceUp ? uncovered.value : 2;
-                    uncoveredCards.push({ card: uncovered, laneIndex, value });
-                }
-            });
-
-            if (uncoveredCards.length === 0) return { type: 'skip' };
-
-            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
-            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
-
-            return { type: 'deleteCard', cardId: highestCards[0].card.id };
-        }
+        // LEGACY REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - now uses generic select_cards_to_delete with calculation: highest_value
 
         case 'select_opponent_face_up_card_to_flip': {
             const getUncovered = (p: Player) => state[p].lanes
@@ -1087,24 +1027,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_any_other_card_to_flip_for_water_0':
-        case 'select_card_to_flip_for_fire_3':
+        // LEGACY REMOVED: select_card_to_flip_for_fire_3 - now uses generic select_card_to_flip
         case 'select_card_to_flip_for_light_0':
-        case 'select_covered_card_to_flip_for_chaos_0':
+        // LEGACY REMOVED: select_covered_card_to_flip_for_chaos_0 - now uses generic select_card_to_flip with each_lane scope
         case 'select_covered_card_in_line_to_flip_optional': {
             const isOptional = 'optional' in action && action.optional;
             const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
             const canTargetSelf = !cannotTargetSelfTypes.includes(action.type);
             const requiresFaceDown = false; // None of these specific cases require face-down only
-
-            // Special case for Chaos-0: "In each line, flip 1 covered card."
-            if (action.type === 'select_covered_card_to_flip_for_chaos_0') {
-                const { laneIndex } = action;
-                const playerCovered = state.player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                if (playerCovered.length > 0) return { type: 'flipCard', cardId: playerCovered[0].id };
-                const opponentCovered = state.opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                if (opponentCovered.length > 0) return { type: 'flipCard', cardId: opponentCovered[0].id };
-                return { type: 'skip' };
-            }
 
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
@@ -1316,21 +1246,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_lane_to_shift_revealed_card_for_light_2': {
-            let possibleLanes = [0, 1, 2];
-            if ('disallowedLaneIndex' in action && action.disallowedLaneIndex !== undefined) {
-                possibleLanes = possibleLanes.filter(l => l !== action.disallowedLaneIndex);
-            }
-            if ('originalLaneIndex' in action && action.originalLaneIndex !== undefined) {
-                possibleLanes = possibleLanes.filter(l => l !== action.originalLaneIndex);
-            }
-            if (possibleLanes.length > 0) {
-                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-                return { type: 'selectLane', laneIndex: randomLane };
-            }
-            if ('optional' in action && action.optional) return { type: 'skip' };
-            return { type: 'skip' };
-        }
+        // LEGACY REMOVED: select_lane_to_shift_revealed_card_for_light_2 - now uses generic select_lane_for_shift
 
         case 'select_opponent_face_down_card_to_shift': { // Speed-4
             const validTargets: PlayedCard[] = [];
@@ -1552,7 +1468,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Normal AI: flip own cards to gain value, shift opponent's cards
             const { revealedCardId } = action as any;
             const cardInfo = findCardOnBoard(state, revealedCardId);
-            if (!cardInfo) return { type: 'skip' };
+            // CRITICAL FIX: Must return resolveLight2Prompt, NOT skip!
+            // skipAction only works for optional actions, but this prompt isn't marked as optional
+            if (!cardInfo) return { type: 'resolveLight2Prompt', choice: 'skip' };
             if (cardInfo.owner === 'opponent') {
                 // Flip our own face-down cards to face-up
                 return { type: 'resolveLight2Prompt', choice: 'flip' };
@@ -1575,8 +1493,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: targetLaneIndex };
         }
 
-        case 'flip_self_for_psychic_4': {
-            // Psychic-4: Flip self after returning opponent card
+        // GENERIC: Handle all flip_self variations (Water-0, Psychic-4, Speed-3, custom protocols)
+        case 'flip_self':
+        case 'flip_self_for_water_0':
+        case 'flip_self_for_psychic_4':
+        case 'speed_3_self_flip_after_shift': {
             if (action.sourceCardId) {
                 return { type: 'flipCard', cardId: action.sourceCardId };
             }
@@ -1585,14 +1506,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'anarchy_0_conditional_draw': {
             // Anarchy-0: This is automatic, no AI decision needed
-            return { type: 'skip' };
-        }
-
-        case 'speed_3_self_flip_after_shift': {
-            // Speed-3: Flip self after shifting
-            if (action.sourceCardId) {
-                return { type: 'flipCard', cardId: action.sourceCardId };
-            }
             return { type: 'skip' };
         }
 
@@ -1618,9 +1531,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_or_flip_for_light_2': {
             const { revealedCardId } = action;
             const cardInfo = findCardOnBoard(state, revealedCardId);
-            if (!cardInfo) return { type: 'skip' };
+            // CRITICAL FIX: Must return resolveLight2Prompt, NOT skip!
+            // skipAction only works for optional actions, but this prompt isn't marked as optional
+            if (!cardInfo) return { type: 'resolveLight2Prompt', choice: 'skip' };
 
-            // Easy AI: flip its own cards, skip player's cards.
+            // Normal AI: flip its own cards, skip player's cards.
             if (cardInfo.owner === 'opponent') {
                 return { type: 'resolveLight2Prompt', choice: 'flip' };
             }
@@ -1648,39 +1563,104 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'flip_self_for_water_0': {
-            // Water-0: Flip self after playing
-            if (action.sourceCardId) {
-                return { type: 'flipCard', cardId: action.sourceCardId };
-            }
-            return { type: 'skip' };
-        }
+        // flip_self_for_water_0 is handled by the generic flip_self case above
 
-        case 'reveal_opponent_hand': {
-            // This action doesn't require a response from the AI, just acknowledgment
+        case 'reveal_opponent_hand':
+        case 'plague_2_player_discard':
+        case 'delete_self': {
+            // These actions don't require AI decisions - handled automatically
             return { type: 'skip' };
         }
 
         // ========== ADDITIONAL HANDLERS FOR CUSTOM PROTOCOLS ==========
 
         case 'select_lane_for_delete': {
-            // Generic lane selection for delete effects - prefer lanes with more player cards
+            // Generic lane selection for delete effects
+            // CRITICAL: Calculate NET benefit (player loss - own loss) based on valueFilter
             const validLanes = (action as any).validLanes || [0, 1, 2];
-            const scoredLanes = validLanes.map((i: number) => ({
-                laneIndex: i,
-                score: state.player.lanes[i].reduce((sum, c) => sum + (c.isFaceUp ? c.value : 2), 0)
-            }));
+            const valueFilter = (action as any).valueFilter; // e.g., { min: 0, max: 2 } for Death-2
+
+            const scoredLanes = validLanes.map((i: number) => {
+                let playerLoss = 0;
+                let ownLoss = 0;
+
+                // Count player's cards that would be deleted
+                for (const card of state.player.lanes[i]) {
+                    const cardValue = card.isFaceUp ? card.value : 2; // Estimate face-down as 2
+                    // Check if card matches value filter (if specified)
+                    if (valueFilter) {
+                        if (card.isFaceUp) {
+                            if (card.value >= valueFilter.min && card.value <= valueFilter.max) {
+                                playerLoss += cardValue + 1; // +1 bonus for removing a card
+                            }
+                        } else {
+                            // Face-down: estimate 50% chance of matching
+                            playerLoss += (cardValue + 1) * 0.5;
+                        }
+                    } else {
+                        playerLoss += cardValue + 1;
+                    }
+                }
+
+                // Count AI's own cards that would be deleted
+                for (const card of state.opponent.lanes[i]) {
+                    const cardValue = card.isFaceUp ? card.value : 2;
+                    if (valueFilter) {
+                        if (card.isFaceUp) {
+                            if (card.value >= valueFilter.min && card.value <= valueFilter.max) {
+                                ownLoss += cardValue + 3; // +3 penalty for losing own card
+                            }
+                        } else {
+                            ownLoss += (cardValue + 3) * 0.5;
+                        }
+                    } else {
+                        ownLoss += cardValue + 3;
+                    }
+                }
+
+                // NET score: positive means good for AI, negative means bad
+                return { laneIndex: i, score: playerLoss - ownLoss };
+            });
+
             scoredLanes.sort((a: any, b: any) => b.score - a.score);
+
+            // Only select lane if it has positive net benefit, otherwise skip
+            if (scoredLanes[0].score > 0) {
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+
+            // All lanes would hurt AI more than player - this shouldn't happen if validLanes is correct
+            // But just in case, pick the least bad option
             return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
         }
 
         case 'select_lane_for_shift_all': {
-            // Generic lane selection for shift all effects
-            const validLanes = (action as any).validLanes || [0, 1, 2];
-            const disallowedLane = (action as any).disallowedLaneIndex;
-            const filteredLanes = validLanes.filter((i: number) => i !== disallowedLane);
+            // Light-3 uses validDestinationLanes, not validLanes
+            const validLanes = (action as any).validDestinationLanes || (action as any).validLanes || [0, 1, 2];
+            const sourceLane = (action as any).sourceLaneIndex;
+            // Filter out the source lane (can't shift to same lane)
+            const filteredLanes = validLanes.filter((i: number) => i !== sourceLane);
+
             if (filteredLanes.length > 0) {
-                return { type: 'selectLane', laneIndex: filteredLanes[Math.floor(Math.random() * filteredLanes.length)] };
+                // Normal AI: Score lanes to pick best destination
+                const scoredLanes = filteredLanes.map((laneIndex: number) => {
+                    let score = 0;
+                    // Prefer lanes where we already have cards (building up)
+                    score += state.opponent.lanes[laneIndex].length * 2;
+                    // Prefer lanes closer to compile
+                    score += state.opponent.laneValues[laneIndex];
+                    // Avoid lanes where player is close to compile
+                    if (state.player.laneValues[laneIndex] >= 8) {
+                        score -= 5;
+                    }
+                    return { laneIndex, score };
+                });
+                scoredLanes.sort((a: any, b: any) => b.score - a.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
+            }
+            // Fallback
+            if (validLanes.length > 0) {
+                return { type: 'selectLane', laneIndex: validLanes[0] };
             }
             return { type: 'selectLane', laneIndex: 0 };
         }
@@ -1693,16 +1673,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_optional_discard_custom': {
             // Optional discard - Normal AI accepts if hand is full
             return { type: 'resolveOptionalEffectPrompt', accept: state.opponent.hand.length > 4 };
-        }
-
-        case 'execute_remaining_custom_effects': {
-            // This is automatic, no AI decision needed
-            return { type: 'skip' };
-        }
-
-        case 'discard_completed': {
-            // This is automatic, no AI decision needed
-            return { type: 'skip' };
         }
 
         case 'custom_choice': {

@@ -42,9 +42,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         if (isPlayFromHand) {
             card = player.hand.find(c => c.id === selectedCardId);
         } else if (isPlayFromEffect) {
+            // CRITICAL: Check disallowedLaneIndex FIRST before any other checks
+            // This handles Darkness-3 "Play to OTHER lines" - excludes current lane
+            if (actionRequired.disallowedLaneIndex !== undefined && laneIndex === actionRequired.disallowedLaneIndex) {
+                return { isPlayable: false, isMatching: false, isCompilable };
+            }
+
             // Life-3: Playing from deck - no card in hand
             if ((actionRequired as any).source === 'deck') {
-                // Exclude current lane if specified
+                // Exclude current lane if specified (legacy check for excludeCurrentLane)
                 if ((actionRequired as any).excludeCurrentLane && laneIndex === (actionRequired as any).currentLaneIndex) {
                     return { isPlayable: false, isMatching: false, isCompilable };
                 }
@@ -55,10 +61,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         }
 
         if (!card) {
-            return { isPlayable: false, isMatching: false, isCompilable };
-        }
-
-        if (isPlayFromEffect && laneIndex === actionRequired.disallowedLaneIndex) {
             return { isPlayable: false, isMatching: false, isCompilable };
         }
         

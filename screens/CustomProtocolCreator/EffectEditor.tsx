@@ -480,16 +480,22 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 }}
                             >
                                 <option value="draw">Draw Cards</option>
+                                <option value="refresh">Refresh Hand</option>
+                                <option value="mutual_draw">Mutual Draw (Exchange)</option>
                                 <option value="flip">Flip Cards</option>
                                 <option value="shift">Shift Card</option>
                                 <option value="delete">Delete Cards</option>
+                                <option value="delete_all_in_lane">Delete All in Lane</option>
                                 <option value="discard">Discard Cards</option>
                                 <option value="return">Return to Hand</option>
                                 <option value="play">Play from Hand/Deck</option>
+                                <option value="rearrange_protocols">Rearrange Protocols</option>
+                                <option value="swap_protocols">Swap Protocols</option>
                                 <option value="reveal">Reveal Hand</option>
                                 <option value="give">Give Cards</option>
                                 <option value="take">Take from Hand</option>
                                 <option value="choice">Either/Or Choice</option>
+                                <option value="block_compile">Block Compile</option>
                             </select>
                         </label>
 
@@ -556,15 +562,22 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                             }}
                                         >
                                             <option value="draw">Draw Cards</option>
+                                            <option value="refresh">Refresh Hand</option>
+                                            <option value="mutual_draw">Mutual Draw (Exchange)</option>
                                             <option value="flip">Flip Cards</option>
                                             <option value="shift">Shift Card</option>
                                             <option value="delete">Delete Cards</option>
+                                            <option value="delete_all_in_lane">Delete All in Lane</option>
                                             <option value="discard">Discard Cards</option>
                                             <option value="return">Return to Hand</option>
                                             <option value="play">Play from Hand/Deck</option>
+                                            <option value="rearrange_protocols">Rearrange Protocols</option>
+                                            <option value="swap_protocols">Swap Protocols</option>
                                             <option value="reveal">Reveal Hand</option>
                                             <option value="give">Give Cards</option>
                                             <option value="take">Take from Hand</option>
+                                            <option value="choice">Either/Or Choice</option>
+                                            <option value="block_compile">Block Compile</option>
                                         </select>
                                     </label>
 

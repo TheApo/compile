@@ -1,596 +1,569 @@
-# AI Onboarding Guide - Compile Game
+# AI Onboarding Guide for COMPILE Card Game
 
-Diese Datei beschreibt die optimale Reihenfolge zum Einlesen des Projekts für schnelles Verständnis.
+## WICHTIG: Zuerst diese Dokumente lesen!
 
----
+Bevor du mit der Arbeit am Code beginnst, lies unbedingt diese Dateien in der folgenden Reihenfolge:
 
-## 🚀 Schnellstart-Reihenfolge
+1. **`beschreibung.txt`** - Überblick über das Projekt und seine Struktur
+2. **`COMP-MN01_Rulesheet_Updated.pdf`** - Offizielle Spielregeln mit Bildern und Beispielen
+3. **`game_rules.md`** - Detaillierte Spielregeln in Textform
+4. **`CUSTOM_PROTOCOL_CREATOR.md`** - Anleitung zum Erstellen neuer Protokolle
+5. **`CARD_TARGETING_RULES.md`** - Regeln für Card Targeting und Filter
 
-### Phase 1: Spielregeln & Konzepte (IMMER ZUERST!)
-
-**Ziel:** Verstehen wie das Spiel funktioniert
-
-1. **`beschreibung.txt`** (Text-Datei)
-   - Enthält: Grundregeln, wichtige Konzepte, Spezialfälle
-   - **Warum wichtig:** Definiert was face-up/face-down, covered/uncovered, Effekt-Typen bedeuten
-   - **Lesen:** Komplett durchlesen
-
-2. **`COMP-MN01_Rulesheet_Updated.pdf`** (PDF-Datei)
-   - Enthält: Offizielle Spielregeln, Card Anatomy, Gameplay-Flow
-   - **Warum wichtig:** Zeigt wie Turns ablaufen, was Compile bedeutet, Victory-Bedingungen
-   - **Lesen:** Seite 1-2 vollständig
-
-3. **`GAME_RULES.md`** (MD-Datei)
-   - Enthält: Kompilierung, Recompile, Control Mechanic, Phase-Ablauf
-   - **Warum wichtig:** Ergänzt PDF mit wichtigen Details für KI-Entwicklung
-   - **Lesen:** Komplett (kurz)
+Diese Dokumente sind essentiell um zu verstehen:
+- Wie das Spiel funktioniert (Compile-Bedingungen, Turn Order, Card Anatomy)
+- Was die verschiedenen Effekt-Typen bedeuten (flip, shift, delete, etc.)
+- Wie Covered/Uncovered Cards funktionieren
+- Wie das Custom Protocol System aufgebaut ist
 
 ---
 
-### Phase 2: System-Dokumentation (DANN!)
+## Game Overview
 
-**Ziel:** Verstehen wie der Code strukturiert ist
+COMPILE is a competitive card game where two players (rogue AIs) compete one-on-one in a race to compile their 3 protocols, rewriting reality in their new image.
 
-4. **`LOGGING_SYSTEM.md`** ⭐ (MD-Datei)
-   - Enthält: Indent-Management, Context-Tracking, Kritische Regeln, Typische Fehler
-   - **Warum wichtig:** Logging ist komplex und fehleranfällig - diese Datei verhindert Bugs!
-   - **Lesen:** Komplett - enthält viele Fix-Beispiele
+### Win Condition
+The first player to **compile all 3 of their protocol cards** wins the game.
 
-5. **`CARD_TARGETING_RULES.md`** ⭐ (MD-Datei)
-   - Enthält: Targeting-Regeln für ALLE Karten (DELETE, FLIP, SHIFT, etc.)
-   - **Warum wichtig:** Definiert UNCOVERED vs COVERED, Spezialfälle (Apathy-4, Death-2)
-   - **Lesen:** Tabellen durchscannen, bei Bedarf nachschlagen
+### Basic Setup
+- Each player has **3 protocols** arranged in 3 lanes
+- Each player builds an **18-card deck** (6 cards per protocol)
+- Starting hand: **5 cards**
+- Protocols start "Loading..." side up, flip to "Compiled" when compiled
 
-6. **`DEBUG_TOOL_GUIDE.md`** (MD-Datei)
-   - Enthält: Wie man Test-Szenarien lädt, Debug-Panel benutzt
-   - **Warum wichtig:** Nützlich zum Testen von Fixes
-   - **Lesen:** Optional, bei Bedarf
+## Core Mechanics
 
-7. **`CSS_STRUCTURE.md`** ⭐ (MD-Datei)
-   - Enthält: CSS-Organisation, Responsive-Design, Tablet-Optimierung, wo man was findet
-   - **Warum wichtig:** CSS ist modular aufgeteilt + enthält Tablet-Responsive Regeln
-   - **Lesen:** Bei CSS/Layout-Änderungen - hat komplette Dokumentation aller Screens
-   - **Besonders wichtig:** Tablet Media Queries (Breakpoints, Grid-Dimensionen)
-
----
-
-### Phase 3: Code-Struktur (NUR BEI BEDARF!)
-
-**Ziel:** Spezifische Systeme verstehen
-
-**Nur lesen wenn du an diesen Systemen arbeiten musst:**
-
-#### 3.1 Karten-System
-
-8. **`data/cards.ts`** (TypeScript)
-   - Enthält: Alle Original-Karten (18 Protokolle × 6 Karten = 108 Karten)
-   - **Wann lesen:** Wenn du wissen musst, was eine Original-Karte genau macht
-   - **Wie lesen:** Suche nach spezifischer Karte (z.B. "Anarchy-0")
-   - **Wichtig:** Custom Protocol Karten sind NICHT hier, sondern in localStorage
-
-#### 3.2 Effekt-System (Original Karten)
-
-9. **`logic/effects/`** Ordner
-   - Struktur:
-     - `effectRegistry.ts` - Middle Commands (on-play)
-     - `effectRegistryStart.ts` - Start-Phase Effekte
-     - `effectRegistryEnd.ts` - End-Phase Effekte
-     - `effectRegistryOnCover.ts` - "When covered" Effekte
-     - `{protocol}/` Ordner - Einzelne Karten-Effekte (z.B. `anarchy/Anarchy-0.ts`)
-   - **Wann lesen:** Wenn du einen spezifischen Original-Karten-Effekt debuggen musst
-   - **Wie lesen:**
-     1. Finde Registry-Eintrag
-     2. Lies die spezifische Effect-Datei
-   - **Wichtig:** Custom Protocol Effekte nutzen NICHT diese Registries!
-
-#### 3.3 Custom Protocol System ⭐
-
-**Lese diese Sektion wenn du an Custom Protocols arbeitest!**
-
-10. **`CUSTOM_PROTOCOL_CREATOR.md`** (MD-Datei) ⭐
-    - Enthält: Architektur, Effect Types, UI-Komponenten, Integration
-    - **Warum wichtig:** Erklärt wie Custom Protocols funktionieren
-    - **Lesen:** Komplett wenn du Custom Protocols editierst/debuggst
-    - **Besonders wichtig:**
-      - Effect Positions (top/middle/bottom)
-      - Conditional Chains (if_executed, then)
-      - Parameter-basierte Effekte (KEINE card-spezifischen Funktionen!)
-
-11. **`CUSTOM_PROTOCOL_MIGRATION_GUIDE.md`** (MD-Datei)
-    - Enthält: Wie Original-Protokolle zu Custom Protocols migriert werden
-    - **Wann lesen:** Wenn du Protokolle migrierst oder Beispiele brauchst
-    - **Besonders wichtig:**
-      - Effect Parameter Patterns
-      - Target Filtering
-      - Conditional Chains
-      - Death Protocol Beispiel (komplett)
-
-**Custom Protocol Code-Dateien:**
-
-- **`types/customProtocol.ts`** - Type Definitions
-  - Alle Effect Parameter Types
-  - EffectDefinition, CustomProtocolDefinition
-  - Conditional Types (if_executed, then, followUp)
-
-- **`logic/customProtocols/effectInterpreter.ts`** ⭐ - Core Engine
-  - Führt Custom Effects aus
-  - Validiert Position (top/middle/bottom)
-  - Handled Conditionals und Chains
-  - Respektiert Spielregeln (Frost-1, Apathy-2, etc.)
-  - **KRITISCH:** Diese Datei ist das Herzstück!
-
-- **`logic/customProtocols/storage.ts`** - localStorage Management
-  - loadCustomProtocols(), saveCustomProtocol()
-  - Import/Export JSON
-
-- **`logic/customProtocols/cardFactory.ts`** - Card Generation
-  - Konvertiert JSON → Card Objects
-  - Fügt customEffects zu Karten hinzu
-
-- **`screens/CustomProtocolCreator/`** - UI Components
-  - ProtocolList.tsx - Protokoll-Übersicht
-  - ProtocolWizard.tsx - Editor
-  - CardEditor.tsx - Einzelne Karte editieren
-  - EffectParameterEditors/ - Parameter-Editoren für jeden Effect Type
-
-**Custom Protocol Activation:**
-- Custom Protocols sind standardmäßig UNSICHTBAR
-- Aktivierung: 5× auf "developed" im Main Menu klicken
-- Einstellung in `localStorage` via `utils/customProtocolSettings.ts`
-
-#### 3.4 Game-Logic
-
-12. **Kern-Dateien** (in dieser Reihenfolge):
-
-   **a) `logic/game/stateManager.ts`**
-   - Enthält: `recalculateAllLaneValues`, `getEffectiveCardValue`, `calculateCompilableLanes`
-   - **Wann lesen:** Wenn du verstehen musst, wie Werte berechnet werden
-
-   **b) `logic/game/phaseManager.ts`**
-   - Enthält: `advancePhase`, `processEndOfAction`, `processQueuedActions`
-   - **Wann lesen:** Wenn du Phase-Übergänge oder queued actions debuggen musst
-   - **Wichtig:** `processQueuedActions` verarbeitet Auto-Resolving Actions (z.B. flip_self_for_water_0)
-
-   **c) `logic/game/actionResolver.ts`**
-   - Enthält: Haupt-Dispatcher für alle Actions
-   - **Wann lesen:** Wenn du verstehen musst, wie Actions verarbeitet werden
-
-   **d) `logic/game/resolvers/`** Ordner
-   - `cardResolver.ts` - Karten-Aktionen (flip, delete, return, etc.)
-   - `laneResolver.ts` - Shift-Aktionen + Play Card
-   - `discardResolver.ts` - Discard-Aktionen
-   - `promptResolver.ts` - Prompts (Rearrange, Compile, etc.)
-   - **Wann lesen:** Wenn du einen spezifischen Action-Typ debuggen musst
-
-   **e) `logic/effectExecutor.ts`** ⭐
-   - Verbindet Original Effects UND Custom Protocol Effects
-   - Ruft `executeCustomEffect` für Custom Cards
-   - **KRITISCH:** Hier wird entschieden ob Original oder Custom Effect
-
-#### 3.5 AI-System
-
-13. **`logic/ai/`** Ordner
-    - `easy.ts` - Einfache AI (spielt höchsten Wert)
-    - `normal.ts` - Mittlere AI (strategisch mit Fehlern)
-    - `hardImproved.ts` - Schwere AI (Memory-System, Strategie)
-    - **Wann lesen:** Nur wenn du AI-Bugs fixen musst
-    - **Wichtig:** Ignoriere `hard.ts` (veraltet)
-    - **Custom Protocols:** AI kann Custom Protocols noch NICHT spielen (TODO)
-
----
-
-## 🎨 CSS-Struktur (Wichtig!)
-
-Das CSS ist modular aufgeteilt - **NIEMALS** direkt in einzelne CSS-Dateien schauen, erst `CSS_STRUCTURE.md` lesen!
-
-### Datei-Organisation
-
-**Root-Level (`styles/`):**
-- `base.css` - Basis-Variablen, Reset, Dark Theme
-- `components.css` - Karten, Buttons, UI-Komponenten, Protocol-Farben
-- `custom-protocol-creator.css` - Custom Protocol Editor
-- `StatisticsScreen.css` - Statistics Screen
-
-**Layout-Spezifisch (`styles/layouts/`):**
-- `main-menu.css` - Main Menu Layout
-- `game-screen.css` - Spiel-Screen (Board, Lanes, Hand)
-- `card-library.css` - Card Library
-- `protocol-selection.css` - Protocol Selection
-
-**Responsive (`styles/responsive/`):**
-- `tablet.css` - Tablet Media Queries (@media (max-width: 1024px))
-
-### Wo ändere ich was?
-
-| Was? | Datei |
-|------|-------|
-| **Karten-Styling** | `components.css` |
-| **Protocol-Farben** | `components.css` (CSS-Variablen wie `--protocol-anarchy`) |
-| **Buttons/Inputs** | `components.css` |
-| **Main Menu Layout** | `layouts/main-menu.css` |
-| **Game Board** | `layouts/game-screen.css` |
-| **Protocol Selection** | `layouts/protocol-selection.css` |
-| **Card Library** | `layouts/card-library.css` |
-| **Custom Protocol Editor** | `custom-protocol-creator.css` |
-| **Tablet-Anpassungen** | `responsive/tablet.css` |
-| **Dark Theme** | `base.css` |
-
-### Wichtige Regeln
-
-1. **NIEMALS** inline Styles in Components - immer CSS-Klassen
-2. **NIEMALS** direkte Farben - immer CSS-Variablen (`var(--protocol-anarchy)`)
-3. **IMMER** Tablet-Responsive beachten - Test bei 1024px Breite
-4. **BEI LAYOUT-BUGS:** Erst `CSS_STRUCTURE.md` lesen, dann relevante CSS-Datei
-
----
-
-## 📋 Checkliste für neue Session
-
-Beim Start einer neuen Programmier-Session:
-
-- [ ] **ZUERST:** `npm run check:all` ausführen! ⚡
-- [ ] Lies `beschreibung.txt` (2 min)
-- [ ] Lies `COMP-MN01_Rulesheet_Updated.pdf` Seite 1-2 (3 min)
-- [ ] Lies `LOGGING_SYSTEM.md` (5 min) ⭐
-- [ ] Scanne `CARD_TARGETING_RULES.md` Tabellen (2 min)
-- [ ] **OPTIONAL:** Lies `CUSTOM_PROTOCOL_CREATOR.md` wenn Custom Protocol Task (5 min)
-- [ ] **DANN:** Melde dich beim User zurück!
-
-**Geschätzte Zeit:** ~13 Minuten (18 min mit Custom Protocols)
-
----
-
-## 🔨 Build & Test Prozedere (PFLICHT!)
-
-**VOR JEDEM BUILD MUSS DIES AUSGEFÜHRT WERDEN:**
-
-```bash
-# IMMER in dieser Reihenfolge:
-npm run check:all    # Prüft queuePendingCustomEffects + custom protocol JSONs
-npm run build        # Baut das Projekt
+### The Field
+```
+         LANE 0      LANE 1      LANE 2
+       ┌─────────┬─────────┬─────────┐
+PLAYER │ Stack 0 │ Stack 1 │ Stack 2 │
+       ├─────────┼─────────┼─────────┤
+       │Protocol0│Protocol1│Protocol2│  <- Player's protocols
+       ├─────────┼─────────┼─────────┤
+       │Protocol0│Protocol1│Protocol2│  <- Opponent's protocols
+       ├─────────┼─────────┼─────────┤
+OPPON. │ Stack 0 │ Stack 1 │ Stack 2 │
+       └─────────┴─────────┴─────────┘
 ```
 
-### Was `npm run check:all` prüft:
+### Turn Order
+1. **Start Phase**: Trigger "Start:" effects on uncovered face-up cards
+2. **Check Control**: (Advanced) Control component mechanics
+3. **Check Compile**: If lane value ≥10 AND > opponent's lane value, MUST compile
+4. **Action Phase**: Either PLAY a card OR REFRESH (draw to 5 cards)
+5. **Check Cache**: Discard down to 5 cards if needed
+6. **End Phase**: Trigger "End:" effects on uncovered face-up cards
 
-1. **`check:effects`** - Findet fehlende `queuePendingCustomEffects` calls
-   - ✅ Alle Resolver/Helpers haben queue vor `actionRequired = null`
-   - ❌ Fehlt queue → Multi-Effect Karten brechen!
+### Playing Cards
+- **Face-Up**: Must match lane protocol (card protocol = player's OR opponent's protocol in that lane)
+  - Triggers middle box effect immediately
+  - Top/bottom effects become active
+- **Face-Down**: Can play in ANY lane
+  - Value = 2 (default)
+  - No effects active until flipped
 
-2. **`test:protocols`** - Validiert alle custom protocol JSONs
-   - ✅ Alle effects haben `position`, `trigger`, `params`, `id`
-   - ✅ Conditional chains korrekt verschachtelt
-   - ✅ ReactiveTriggerActor bei reactive triggers gesetzt
-   - ❌ Structural errors → Karten funktionieren nicht!
-
-### ⚠️ NIEMALS ohne Tests bauen!
-
-**FALSCH** ❌:
-```bash
-npm run build  # Direkt bauen ohne Tests
+### Card Anatomy
+```
+┌─────────────────────────────┐
+│ [Protocol] [Value] [Icon]   │  <- Protocol indicator, value, icon
+├─────────────────────────────┤
+│ TOP BOX (Persistent)        │  <- Always active when face-up (even covered)
+├─────────────────────────────┤
+│ MIDDLE BOX (Immediate)      │  <- Triggers on play/flip/uncover
+├─────────────────────────────┤
+│ BOTTOM BOX (Auxiliary)      │  <- Only active when UNCOVERED
+└─────────────────────────────┘
 ```
 
-**RICHTIG** ✅:
-```bash
-npm run check:all && npm run build
+### Key Terms
+- **Compile**: Delete all cards in a line (both sides), flip your protocol to "Compiled"
+- **Uncovered**: Top card of a stack (can be targeted by most effects)
+- **Covered**: Cards under other cards (protected from most effects)
+- **Delete**: Move card from field to owner's trash
+- **Discard**: Move card from hand to owner's trash
+- **Flip**: Change card facing (face-up ↔ face-down)
+- **Shift**: Move card to another lane on same side
+- **Return**: Move card from field to owner's hand
+- **Reveal**: Show card temporarily, then return to previous state
+- **Refresh**: Draw until 5 cards in hand
+- **Clear Cache**: Discard down to 5 cards in hand
+
+## Custom Protocol System (CRITICAL!)
+
+### Architecture Overview
+
+The game now uses a **fully data-driven custom protocol system**. All card effects are defined in JSON files, NOT hardcoded in TypeScript.
+
+```
+custom_protocols/
+├── fire_custom_protocol.json
+├── water_custom_protocol.json
+├── death_custom_protocol.json
+├── life_custom_protocol.json
+├── light_custom_protocol.json
+├── darkness_custom_protocol.json
+├── gravity_custom_protocol.json
+├── speed_custom_protocol.json
+├── spirit_custom_protocol.json
+├── metal_custom_protocol.json
+├── plague_custom_protocol.json
+├── psychic_custom_protocol.json
+├── love_custom_protocol.json
+├── anarchy_custom_protocol.json
+└── [any new protocols...]
 ```
 
-### Nach JEDER Code-Änderung:
+### JSON Protocol Structure
 
-- [ ] Geändert: Resolver/Helper? → `npm run check:all`
-- [ ] Geändert: Custom Protocol JSON? → `npm run check:all`
-- [ ] Geändert: Text-Generierung? → `npm run check:all`
-- [ ] **DANN ERST:** `npm run build`
-
-### Wenn Tests fehlschlagen:
-
-**check:effects schlägt fehl:**
-- Problem: Fehlende `queuePendingCustomEffects`
-- Fix: Vor JEDEM `actionRequired = null` einfügen:
-  ```typescript
-  newState = queuePendingCustomEffects(newState);
-  newState.actionRequired = null;
-  ```
-
-**test:protocols schlägt fehl:**
-- Problem: Fehlendes Feld in custom protocol JSON
-- Fix: Fehlende `position`, `trigger`, etc. hinzufügen
-- Beispiel: `"position": "middle"` bei middleEffects
-
-**NIEMALS Code committen wenn Tests fehlschlagen!**
-
----
-
-## 🎯 Schnell-Referenz: Wo finde ich was?
-
-| Was suchst du? | Wo findest du es? |
-|----------------|-------------------|
-| **Spielregeln** | `beschreibung.txt`, PDF, `GAME_RULES.md` |
-| **Original Karten-Effekte** | `data/cards.ts` → `logic/effects/{protocol}/{Card}.ts` |
-| **Custom Protocol Effekte** | `logic/customProtocols/effectInterpreter.ts` |
-| **Custom Protocol Typen** | `types/customProtocol.ts` |
-| **Custom Protocol Migration** | `CUSTOM_PROTOCOL_MIGRATION_GUIDE.md` |
-| **Logging-Regeln** | `LOGGING_SYSTEM.md` ⭐ |
-| **Targeting-Regeln** | `CARD_TARGETING_RULES.md` |
-| **CSS - Komponenten** | `styles/components.css` |
-| **CSS - Layouts** | `styles/layouts/{screen}.css` |
-| **CSS - Tablet** | `styles/responsive/tablet.css` |
-| **CSS - Übersicht** | `CSS_STRUCTURE.md` ⭐ |
-| **Phase-Management** | `logic/game/phaseManager.ts` |
-| **Shift-Logic** | `logic/game/resolvers/laneResolver.ts` |
-| **Delete/Flip/Return** | `logic/game/resolvers/cardResolver.ts` |
-| **AI-Entscheidungen** | `logic/ai/easy.ts`, `normal.ts`, `hardImproved.ts` |
-| **Uncover-Logic** | `logic/game/helpers/actionUtils.ts` → `handleUncoverEffect` |
-| **Queued Actions** | `logic/game/phaseManager.ts` → `processQueuedActions` |
-| **Pending Effects Queue** | `logic/game/phaseManager.ts` → `queuePendingCustomEffects` ⭐ |
-| **Effect Execution** | `logic/effectExecutor.ts` (Original + Custom) |
-| **Check Missing Queues** | `npm run check:effects` (Auto-Check Script) ⚡ |
-| **Check Custom Protocols** | `npm run test:protocols` (JSON Validation) ⚡ |
-| **Check ALLES** | `npm run check:all` (Beide Tests) ⚡ |
-
----
-
-## 🔥 Häufige Bug-Kategorien & Wo schauen
-
-### 🚨 Effekte werden verschluckt (Multi-Effect Karten)
-→ **Check:**
-1. **ZUERST:** `npm run check:effects` ausführen ⚡
-2. Suche nach `actionRequired = null` ohne vorheriges `queuePendingCustomEffects`
-3. Prüfe `logic/game/resolvers/` (laneResolver, discardResolver, cardResolver)
-4. Prüfe `logic/game/helpers/actionUtils.ts` (handleUncoverEffect, handleOnFlipToFaceUp)
-5. **Pattern:** Reactive Effects → queuePendingCustomEffects → actionRequired = null
-→ **Symptom:** Zweiter/dritter Effekt wird nicht ausgeführt nach Uncover/Shift/Return
-
-### Softlock nach Effekt
-→ **Check:**
-1. `laneResolver.ts` - Animation Callbacks müssen IMMER `endTurnCb` aufrufen
-2. `phaseManager.ts` - `processQueuedActions` muss Queue verarbeiten
-3. `cardResolver.ts` - Keine Queue zu actionRequired bewegen!
-
-### Custom Protocol Effect funktioniert nicht
-→ **Check:**
-1. `effectInterpreter.ts` - Position-Check (top/middle/bottom)
-2. Karte face-up? (für alle Effekte)
-3. Karte uncovered? (für middle/bottom Effekte)
-4. Target Filters korrekt? (owner, position, faceState)
-5. Conditional richtig verschachtelt?
-
-### Falsches Logging (Einrückung/Source)
-→ **Check:** `LOGGING_SYSTEM.md`, `actionUtils.ts` (handleUncoverEffect), `cardResolver.ts` (Context-Management)
-
-### Effekt wird nicht ausgeführt / falsche Bedingung
-→ **Check:**
-1. Original Card: `logic/effects/{protocol}/{Card}.ts`
-2. Custom Card: `logic/customProtocols/effectInterpreter.ts`
-3. Ist Karte face-up? Ist Karte uncovered?
-4. Wird Effect vom richtigen Executor aufgerufen? (`effectExecutor.ts`)
-
-### AI macht dumme Entscheidung
-→ **Check:** `logic/ai/{difficulty}.ts`, validiere mit `CARD_TARGETING_RULES.md`
-
-### Information Leak (Spieler sieht Gegner-Karte)
-→ **Check:** Log-Messages in Effect-Dateien, siehe `LOGGING_SYSTEM.md` Regel 3
-
-### Karte targetiert falsch (covered statt uncovered)
-→ **Check:** `CARD_TARGETING_RULES.md`, dann AI-Handler oder Resolver
-
-### Layout/CSS kaputt auf Tablet
-→ **Check:**
-1. `CSS_STRUCTURE.md` - Welche Datei ist zuständig?
-2. `styles/responsive/tablet.css` - Media Query prüfen
-3. Breakpoint 1024px testen
-
-### Protocol Grid zu breit/Cards falsche Größe
-→ **Check:**
-1. `CSS_STRUCTURE.md` → "Troubleshooting"
-2. `styles/responsive/tablet.css` - Grid-Dimensionen
-
-### Custom Protocol Editor Validation Error
-→ **Check:**
-1. `CUSTOM_PROTOCOL_CREATOR.md` - Validation Rules
-2. Required Fields gefüllt?
-3. Conditionals haben thenEffect?
-4. Position/Trigger Kombination gültig?
-
----
-
-## 💡 Wichtige Konzepte (Kurzform)
-
-### Face-Up vs Face-Down
-- **Face-Up:** Alle Effekte aktiv (Top/Middle/Bottom), Wert sichtbar
-- **Face-Down:** Keine Effekte, Wert = 2 (oder 4 mit Darkness-2)
-
-### Covered vs Uncovered
-- **Uncovered:** Oberste Karte im Stack → Middle + Bottom aktiv
-- **Covered:** Darunter → nur Top aktiv (wenn face-up)
-
-### Effekt-Typen (Original + Custom)
-- **Top (Persistent):** Immer aktiv wenn face-up (auch wenn covered)
-- **Middle (Immediate):** Beim Spielen/Aufdecken/Uncovern (nur wenn uncovered!)
-- **Bottom (Auxiliary):** Nur wenn uncovered (triggered effects: start, end, on_cover)
-
-### Custom Protocol Positions
-- **Top:** Passive Rules, Value Modifiers - aktiv wenn covered
-- **Middle:** Draw, Flip, Delete, etc. - NUR wenn uncovered
-- **Bottom:** Start/End/OnCover Triggers - NUR wenn uncovered
-
-### Turn-Interrupt
-- Wenn Effekt für anderen Spieler Action benötigt
-- `_interruptedTurn` speichert ursprünglichen Turn
-- Nach Interrupt: Resume original turn
-
-### Queued Actions
-- Actions die nach aktueller Action ausgeführt werden
-- Beispiel: `flip_self_for_water_0`, `anarchy_0_conditional_draw`
-- Werden in `phaseManager.ts` → `processQueuedActions` verarbeitet
-- **KRITISCH:** NIEMALS Queue zu actionRequired bewegen!
-
-### Conditional Chains (Custom Protocols)
-- **optional: true** → "You may..."
-- **conditional: { type: "if_executed" }** → "If you do..."
-- **conditional: { type: "then" }** → "...then..."
-- **followUpEffect** → Sequentielle Verkettung
-
----
-
-## ⚠️ Kritische Warnungen
-
-1. **🚨 NIEMALS** `actionRequired = null` setzen ohne vorher `queuePendingCustomEffects(newState)` zu rufen!
-   - **Warum:** Multi-Effect Custom Protocols speichern pending effects in `_pendingCustomEffects`
-   - **Fix:** IMMER `newState = queuePendingCustomEffects(newState);` VOR `actionRequired = null`
-   - **Check-Script:** `npm run check:all` findet alle fehlenden Stellen automatisch!
-   - **Pattern:**
-     ```typescript
-     // ❌ FALSCH - Effects werden verschluckt!
-     newState.actionRequired = null;
-
-     // ✅ RICHTIG - Effects werden in Queue gespeichert
-     newState = queuePendingCustomEffects(newState);
-     newState.actionRequired = null;
-     ```
-   - **VOR JEDEM BUILD:** `npm run check:all && npm run build` ausführen!
-
-2. **IMMER** `decreaseLogIndent` symmetrisch zu `increaseLogIndent` aufrufen!
-
-3. **IMMER** prüfen ob Karte face-up UND uncovered ist, bevor Follow-up-Effekt ausgeführt wird!
-
-4. **NIEMALS** Gegner-Karten-Details im Log zeigen (Information Leak)!
-
-5. **IMMER** `setLogSource` und `setLogPhase` bei queued actions neu setzen!
-
-6. **NIEMALS** Animation Callbacks ohne `endTurnCb` aufrufen - führt zu Softlock!
-
-7. **NIEMALS** Queue-Actions zu `actionRequired` bewegen - sie sind auto-resolving!
-
-8. **NIEMALS** Custom Protocol Effekte mit card-spezifischem Code - nur Parameter!
-
-9. **NIEMALS** `Math.random()` nutzen - IMMER `import`, nie `require()` - es ist eine Web-App!
-
-10. **NIEMALS** Dev-Server selbst starten - User macht das!
-
----
-
-## 🛠️ Debugging-Workflow
-
-Wenn etwas nicht funktioniert:
-
-1. **Reproduziere Bug** (am besten mit Debug-Tool oder Testszenario)
-2. **Lies Log** (drücke "Log" Button im Spiel)
-3. **Identifiziere Problem:**
-   - Softlock? → Check queued actions / actionRequired / Animation Callbacks
-   - Falsches Logging? → Check Indent-Level / Source
-   - Effekt nicht ausgeführt? → Check face-up / uncovered / Position
-   - Falscher Actor? → Check `actionRequired.actor` vs `state.turn`
-   - Custom Protocol Bug? → Check effectInterpreter.ts Position-Validierung
-4. **Finde relevante Datei** (siehe "Wo finde ich was?" Tabelle oben)
-5. **Lies Code-Kontext** (nur betroffene Funktion)
-6. **Finde Root Cause** - NICHT raten, systematisch analysieren!
-7. **Implementiere Fix**
-8. **Teste mit Debug-Tool oder Testszenario**
-
----
-
-## 📚 Zusätzliche Notizen
-
-### Was NICHT einlesen
-- ❌ `node_modules/` (Dependencies)
-- ❌ `dist/` oder `docs/` (Build-Artifacts)
-- ❌ `logic/ai/hard.ts` (veraltet, benutze `hardImproved.ts`)
-- ❌ UI-Code (`screens/`, `components/`) außer bei UI-Bugs
-- ❌ Einzelne CSS-Dateien (benutze stattdessen `CSS_STRUCTURE.md`)
-- ❌ Veraltete MD-Dateien (alle Status/TODO/Analysis Dateien wurden gelöscht)
-
-### Nützliche Grep-Patterns
-```bash
-# Finde alle Effekte einer Original-Karte
-grep -r "Anarchy-0" logic/effects/
-
-# Finde wo Action-Type verwendet wird
-grep -r "select_card_to_shift" logic/
-
-# Finde Log-Messages
-grep -r "log(" logic/ | grep "Anarchy-0"
-
-# Finde Custom Protocol Effect Parameter
-grep -r "action: 'draw'" logic/customProtocols/
-
-# Finde CSS für Komponente
-grep -r "\.card\b" styles/
+```json
+{
+  "protocolName": "Fire",
+  "themeKeywords": ["DISCARD FOR EFFECT"],
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [...],      // Persistent effects (D box)
+      "middleEffects": [...],   // Immediate effects (E box)
+      "bottomEffects": [...]    // Auxiliary effects (F box)
+    },
+    // ... cards 1-5
+  ]
+}
 ```
 
-### Custom Protocol localStorage
-```javascript
-// In Browser Console:
-localStorage.getItem('customProtocols') // Alle Custom Protocols
-localStorage.getItem('customProtocolsEnabled') // Aktivierungs-Status
+### Effect Definition Structure
+
+Each effect has:
+```json
+{
+  "action": "draw" | "flip" | "delete" | "shift" | "discard" | "return" | "reveal" | "play" | "give" | "swap_protocols" | "prevent" | "value_boost" | "draw_from_opponent_deck" | "delete_all_in_lane" | "return_all_in_lane" | "custom_choice",
+  "params": {
+    "count": 1,
+    "targetFilter": {
+      "owner": "own" | "opponent" | "any",
+      "faceState": "face_up" | "face_down" | "any",
+      "position": "uncovered" | "covered" | "any",
+      "excludeSelf": true | false
+    },
+    "actorChooses": "effect_owner" | "card_owner",
+    "laneRestriction": "current" | "other" | "any",
+    "protocolRestriction": "matching" | "non_matching" | "any"
+  },
+  "trigger": "immediate" | "start" | "end" | "on_cover" | "after_draw" | "after_delete" | "after_flip" | "after_shift" | "after_return",
+  "optional": true | false,
+  "conditional": {
+    "if_executed": true,
+    "then": { /* another effect */ }
+  }
+}
 ```
 
----
+### Key Files in Custom Protocol System
 
-## ✅ Nach dem Einlesen
+1. **`logic/customProtocols/effectInterpreter.ts`** - The heart of effect execution
+   - `executeCustomEffect()` - Main entry point for all effect types
+   - Creates `actionRequired` when user/AI input is needed
+   - Handles conditionals (`if_executed`, `then`)
+   - Parses `targetFilter`, `actorChooses`, `laneRestriction`
 
-Wenn du diese Anleitung befolgt hast, solltest du:
+2. **`logic/game/resolvers/cardResolver.ts`** - Handles `actionRequired` responses
+   - Processes user/AI card selections
+   - Routes to appropriate handlers based on action type
+   - Contains both legacy (specific) and generic handlers
 
-✅ Die Spielregeln verstehen (face-up, uncovered, compile)
-✅ Das Logging-System verstehen (indent, source, phase)
-✅ Wissen wo Code für spezifische Features liegt
-✅ Custom Protocol System verstehen (wenn relevant)
-✅ CSS-Struktur kennen (modular, wo was liegt)
-✅ Häufige Bug-Kategorien kennen
-✅ Bereit sein zum Programmieren!
+3. **`logic/game/reactiveEffectProcessor.ts`** - Reactive effect handling
+   - Processes top box effects with triggers like `after_draw`, `after_delete`, etc.
+   - Queues and processes reactive effects in correct order
 
-**Melde dich beim User und frage nach der Aufgabe!** 🚀
+4. **`types/customProtocol.ts`** - TypeScript types for custom protocols
 
----
+### How Effects Flow
 
-## 🎓 Spezial-Themen
+```
+1. Card played/flipped/uncovered
+       ↓
+2. effectInterpreter.executeCustomEffect()
+       ↓
+3. If user input needed → actionRequired created
+       ↓
+4. AI (easy.ts/normal.ts) or GUI receives actionRequired
+       ↓
+5. cardResolver.ts processes the response
+       ↓
+6. Effect completes, triggers reactive effects if any
+       ↓
+7. reactiveEffectProcessor.ts checks for triggered effects
+```
 
-### Custom Protocol Migration
+## AI System
 
-Wenn du Original-Protokolle zu Custom Protocols migrierst:
-1. Lies `CUSTOM_PROTOCOL_MIGRATION_GUIDE.md` komplett
-2. Prüfe alle 6 Karten des Protokolls
-3. Mappe jeden Effekt zu Effect Type + Parametern
-4. Nutze Conditional Chains für komplexe Effekte
-5. Teste JEDEN Edge Case (no targets, softlocks, etc.)
+### AI Difficulty Levels
 
-### Water-0 Pattern (Flip Self After Flip Other)
+1. **Easy AI** (`logic/ai/easy.ts`)
+   - Makes random or first-available choices
+   - Rarely accepts optional effects
+   - No strategic thinking
+
+2. **Normal AI** (`logic/ai/normal.ts`)
+   - Makes scoring-based decisions
+   - 20% chance to make suboptimal moves (human-like)
+   - No memory of revealed cards
+   - Balanced strategic choices
+
+3. **Hard AI** (`logic/ai/hardImproved.ts`)
+   - **NOTE: Currently being rewritten from scratch**
+   - Will have full strategic analysis
+   - Memory of revealed cards
+   - Predictive opponent modeling
+
+### How AI Handles Effects
+
+The AI receives `ActionRequired` objects and must return `AIAction`:
 
 ```typescript
+// Example ActionRequired
 {
-  params: { action: "flip", count: 1, excludeSelf: true },
-  conditional: {
-    type: "then",
-    thenEffect: {
-      params: { action: "flip", count: 1, deleteSelf: true }
+  type: 'select_card_to_flip',
+  actor: 'opponent',
+  sourceCardId: 'card-123',
+  targetFilter: {
+    owner: 'opponent',
+    faceState: 'face_up',
+    position: 'uncovered'
+  }
+}
+
+// AI returns AIAction
+{
+  type: 'flipCard',
+  cardId: 'target-card-456'
+}
+```
+
+### Generic vs Specific Handlers
+
+The AI has two types of handlers:
+
+**Generic Handlers** (PREFERRED for custom protocols):
+- `select_card_to_flip` - Uses `targetFilter` to find valid targets
+- `select_card_to_shift` - Uses `targetFilter` + lane restrictions
+- `select_cards_to_delete` - Uses `targetFilter` + `actorChooses`
+- `select_card_to_return` - Uses `targetOwner` filter
+- `select_lane_for_shift` - Handles lane selection with restrictions
+- `select_lane_for_delete_all` - Generic delete all in lane
+- `prompt_optional_effect` - Generic optional effect prompt
+
+**Specific Handlers** (Legacy, for original protocols):
+- `select_card_to_flip_for_fire_3` - Fire-3 specific
+- `select_card_to_delete_for_death_1` - Death-1 specific
+- etc.
+
+### Adding New Effects for AI
+
+When creating new custom protocols:
+
+1. **Use generic action types** when possible:
+   - `select_card_to_flip` with appropriate `targetFilter`
+   - `select_card_to_shift` with appropriate `targetFilter`
+   - `select_cards_to_delete` with `targetFilter` and `actorChooses`
+
+2. **If generic types don't fit**, you may need to:
+   - Add a new specific handler in `easy.ts` and `normal.ts`
+   - Add corresponding case in `cardResolver.ts`
+
+3. **Test with AI** to ensure the effect works correctly
+
+## Effect Action Types Reference
+
+### Draw
+```json
+{ "action": "draw", "params": { "count": 2 } }
+```
+
+### Flip
+```json
+{
+  "action": "flip",
+  "params": {
+    "count": 1,
+    "targetFilter": {
+      "owner": "opponent",
+      "faceState": "face_up",
+      "position": "uncovered"
     }
   }
 }
 ```
 
-Generiert Queue-Action `flip_self_for_water_0` die von `processQueuedActions` verarbeitet wird.
-
-### Death-1 Pattern (Optional Draw → Delete Other → Delete Self)
-
-```typescript
+### Delete
+```json
 {
-  params: { action: "draw", count: 1, optional: true },
-  conditional: {
-    type: "if_executed",
-    thenEffect: {
-      params: { action: "delete", count: 1, excludeSelf: true },
-      conditional: {
-        type: "then",
-        thenEffect: {
-          params: { action: "delete", count: 1, deleteSelf: true }
-        }
-      }
+  "action": "delete",
+  "params": {
+    "count": 1,
+    "targetFilter": {
+      "owner": "any",
+      "faceState": "face_down",
+      "position": "uncovered"
+    },
+    "actorChooses": "effect_owner"
+  }
+}
+```
+
+### Shift
+```json
+{
+  "action": "shift",
+  "params": {
+    "count": 1,
+    "targetFilter": {
+      "owner": "own",
+      "position": "uncovered",
+      "excludeSelf": true
+    },
+    "laneRestriction": "other"
+  }
+}
+```
+
+### Discard
+```json
+{
+  "action": "discard",
+  "params": {
+    "count": 1,
+    "targetFilter": { "owner": "opponent" },
+    "actorChooses": "card_owner"
+  }
+}
+```
+
+### Return
+```json
+{
+  "action": "return",
+  "params": {
+    "count": 1,
+    "targetFilter": {
+      "owner": "opponent",
+      "position": "uncovered"
     }
   }
 }
 ```
 
-Multi-Step Conditional Chain.
+### Play (from hand or deck)
+```json
+{
+  "action": "play",
+  "params": {
+    "source": "hand" | "top_deck",
+    "faceState": "face_down",
+    "laneRestriction": "other"
+  }
+}
+```
+
+### Delete All in Lane
+```json
+{
+  "action": "delete_all_in_lane",
+  "params": {
+    "targetFilter": {
+      "owner": "any",
+      "valueFilter": 2
+    }
+  }
+}
+```
+
+### Custom Choice (Either/Or)
+```json
+{
+  "action": "custom_choice",
+  "params": {
+    "choices": [
+      { "action": "draw", "params": { "count": 1 } },
+      { "action": "flip", "params": { "count": 1 } }
+    ]
+  }
+}
+```
+
+### Value Boost (Passive)
+```json
+{
+  "action": "value_boost",
+  "params": {
+    "targetFilter": { "faceState": "face_down" },
+    "boostAmount": 1,
+    "scope": "lane" | "all"
+  },
+  "trigger": "passive"
+}
+```
+
+### Prevent (Passive Protection)
+```json
+{
+  "action": "prevent",
+  "params": {
+    "preventedAction": "delete" | "flip" | "shift" | "return",
+    "targetFilter": { "owner": "own" }
+  },
+  "trigger": "passive"
+}
+```
+
+## UI System (React + CSS)
+
+### UI-Architektur
+
+Die UI ist eine **React-Anwendung** mit folgender Struktur:
+
+```
+├── index.html              # Entry point
+├── index.tsx               # React root render
+├── App.tsx                 # Main App component mit Routing
+├── index.css               # Global styles (importiert alle anderen)
+│
+├── screens/                # Hauptbildschirme
+│   ├── MainMenu.tsx        # Hauptmenü
+│   ├── ProtocolSelection.tsx # Protocol-Auswahl vor dem Spiel
+│   ├── GameScreen.tsx      # Hauptspielbildschirm
+│   ├── ResultsScreen.tsx   # Spielergebnis
+│   ├── StatisticsScreen.tsx # Statistiken
+│   ├── CardLibraryScreen.tsx # Kartenübersicht
+│   └── CustomProtocolCreator/ # Protocol-Editor
+│       ├── CustomProtocolCreator.tsx
+│       ├── CardEditor.tsx
+│       ├── EffectEditor.tsx
+│       ├── ProtocolList.tsx
+│       ├── ProtocolWizard.tsx
+│       └── EffectParameterEditors/  # Spezifische Editoren pro Effekttyp
+│           ├── DrawEffectEditor.tsx
+│           ├── FlipEffectEditor.tsx
+│           ├── DeleteEffectEditor.tsx
+│           ├── ShiftEffectEditor.tsx
+│           └── ... (weitere Editoren)
+│
+├── components/             # Wiederverwendbare Komponenten
+│   ├── Card.tsx            # Kartenkomponente
+│   ├── Lane.tsx            # Lane/Stack-Darstellung
+│   ├── GameBoard.tsx       # Spielfeld
+│   ├── GameInfoPanel.tsx   # Info-Panel (Hand, Deck, etc.)
+│   ├── PhaseController.tsx # Phase-Buttons und Anzeige
+│   ├── Header.tsx          # Header mit Navigation
+│   ├── ControlDisplay.tsx  # Control-Komponente Anzeige
+│   ├── RulesModal.tsx      # Regeln-Modal
+│   ├── LogModal.tsx        # Spiellog-Modal
+│   ├── DebugPanel.tsx      # Debug-Informationen
+│   └── ... (weitere Modals)
+│
+├── styles/                 # CSS-Dateien
+│   ├── base.css            # Grundlegende Styles, Variablen, Fonts
+│   ├── components.css      # Komponenten-Styles
+│   ├── custom-protocol-creator.css
+│   ├── StatisticsScreen.css
+│   └── layouts/            # Screen-spezifische Layouts
+│       ├── main-menu.css
+│       ├── protocol-selection.css
+│       ├── game-screen.css
+│       └── card-library.css
+│   └── responsive/
+│       └── tablet.css      # Responsive Anpassungen
+```
+
+### Design-Stil
+
+Das Spiel hat einen **Cyberpunk/Tech-Stil**:
+- **Fonts**: `Orbitron` (Headlines), `Poppins` (Body text)
+- **Farbschema**: Dunkle Hintergründe mit Neon-Akzenten (Lila, Cyan, Pink)
+- **CSS-Variablen**: Definiert in `styles/base.css`
+
+### Wichtige UI-Komponenten
+
+1. **`GameScreen.tsx`** - Hauptspiellogik
+   - Verwaltet GameState
+   - Ruft AI-Funktionen auf
+   - Handelt User-Interaktionen
+
+2. **`Card.tsx`** - Kartenrendering
+   - Zeigt Karten mit allen Effekten
+   - Highlightet selektierbare Karten
+   - Animation für Flip/Delete/etc.
+
+3. **`PhaseController.tsx`** - Phasensteuerung
+   - Zeigt aktuelle Phase
+   - Buttons für Aktionen (Play, Refresh, etc.)
+
+4. **`CustomProtocolCreator/`** - Protocol-Editor
+   - Erstellt/Bearbeitet Custom Protocols
+   - Validiert Effect-Definitionen
+   - Exportiert JSON-Dateien
 
 ---
 
-**Viel Erfolg!** 🚀
+## Critical Files Summary
+
+| File | Purpose |
+|------|---------|
+| `logic/customProtocols/effectInterpreter.ts` | Execute all custom effects |
+| `logic/game/resolvers/cardResolver.ts` | Handle user/AI responses to actionRequired |
+| `logic/game/reactiveEffectProcessor.ts` | Process triggered/reactive effects |
+| `logic/game/phaseManager.ts` | Game phase transitions and turn management |
+| `logic/game/stateManager.ts` | GameState mutations and calculations |
+| `logic/ai/easy.ts` | Easy AI decision making |
+| `logic/ai/normal.ts` | Normal AI decision making |
+| `logic/ai/aiEffectUtils.ts` | Utility functions for AI effect detection |
+| `logic/game/passiveRuleChecker.ts` | Check passive rules for play restrictions |
+| `types/index.ts` | Core TypeScript types |
+| `types/customProtocol.ts` | Custom protocol types |
+| **UI Files** | |
+| `screens/GameScreen.tsx` | Main game screen with state management |
+| `screens/ProtocolSelection.tsx` | Protocol selection before game |
+| `screens/CustomProtocolCreator/` | Protocol editor UI |
+| `components/Card.tsx` | Card rendering component |
+| `components/GameBoard.tsx` | Game board layout |
+| `components/PhaseController.tsx` | Phase control buttons |
+| `styles/base.css` | CSS variables and base styles |
+| `styles/components.css` | Component-specific styles |
+
+## Common Pitfalls
+
+### 1. Owner Filter Perspective
+The `targetFilter.owner` is **relative to the effect owner**, not absolute:
+- `"own"` = cards belonging to whoever owns the effect
+- `"opponent"` = cards belonging to the opponent OF the effect owner
+
+### 2. actorChooses Confusion
+- `"effect_owner"` = The player who played the card chooses targets
+- `"card_owner"` = The owner of potential target cards chooses (forced self-targeting)
+
+### 3. Position Filter
+- `"uncovered"` = Only the TOP card of each stack
+- `"covered"` = Only cards UNDER other cards
+- `"any"` or omitted = All cards in stack
+
+### 4. Lane Restrictions for Shift
+- `"current"` = Must stay in same lane (no shift)
+- `"other"` = Must move to different lane
+- `"to_from_this_line"` = Special: must shift TO or FROM the source card's lane
+
+### 5. AI Fallback Behavior
+If the AI doesn't have a handler for an action type, it returns `{ type: 'skip' }`. This may cause effects to be skipped entirely!
+
+## Testing Custom Protocols
+
+1. **Unit test the JSON**: Ensure it parses correctly
+2. **Test with human player**: Verify effects work as expected
+3. **Test with Easy AI**: Check AI handles all action types
+4. **Test with Normal AI**: Verify strategic decisions make sense
+5. **Check edge cases**: Empty hands, no valid targets, etc.
+
+## Version History
+
+- **v2.0**: Full migration to custom protocol system
+- **v1.x**: Original hardcoded protocol implementations (deprecated)

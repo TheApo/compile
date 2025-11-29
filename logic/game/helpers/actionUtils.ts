@@ -210,9 +210,13 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             break;
         case 'fire_3':
             nextAction = {
-                type: 'select_card_to_flip_for_fire_3',
+                type: 'select_card_to_flip',
                 sourceCardId: sourceCardId,
                 actor: player,
+                targetFilter: {
+                    position: 'uncovered',
+                    excludeSelf: true,
+                },
             };
             break;
         case 'spirit_1_start':

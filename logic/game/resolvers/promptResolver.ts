@@ -78,9 +78,12 @@ export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): Game
         // The actor draws one card.
         newState = drawForPlayer(newState, actor, 1);
         newState.actionRequired = {
-            type: 'select_card_to_delete_for_death_1',
+            type: 'select_cards_to_delete',
+            count: 1,
             sourceCardId,
+            disallowedIds: [sourceCardId],
             actor,
+            // Generic handler: any uncovered card
         };
     } else {
         newState = log(newState, actor, `Death-1: ${actorName} skips the effect.`);
@@ -246,9 +249,10 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         const effectWasSkipped = (result.newState as any)._effectSkippedNoTargets;
         if (effectWasSkipped) {
             console.log('[DEBUG resolveOptionalEffectPrompt] Effect was skipped (no valid targets), NOT executing if_executed followUp');
-            // Clean up the marker
+            // Clean up the marker and ensure actionRequired is cleared
             const cleanedState = { ...result.newState };
             delete (cleanedState as any)._effectSkippedNoTargets;
+            cleanedState.actionRequired = null;  // CRITICAL: Clear any stale actionRequired
             return cleanedState;
         }
 
@@ -337,15 +341,29 @@ export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'fli
     let newState = { ...prevState };
 
     switch (choice) {
-        case 'shift':
+        case 'shift': {
             newState = log(newState, actor, `Light-2: ${actorName} chooses to shift the revealed card.`);
+            // Find the revealed card's lane to provide originalLaneIndex
+            const revealedCardInfo = findCardOnBoard(prevState, revealedCardId);
+            let originalLaneIndex = -1;
+            if (revealedCardInfo) {
+                for (let i = 0; i < prevState[revealedCardInfo.owner].lanes.length; i++) {
+                    if (prevState[revealedCardInfo.owner].lanes[i].some(c => c.id === revealedCardId)) {
+                        originalLaneIndex = i;
+                        break;
+                    }
+                }
+            }
             newState.actionRequired = {
-                type: 'select_lane_to_shift_revealed_card_for_light_2',
+                type: 'select_lane_for_shift',
                 sourceCardId,
-                revealedCardId,
+                cardToShiftId: revealedCardId,  // Generic: specify which card to shift
+                cardOwner: revealedCardInfo?.owner,
+                originalLaneIndex,
                 actor,
             };
             break;
+        }
         case 'flip': {
             newState = log(newState, actor, `Light-2: ${actorName} chooses to flip the revealed card face-up.`);
             // FIX: Clear the current action *before* flipping and triggering the next effect.

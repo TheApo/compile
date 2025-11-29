@@ -278,55 +278,21 @@ export const processQueuedActions = (state: GameState): GameState => {
         // --- Auto-resolving actions ---
         // NOTE: "discard all" is now auto-executed in effectInterpreter.ts
 
-        if (nextAction.type === 'flip_self_for_water_0') {
-            console.log('[WATER-0 FLIP] Processing flip_self_for_water_0 in processQueuedActions');
-            const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
+        // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, custom protocols)
+        if (nextAction.type === 'flip_self' || nextAction.type === 'flip_self_for_water_0' || nextAction.type === 'flip_self_for_psychic_4') {
+            const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-            // DEBUG: Log what we found
-            console.log('[DEBUG] Water-0 self-flip queue processing:', {
-                sourceCardId,
-                foundCard: !!sourceCardInfo,
-                cardName: sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'NOT_FOUND',
-                isFaceUp: sourceCardInfo?.card.isFaceUp,
-                isUncovered: sourceIsUncovered,
-                willExecute: !!(sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered)
-            });
-
-            // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
-            // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
-                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                console.log('[WATER-0 FLIP] Executing self-flip');
-                mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
-                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
-            } else {
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                const reason = !sourceCardInfo ? 'deleted' :
-                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
-                              'now covered';
-                console.log('[WATER-0 FLIP] Cancelling self-flip - reason:', reason);
-                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
-            }
-            continue; // Action resolved (or cancelled), move to next in queue
-        }
-
-        if (nextAction.type === 'flip_self_for_psychic_4') {
-            const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
-            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
-
-            // CRITICAL: Only execute if Psychic-4 is still on the board, face-up AND uncovered
-            // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Psychic-4 is covered
+            // CRITICAL: Only execute if source card is still on the board, face-up AND uncovered
+            // Commands are only active when uncovered, so the self-flip must be cancelled if source is covered
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                 mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                 const reason = !sourceCardInfo ? 'deleted' :
                               !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
                               'now covered';
@@ -711,7 +677,9 @@ export const processEndOfAction = (state: GameState): GameState => {
 
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
             // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
-            if (nextAction.sourceCardId && nextAction.type !== 'flip_self_for_water_0' && nextAction.type !== 'flip_self_for_psychic_4') {
+            // CRITICAL: Skip source validation for flip_self actions (they have their own validation logic)
+            const isFlipSelfAction = nextAction.type === 'flip_self' || nextAction.type === 'flip_self_for_water_0' || nextAction.type === 'flip_self_for_psychic_4';
+            if (nextAction.sourceCardId && !isFlipSelfAction) {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
@@ -721,55 +689,21 @@ export const processEndOfAction = (state: GameState): GameState => {
             }
 
             // --- Auto-resolving actions ---
-            if (nextAction.type === 'flip_self_for_water_0') {
-                console.log('[WATER-0 FLIP] Processing flip_self_for_water_0 in processEndOfAction (SECOND LOCATION - SHOULD NOT BE CALLED)');
-                const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_water_0', sourceCardId: string, actor: Player };
+            // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, Speed-3, custom protocols)
+            if (isFlipSelfAction) {
+                const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
                 const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
-                // DEBUG: Log what we found (SECOND LOCATION - processEndOfAction)
-                console.log('[DEBUG] Water-0 self-flip queue processing (processEndOfAction):', {
-                    sourceCardId,
-                    foundCard: !!sourceCardInfo,
-                    cardName: sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'NOT_FOUND',
-                    isFaceUp: sourceCardInfo?.card.isFaceUp,
-                    isUncovered: sourceIsUncovered,
-                    willExecute: !!(sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered)
-                });
-
-                // CRITICAL: Only execute if Water-0 is still on the board, face-up AND uncovered
-                // Middle commands are only active when uncovered, so the self-flip must be cancelled if Water-0 is covered
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
-                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                    console.log('[WATER-0 FLIP] Executing self-flip (processEndOfAction)');
-                    mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
-                    mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
-                } else {
-                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Water-0';
-                    const reason = !sourceCardInfo ? 'deleted' :
-                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
-                                  'now covered';
-                    console.log('[WATER-0 FLIP] Cancelling self-flip (processEndOfAction) - reason:', reason);
-                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
-                }
-                continue; // Action resolved (or cancelled), move to next in queue
-            }
-
-            if (nextAction.type === 'flip_self_for_psychic_4') {
-                const { sourceCardId, actor } = nextAction as { type: 'flip_self_for_psychic_4', sourceCardId: string, actor: Player };
-                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-                const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
-
-                // CRITICAL: Only execute if Psychic-4 is still on the board, face-up AND uncovered
-                // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Psychic-4 is covered
+                // CRITICAL: Only execute if source card is still on the board, face-up AND uncovered
+                // Commands are only active when uncovered, so the self-flip must be cancelled if source is covered
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
                     mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
-                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Psychic-4';
+                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     const reason = !sourceCardInfo ? 'deleted' :
                                   !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
                                   'now covered';

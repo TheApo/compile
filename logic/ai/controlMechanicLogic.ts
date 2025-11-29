@@ -1,15 +1,35 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Control Mechanic Logic for AI
+ *
+ * CRITICAL: When evaluating rearrangements during a compile action,
+ * the lane being compiled will have its value RESET TO 0 after the compile.
+ * This must be considered when determining beneficial swaps!
  */
 
 import { GameState, ActionRequired, AIAction } from '../../types';
 
 /**
+ * Gets the effective lane values, accounting for a lane about to be compiled.
+ * @param laneValues Current lane values
+ * @param compilingLaneIndex The lane being compiled (will be 0 after compile)
+ * @returns Adjusted lane values
+ */
+function getEffectiveLaneValues(laneValues: number[], compilingLaneIndex: number | null): number[] {
+    const effective = [...laneValues];
+    if (compilingLaneIndex !== null && compilingLaneIndex >= 0 && compilingLaneIndex < 3) {
+        effective[compilingLaneIndex] = 0;
+    }
+    return effective;
+}
+
+/**
  * Checks if rearranging PLAYER's protocols would be beneficial for the AI.
  * Returns true if there's at least one swap that hurts the player (score > 0).
  */
-export function canBenefitFromPlayerRearrange(state: GameState): boolean {
+export function canBenefitFromPlayerRearrange(state: GameState, compilingLaneIndex: number | null = null): boolean {
     const playerState = state.player;
     const compiledIndices: number[] = [];
     const uncompiledIndices: number[] = [];
@@ -26,24 +46,27 @@ export function canBenefitFromPlayerRearrange(state: GameState): boolean {
         return false;
     }
 
+    // Get effective values (compiling lane = 0)
+    const effectiveValues = getEffectiveLaneValues(playerState.laneValues, compilingLaneIndex);
+
     // Check if ANY swap would hurt the player (score > 0)
     for (const compiledIdx of compiledIndices) {
         for (const uncompiledIdx of uncompiledIndices) {
-            const score = playerState.laneValues[uncompiledIdx] - playerState.laneValues[compiledIdx];
+            const score = effectiveValues[uncompiledIdx] - effectiveValues[compiledIdx];
             if (score > 0) {
-                return true; // Found a beneficial swap!
+                return true;
             }
         }
     }
 
-    return false; // No beneficial swap found
+    return false;
 }
 
 /**
  * Checks if rearranging AI's (opponent's) own protocols would be beneficial.
  * Returns true if there's a swap that brings uncompiled protocol closer to victory (distance <= 3).
  */
-export function canBenefitFromOwnRearrange(state: GameState): boolean {
+export function canBenefitFromOwnRearrange(state: GameState, compilingLaneIndex: number | null = null): boolean {
     const aiState = state.opponent;
     const compiledIndices: number[] = [];
     const uncompiledIndices: number[] = [];
@@ -60,44 +83,56 @@ export function canBenefitFromOwnRearrange(state: GameState): boolean {
         return false;
     }
 
+    // Get effective values (compiling lane = 0)
+    const effectiveValues = getEffectiveLaneValues(aiState.laneValues, compilingLaneIndex);
+
     // Check if ANY swap brings us closer to victory
     for (const compiledIdx of compiledIndices) {
         for (const uncompiledIdx of uncompiledIndices) {
-            const valueAfterSwap = aiState.laneValues[compiledIdx];
+            const valueAfterSwap = effectiveValues[compiledIdx];
             const distanceToWin = 10 - valueAfterSwap;
 
             if (distanceToWin >= 0 && distanceToWin <= 3) {
-                // Check if this is actually an improvement over current state
-                const currentUncompiledValue = aiState.laneValues[uncompiledIdx];
+                const currentUncompiledValue = effectiveValues[uncompiledIdx];
                 const currentDistance = 10 - currentUncompiledValue;
 
                 if (distanceToWin < currentDistance) {
-                    return true; // Found a beneficial swap!
+                    return true;
                 }
             }
         }
     }
 
-    return false; // No beneficial swap found
+    return false;
 }
 
 /**
  * Determines the best rearrangement of protocols when the AI uses the Control Mechanic.
- * @param state The current game state.
- * @param action The `prompt_rearrange_protocols` action.
- * @returns An `AIAction` with the new protocol order.
+ *
+ * CRITICAL FIX: When control is used during compile, the lane being compiled
+ * will have value 0 AFTER the compile. So when evaluating swaps:
+ * - If player is compiling lane X, treat player.laneValues[X] as 0
+ * - If AI is compiling lane X, treat opponent.laneValues[X] as 0
+ *
+ * Example: Player has values [8, 0, 4] and is compiling lane 0 (value 8).
+ * After compile, lane 0 will be 0. So effective values are [0, 0, 4].
+ * Best strategy: Move compiled protocol to lane 2 (where player has 4),
+ * NOT lane 0 (which will be 0 anyway).
  */
 export function handleControlRearrange(state: GameState, action: ActionRequired): AIAction {
-    // FIX: The action could be null, or not of the expected type. This guard handles both cases.
     if (!action || action.type !== 'prompt_rearrange_protocols') {
-        // Fallback for safety, should not be reached.
-        // If action is null, or the wrong type, we can't safely access `action.target`.
-        // A safe fallback is to return an unchanged protocol order for the opponent.
         return { type: 'rearrangeProtocols', newOrder: [...state.opponent.protocols] };
     }
 
     const targetPlayerKey = action.target;
     const disallowedProtocolForLane = action.disallowedProtocolForLane;
+
+    // Determine if this is during a compile and which lane
+    // Extract from originalAction if it's a compile action
+    let compilingLaneIndex: number | null = null;
+    if (action.originalAction && action.originalAction.type === 'compile') {
+        compilingLaneIndex = action.originalAction.laneIndex;
+    }
 
     // Helper function to check if a protocol arrangement is valid (respects Anarchy-3 restriction)
     const isValidArrangement = (protocols: string[]): boolean => {
@@ -106,94 +141,73 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         return protocols[laneIndex] !== protocol;
     };
 
-    // Helper function to safely return a rearrange action, respecting Anarchy-3 restrictions
-    const safeReturn = (newOrder: string[], originalOrder: string[]): AIAction => {
-        if (isValidArrangement(newOrder)) {
-            return { type: 'rearrangeProtocols', newOrder };
-        }
-        // If the proposed order is invalid, try to find a valid swap
-        for (let i = 0; i < 3; i++) {
-            for (let j = i + 1; j < 3; j++) {
-                const testOrder = [...originalOrder];
-                [testOrder[i], testOrder[j]] = [testOrder[j], testOrder[i]];
-                if (isValidArrangement(testOrder)) {
-                    return { type: 'rearrangeProtocols', newOrder: testOrder };
-                }
-            }
-        }
-        // Ultimate fallback: return original order (even if invalid, let resolver handle it)
-        return { type: 'rearrangeProtocols', newOrder: originalOrder };
-    };
-
-    // Check both players' win status to determine priority
     const aiState = state.opponent;
     const playerState = state.player;
+
+    // Get effective lane values (compiling lane = 0)
+    // CRITICAL: AI is the one compiling, so we need to consider which lane AI is compiling
+    const aiEffectiveValues = getEffectiveLaneValues(aiState.laneValues, compilingLaneIndex);
+    const playerEffectiveValues = getEffectiveLaneValues(playerState.laneValues, compilingLaneIndex);
+
     const aiCompiledCount = aiState.compiled.filter(c => c).length;
     const playerCompiledCount = playerState.compiled.filter(c => c).length;
 
     // CRITICAL PRIORITY: If BOTH players have 2 compiled protocols - compare who is closer to winning!
     if (playerCompiledCount === 2 && aiCompiledCount === 2) {
-        // Find uncompiled lanes
         const playerUncompiledIndex = playerState.compiled.findIndex(c => !c);
         const aiUncompiledIndex = aiState.compiled.findIndex(c => !c);
-        const playerUncompiledValue = playerState.laneValues[playerUncompiledIndex];
-        const aiUncompiledValue = aiState.laneValues[aiUncompiledIndex];
+        const playerUncompiledValue = playerEffectiveValues[playerUncompiledIndex];
+        const aiUncompiledValue = aiEffectiveValues[aiUncompiledIndex];
 
-        // If player is closer to victory (higher value), prioritize disrupting them
+        // If player is closer to victory, prioritize disrupting them
         if (playerUncompiledValue > aiUncompiledValue && targetPlayerKey === 'player') {
-            // Find player's compiled lane with LOWEST value (safest to swap)
             let playerWeakestCompiledIndex = -1;
             let minCompiledValue = Infinity;
             for (let i = 0; i < 3; i++) {
-                if (playerState.compiled[i] && playerState.laneValues[i] < minCompiledValue) {
-                    minCompiledValue = playerState.laneValues[i];
+                if (playerState.compiled[i] && playerEffectiveValues[i] < minCompiledValue) {
+                    minCompiledValue = playerEffectiveValues[i];
                     playerWeakestCompiledIndex = i;
                 }
             }
 
-            // CRITICAL: Only swap if it WORSENS player's position (doesn't give them advantage)
-            // Don't swap if the compiled lane we're moving has higher value than their uncompiled
             if (playerWeakestCompiledIndex !== -1 && minCompiledValue <= playerUncompiledValue) {
                 const newOrder = [...playerState.protocols];
                 [newOrder[playerUncompiledIndex], newOrder[playerWeakestCompiledIndex]] =
                     [newOrder[playerWeakestCompiledIndex], newOrder[playerUncompiledIndex]];
-                return { type: 'rearrangeProtocols', newOrder };
+
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
             }
-            // No good swap found - skip to avoid helping player
             return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
         }
 
         // If AI is closer or equal, prioritize advancing ourselves
         if (playerUncompiledValue <= aiUncompiledValue && targetPlayerKey === 'opponent') {
-            // Find AI's compiled lane with HIGHEST value
             let bestCompiledIndex = -1;
             let maxCompiledValue = -1;
             for (let i = 0; i < 3; i++) {
-                if (aiState.compiled[i] && aiState.laneValues[i] > maxCompiledValue) {
-                    maxCompiledValue = aiState.laneValues[i];
+                if (aiState.compiled[i] && aiEffectiveValues[i] > maxCompiledValue) {
+                    maxCompiledValue = aiEffectiveValues[i];
                     bestCompiledIndex = i;
                 }
             }
 
-            // CRITICAL: Only swap if it IMPROVES AI's position
-            // Swap if compiled lane has MORE value than uncompiled (advances towards victory)
             if (bestCompiledIndex !== -1 && maxCompiledValue > aiUncompiledValue && maxCompiledValue > 0) {
                 const newOrder = [...aiState.protocols];
                 [newOrder[aiUncompiledIndex], newOrder[bestCompiledIndex]] =
                     [newOrder[bestCompiledIndex], newOrder[aiUncompiledIndex]];
-                return { type: 'rearrangeProtocols', newOrder };
+
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
             }
-            // No beneficial swap - skip
             return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
         }
     }
 
     // PRIORITY 1: If AI can rearrange PLAYER's protocols, use it strategically!
     if (targetPlayerKey === 'player') {
-        // STRATEGY: Evaluate ALL possible swaps between compiled and uncompiled lanes
-        // Score = uncompiled_value - compiled_value
-        // Higher score = better for AI (hurts player more)
-
         const compiledIndices: number[] = [];
         const uncompiledIndices: number[] = [];
 
@@ -206,16 +220,16 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
-            // Can't swap if we don't have both compiled and uncompiled lanes
             return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
         }
 
-        // Evaluate ALL combinations
+        // Evaluate ALL combinations using EFFECTIVE values
         let bestSwap: { compiledIdx: number; uncompiledIdx: number; score: number } | null = null;
 
         for (const compiledIdx of compiledIndices) {
             for (const uncompiledIdx of uncompiledIndices) {
-                const score = playerState.laneValues[uncompiledIdx] - playerState.laneValues[compiledIdx];
+                // CRITICAL: Use effective values (compiling lane = 0)
+                const score = playerEffectiveValues[uncompiledIdx] - playerEffectiveValues[compiledIdx];
 
                 if (!bestSwap || score > bestSwap.score) {
                     bestSwap = { compiledIdx, uncompiledIdx, score };
@@ -228,31 +242,30 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             const newOrder = [...playerState.protocols];
             [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
                 [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
-            return { type: 'rearrangeProtocols', newOrder };
+
+            if (isValidArrangement(newOrder)) {
+                return { type: 'rearrangeProtocols', newOrder };
+            }
         }
 
-        // No good disruption found
-        // Check if source is Psychic-2 or other forced effect (not Control Mechanic)
+        // Check if source is forced effect (not Control Mechanic)
         const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
 
         if (isForcedRearrange) {
             // FORCED rearrange - we MUST swap something
-            // Find the safest swap that minimally impacts player
             const newOrder = [...playerState.protocols];
             [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-            return { type: 'rearrangeProtocols', newOrder };
+            if (isValidArrangement(newOrder)) {
+                return { type: 'rearrangeProtocols', newOrder };
+            }
         }
 
-        // Control Mechanic - no good disruption found, SKIP to avoid helping player
+        // Control Mechanic - no good disruption found, SKIP
         return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
     }
 
-    // PRIORITY 2: If AI must rearrange its own protocols - ONLY if it's beneficial!
+    // PRIORITY 2: If AI must rearrange its own protocols
     if (targetPlayerKey === 'opponent') {
-        // STRATEGY: Find swap that brings uncompiled protocol CLOSEST to victory (10)
-        // Goal: Maximize compiled_value to get uncompiled protocol as close to 10 as possible
-        // Score = distance to victory AFTER swap (lower is better!)
-
         const compiledIndices: number[] = [];
         const uncompiledIndices: number[] = [];
 
@@ -265,31 +278,27 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
-            // Can't swap if we don't have both compiled and uncompiled lanes
-            // Check if forced rearrange
             const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
             if (isForcedRearrange) {
-                // FORCED rearrange - we MUST swap something
                 const newOrder = [...aiState.protocols];
                 [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-                return { type: 'rearrangeProtocols', newOrder };
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
             }
             return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
         }
 
-        // Evaluate ALL combinations
-        // Find swap that minimizes distance to 10 for uncompiled protocol
+        // Find swap that minimizes distance to 10 using EFFECTIVE values
         let bestSwap: { compiledIdx: number; uncompiledIdx: number; distanceToWin: number } | null = null;
 
         for (const compiledIdx of compiledIndices) {
             for (const uncompiledIdx of uncompiledIndices) {
-                // After swap: uncompiled protocol gets compiled lane's value
-                const valueAfterSwap = aiState.laneValues[compiledIdx];
+                // CRITICAL: Use effective values (compiling lane = 0)
+                const valueAfterSwap = aiEffectiveValues[compiledIdx];
                 const distanceToWin = 10 - valueAfterSwap;
 
-                // Only consider if it brings us closer to 10 (distance >= 0)
                 if (distanceToWin >= 0) {
-                    // Lower distance is better (closer to victory)
                     if (!bestSwap || distanceToWin < bestSwap.distanceToWin) {
                         bestSwap = { compiledIdx, uncompiledIdx, distanceToWin };
                     }
@@ -300,45 +309,42 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         // Only swap if it brings us significantly closer to victory (distance <= 3)
         // AND it's better than current state
         if (bestSwap && bestSwap.distanceToWin <= 3) {
-            // Check if this is actually an improvement over current state
-            const currentUncompiledValue = aiState.laneValues[bestSwap.uncompiledIdx];
+            const currentUncompiledValue = aiEffectiveValues[bestSwap.uncompiledIdx];
             const currentDistance = 10 - currentUncompiledValue;
 
-            // Only swap if new distance is better than current
             if (bestSwap.distanceToWin < currentDistance) {
                 const newOrder = [...aiState.protocols];
                 [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
                     [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
-                return { type: 'rearrangeProtocols', newOrder };
+
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
             }
         }
 
-        // No beneficial swap found
         // Check if source is forced effect (not Control Mechanic)
         const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
 
         if (isForcedRearrange) {
-            // FORCED rearrange - we MUST swap something
-            // Find the safest swap that minimally impacts AI
             const newOrder = [...aiState.protocols];
             [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-            return { type: 'rearrangeProtocols', newOrder };
+            if (isValidArrangement(newOrder)) {
+                return { type: 'rearrangeProtocols', newOrder };
+            }
         }
 
-        // Control Mechanic - no beneficial swap found, SKIP (don't change anything)
         return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
     }
 
-    // FALLBACK: No beneficial swap found - return current order
+    // FALLBACK
     const fallbackOrder = targetPlayerKey === 'player' ? [...playerState.protocols] : [...aiState.protocols];
 
-    // CRITICAL: Validate the fallback order respects Anarchy-3 restriction
     if (isValidArrangement(fallbackOrder)) {
         return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
     }
 
-    // If even the current order is invalid (shouldn't happen), find ANY valid arrangement
-    // This is a safety fallback for edge cases
+    // If even the current order is invalid, find ANY valid arrangement
     for (let i = 0; i < 3; i++) {
         for (let j = i + 1; j < 3; j++) {
             const testOrder = [...fallbackOrder];
@@ -349,6 +355,5 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
     }
 
-    // Ultimate fallback (should never reach here)
     return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
 }
