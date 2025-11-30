@@ -6,7 +6,8 @@
 import { GameState, ActionRequired, AIAction, Player, Difficulty, EffectResult, AnimationRequest, EffectContext, GamePhase } from '../../types';
 import { easyAI } from '../ai/easy';
 import { normalAI } from '../ai/normal';
-import { hardAI } from '../ai/hardImproved';
+// TEMPORARILY DISABLED: hardAI is being completely rewritten
+// import { hardAI } from '../ai/hardImproved';
 import { Dispatch, SetStateAction } from 'react';
 import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
@@ -64,7 +65,9 @@ const getAIAction = (state: GameState, action: ActionRequired | null, difficulty
         case 'normal':
             return normalAI(state, action);
         case 'hard':
-            return hardAI(state, action);
+            // TEMPORARILY: Hard AI falls back to normal AI until rewritten
+            console.warn('[AI] Hard AI temporarily disabled, using Normal AI');
+            return normalAI(state, action);
         default:
             return easyAI(state, action);
     }
@@ -92,8 +95,7 @@ export const resolveRequiredOpponentAction = (
 
         if (!isOpponentInterrupt) return state;
 
-        // CRITICAL FIX: Handle 'discard_completed' automatically - no AI decision needed
-        // This happens after AI discards cards with a conditional follow-up effect (like Fire-3)
+        // CRITICAL: Handle 'discard_completed' automatically - execute the followUp effect
         if (action.type === 'discard_completed') {
             const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
 
@@ -105,7 +107,7 @@ export const resolveRequiredOpponentAction = (
                     const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
                     if (shouldExecute) {
-                        console.log(`[AI Interrupt discard_completed] Executing follow-up effect`);
+                        console.log(`[AI Interrupt discard_completed] Executing follow-up effect, discardedCount: ${discardedCount}`);
 
                         let laneIndex = -1;
                         for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
@@ -155,22 +157,7 @@ export const resolveRequiredOpponentAction = (
             return phaseManager.processEndOfAction(newState);
         }
 
-        // CRITICAL FIX: Handle plague_2_opponent_discard during player's turn (interrupt scenario)
-        // This happens when Plague-2 is uncovered during the player's action (e.g., deleting a card)
-        if (aiDecision.type === 'resolvePlague2Discard' && action.type === 'plague_2_opponent_discard') {
-            const newState = actions.resolvePlague2OpponentDiscard(state, aiDecision.cardIds);
-            if (newState.actionRequired) {
-                return newState;
-            }
-            return phaseManager.processEndOfAction(newState);
-        }
-
-        if (aiDecision.type === 'resolveHate1Discard' && action.type === 'select_cards_from_hand_to_discard_for_hate_1') {
-            const newState = actions.resolveHate1Discard(state, aiDecision.cardIds);
-            // The Hate-1 discard action chains into a delete action, which is still for the opponent.
-            // So we return the new state, and the AI manager will loop on the new action.
-            return newState;
-        }
+        // NOTE: Legacy plague/hate handlers removed - now use generic discard handler above
 
         if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
             // Track AI rearrange in statistics ONLY if from Control Mechanic
@@ -191,13 +178,7 @@ export const resolveRequiredOpponentAction = (
             return phaseManager.processEndOfAction(newState);
         }
 
-        if (aiDecision.type === 'resolveSpirit3Prompt' && action.type === 'prompt_shift_for_spirit_3') {
-            const newState = actions.resolveSpirit3Prompt(state, aiDecision.accept);
-            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') {
-                return newState;
-            }
-            return phaseManager.processEndOfAction(newState);
-        }
+        // NOTE: Spirit-3 prompt now uses generic prompt_optional_effect handler
 
         // --- Generic Lane Selection Handler ---
         if (aiDecision.type === 'selectLane') {
@@ -259,26 +240,20 @@ const handleRequiredAction = (
 
     const action = state.actionRequired!; // Action is guaranteed to exist here
 
-    // CRITICAL FIX: Handle 'discard_completed' automatically - no AI decision needed
-    // This happens after AI discards cards with a conditional follow-up effect (like Fire-3)
+    // CRITICAL: Handle 'discard_completed' automatically - execute the followUp effect
     if (action.type === 'discard_completed') {
         const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
 
-        // Execute the follow-up effect if conditions are met
         if (followUpEffect && sourceCardId) {
             const sourceCardInfo = findCardOnBoard(state, sourceCardId);
             if (sourceCardInfo) {
-                // Check conditional type
                 const currentHandSize = state[actor].hand.length;
                 const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-
-                // For "if_executed", only execute if at least one card was discarded
                 const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
                 if (shouldExecute) {
-                    console.log(`[AI discard_completed] Executing follow-up effect (type: ${conditionalType}, discarded: ${discardedCount})`);
+                    console.log(`[AI runOpponentTurn discard_completed] Executing follow-up effect, discardedCount: ${discardedCount}`);
 
-                    // Find lane index
                     let laneIndex = -1;
                     for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
                         if (state[sourceCardInfo.owner].lanes[i].some((c: any) => c.id === sourceCardId)) {
@@ -296,18 +271,13 @@ const handleRequiredAction = (
                             discardedCount: discardedCount,
                         };
 
-                        // Import and execute the custom effect
                         const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
                         const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
                         return result.newState;
                     }
-                } else {
-                    console.log(`[AI discard_completed] Skipping follow-up - conditional type: ${conditionalType}, discarded: ${discardedCount}`);
                 }
             }
         }
-
-        // Clear actionRequired and continue
         return { ...state, actionRequired: null };
     }
 
@@ -379,42 +349,8 @@ const handleRequiredAction = (
         }
     }
     
-    if (aiDecision.type === 'resolveDeath1Prompt' && action.type === 'prompt_death_1_effect') {
-        const nextState = actions.resolveDeath1Prompt(state, aiDecision.accept);
-        if (nextState.actionRequired) return nextState; // Accepted, now needs to select card
-        // Skipped, continue turn
-        const stateAfterSkip = phaseManager.continueTurnAfterStartPhaseAction(nextState);
-        // CRITICAL FIX: Schedule continuation of opponent's turn after skipping
-        if (!stateAfterSkip.actionRequired && stateAfterSkip.turn === 'opponent' && !stateAfterSkip.winner) {
-            setTimeout(() => {
-                runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-            }, 500);
-        }
-        return stateAfterSkip;
-    }
-    
-    if (aiDecision.type === 'resolveLove1Prompt' && action.type === 'prompt_give_card_for_love_1') {
-        const nextState = actions.resolveLove1Prompt(state, aiDecision.accept);
-        if (nextState.actionRequired) { // AI accepted the prompt and now has to choose a card.
-            return nextState; // The AI manager will loop and handle the 'select_card_from_hand_to_give' action.
-        }
-        // AI skipped the prompt. The action is cleared. We can now proceed with the end of the turn.
-        return phaseManager.processEndOfAction(nextState);
-    }
-    
-    if (aiDecision.type === 'resolvePlague2Discard' && action.type === 'plague_2_opponent_discard') {
-        return resolvers.resolvePlague2OpponentDiscard(state, aiDecision.cardIds);
-    }
-
-    if (aiDecision.type === 'resolvePlague4Flip' && action.type === 'plague_4_player_flip_optional') {
-        return actions.resolvePlague4Flip(state, aiDecision.accept, 'opponent');
-    }
-
-    if (aiDecision.type === 'resolveFire3Prompt' && action.type === 'prompt_fire_3_discard') {
-        const nextState = actions.resolveFire3Prompt(state, aiDecision.accept);
-        if (nextState.actionRequired) return nextState; // New action (discard), re-run processor
-        return phaseManager.processEndOfAction(nextState); // Skipped, so end turn
-    }
+    // NOTE: Legacy Death-1, Love-1, Plague-2, Plague-4, Fire-3 prompt handlers removed
+    // These now use generic prompt_optional_effect and resolveOptionalEffectPrompt
 
     if (aiDecision.type === 'resolveOptionalDiscardCustomPrompt' && action.type === 'prompt_optional_discard_custom') {
         const nextState = actions.resolveOptionalDiscardCustomPrompt(state, aiDecision.accept);
@@ -443,36 +379,8 @@ const handleRequiredAction = (
         return phaseManager.processEndOfAction(nextState); // Skipped or completed
     }
 
-    if (aiDecision.type === 'resolveSpeed3Prompt' && action.type === 'prompt_shift_for_speed_3') {
-        const nextState = actions.resolveSpeed3Prompt(state, aiDecision.accept);
-        if (nextState.actionRequired) return nextState; // New action (select card), re-run
-        return phaseManager.processEndOfAction(nextState);
-    }
-    
-    if (aiDecision.type === 'resolvePsychic4Prompt' && action.type === 'prompt_return_for_psychic_4') {
-        const nextState = actions.resolvePsychic4Prompt(state, aiDecision.accept);
-        if(nextState.actionRequired) return nextState;
-        return phaseManager.processEndOfAction(nextState);
-    }
-    
-    if (aiDecision.type === 'resolveSpirit1Prompt' && action.type === 'prompt_spirit_1_start') {
-        const nextState = actions.resolveSpirit1Prompt(state, aiDecision.choice);
-        if(nextState.actionRequired) return nextState;
-        const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(nextState);
-        // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
-        if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
-            setTimeout(() => {
-                runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-            }, 500);
-        }
-        return stateAfterAction;
-    }
-
-    if (aiDecision.type === 'resolveSpirit3Prompt' && action.type === 'prompt_shift_for_spirit_3') {
-        const nextState = actions.resolveSpirit3Prompt(state, aiDecision.accept);
-        if(nextState.actionRequired) return nextState;
-        return phaseManager.processEndOfAction(nextState);
-    }
+    // NOTE: Legacy Speed-3, Psychic-4, Spirit-1, Spirit-3 prompt handlers removed
+    // These now use generic prompt_optional_effect and resolveOptionalEffectPrompt
 
     if (aiDecision.type === 'resolveSwapProtocols' && action.type === 'prompt_swap_protocols') {
         const nextState = actions.resolveSwapProtocols(state, aiDecision.indices);
@@ -480,32 +388,19 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'resolveCustomChoice' && action.type === 'custom_choice') {
-        const nextState = actions.resolveCustomChoice(state, aiDecision.choiceIndex);
+        const nextState = actions.resolveCustomChoice(state, aiDecision.optionIndex);
         if (nextState.actionRequired) return nextState; // Choice may create follow-up action
         return phaseManager.processEndOfAction(nextState);
     }
 
-    if (aiDecision.type === 'resolveFire4Discard' && action.type === 'select_cards_from_hand_to_discard_for_fire_4') {
-        const nextState = actions.resolveFire4Discard(state, aiDecision.cardIds);
-        return phaseManager.processEndOfAction(nextState);
-    }
+    // NOTE: Legacy Fire-4 and Hate-1 discard handlers removed
+    // These now use generic discard handler
 
-    if (aiDecision.type === 'resolveHate1Discard' && action.type === 'select_cards_from_hand_to_discard_for_hate_1') {
-        const nextState = actions.resolveHate1Discard(state, aiDecision.cardIds);
-        // This action chains, so we return the new state for the AI to process the delete action.
-        return nextState;
-    }
-    
-    // GENERIC: Handle ALL shift/flip/skip choice prompts (Light-2 style and custom protocols)
-    if (aiDecision.type === 'resolveLight2Prompt') {
-        let nextState: GameState;
-        // CRITICAL: Use the correct resolver based on action type
-        if (action.type === 'prompt_shift_or_flip_board_card_custom') {
-            nextState = resolvers.resolveRevealBoardCardPrompt(state, aiDecision.choice);
-        } else {
-            nextState = actions.resolveLight2Prompt(state, aiDecision.choice);
-        }
-        if (nextState.actionRequired) return nextState; // may need to select a lane to shift
+    // GENERIC: Handle shift/flip/skip choice prompts (both legacy and custom protocol versions)
+    if (aiDecision.type === 'resolveRevealBoardCardPrompt' &&
+        (action.type === 'prompt_shift_or_flip_revealed_card' || action.type === 'prompt_shift_or_flip_board_card_custom')) {
+        const nextState = resolvers.resolveRevealBoardCardPrompt(state, aiDecision.choice);
+        if (nextState.actionRequired) return nextState;
         return phaseManager.processEndOfAction(nextState);
     }
 

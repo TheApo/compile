@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState } from '../../../types';
+import { GameState, Player, EffectContext } from '../../../types';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { findCardOnBoard } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
@@ -33,8 +33,8 @@ export const resolveCustomChoice = (prevState: GameState, selectedOptionIndex: n
     }
 
     // Build effect context
-    const opponent = actor === 'player' ? 'opponent' : 'player';
-    const effectContext = {
+    const opponent: Player = actor === 'player' ? 'opponent' : 'player';
+    const effectContext: EffectContext = {
         cardOwner: actor,
         actor,
         currentTurn: prevState.turn,

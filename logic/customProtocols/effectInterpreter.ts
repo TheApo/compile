@@ -94,7 +94,7 @@ export function executeCustomEffect(
                 break;
 
             case 'flip': {
-                const isFrost1Active = state.passiveEffects?.some((e: any) => e.type === 'prevent_flip_to_face_up' && e.isActive);
+                const isFrost1Active = (state as any).passiveEffects?.some((e: any) => e.type === 'prevent_flip_to_face_up' && e.isActive);
                 canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
                     // Check excludeSelf
                     if (targetFilter.excludeSelf && c.id === card.id) return false;
@@ -692,7 +692,7 @@ function executeDrawEffect(
         // Set compile block flag on opponent
         newState = {
             ...newState,
-            compileBlockedUntilTurn: (newState.turnNumber || 0) + duration,
+            compileBlockedUntilTurn: ((newState as any).turnNumber || 0) + duration,
             compileBlockedPlayer: opponent,
         } as any;
 
@@ -1160,7 +1160,9 @@ function executeDeleteEffect(
     // NEW: Line Filter - Metal-3: "If there are 8 or more cards in this line"
     if (params.scope?.minCardsInLane) {
         const minCards = params.scope.minCardsInLane;
-        const cardsInLane = state.lanes[laneIndex].length;
+        const playerCardsInLane = state.player.lanes[laneIndex]?.length || 0;
+        const opponentCardsInLane = state.opponent.lanes[laneIndex]?.length || 0;
+        const cardsInLane = playerCardsInLane + opponentCardsInLane;
 
         if (cardsInLane < minCards) {
             console.log(`[Delete Effect] Line filter not met: ${cardsInLane} < ${minCards} cards in lane. Skipping delete.`);
@@ -1433,7 +1435,7 @@ function executeDeleteEffect(
         newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
         // CRITICAL: Create animation request for delete animation (Death-1)
-        const animationRequests = [{ type: 'delete', cardId: card.id, owner }];
+        const animationRequests: AnimationRequest[] = [{ type: 'delete', cardId: card.id, owner }];
 
         // Handle uncover ONLY if:
         // 1. Card was the top card
@@ -2251,9 +2253,7 @@ function executePlayEffect(
             playAnimations.push({
                 type: 'play',
                 cardId: newCardsToPlay[i].id,
-                owner: actor,
-                laneIndex: targetLaneIndex,
-                isFaceUp: newCardsToPlay[i].isFaceUp
+                owner: actor
             });
         }
 

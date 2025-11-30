@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, GamePhase, PlayedCard } from '../../../types';
+import { GameState, Player, GamePhase, PlayedCard, EffectContext } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { findAndFlipCards, drawForPlayer } from '../../../utils/gameStateModifiers';
 import { findCardOnBoard, handleOnFlipToFaceUp } from '../helpers/actionUtils';
@@ -40,8 +40,8 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
             const sourceCard = findCardOnBoard(newState, sourceCardId);
             if (sourceCard) {
                 const laneIndex = newState[sourceCard.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
-                const opponent = actor === 'player' ? 'opponent' : 'player';
-                const context = {
+                const opponent: Player = actor === 'player' ? 'opponent' : 'player';
+                const context: EffectContext = {
                     cardOwner: actor,
                     actor,
                     currentTurn: newState.turn,
@@ -243,10 +243,13 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         };
 
         const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
-        console.log('[DEBUG resolveOptionalEffectPrompt] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null');
+        const hasActionRequired = !!result.newState.actionRequired;
+        const hasSkipMarker = !!(result.newState as any)._effectSkippedNoTargets;
+        console.log('[DEBUG resolveOptionalEffectPrompt] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null', '_effectSkippedNoTargets:', hasSkipMarker, 'hasActionRequired:', hasActionRequired);
 
         // CRITICAL: Check if effect was skipped due to no valid targets
-        const effectWasSkipped = (result.newState as any)._effectSkippedNoTargets;
+        // BUT: If actionRequired is set, the effect DID find targets and needs user input - don't skip!
+        const effectWasSkipped = hasSkipMarker && !hasActionRequired;
         if (effectWasSkipped) {
             console.log('[DEBUG resolveOptionalEffectPrompt] Effect was skipped (no valid targets), NOT executing if_executed followUp');
             // Clean up the marker and ensure actionRequired is cleared
@@ -254,6 +257,12 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             delete (cleanedState as any)._effectSkippedNoTargets;
             cleanedState.actionRequired = null;  // CRITICAL: Clear any stale actionRequired
             return cleanedState;
+        }
+
+        // Clean up stale marker if effect did execute (has actionRequired)
+        if (hasSkipMarker && hasActionRequired) {
+            console.log('[DEBUG resolveOptionalEffectPrompt] Cleaning stale _effectSkippedNoTargets - effect has valid actionRequired');
+            delete (result.newState as any)._effectSkippedNoTargets;
         }
 
         // CRITICAL: Handle conditional follow-up effects (if_executed)

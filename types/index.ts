@@ -34,7 +34,9 @@ export type EffectContext = {
     actor: Player;               // Wer führt die Aktion aus? (für Prompts und Queue)
     currentTurn: Player;         // Wessen Zug ist es?
     opponent: Player;            // Gegner des Kartenbesitzers
-    triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover'; // Wie wurde der Effekt ausgelöst?
+    triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover' | 'middle'; // Wie wurde der Effekt ausgelöst?
+    sourceCardId?: string;       // ID of the card that triggered this effect
+    laneIndex?: number;          // Lane where the source card is located
     // NEW: For follow-up actions (useCardFromPreviousEffect)
     referencedCard?: PlayedCard; // Card selected by previous effect in chain
     referencedCardValue?: number; // Value of referenced card (for dynamic draw)
@@ -67,429 +69,356 @@ export interface PlayerState {
 
 export type GamePhase = 'start' | 'control' | 'compile' | 'action' | 'hand_limit' | 'end';
 
-/**
- * Base properties that can be added to ActionRequired types in the future.
- * These help track the context of actions for correct actor/owner handling.
- */
-export type ActionMetadata = {
-    sourceCardOwner?: Player;    // Wem gehört die Source-Karte? (for future use)
-    initiator?: Player;          // Wer hat den Effekt ausgelöst? (for future use)
-};
+// =============================================================================
+// GENERIC TARGET FILTER - Used by all selection actions
+// =============================================================================
 
-export type ActionRequired = {
+/**
+ * Generic target filter for card selection.
+ * All selection actions use this to define valid targets.
+ * AI and resolvers read these parameters directly.
+ */
+export interface TargetFilter {
+    owner?: 'own' | 'opponent' | 'any';
+    position?: 'covered' | 'uncovered' | 'any';
+    faceState?: 'face_up' | 'face_down' | 'any';
+    excludeSelf?: boolean;
+    valueRange?: { min: number; max: number };
+    valueEquals?: number;
+    calculation?: 'highest_value' | 'lowest_value';
+}
+
+/**
+ * Scope definition for effects
+ */
+export interface EffectScope {
+    type: 'anywhere' | 'this_lane' | 'other_lanes' | 'each_lane' | 'each_other_line';
+    laneIndex?: number;
+    minCardsInLane?: number;
+}
+
+/**
+ * Destination restriction for shift effects
+ */
+export interface DestinationRestriction {
+    type: 'any' | 'to_this_lane' | 'to_another_lane' | 'to_or_from_this_lane' | 'non_matching_protocol';
+    laneIndex?: number | 'current';
+}
+
+// =============================================================================
+// GENERIC ACTION REQUIRED TYPES
+// =============================================================================
+
+/**
+ * ActionRequired - FULLY GENERIC
+ *
+ * All types use parameters from the effect definition.
+ * NO card-specific types like 'select_card_to_delete_for_death_1'.
+ * AI and resolvers read targetFilter, scope, destinationRestriction etc.
+ */
+export type ActionRequired =
+// -----------------------------------------------------------------------------
+// DISCARD ACTIONS
+// -----------------------------------------------------------------------------
+| {
     type: 'discard';
     actor: Player;
     count: number;
     sourceCardId?: string;
-    sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start';
-} | {
-    type: 'select_opponent_face_up_card_to_flip';
+    variableCount?: boolean;  // "Discard 1 or more" (Fire-4, Plague-2)
+    upTo?: boolean;           // "Discard up to X" (Hate-1)
+    context?: EffectContext;
+    sourceEffect?: string;    // Legacy: track which effect triggered discard
+}
+
+// -----------------------------------------------------------------------------
+// GENERIC CARD SELECTION ACTIONS (with targetFilter)
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_cards_to_delete';
+    actor: Player;
+    sourceCardId: string;
     count: number;
-    sourceCardId: string;
+    targetFilter?: TargetFilter;
+    scope?: EffectScope;
+    disallowedIds?: string[];  // Cards that cannot be selected
+    laneIndex?: number;        // Source card's lane
+    deleteSelf?: boolean;      // Delete source card after
+    autoSelectHighest?: boolean;  // Auto-select highest value (Hate-2)
+    autoSelectLowest?: boolean;   // Auto-select lowest value
+}
+| {
+    type: 'select_card_to_flip';
     actor: Player;
-} | {
-    type: 'select_own_face_up_covered_card_to_flip';
-    count: number;
-    optional: true;
     sourceCardId: string;
+    count?: number;
+    targetFilter?: TargetFilter;
+    scope?: EffectScope;
+    optional?: boolean;
+    currentLaneIndex?: number;   // For scope: 'each_lane'
+    remainingLanes?: number[];   // Lanes to process after
+    draws?: number;              // Draw cards after flip
+    followUpEffect?: any;        // Follow-up effect after flip
+    params?: any;                // Store params for continuation
+}
+| {
+    type: 'select_card_to_shift';
     actor: Player;
-} | {
-    type: 'select_opponent_covered_card_to_shift';
     sourceCardId: string;
+    count?: number;
+    targetFilter?: TargetFilter;
+    destinationRestriction?: DestinationRestriction;
+    scope?: EffectScope;
+    optional?: boolean;
+    currentLaneIndex?: number;
+    remainingLanes?: number[];
+    laneIndex?: number;          // Source card's lane
+    params?: any;
+}
+| {
+    type: 'select_card_to_return';
     actor: Player;
-} | {
-    type: 'select_own_covered_card_to_shift';
     sourceCardId: string;
-    actor: Player;
-} | {
+    count?: number;
+    targetFilter?: TargetFilter;
+    scope?: EffectScope;
+    optional?: boolean;
+    laneIndex?: number;
+}
+
+// -----------------------------------------------------------------------------
+// GENERIC LANE SELECTION ACTIONS (with parameters)
+// -----------------------------------------------------------------------------
+| {
     type: 'select_lane_for_shift';
+    actor: Player;
+    sourceCardId: string;
     cardToShiftId: string;
     cardOwner: Player;
     originalLaneIndex: number;
-    sourceCardId: string;
+    destinationRestriction?: DestinationRestriction;
+    sourceEffect?: string;    // Legacy: track which effect triggered shift
+}
+| {
+    type: 'select_lane_for_shift_all';
     actor: Player;
-    sourceEffect?: 'speed_3_end';
-} | {
-    type: 'select_opponent_card_to_flip';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'shift_flipped_card_optional';
-    cardId: string;
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_covered_card_in_line_to_flip_optional';
-    laneIndex: number;
-    sourceCardId:string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_card_from_hand_to_play';
-    disallowedLaneIndex: number;
-    sourceCardId: string;
-    isFaceDown?: boolean;
-    actor: Player;
-} | {
-    type: 'select_lane_for_play';
-    cardInHandId: string;
-    disallowedLaneIndex: number;
-    sourceCardId: string;
-    isFaceDown?: boolean;
-    actor: Player;
-} | {
-    type: 'select_face_down_card_to_shift_for_darkness_4';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_face_down_card_to_shift_for_gravity_4';
-    sourceCardId: string;
-    targetLaneIndex: number;
-    actor: Player;
-} | {
-    type: 'select_cards_to_delete';
-    count: number;
-    sourceCardId: string;
-    disallowedIds: string[];
-    actor: Player;
-} | {
-    type: 'select_covered_card_to_flip_for_chaos_0';
-    sourceCardId: string;
-    laneIndex: number;
-    remainingLanes: number[];
-    actor: Player;
-} | {
-    type: 'select_face_down_card_to_delete';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_low_value_card_to_delete';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_own_highest_card_to_delete_for_hate_2';
-    sourceCardId: string;
-    actor: Player;
-    count: 1;
-} | {
-    type: 'select_opponent_highest_card_to_delete_for_hate_2';
-    sourceCardId: string;
-    actor: Player;
-    count: 1;
-} | {
-    type: 'select_card_from_other_lanes_to_delete';
-    sourceCardId: string;
-    disallowedLaneIndex: number;
-    lanesSelected: number[];
-    count: number;
-    actor: Player;
-} | {
-    type: 'select_lane_for_death_2';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_death_1_effect';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_card_to_delete_for_death_1';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_give_card_for_love_1';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_card_from_hand_to_give';
-    sourceCardId: string;
-    sourceEffect: 'love_1_end' | 'love_3';
-    actor: Player;
-} | {
-    type: 'select_card_from_hand_to_reveal';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'plague_2_player_discard';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'plague_2_opponent_discard';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'plague_4_opponent_delete';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'plague_4_player_flip_optional';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_any_other_card_to_flip';
-    sourceCardId: string;
-    draws: number;
-    actor: Player;
-} | {
-    type: 'select_card_to_return';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_fire_3_discard';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_card_to_flip_for_fire_3';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_cards_from_hand_to_discard_for_fire_4';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_cards_from_hand_to_discard_for_hate_1';
-    sourceCardId: string;
-    count: number;
-    actor: Player;
-} | {
-    type: 'select_card_to_shift_for_gravity_1';
     sourceCardId: string;
     sourceLaneIndex: number;
+    targetFilter?: TargetFilter;  // Which cards to shift
+    validLanes?: number[];
+    cardsToShift?: string[];      // Legacy: pre-selected card IDs to shift
+    validDestinationLanes?: number[];  // Legacy: allowed destination lanes
+}
+| {
+    type: 'select_lane_for_delete';
     actor: Player;
-} | {
-    type: 'select_card_to_shift_for_anarchy_0';
     sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_card_to_shift_for_anarchy_1';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_card_to_delete_for_anarchy_2';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_card_to_flip_and_shift_for_gravity_2';
-    sourceCardId: string;
-    targetLaneIndex: number;
-    actor: Player;
-} | {
-    type: 'gravity_2_shift_after_flip';
-    cardToShiftId: string;
-    targetLaneIndex: number;
-    cardOwner: Player;
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_face_down_card_to_shift_for_gravity_4';
-    sourceCardId: string;
-    targetLaneIndex: number;
-    actor: Player;
-} | {
-    type: 'select_any_card_to_flip';
-    count: number;
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_any_face_down_card_to_flip_optional';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_any_card_to_flip_optional';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'prompt_spirit_1_start';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_shift_for_spirit_3';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'prompt_swap_protocols';
-    sourceCardId: string;
-    actor: Player;
-    target: Player;
-    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
-} | {
-    type: 'select_lane_for_life_3_play';
-    sourceCardId: string;
-    disallowedLaneIndex: number;
-    actor: Player;
-} | {
-    type: 'select_card_to_flip_for_light_0';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_face_down_card_to_reveal_for_light_2';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_shift_or_flip_for_light_2';
-    sourceCardId: string;
-    revealedCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_lane_to_shift_revealed_card_for_light_2';
-    sourceCardId: string;
-    revealedCardId: string;
-    actor: Player;
-} | {
-    type: 'select_board_card_to_reveal_custom';
-    sourceCardId: string;
-    actor: Player;
-    followUpAction?: 'flip' | 'shift';
-    optional?: boolean;
-} | {
-    type: 'prompt_shift_or_flip_board_card_custom';
-    sourceCardId: string;
-    revealedCardId: string;
-    followUpAction?: 'flip' | 'shift';
-    optional: boolean;
-    actor: Player;
-} | {
-    type: 'select_lane_to_shift_revealed_board_card_custom';
-    sourceCardId: string;
-    revealedCardId: string;
-    actor: Player;
-} | {
-    type: 'select_lane_to_shift_cards_for_light_3';
-    sourceCardId: string;
-    sourceLaneIndex: number;
-    actor: Player;
-} | {
-    type: 'select_lane_for_metal_3_delete';
-    sourceCardId: string;
-    disallowedLaneIndex: number;
-    actor: Player;
-} | {
+    deleteFilter?: {
+        valueRange?: { min: number; max: number };
+        faceState?: 'face_up' | 'face_down' | 'any';
+        count?: number | 'all';
+    };
+    laneIndex?: number;          // Source lane (for exclusion)
+    excludeSourceLane?: boolean;
+}
+| {
     type: 'select_lane_for_delete_all';
+    actor: Player;
     sourceCardId: string;
     validLanes: number[];
     minCards: number;
+    deleteFilter?: {
+        calculation?: 'highest_value' | 'lowest_value';
+    };
+}
+| {
+    type: 'select_lane_for_play';
     actor: Player;
-} | {
-    type: 'select_any_other_card_to_flip_for_water_0';
     sourceCardId: string;
+    cardInHandId?: string;
+    playFromSource?: 'hand' | 'deck';
+    isFaceDown?: boolean;
+    disallowedLaneIndex?: number;
+    validLanes?: number[];
+}
+| {
+    type: 'select_lane_for_return';
     actor: Player;
-} | {
-    type: 'prompt_rearrange_protocols';
     sourceCardId: string;
-    target: Player;
-    actor: Player;
-    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
-    disallowedProtocolForLane?: { laneIndex: number; protocol: string };
-} | {
-    type: 'select_lane_for_water_3';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_own_card_to_return_for_water_4';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_own_other_card_to_shift';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_shift_for_speed_3';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_own_card_to_shift_for_speed_3';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_opponent_face_down_card_to_shift';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'reveal_opponent_hand';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'select_any_opponent_card_to_shift';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_return_for_psychic_4';
-    sourceCardId: string;
-    optional: true;
-    actor: Player;
-} | {
-    type: 'select_opponent_card_to_return';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'prompt_use_control_mechanic';
-    sourceCardId: 'CONTROL_MECHANIC';
-    actor: Player;
-    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
-} | {
-    type: 'flip_self_for_water_0';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'flip_self_for_psychic_4';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'anarchy_0_conditional_draw';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    type: 'speed_3_self_flip_after_shift';
-    sourceCardId: string;
-    actor: Player;
-} | {
-    // NEW: Generic flip action for custom protocols (flexible, supports scope: 'each_lane' via parameters)
-    type: 'select_card_to_flip';
-    sourceCardId: string;
-    actor: Player;
-    targetFilter?: any;
-    currentLaneIndex?: number;  // Optional: Restricts selection to this lane (scope: 'each_lane')
-    remainingLanes?: number[];  // Optional: Lanes to process after this one
-    params?: any;  // Store params for continuation
-    draws?: number;  // Optional: Draw cards after flip
-    followUpEffect?: any;  // Optional: Follow-up effect after flip
-} | {
-    // NEW: Generic shift action for custom protocols (flexible, supports scope: 'each_lane' via parameters)
-    type: 'select_card_to_shift';
-    sourceCardId: string;
-    actor: Player;
-    targetFilter?: any;
-    currentLaneIndex?: number;  // Optional: Restricts selection to this lane
-    remainingLanes?: number[];  // Optional: Lanes to process after this one
-    params?: any;
-} | {
-    // Generic optional effect prompt for custom protocols
+    returnFilter?: {
+        valueEquals?: number;
+        count?: number | 'all';
+    };
+}
+
+// -----------------------------------------------------------------------------
+// GENERIC PROMPT ACTIONS
+// -----------------------------------------------------------------------------
+| {
     type: 'prompt_optional_effect';
-    sourceCardId: string;
     actor: Player;
-    effectDef: any;  // The effect definition from customEffects
+    sourceCardId: string;
+    effectDef: any;
     context: EffectContext;
     optional?: boolean;
-} | {
-    // Generic optional discard prompt for custom protocols
+}
+| {
     type: 'prompt_optional_discard_custom';
-    sourceCardId: string;
     actor: Player;
+    sourceCardId: string;
     count: number;
     context?: EffectContext;
-} | null;
+}
+| {
+    type: 'custom_choice';
+    actor: Player;
+    sourceCardId: string;
+    options: any[];  // Array of effect options
+    context?: EffectContext;
+}
 
-export type AnimationState = 
-    | { type: 'playCard', cardId: string; owner: Player } 
+// -----------------------------------------------------------------------------
+// FLIP SELF (generic - no card-specific naming)
+// -----------------------------------------------------------------------------
+| {
+    type: 'flip_self';
+    actor: Player;
+    sourceCardId: string;
+}
+
+// -----------------------------------------------------------------------------
+// PROTOCOL MANIPULATION
+// -----------------------------------------------------------------------------
+| {
+    type: 'prompt_rearrange_protocols';
+    actor: Player;
+    sourceCardId: string;
+    target: Player;
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
+    disallowedProtocolForLane?: { laneIndex: number; protocol: string };
+}
+| {
+    type: 'prompt_swap_protocols';
+    actor: Player;
+    sourceCardId: string;
+    target: Player;
+    originalAction?: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' };
+}
+
+// -----------------------------------------------------------------------------
+// CONTROL MECHANIC
+// -----------------------------------------------------------------------------
+| {
+    type: 'prompt_use_control_mechanic';
+    actor: Player;
+    sourceCardId: 'CONTROL_MECHANIC';
+    originalAction: { type: 'compile'; laneIndex: number } | { type: 'fill_hand' } | { type: 'continue_turn', queuedSpeed2Actions?: ActionRequired[] } | { type: 'resume_interrupted_turn', interruptedTurn: Player, interruptedPhase: GamePhase, queuedSpeed2Actions?: ActionRequired[] };
+}
+
+// -----------------------------------------------------------------------------
+// HAND CARD SELECTION (give, reveal, play from hand)
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_card_from_hand_to_play';
+    actor: Player;
+    sourceCardId: string;
+    disallowedLaneIndex?: number;
+    isFaceDown?: boolean;
+}
+| {
+    type: 'select_card_from_hand_to_give';
+    actor: Player;
+    sourceCardId: string;
+    sourceEffect?: string;  // Legacy: track which effect triggered this
+}
+| {
+    type: 'select_card_from_hand_to_reveal';
+    actor: Player;
+    sourceCardId: string;
+}
+
+// -----------------------------------------------------------------------------
+// REVEAL ACTIONS
+// -----------------------------------------------------------------------------
+| {
+    type: 'reveal_opponent_hand';
+    actor: Player;
+    sourceCardId: string;
+}
+| {
+    type: 'select_board_card_to_reveal';
+    actor: Player;
+    sourceCardId: string;
+    targetFilter?: TargetFilter;
+    followUpAction?: 'flip' | 'shift';
+    optional?: boolean;
+}
+| {
+    type: 'prompt_shift_or_flip_revealed_card';
+    actor: Player;
+    sourceCardId: string;
+    revealedCardId: string;
+    optional: boolean;
+}
+| {
+    type: 'select_lane_to_shift_revealed_card';
+    actor: Player;
+    sourceCardId: string;
+    revealedCardId: string;
+}
+
+// -----------------------------------------------------------------------------
+// LEGACY COMPATIBILITY (to be removed after migration)
+// These allow old card-specific types to work during transition
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_card_to_delete_for_death_1' | 'select_card_to_delete_for_anarchy_2' |
+          'select_own_highest_card_to_delete_for_hate_2' | 'select_opponent_highest_card_to_delete_for_hate_2' |
+          'select_face_down_card_to_reveal_for_light_2' | 'select_card_to_flip_for_fire_3' |
+          'select_card_to_flip_for_light_0' | 'select_any_other_card_to_flip_for_water_0' |
+          'select_covered_card_to_flip_for_chaos_0' | 'select_own_card_to_return_for_water_4' |
+          'select_card_to_shift_for_anarchy_0' | 'select_card_to_shift_for_anarchy_1' |
+          'select_card_to_shift_for_gravity_1' | 'select_card_to_flip_and_shift_for_gravity_2' |
+          'select_face_down_card_to_shift_for_gravity_4' | 'select_face_down_card_to_shift_for_darkness_4' |
+          'select_lane_for_death_2' | 'select_lane_for_life_3_play' |
+          'select_lane_to_shift_revealed_card_for_light_2' | 'select_lane_to_shift_cards_for_light_3' |
+          'select_lane_for_metal_3_delete' | 'flip_self_for_water_0' | 'flip_self_for_psychic_4' |
+          'select_opponent_card_to_flip' | 'select_any_other_card_to_flip' |
+          'select_opponent_face_up_card_to_flip' | 'select_own_face_up_covered_card_to_flip' |
+          'select_covered_card_in_line_to_flip_optional' | 'select_any_card_to_flip_optional' |
+          'select_any_face_down_card_to_flip_optional' | 'shift_flipped_card_optional' |
+          'select_opponent_covered_card_to_shift' | 'select_own_covered_card_to_shift' |
+          'select_any_opponent_card_to_shift' | 'select_own_other_card_to_shift' |
+          'select_opponent_face_down_card_to_shift' | 'select_own_card_to_shift_for_speed_3' |
+          'gravity_2_shift_after_flip' | 'speed_3_self_flip_after_shift' |
+          'anarchy_0_conditional_draw' | 'execute_remaining_custom_effects' |
+          'prompt_death_1_effect' | 'prompt_give_card_for_love_1' | 'prompt_fire_3_discard' |
+          'prompt_shift_for_speed_3' | 'prompt_return_for_psychic_4' | 'prompt_spirit_1_start' |
+          'prompt_shift_for_spirit_3' | 'plague_2_opponent_discard' | 'plague_4_player_flip_optional' |
+          'select_cards_from_hand_to_discard_for_fire_4' | 'select_cards_from_hand_to_discard_for_hate_1' |
+          'prompt_shift_or_flip_board_card_custom' | 'discard_completed' |
+          'delete_self' | 'select_face_down_card_to_delete' | 'select_low_value_card_to_delete' |
+          'select_card_from_other_lanes_to_delete' | 'plague_4_opponent_delete' |
+          'select_opponent_card_to_return' | 'select_any_card_to_flip' |
+          'prompt_shift_or_flip_for_light_2' | 'select_board_card_to_reveal_custom' |
+          'plague_2_player_discard' | 'select_lane_to_shift_revealed_board_card_custom' |
+          'select_lane_for_water_3' | 'prompt_optional_draw';
+    actor: Player;
+    sourceCardId?: string;
+    [key: string]: any;  // Allow any additional properties for legacy compatibility
+}
+
+// -----------------------------------------------------------------------------
+// NULL (no action required)
+// -----------------------------------------------------------------------------
+| null;
+
+// =============================================================================
+// ANIMATION TYPES
+// =============================================================================
+
+export type AnimationState =
+    | { type: 'playCard', cardId: string; owner: Player }
     | { type: 'compile', laneIndex: number }
     | { type: 'flipCard', cardId: string }
     | { type: 'deleteCard', cardId: string, owner: Player }
@@ -508,12 +437,11 @@ export interface LogCardRef {
 export interface LogEntry {
     player: Player;
     message: string;
-    indentLevel?: number; // Indentation level for effect chains (0 = top level)
-    sourceCard?: string; // Card that triggered this effect (e.g., "Fire-3")
-    phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile'; // Which phase/trigger caused this
-    // Card references for preview on click
-    sourceCardRef?: LogCardRef; // The card that triggered this action
-    targetCardRefs?: LogCardRef[]; // Target card(s) affected by this action
+    indentLevel?: number;
+    sourceCard?: string;
+    phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile';
+    sourceCardRef?: LogCardRef;
+    targetCardRefs?: LogCardRef[];
 }
 
 export interface GameState {
@@ -535,17 +463,21 @@ export interface GameState {
     processedSpeed1TriggerThisTurn?: boolean;
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
-    lastCustomEffectTargetCardId?: string | null;  // NEW: For useCardFromPreviousEffect chains
+    lastCustomEffectTargetCardId?: string | null;
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
-    _logIndentLevel?: number; // Current indentation level for effect chains
-    _currentEffectSource?: string; // Current card causing effects (e.g., "Fire-3")
-    _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile'; // Current phase context
+    _logIndentLevel?: number;
+    _currentEffectSource?: string;
+    _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile';
     stats: {
         player: PlayerStats,
         opponent: PlayerStats,
     }
 }
+
+// =============================================================================
+// AI ACTION TYPES (generic - no card-specific actions)
+// =============================================================================
 
 export type AIAction =
     | { type: 'playCard'; cardId: string; laneIndex: number; isFaceUp: boolean; }
@@ -558,34 +490,21 @@ export type AIAction =
     | { type: 'shiftCard', cardId: string }
     | { type: 'selectLane', laneIndex: number }
     | { type: 'skip' }
-    | { type: 'resolveDeath1Prompt', accept: boolean }
-    | { type: 'resolveLove1Prompt', accept: boolean }
     | { type: 'giveCard', cardId: string }
     | { type: 'revealCard', cardId: string }
-    | { type: 'resolvePlague2Discard', cardIds: string[] }
-    | { type: 'resolvePlague4Flip', accept: boolean }
-    | { type: 'resolveFire3Prompt', accept: boolean }
-    | { type: 'resolveFire4Discard', cardIds: string[] }
-    | { type: 'resolveHate1Discard', cardIds: string[] }
-    | { type: 'resolveLight2Prompt', choice: 'shift' | 'flip' | 'skip' }
     | { type: 'rearrangeProtocols', newOrder: string[] }
-    | { type: 'resolveSpirit1Prompt', choice: 'discard' | 'flip' }
-    | { type: 'resolveSpirit3Prompt', accept: boolean }
     | { type: 'resolveSwapProtocols', indices: [number, number] }
-    | { type: 'resolveSpeed3Prompt', accept: boolean }
-    | { type: 'resolvePsychic4Prompt', accept: boolean }
     | { type: 'resolveControlMechanicPrompt', choice: 'player' | 'opponent' | 'skip' }
     | { type: 'resolveOptionalEffectPrompt', accept: boolean }
-    | { type: 'resolveOptionalDiscardCustomPrompt', accept: boolean };
+    | { type: 'resolveOptionalDiscardCustomPrompt', accept: boolean }
+    | { type: 'resolveCustomChoice', optionIndex: number }
+    | { type: 'resolveRevealBoardCardPrompt', choice: 'shift' | 'flip' | 'skip' }
+    | { type: 'resolvePrompt', accept: boolean };  // Generic prompt resolution
 
+// =============================================================================
+// ANIMATION REQUEST TYPES
+// =============================================================================
 
-/**
- * AnimationRequest represents a visual animation that should play
- * BEFORE the game state is updated in the UI.
- *
- * All card operations (delete, flip, shift, return, discard) should
- * generate animation requests to ensure visual consistency.
- */
 export type AnimationRequest =
     | { type: 'delete'; cardId: string; owner: Player }
     | { type: 'flip'; cardId: string }

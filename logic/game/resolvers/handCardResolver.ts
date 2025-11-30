@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard } from '../../../types';
+import { GameState, PlayedCard, Player, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
@@ -50,10 +50,12 @@ export const resolveActionWithHandCard = (prevState: GameState, cardId: string):
                 const sourceCardInfo = findCardOnBoard(newState, actionRequired.sourceCardId);
                 if (sourceCardInfo) {
                     const { card: sourceCard, laneIndex } = sourceCardInfo;
-                    const context = {
-                        cardOwner: actor as 'player' | 'opponent',
-                        opponent: opponent as 'player' | 'opponent',
-                        triggerType: 'on_play' as const
+                    const context: EffectContext = {
+                        cardOwner: actor as Player,
+                        actor: actor as Player,
+                        currentTurn: newState.turn,
+                        opponent: opponent as Player,
+                        triggerType: 'play' as const
                     };
                     // FIXED: Correct parameter order - (card, laneIndex, state, context, effectDef)
                     const result = executeCustomEffect(sourceCard, laneIndex, newState, context, followUpEffect);
@@ -92,10 +94,12 @@ export const resolveActionWithHandCard = (prevState: GameState, cardId: string):
                     const { card: sourceCard } = sourceCardInfo;
                     const nextEffect = pendingEffects.effects[0];
                     const remainingEffects = pendingEffects.effects.slice(1);
-                    const context = {
-                        cardOwner: actor as 'player' | 'opponent',
-                        opponent: opponent as 'player' | 'opponent',
-                        triggerType: 'on_play' as const
+                    const context: EffectContext = {
+                        cardOwner: actor as Player,
+                        actor: actor as Player,
+                        currentTurn: newState.turn,
+                        opponent: opponent as Player,
+                        triggerType: 'play' as const
                     };
                     // FIXED: Correct parameter order - (card, laneIndex, state, context, effectDef)
                     const result = executeCustomEffect(sourceCard, pendingEffects.laneIndex, newState, context, nextEffect);

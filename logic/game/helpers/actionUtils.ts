@@ -13,12 +13,13 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
 
-export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player } | null {
+export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex?: number } | null {
     if (!cardId) return null;
     for (const p of ['player', 'opponent'] as Player[]) {
-        for (const lane of state[p].lanes) {
+        for (let i = 0; i < state[p].lanes.length; i++) {
+            const lane = state[p].lanes[i];
             const card = lane.find(c => c.id === cardId);
-            if (card) return { card, owner: p };
+            if (card) return { card, owner: p, laneIndex: i };
         }
     }
     return null;
@@ -231,15 +232,14 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
         if (hasQueuedActions) {
             // Split queue: chained effect goes BEFORE shift actions, but AFTER other effects
             const existingQueue = newState.queuedActions || [];
+            // NOTE: Legacy shift_flipped_card_optional and gravity_2_shift_after_flip removed
+            // Now uses generic select_card_to_shift with followUpEffect
             const shiftActions = existingQueue.filter(a =>
-                a.type === 'shift_flipped_card_optional' ||
-                a.type === 'gravity_2_shift_after_flip'
+                a.type === 'select_card_to_shift' && (a as any).followUpEffect
             );
             const otherActions = existingQueue.filter(a =>
-                a.type !== 'shift_flipped_card_optional' &&
-                a.type !== 'gravity_2_shift_after_flip'
+                !(a.type === 'select_card_to_shift' && (a as any).followUpEffect)
             );
-
 
             // Order: other effects → chained effect → shift actions
             newState.queuedActions = [...otherActions, nextAction, ...shiftActions];
@@ -490,6 +490,12 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     }
 
     if (originalLaneIndex === -1) return { newState: state };
+
+    // CRITICAL: Cannot shift to the same lane
+    if (originalLaneIndex === targetLaneIndex) {
+        console.log('[DEBUG internalShiftCard] Cannot shift to same lane, skipping');
+        return { newState: state };
+    }
 
     console.log('[DEBUG internalShiftCard] Shifting from lane', originalLaneIndex, 'to lane', targetLaneIndex);
 

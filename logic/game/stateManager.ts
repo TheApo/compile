@@ -264,15 +264,8 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
     let finalPlayerValues = [...playerBase];
     let finalOpponentValues = [...opponentBase];
 
-    // Cross-lane effects (e.g., Metal 0)
-    for (let i = 0; i < 3; i++) {
-        if (state.opponent.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 0)) {
-            finalPlayerValues[i] = Math.max(0, finalPlayerValues[i] - 2);
-        }
-        if (state.player.lanes[i].some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 0)) {
-            finalOpponentValues[i] = Math.max(0, finalOpponentValues[i] - 2);
-        }
-    }
+    // NOTE: Metal-0 hardcoded logic removed - now uses custom protocol value_modifier
+    // Cross-lane effects are now handled via applyCustomValueModifiers
 
     // Lane-specific effects
     for (let i = 0; i < 3; i++) {

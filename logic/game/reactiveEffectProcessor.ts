@@ -34,9 +34,11 @@ export function processReactiveEffects(
     // Set flag to prevent recursion
     newState = { ...newState, _processingReactiveEffects: true } as any;
 
-    // CRITICAL: Track processed clear_cache triggers to prevent infinite loops
+    // CRITICAL: Track processed triggers to prevent infinite loops and double-triggering
     // (like Speed_custom-1: after_clear_cache draws a card, which triggers another clear_cache)
+    // (like Spirit-3: after_draw shift, which should NOT re-trigger after the shift completes)
     const processedClearCacheTriggerIds = (newState as any).processedClearCacheTriggerIds || [];
+    const processedAfterDrawTriggerIds = (newState as any).processedAfterDrawTriggerIds || [];
 
     // Find all face-up custom protocol cards with matching reactive trigger
     const reactiveCards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; box: 'top' }> = [];
@@ -60,9 +62,13 @@ export function processReactiveEffects(
                         );
 
                         if (matchingEffects.length > 0) {
-                            // CRITICAL: Skip if this card already triggered for after_clear_cache this turn
+                            // CRITICAL: Skip if this card already triggered for certain trigger types this turn
                             if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
                                 console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
+                                return;
+                            }
+                            if (triggerType === 'after_draw' && processedAfterDrawTriggerIds.includes(card.id)) {
+                                console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_draw - already triggered this turn`);
                                 return;
                             }
                             reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
@@ -186,11 +192,16 @@ export function processReactiveEffects(
             triggerType: triggerType as any,
         };
 
-        // CRITICAL: Mark this card as processed for after_clear_cache to prevent infinite loops
+        // CRITICAL: Mark this card as processed to prevent re-triggering
         if (triggerType === 'after_clear_cache') {
             const currentProcessedIds = (newState as any).processedClearCacheTriggerIds || [];
             (newState as any).processedClearCacheTriggerIds = [...currentProcessedIds, card.id];
             console.log(`[Reactive Effects] Marked ${cardName} as processed for after_clear_cache`);
+        }
+        if (triggerType === 'after_draw') {
+            const currentProcessedIds = (newState as any).processedAfterDrawTriggerIds || [];
+            (newState as any).processedAfterDrawTriggerIds = [...currentProcessedIds, card.id];
+            console.log(`[Reactive Effects] Marked ${cardName} as processed for after_draw`);
         }
 
         // Execute all filtered effects for this card

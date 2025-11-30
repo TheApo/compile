@@ -359,7 +359,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                         cardOwner: sourceCard.owner,
                                         actor: actor,
                                         currentTurn: finalState.turn,
-                                        opponent: sourceCard.owner === 'player' ? 'opponent' : 'player',
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
                                     };
                                     const result = executeCustomEffect(sourceCard.card, laneIndex, finalState, context, followUpEffect);
                                     finalState = result.newState;

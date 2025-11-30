@@ -666,19 +666,25 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     actionRequiredClass={actionRequiredClass}
                   />
                   <div className={`player-hand-area ${handBackgroundClass}`}>
-                    {gameState.player.hand.map((card) => (
-                      <CardComponent
-                        key={card.id}
-                        card={card}
-                        isFaceUp={true}
-                        onPointerDown={() => handleHandCardPointerDown(card)}
-                        onPointerEnter={() => handleHandCardPointerEnter(card)}
-                        isSelected={card.id === selectedCard}
-                        isMultiSelected={multiSelectedCardIds.includes(card.id)}
-                        animationState={gameState.animationState}
-                        additionalClassName="in-hand"
-                      />
-                    ))}
+                    {gameState.player.hand.map((card) => {
+                      // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
+                      const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
+                        ? card.id === (gameState.actionRequired as any).cardInHandId
+                        : card.id === selectedCard;
+                      return (
+                        <CardComponent
+                          key={card.id}
+                          card={card}
+                          isFaceUp={true}
+                          onPointerDown={() => handleHandCardPointerDown(card)}
+                          onPointerEnter={() => handleHandCardPointerEnter(card)}
+                          isSelected={isSelectedForPlay}
+                          isMultiSelected={multiSelectedCardIds.includes(card.id)}
+                          animationState={gameState.animationState}
+                          additionalClassName="in-hand"
+                        />
+                      );
+                    })}
                   </div>
                 </div>
             </div>

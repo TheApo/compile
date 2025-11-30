@@ -199,7 +199,6 @@ export const advancePhase = (state: GameState): GameState => {
                 processedStartEffectIds: [],
                 processedEndEffectIds: [],
                 processedSpeed1TriggerThisTurn: false,
-                processedClearCacheTriggerIds: [], // Reset for custom protocol after_clear_cache triggers
                 processedUncoverEventIds: [],
                 // CRITICAL: Clear interrupt state when starting a new turn
                 _interruptedTurn: undefined,
@@ -265,8 +264,8 @@ export const processQueuedActions = (state: GameState): GameState => {
         const nextAction = queuedActions.shift()!;
 
         // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
-        // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
-        if (nextAction.sourceCardId && nextAction.type !== 'flip_self_for_water_0' && nextAction.type !== 'flip_self_for_psychic_4') {
+        // EXCEPTION: flip_self has its own specific checks
+        if (nextAction.sourceCardId && nextAction.type !== 'flip_self') {
             const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
             if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
@@ -279,7 +278,7 @@ export const processQueuedActions = (state: GameState): GameState => {
         // NOTE: "discard all" is now auto-executed in effectInterpreter.ts
 
         // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, custom protocols)
-        if (nextAction.type === 'flip_self' || nextAction.type === 'flip_self_for_water_0' || nextAction.type === 'flip_self_for_psychic_4') {
+        if (nextAction.type === 'flip_self') {
             const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
@@ -301,17 +300,8 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved (or cancelled), move to next in queue
         }
 
-        if (nextAction.type === 'anarchy_0_conditional_draw') {
-            // NOTE: This is DEAD CODE - old Anarchy-0 (protocol === 'Anarchy') no longer exists
-            // Custom protocol Anarchy_custom handles its conditional draw via effectInterpreter
-            // Keeping for backwards compatibility with any saved game states
-            const { actor } = nextAction as { type: 'anarchy_0_conditional_draw', actor: Player };
-            mutableState = log(mutableState, actor, `Legacy anarchy_0_conditional_draw triggered - this should not happen with custom protocols.`);
-            mutableState = decreaseLogIndent(mutableState);
-            continue;
-        }
-
-        if (nextAction.type === 'execute_remaining_custom_effects') {
+        // Internal queue action type for executing remaining custom effects
+        if ((nextAction as any).type === 'execute_remaining_custom_effects') {
             const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
 
@@ -374,19 +364,21 @@ export const processQueuedActions = (state: GameState): GameState => {
                     const firstAnimation = result.animationRequests[0];
                     if (firstAnimation.type === 'draw') {
                         mutableState.animationState = {
-                            type: 'draw',
-                            player: firstAnimation.player as Player,
-                            count: firstAnimation.count
+                            type: 'drawCard',
+                            owner: firstAnimation.player as Player,
+                            cardIds: [] // Draw animations are handled separately
                         };
                     } else if (firstAnimation.type === 'play') {
                         mutableState.animationState = {
                             type: 'playCard',
-                            cardId: firstAnimation.cardId
+                            cardId: firstAnimation.cardId,
+                            owner: firstAnimation.owner
                         };
                     } else if (firstAnimation.type === 'delete') {
                         mutableState.animationState = {
                             type: 'deleteCard',
-                            cardId: firstAnimation.cardId
+                            cardId: firstAnimation.cardId,
+                            owner: firstAnimation.owner
                         };
                     }
 
@@ -428,26 +420,7 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved, move to next in queue
         }
 
-        if (nextAction.type === 'speed_3_self_flip_after_shift') {
-            const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
-            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
-
-            // CRITICAL: Only execute if Speed-3 is still on the board, face-up AND uncovered
-            // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Speed-3 is covered
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
-                mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
-                mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
-            } else {
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
-                const reason = !sourceCardInfo ? 'deleted' :
-                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
-                              'now covered';
-                mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
-            }
-            continue; // Action resolved (or cancelled), move to next in queue
-        }
+        // NOTE: speed_3_self_flip_after_shift now handled via generic flip_self action type
 
         if (nextAction.type === 'reveal_opponent_hand') {
             const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
@@ -467,49 +440,8 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved, move to next in queue
         }
 
-        if (nextAction.type === 'gravity_2_shift_after_flip') {
-            const { cardToShiftId, targetLaneIndex, cardOwner, actor, sourceCardId } = nextAction;
-
-            // Validate that both cards still exist AND source is still face-up AND uncovered before performing the shift
-            const flippedCardStillExists = findCardOnBoard(mutableState, cardToShiftId);
-            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
-            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered;
-
-            if (!flippedCardStillExists || !sourceCardStillValid) {
-                // One of the cards was deleted/returned, or source was flipped face-down/covered → Cancel the shift
-                const sourceName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Gravity-2';
-                mutableState = log(mutableState, actor, `${sourceName}: Shift cancelled because the card no longer exists or is not active.`);
-            } else {
-                // Perform the shift
-                const shiftResult = internalShiftCard(mutableState, cardToShiftId, cardOwner, targetLaneIndex, actor);
-                mutableState = shiftResult.newState;
-            }
-            continue; // Action resolved (or cancelled), move to next in queue
-        }
-
-        // --- Conditional actions (check if possible) ---
-        if (nextAction.type === 'select_any_opponent_card_to_shift') {
-            const opponent = nextAction.actor === 'player' ? 'opponent' : 'player';
-            if (mutableState[opponent].lanes.flat().length === 0) {
-                const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
-                const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
-                mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
-                continue; // Action impossible, skip and move to next in queue
-            }
-        }
-
-        // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists, is face-up, AND uncovered!
-        if (nextAction.type === 'shift_flipped_card_optional') {
-            const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
-            const sourceIsUncovered = isCardUncovered(mutableState, nextAction.sourceCardId);
-            if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
-                // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
-                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
-                mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
-                continue; // Action cancelled, move to next in queue
-            }
-        }
+        // NOTE: Legacy gravity_2_shift_after_flip, select_any_opponent_card_to_shift, shift_flipped_card_optional
+        // now use generic select_card_to_shift with followUpEffect parameters
 
         // --- If we reach here, the action is not auto-resolving and is possible ---
         mutableState.actionRequired = nextAction;
@@ -524,18 +456,7 @@ export const processQueuedActions = (state: GameState): GameState => {
 export const processEndOfAction = (state: GameState): GameState => {
     if (state.winner) return state;
 
-    // CRITICAL FIX: If execute_remaining_custom_effects is set as actionRequired (not in queue),
-    // we need to process it immediately by calling processQueuedActions.
-    if (state.actionRequired?.type === 'execute_remaining_custom_effects') {
-        // Move to queue and process immediately
-        const action = state.actionRequired;
-        const stateWithQueue = {
-            ...state,
-            actionRequired: null,
-            queuedActions: [action, ...(state.queuedActions || [])]
-        };
-        return processQueuedActions(stateWithQueue);
-    }
+    // Internal execute_remaining_custom_effects is handled via queuedActions
 
     // This is the crucial check. If an action is required, the turn cannot end.
     // This handles both actions for the current turn player (which the AI manager will loop on)
@@ -595,8 +516,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     processedStartEffectIds: [],
                     processedEndEffectIds: [],
                     processedSpeed1TriggerThisTurn: false,
-                    processedClearCacheTriggerIds: [], // Reset for custom protocol after_clear_cache triggers
-                    processedUncoverEventIds: [],
+                        processedUncoverEventIds: [],
                     // CRITICAL: Clear interrupt state when starting a new turn
                     _interruptedTurn: undefined,
                     _interruptedPhase: undefined,
@@ -678,7 +598,7 @@ export const processEndOfAction = (state: GameState): GameState => {
             // Rule: An effect is cancelled if its source card is no longer on the board or face-up.
             // EXCEPTION: flip_self_for_water_0 and flip_self_for_psychic_4 have their own specific checks
             // CRITICAL: Skip source validation for flip_self actions (they have their own validation logic)
-            const isFlipSelfAction = nextAction.type === 'flip_self' || nextAction.type === 'flip_self_for_water_0' || nextAction.type === 'flip_self_for_psychic_4';
+            const isFlipSelfAction = nextAction.type === 'flip_self';
             if (nextAction.sourceCardId && !isFlipSelfAction) {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
@@ -712,35 +632,8 @@ export const processEndOfAction = (state: GameState): GameState => {
                 continue; // Action resolved (or cancelled), move to next in queue
             }
 
-            if (nextAction.type === 'anarchy_0_conditional_draw') {
-                // NOTE: This is DEAD CODE - old Anarchy-0 (protocol === 'Anarchy') no longer exists
-                // Custom protocol Anarchy_custom handles its conditional draw via effectInterpreter
-                const { actor } = nextAction as { type: 'anarchy_0_conditional_draw', actor: Player };
-                mutableState = log(mutableState, actor, `Legacy anarchy_0_conditional_draw triggered - this should not happen with custom protocols.`);
-                mutableState = decreaseLogIndent(mutableState);
-                continue;
-            }
-
-            if (nextAction.type === 'speed_3_self_flip_after_shift') {
-                const { sourceCardId, actor } = nextAction as { type: 'speed_3_self_flip_after_shift', sourceCardId: string, actor: Player };
-                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-                const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
-
-                // CRITICAL: Only execute if Speed-3 is still on the board, face-up AND uncovered
-                // Bottom commands are only active when uncovered, so the self-flip must be cancelled if Speed-3 is covered
-                if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
-                    mutableState = log(mutableState, actor, `Speed-3: Flipping itself after shifting a card.`);
-                    mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
-                } else {
-                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Speed-3';
-                    const reason = !sourceCardInfo ? 'deleted' :
-                                  !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
-                                  'now covered';
-                    mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
-                }
-                continue; // Action resolved (or cancelled), move to next in queue
-            }
+            // NOTE: Legacy anarchy_0_conditional_draw and speed_3_self_flip_after_shift removed
+            // Now handled via generic flip_self action type
 
             if (nextAction.type === 'reveal_opponent_hand') {
                 const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
@@ -760,28 +653,8 @@ export const processEndOfAction = (state: GameState): GameState => {
                 continue; // Action resolved, move to next in queue
             }
 
-            // --- Conditional actions (check if possible) ---
-            if (nextAction.type === 'select_any_opponent_card_to_shift') {
-                const opponent = nextAction.actor === 'player' ? 'opponent' : 'player';
-                if (mutableState[opponent].lanes.flat().length === 0) {
-                    const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
-                    const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
-                    mutableState = log(mutableState, nextAction.actor, `${sourceName}: Opponent has no cards to shift, skipping effect.`);
-                    continue; // Action impossible, skip and move to next in queue
-                }
-            }
-
-            // CRITICAL: For shift_flipped_card_optional, validate that the source card still exists, is face-up, AND uncovered!
-            if (nextAction.type === 'shift_flipped_card_optional') {
-                const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
-                const sourceIsUncovered = isCardUncovered(mutableState, nextAction.sourceCardId);
-                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp || !sourceIsUncovered) {
-                    // Source card was deleted/returned/flipped face-down/covered → Cancel the shift
-                    const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
-                    mutableState = log(mutableState, nextAction.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
-                    continue; // Action cancelled, move to next in queue
-                }
-            }
+            // NOTE: Legacy select_any_opponent_card_to_shift and shift_flipped_card_optional removed
+            // Now use generic select_card_to_shift with targetFilter parameters
 
             // --- If we reach here, the action is not auto-resolving and is possible ---
             mutableState.actionRequired = nextAction;

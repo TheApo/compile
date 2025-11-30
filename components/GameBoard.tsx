@@ -33,8 +33,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         const isPlayerTurn = turn === 'player';
         const isPlayFromHand = phase === 'action' && !actionRequired && selectedCardId;
         const isPlayFromEffect = actionRequired?.type === 'select_lane_for_play';
-    
-        if (!isPlayerTurn || (!isPlayFromHand && !isPlayFromEffect)) {
+
+        // CRITICAL: For effect-based plays, check actor not turn (handles interrupts)
+        const canPlayerAct = isPlayFromEffect
+            ? (actionRequired as any)?.actor === 'player'
+            : isPlayerTurn;
+
+        if (!canPlayerAct || (!isPlayFromHand && !isPlayFromEffect)) {
             return { isPlayable: false, isMatching: false, isCompilable };
         }
         

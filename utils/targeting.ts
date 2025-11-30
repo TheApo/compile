@@ -410,8 +410,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // CRITICAL: Default to 'uncovered' if position is not specified (just like other effects)
             const position = targetFilter.position || 'uncovered';
             const cardIndex = lane.findIndex(c => c.id === card.id);
+            const isCovered = cardIndex < lane.length - 1;
+            console.log(`[Targeting DEBUG] select_card_to_shift: card=${card.protocol}-${card.value}, position filter=${position}, cardIndex=${cardIndex}, laneLength=${lane.length}, isCovered=${isCovered}, isUncovered=${isUncovered}`);
             if (position === 'uncovered' && !isUncovered) return false;
-            if (position === 'covered' && cardIndex >= lane.length - 1) return false;
+            if (position === 'covered' && !isCovered) return false;
 
             // Check owner filter if specified (but 'any' allows both players)
             if (targetFilter.owner === 'own' && owner !== actionRequired.actor) return false;

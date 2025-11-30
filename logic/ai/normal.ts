@@ -343,6 +343,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'discardCards', cardIds: sortedHand.slice(0, action.count).map(c => c.id) };
         }
 
+        // CRITICAL: Handle discard_completed - this triggers the followUp effect (e.g., Fire-3 flip after discard)
+        case 'discard_completed': {
+            // The followUp effect will be executed automatically by the resolver
+            // We just need to acknowledge the completion
+            return { type: 'skip' };
+        }
+
         case 'select_opponent_card_to_flip': {
             const getUncovered = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
@@ -504,7 +511,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Discard weakest card
             if (state.opponent.hand.length === 0) return { type: 'skip' };
             const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            return { type: 'resolvePlague2Discard', cardIds: [sortedHand[0].id] };
+            return { type: 'discardCards', cardIds: [sortedHand[0].id] };
         }
 
         case 'select_cards_from_hand_to_discard_for_fire_4': {
@@ -514,17 +521,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
             const toDiscard = sortedHand.slice(0, maxDiscard);
-            return { type: 'resolveFire4Discard', cardIds: toDiscard.map(c => c.id) };
+            return { type: 'discardCards', cardIds: toDiscard.map(c => c.id) };
         }
 
         case 'select_cards_from_hand_to_discard_for_hate_1': {
             // Hate-1: Discard specified number of cards
-            const maxDiscard = Math.min(action.count, state.opponent.hand.length);
+            const maxDiscard = Math.min((action as any).count || 1, state.opponent.hand.length);
             if (maxDiscard === 0) return { type: 'skip' };
 
             const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
             const toDiscard = sortedHand.slice(0, maxDiscard);
-            return { type: 'resolveHate1Discard', cardIds: toDiscard.map(c => c.id) };
+            return { type: 'discardCards', cardIds: toDiscard.map(c => c.id) };
         }
 
         case 'select_card_from_hand_to_play': {
@@ -532,10 +539,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (state.opponent.hand.length === 0) return { type: 'skip' };
 
             // CRITICAL: Check if the effect FORCES face-down play (e.g., Darkness-3)
-            const isForcedFaceDown = action.isFaceDown === true;
+            // effectInterpreter sends 'faceDown', not 'isFaceDown'
+            const isForcedFaceDown = (action as any).faceDown === true;
+            console.log('[AI select_card_from_hand_to_play] faceDown:', (action as any).faceDown, 'isForcedFaceDown:', isForcedFaceDown);
 
             // FIX: Filter out blocked lanes
-            let playableLanes = [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
+            let playableLanes = [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
             playableLanes = playableLanes.filter(laneIndex => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
@@ -895,17 +904,48 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: 0 };
         }
 
-        // Prompts
-        case 'prompt_death_1_effect': return { type: 'resolveDeath1Prompt', accept: !shouldMakeMistake() };
-        case 'prompt_give_card_for_love_1': return { type: 'resolveLove1Prompt', accept: false };
-        case 'plague_4_player_flip_optional': return { type: 'resolvePlague4Flip', accept: false };
-        case 'prompt_fire_3_discard': return { type: 'resolveFire3Prompt', accept: state.opponent.hand.length > 2 };
-        case 'prompt_shift_for_speed_3': return { type: 'resolveSpeed3Prompt', accept: !shouldMakeMistake() };
-        case 'prompt_shift_for_spirit_3': return { type: 'resolveSpirit3Prompt', accept: !shouldMakeMistake() };
-        case 'prompt_return_for_psychic_4': return { type: 'resolvePsychic4Prompt', accept: true };
-        case 'prompt_spirit_1_start': return { type: 'resolveSpirit1Prompt', choice: 'flip' };
-        // Generic optional effect prompt for custom protocols - Normal AI accepts sometimes
-        case 'prompt_optional_effect': return { type: 'resolveOptionalEffectPrompt', accept: !shouldMakeMistake() };
+        // =========================================================================
+        // PROMPTS - Use generic resolvePrompt for all legacy prompts
+        // =========================================================================
+        case 'prompt_death_1_effect': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
+        case 'prompt_give_card_for_love_1': return { type: 'resolvePrompt', accept: false };
+        // NOTE: plague_4_player_flip_optional removed - now handled via prompt_optional_effect
+        case 'prompt_fire_3_discard': return { type: 'resolvePrompt', accept: state.opponent.hand.length > 2 };
+        case 'prompt_shift_for_speed_3': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
+        case 'prompt_shift_for_spirit_3': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
+        case 'prompt_return_for_psychic_4': return { type: 'resolvePrompt', accept: true };
+        case 'prompt_spirit_1_start': return { type: 'resolvePrompt', accept: true }; // flip = accept
+        // Generic optional effect prompt for custom protocols
+        case 'prompt_optional_effect': {
+            // Intelligent decision based on the effect type and context
+            const { effectDef, sourceCardId } = action as any;
+            const effectAction = effectDef?.params?.action;
+
+            // For 'flip' actions on own cards: check if flipping improves or maintains value
+            if (effectAction === 'flip' && sourceCardId) {
+                const cardInfo = findCardOnBoard(state, sourceCardId);
+                if (cardInfo && cardInfo.owner === 'opponent') {
+                    const laneIndex = state.opponent.lanes.findIndex(lane =>
+                        lane.some(c => c.id === sourceCardId)
+                    );
+                    if (laneIndex !== -1) {
+                        const lane = state.opponent.lanes[laneIndex];
+                        const faceUpValue = cardInfo.card.value;
+                        const faceDownValue = getEffectiveCardValue(cardInfo.card, lane, state, laneIndex, 'opponent');
+
+                        // Only flip if it strictly improves lane value
+                        // Don't flip just to reveal information when values are equal
+                        if (faceUpValue <= faceDownValue) {
+                            return { type: 'resolveOptionalEffectPrompt', accept: false };
+                        }
+                    }
+                }
+            }
+
+            // For most other optional effects (shift, delete, draw, etc.): usually beneficial
+            // Use shouldMakeMistake() for some randomness
+            return { type: 'resolveOptionalEffectPrompt', accept: !shouldMakeMistake() };
+        }
 
         case 'select_card_from_other_lanes_to_delete': {
             const { disallowedLaneIndex, lanesSelected } = action;
@@ -1222,24 +1262,35 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'shift_flipped_card_optional': {
-            // Easy AI: just find any valid lane and shift it. If not, skip.
-            const cardInfo = findCardOnBoard(state, action.cardId);
-            if (!cardInfo) return { type: 'skip' };
+            // Darkness-1, Spirit-3: Shift the flipped card to another lane
+            const cardId = (action as any).cardId;
+            console.log('[AI shift_flipped_card_optional] cardId:', cardId);
+            const cardInfo = findCardOnBoard(state, cardId);
+            if (!cardInfo) {
+                console.log('[AI shift_flipped_card_optional] Card not found, skipping');
+                return { type: 'skip' };
+            }
 
-            let originalLaneIndex = -1;
-            const ownerState = state[cardInfo.owner];
-            for (let i = 0; i < ownerState.lanes.length; i++) {
-                if (ownerState.lanes[i].some(c => c.id === action.cardId)) {
-                    originalLaneIndex = i;
-                    break;
+            // Use laneIndex from findCardOnBoard if available
+            let originalLaneIndex = cardInfo.laneIndex ?? -1;
+            if (originalLaneIndex === -1) {
+                const ownerState = state[cardInfo.owner];
+                for (let i = 0; i < ownerState.lanes.length; i++) {
+                    if (ownerState.lanes[i].some(c => c.id === cardId)) {
+                        originalLaneIndex = i;
+                        break;
+                    }
                 }
             }
 
+            console.log('[AI shift_flipped_card_optional] originalLaneIndex:', originalLaneIndex);
             if (originalLaneIndex === -1) return { type: 'skip' };
 
             const possibleLanes = [0, 1, 2].filter(l => l !== originalLaneIndex);
+            console.log('[AI shift_flipped_card_optional] possibleLanes:', possibleLanes);
             if (possibleLanes.length > 0) {
                 const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                console.log('[AI shift_flipped_card_optional] Selected lane:', randomLane);
                 return { type: 'selectLane', laneIndex: randomLane };
             }
 
@@ -1468,15 +1519,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Normal AI: flip own cards to gain value, shift opponent's cards
             const { revealedCardId } = action as any;
             const cardInfo = findCardOnBoard(state, revealedCardId);
-            // CRITICAL FIX: Must return resolveLight2Prompt, NOT skip!
-            // skipAction only works for optional actions, but this prompt isn't marked as optional
-            if (!cardInfo) return { type: 'resolveLight2Prompt', choice: 'skip' };
+            if (!cardInfo) return { type: 'resolveRevealBoardCardPrompt', choice: 'skip' };
             if (cardInfo.owner === 'opponent') {
-                // Flip our own face-down cards to face-up
-                return { type: 'resolveLight2Prompt', choice: 'flip' };
+                // This is OUR card (AI is opponent) - flip to gain value
+                return { type: 'resolveRevealBoardCardPrompt', choice: 'flip' };
             }
-            // For opponent's cards, prefer shift to disrupt their lane
-            return { type: 'resolveLight2Prompt', choice: 'shift' };
+            // This is player's card - shift to disrupt their lane
+            return { type: 'resolveRevealBoardCardPrompt', choice: 'shift' };
         }
 
         case 'select_lane_to_shift_revealed_board_card_custom': {
@@ -1531,15 +1580,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_shift_or_flip_for_light_2': {
             const { revealedCardId } = action;
             const cardInfo = findCardOnBoard(state, revealedCardId);
-            // CRITICAL FIX: Must return resolveLight2Prompt, NOT skip!
-            // skipAction only works for optional actions, but this prompt isn't marked as optional
-            if (!cardInfo) return { type: 'resolveLight2Prompt', choice: 'skip' };
+            // Use resolvePrompt with accept:true for flip, accept:false for skip
+            if (!cardInfo) return { type: 'resolvePrompt', accept: false }; // skip
 
             // Normal AI: flip its own cards, skip player's cards.
             if (cardInfo.owner === 'opponent') {
-                return { type: 'resolveLight2Prompt', choice: 'flip' };
+                return { type: 'resolvePrompt', accept: true }; // flip
             }
-            return { type: 'resolveLight2Prompt', choice: 'skip' };
+            return { type: 'resolvePrompt', accept: false }; // skip
         }
 
         case 'plague_4_opponent_delete': {
@@ -1680,7 +1728,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Normal AI: prefer options that benefit it
             const { options } = action as any;
             if (!options || options.length !== 2) {
-                return { type: 'resolveCustomChoice', choiceIndex: 0 };
+                return { type: 'resolveCustomChoice', optionIndex: 0 };
             }
 
             // Simple heuristic: prefer draw, avoid discard
@@ -1696,7 +1744,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             const score0 = scoreOption(options[0]);
             const score1 = scoreOption(options[1]);
-            return { type: 'resolveCustomChoice', choiceIndex: score0 >= score1 ? 0 : 1 };
+            return { type: 'resolveCustomChoice', optionIndex: score0 >= score1 ? 0 : 1 };
         }
 
         // Fallback for other actions - use simple random/first selection

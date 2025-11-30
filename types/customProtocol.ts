@@ -331,7 +331,7 @@ export interface EffectDefinition {
     position: EffectPosition;
     trigger: EffectTrigger;
     conditional?: {
-        type: 'if_you_do';
+        type: 'if_you_do' | 'if_executed' | 'then';
         thenEffect: EffectDefinition;  // Chained effect
     };
     // NEW: Reference card from previous effect in chain

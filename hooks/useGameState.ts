@@ -572,7 +572,11 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveOptionalEffectPrompt(prev, accept);
-            if (!accept) {
+            // CRITICAL: Call turnProgressionCb if:
+            // 1. User declined (!accept), OR
+            // 2. User accepted but effect was skipped (no actionRequired)
+            // Only skip turnProgressionCb if effect created an actionRequired (waiting for user input)
+            if (!nextState.actionRequired) {
                 return turnProgressionCb(nextState);
             }
             return nextState;

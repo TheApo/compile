@@ -207,7 +207,7 @@ const executeFlipEffect = (
         newState.queuedActions = [
             ...(newState.queuedActions || []),
             {
-                type: 'flip_source_card',
+                type: 'flip_self',
                 sourceCardId: card.id,
                 actor: cardOwner,
             }
@@ -427,7 +427,7 @@ const executeRevealEffect = (
             newState.queuedActions = [
                 ...(newState.queuedActions || []),
                 {
-                    type: 'select_any_card_to_flip',
+                    type: 'select_card_to_flip',
                     count: 1,
                     sourceCardId: card.id,
                     actor: cardOwner,
