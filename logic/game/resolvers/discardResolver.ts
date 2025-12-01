@@ -72,6 +72,9 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
         let stateAfterDiscard = newState;
         
         if (isHandLimitDiscard) {
+            // Decrease indent after completing Check Cache discards
+            stateAfterDiscard = decreaseLogIndent(stateAfterDiscard);
+
             stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, 'player');
 
             // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
@@ -179,6 +182,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         const isHandLimitDiscard = (prevState.phase === 'hand_limit' && !action?.sourceCardId);
         let stateAfterDiscard = state;
         if (isHandLimitDiscard) {
+            // Decrease indent after completing Check Cache discards
+            stateAfterDiscard = decreaseLogIndent(stateAfterDiscard);
             stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, player);
 
             // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)

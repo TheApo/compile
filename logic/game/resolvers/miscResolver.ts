@@ -5,7 +5,7 @@
 
 import { GameState, Player, PlayedCard, AnimationRequest } from '../../../types';
 import { drawFromOpponentDeck } from '../../../utils/gameStateModifiers';
-import { log, setLogSource, setLogPhase } from '../../utils/log';
+import { log, setLogSource, setLogPhase, increaseLogIndent } from '../../utils/log';
 import { recalculateAllLaneValues } from '../stateManager';
 // NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
 // FIX: Import internal helpers to be used by new functions.
@@ -47,6 +47,8 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         newState = setLogPhase(newState, undefined);
         newState = { ...newState, _logIndentLevel: 0 };
         newState = log(newState, compiler, `${compilerName} has Control and may rearrange protocols before compiling.`);
+        // Increase indent for Control mechanic sub-actions (skip/rearrange)
+        newState = increaseLogIndent(newState);
 
         newState.actionRequired = {
             type: 'prompt_use_control_mechanic',

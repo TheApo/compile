@@ -211,7 +211,9 @@ function processTriggeredEffects(
     effectRegistry: Record<string, (card: PlayedCard, state: GameState, context: EffectContext) => EffectResult>
 ): EffectResult {
     const player = state.turn;
-    let newState = { ...state };
+    // CRITICAL: Reset indent to 0 at the start of processing triggered effects
+    // This ensures "Start/End effect triggers" messages are always at top level
+    let newState = { ...state, _logIndentLevel: 0 };
     const processedIds = effectKeyword === 'Start'
         ? newState.processedStartEffectIds || []
         : newState.processedEndEffectIds || [];
@@ -270,13 +272,21 @@ function processTriggeredEffects(
             const matchingEffects = effectsSource?.filter((e: any) => e.trigger === triggerType) || [];
 
             if (matchingEffects.length > 0) {
-                // IMPORTANT: Increase indent FIRST
-                newState = increaseLogIndent(newState);
-
                 const cardName = `${card.protocol}-${card.value}`;
                 const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
+
+                // Log the "triggers" message at indent level 0 WITHOUT phase context
+                // (phase context forces indent >= 1, but "triggers" should be at indent 0)
                 newState = setLogSource(newState, cardName);
                 newState = setLogPhase(newState, phaseContext);
+                // Temporarily clear phase context for this log entry
+                const tempState = { ...newState, _currentPhaseContext: undefined };
+                const loggedState = log(tempState, player, `${effectKeyword} effect triggers.`);
+                // Restore phase context and copy the log
+                newState = { ...newState, log: loggedState.log };
+
+                // IMPORTANT: Increase indent for effect details (now at level 1)
+                newState = increaseLogIndent(newState);
 
                 // Find lane index
                 const laneIndex = newState[player].lanes.findIndex(l => l.some(c => c.id === card.id));
@@ -284,6 +294,7 @@ function processTriggeredEffects(
                 // Execute all matching effects sequentially
                 for (let effectIdx = 0; effectIdx < matchingEffects.length; effectIdx++) {
                     const effectDef = matchingEffects[effectIdx];
+                    console.log('[effectExecutor] Executing custom effect:', effectDef.id, 'hasConditional:', !!effectDef.conditional, 'conditionalType:', effectDef.conditional?.type);
                     const result = executeCustomEffect(card, laneIndex, newState, context, effectDef);
                     newState = recalculateAllLaneValues(result.newState);
 
@@ -323,14 +334,22 @@ function processTriggeredEffects(
         const effectKey = `${card.protocol}-${card.value}`;
         const execute = effectRegistry[effectKey];
         if (execute) {
-            // IMPORTANT: Increase indent FIRST so that the trigger log and all subsequent logs are indented
-            newState = increaseLogIndent(newState);
-
             // Set logging context: card name and phase
             const cardName = `${card.protocol}-${card.value}`;
             const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
+
+            // Log the "triggers" message at indent level 0 WITHOUT phase context
+            // (phase context forces indent >= 1, but "triggers" should be at indent 0)
             newState = setLogSource(newState, cardName);
             newState = setLogPhase(newState, phaseContext);
+            // Temporarily clear phase context for this log entry
+            const tempState = { ...newState, _currentPhaseContext: undefined };
+            const loggedState = log(tempState, player, `${effectKeyword} effect triggers.`);
+            // Restore phase context and copy the log
+            newState = { ...newState, log: loggedState.log };
+
+            // IMPORTANT: Increase indent for effect details (now at level 1)
+            newState = increaseLogIndent(newState);
 
             // FIXED: Now calls execute with proper signature (card, state, context)
             const result = execute(card, newState, context);

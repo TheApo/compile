@@ -8,7 +8,7 @@ import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect }
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
 import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
-import { log, setLogSource, setLogPhase, decreaseLogIndent } from '../utils/log';
+import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../utils/log';
 // NOTE: handleAnarchyConditionalDraw removed - old Anarchy-0 code is no longer used, custom protocol handles this
 import { getActivePassiveRules } from './passiveRuleChecker';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
@@ -143,6 +143,8 @@ export const advancePhase = (state: GameState): GameState => {
                 const cardsToDiscard = playerState.hand.length - 5;
                 const playerName = turnPlayer === 'player' ? 'Player' : 'Opponent';
                 let stateWithLog = log(nextState, turnPlayer, `Check Cache: ${playerName} has ${playerState.hand.length} cards, must discard ${cardsToDiscard}.`);
+                // Increase indent for the discard actions that follow
+                stateWithLog = increaseLogIndent(stateWithLog);
                 return {
                     ...stateWithLog,
                     actionRequired: { type: 'discard', actor: turnPlayer, count: cardsToDiscard }
@@ -269,7 +271,11 @@ export const processQueuedActions = (state: GameState): GameState => {
             const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
             if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
-                mutableState = log(mutableState, nextAction.actor, `Queued effect from ${cardName} was cancelled because the source is no longer active.`);
+                // CRITICAL: Temporarily set log source to the cancelled card, not the current context
+                const previousLogSource = (mutableState as any)._logSource;
+                mutableState = setLogSource(mutableState, cardName);
+                mutableState = log(mutableState, nextAction.actor, `Queued effect was cancelled because the source is no longer active.`);
+                mutableState = setLogSource(mutableState, previousLogSource);
                 continue; // Skip this action
             }
         }
@@ -603,7 +609,11 @@ export const processEndOfAction = (state: GameState): GameState => {
                 const sourceCardInfo = findCardOnBoard(mutableState, nextAction.sourceCardId);
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card';
-                    mutableState = log(mutableState, nextAction.actor, `Queued effect from ${cardName} was cancelled because the source is no longer active.`);
+                    // CRITICAL: Temporarily set log source to the cancelled card, not the current context
+                    const previousLogSource = (mutableState as any)._logSource;
+                    mutableState = setLogSource(mutableState, cardName);
+                    mutableState = log(mutableState, nextAction.actor, `Queued effect was cancelled because the source is no longer active.`);
+                    mutableState = setLogSource(mutableState, previousLogSource);
                     continue; // Skip this action
                 }
             }

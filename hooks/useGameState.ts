@@ -401,8 +401,9 @@ export const useGameState = (
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             let stateWithoutAnimation = { ...prev, animationState: null };
 
-            if (stateWithoutAnimation.actionRequired?.type === 'prompt_shift_or_flip_for_light_2') {
-                stateWithoutAnimation = resolvers.resolveLight2Prompt(stateWithoutAnimation, 'skip');
+            // Handle skip for reveal-board-card prompts (Light-2 and custom protocols)
+            if (stateWithoutAnimation.actionRequired?.type === 'prompt_shift_or_flip_board_card_custom') {
+                stateWithoutAnimation = resolvers.resolveRevealBoardCardPrompt(stateWithoutAnimation, 'skip');
             } else {
                 stateWithoutAnimation = resolvers.skipAction(stateWithoutAnimation);
             }
@@ -424,6 +425,8 @@ export const useGameState = (
             if (choice === 'skip') {
                 let stateAfterSkip = log(prev, actor, "Player skips rearranging protocols.");
                 stateAfterSkip.actionRequired = null;
+                // Reset indent to 0 before resuming the main action (compile/refresh)
+                stateAfterSkip = { ...stateAfterSkip, _logIndentLevel: 0 };
 
                 if (originalAction.type === 'compile') {
                     const stateBeforeCompile = stateAfterSkip;
@@ -506,27 +509,8 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
-    const resolveDeath1Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveDeath1Prompt(prev, accept);
-            if (!nextState.actionRequired) {
-                return turnProgressionCb(nextState);
-            }
-            return nextState;
-        });
-    }, [getTurnProgressionCallback]);
-
-    const resolveLove1Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveLove1Prompt(prev, accept);
-            if (!accept) { // Player skipped
-                return turnProgressionCb(nextState);
-            }
-            return nextState; // Player accepted, new action is set
-        });
-    }, [getTurnProgressionCallback]);
+    // REMOVED: resolveDeath1Prompt - Death-1 now uses custom protocol with prompt_optional_draw
+    // REMOVED: resolveLove1Prompt - Love-1 now uses custom protocol with prompt_optional_effect
 
     const resolvePlague2Discard = useCallback((cardIdsToDiscard: string[]) => {
         setGameState(prev => {
@@ -546,16 +530,7 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
     
-    const resolveFire3Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveFire3Prompt(prev, accept);
-            if (!accept) {
-                return turnProgressionCb(nextState);
-            }
-            return nextState;
-        });
-    }, [getTurnProgressionCallback]);
+    // REMOVED: resolveFire3Prompt - Fire-3 now uses custom protocol with prompt_optional_discard_custom
 
     const resolveOptionalDiscardCustomPrompt = useCallback((accept: boolean) => {
         setGameState(prev => {
@@ -583,16 +558,7 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
-    const resolveSpeed3Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveSpeed3Prompt(prev, accept);
-            if (!accept) {
-                return turnProgressionCb(nextState);
-            }
-            return nextState;
-        });
-    }, [getTurnProgressionCallback]);
+    // REMOVED: resolveSpeed3Prompt - Speed-3 now uses custom protocol system
 
     const resolveFire4Discard = useCallback((cardIds: string[]) => {
         setGameState(prev => {
@@ -619,16 +585,7 @@ export const useGameState = (
         });
     }, []);
 
-    const resolveLight2Prompt = useCallback((choice: 'shift' | 'flip' | 'skip') => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveLight2Prompt(prev, choice);
-            if (nextState.actionRequired) {
-                return nextState;
-            }
-            return turnProgressionCb(nextState);
-        });
-    }, [getTurnProgressionCallback]);
+    // REMOVED: resolveLight2Prompt - Light-2 now uses resolveRevealBoardCardPrompt
 
     const resolveRevealBoardCardPrompt = useCallback((choice: 'shift' | 'flip' | 'skip') => {
         setGameState(prev => {
@@ -663,38 +620,9 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback, onEndGame, trackPlayerRearrange]);
     
-    const resolvePsychic4Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolvePsychic4Prompt(prev, accept);
-            if (!accept) {
-                return turnProgressionCb(nextState);
-            }
-            return nextState;
-        });
-    }, [getTurnProgressionCallback]);
-
-    const resolveSpirit1Prompt = useCallback((choice: 'discard' | 'flip') => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveSpirit1Prompt(prev, choice);
-            if (nextState.actionRequired) {
-                return nextState;
-            }
-            return turnProgressionCb(nextState);
-        });
-    }, [getTurnProgressionCallback]);
-
-    const resolveSpirit3Prompt = useCallback((accept: boolean) => {
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const nextState = resolvers.resolveSpirit3Prompt(prev, accept);
-            if (nextState.actionRequired) {
-                return nextState;
-            }
-            return turnProgressionCb(nextState);
-        });
-    }, [getTurnProgressionCallback]);
+    // REMOVED: resolvePsychic4Prompt - Psychic-4 now uses custom protocol with prompt_optional_effect
+    // REMOVED: resolveSpirit1Prompt - Spirit-1 now uses custom protocol with custom_choice
+    // REMOVED: resolveSpirit3Prompt - Spirit-3 now uses custom protocol system with after_draw trigger
 
     const resolveCustomChoice = useCallback((optionIndex: number) => {
         setGameState(prev => {
@@ -1039,23 +967,21 @@ export const useGameState = (
                     returnCard: resolvers.returnCard,
                     skipAction: resolvers.skipAction,
                     resolveOptionalDrawPrompt: resolvers.resolveOptionalDrawPrompt,
-                    resolveDeath1Prompt: resolvers.resolveDeath1Prompt,
-                    resolveLove1Prompt: resolvers.resolveLove1Prompt,
+                    // REMOVED: resolveDeath1Prompt - Death-1 now uses custom protocol
+                    // REMOVED: resolveLove1Prompt - Love-1 now uses custom protocol
                     resolvePlague4Flip: (s, a) => resolvers.resolvePlague4Flip(s, a, 'opponent'),
                     resolvePlague2Discard: resolvers.resolvePlague2OpponentDiscard,
                     resolvePlague2OpponentDiscard: resolvers.resolvePlague2OpponentDiscard,
-                    resolveFire3Prompt: resolvers.resolveFire3Prompt,
+                    // REMOVED: resolveFire3Prompt - Fire-3 now uses custom protocol
                     resolveOptionalDiscardCustomPrompt: resolvers.resolveOptionalDiscardCustomPrompt,
                     resolveOptionalEffectPrompt: resolvers.resolveOptionalEffectPrompt,
-                    resolveSpeed3Prompt: resolvers.resolveSpeed3Prompt,
                     resolveFire4Discard: resolvers.resolveFire4Discard,
                     resolveHate1Discard: resolvers.resolveHate1Discard,
-                    resolveLight2Prompt: resolvers.resolveLight2Prompt,
+                    // REMOVED: resolveLight2Prompt - now uses resolveRevealBoardCardPrompt
                     resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
                     resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
-                    resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
-                    resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
-                    resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
+                    // REMOVED: resolvePsychic4Prompt - Psychic-4 now uses custom protocol
+                    // REMOVED: resolveSpirit1Prompt - Spirit-1 now uses custom protocol
                     resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
                     revealOpponentHand: resolvers.revealOpponentHand,
                     resolveCustomChoice: resolvers.resolveCustomChoice,
@@ -1092,6 +1018,7 @@ export const useGameState = (
                 setGameState,
                 difficulty,
                 {
+                    playCard: resolvers.playCard,
                     discardCards: resolvers.discardCards,
                     flipCard: resolvers.flipCard,
                     returnCard: resolvers.returnCard,
@@ -1100,14 +1027,13 @@ export const useGameState = (
                         animationRequests: [{ type: 'delete', cardId: c, owner: 'opponent'}]
                     }),
                     resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
-                    resolveLove1Prompt: resolvers.resolveLove1Prompt,
+                    // REMOVED: resolveLove1Prompt - Love-1 now uses custom protocol
                     resolveHate1Discard: resolvers.resolveHate1Discard,
                     resolvePlague2OpponentDiscard: resolvers.resolvePlague2OpponentDiscard,
                     revealOpponentHand: resolvers.revealOpponentHand,
                     resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
-                    resolveSpirit3Prompt: resolvers.resolveSpirit3Prompt,
-                    resolveSpirit1Prompt: resolvers.resolveSpirit1Prompt,
-                    resolvePsychic4Prompt: resolvers.resolvePsychic4Prompt,
+                    // REMOVED: resolveSpirit1Prompt - Spirit-1 now uses custom protocol
+                    // REMOVED: resolvePsychic4Prompt - Psychic-4 now uses custom protocol
                 },
                 phaseManager,
                 processAnimationQueue,
@@ -1136,10 +1062,10 @@ export const useGameState = (
         gameState, selectedCard, setSelectedCard, playSelectedCard, fillHand,
         discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane,
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
-        resolvePlague4Flip, resolveFire3Prompt, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveLight2Prompt, resolveRevealBoardCardPrompt,
-        resolveRearrangeProtocols, resolveSpeed3Prompt, resolveOptionalDrawPrompt, resolveDeath1Prompt, resolveLove1Prompt,
-        resolvePsychic4Prompt, resolveSpirit1Prompt, resolveSpirit3Prompt, resolveSwapProtocols,
+        resolvePlague4Flip, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveRevealBoardCardPrompt,
+        resolveRearrangeProtocols, resolveOptionalDrawPrompt, resolveSwapProtocols,
         resolveControlMechanicPrompt, resolveCustomChoice,
         setupTestScenario,
+        // REMOVED: resolveFire3Prompt, resolveDeath1Prompt, resolveLove1Prompt, resolvePsychic4Prompt, resolveSpirit1Prompt
     };
 };

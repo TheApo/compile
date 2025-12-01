@@ -220,6 +220,16 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
+            // No compiled/uncompiled distinction, but forced rearrange still requires a swap
+            const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
+            if (isForcedRearrange) {
+                // Must swap SOMETHING - just swap first two
+                const newOrder = [...playerState.protocols];
+                [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
+            }
             return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
         }
 
@@ -237,6 +247,10 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
         }
 
+        // Check if source is forced effect (not Control Mechanic)
+        // CRITICAL: Must check this BEFORE returning unchanged order!
+        const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
+
         // Only swap if it actually hurts the player (score > 0)
         if (bestSwap && bestSwap.score > 0) {
             const newOrder = [...playerState.protocols];
@@ -248,19 +262,21 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
         }
 
-        // Check if source is forced effect (not Control Mechanic)
-        const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
-
         if (isForcedRearrange) {
-            // FORCED rearrange - we MUST swap something
-            const newOrder = [...playerState.protocols];
-            [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-            if (isValidArrangement(newOrder)) {
-                return { type: 'rearrangeProtocols', newOrder };
+            // FORCED rearrange (e.g., Psychic-2) - we MUST swap at least 2 protocols
+            // Try to find ANY valid swap, prioritizing least harmful
+            for (let i = 0; i < 3; i++) {
+                for (let j = i + 1; j < 3; j++) {
+                    const newOrder = [...playerState.protocols];
+                    [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+                    if (isValidArrangement(newOrder)) {
+                        return { type: 'rearrangeProtocols', newOrder };
+                    }
+                }
             }
         }
 
-        // Control Mechanic - no good disruption found, SKIP
+        // Control Mechanic - no good disruption found, SKIP (only for voluntary rearrange)
         return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
     }
 
@@ -278,8 +294,10 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
+            // No compiled/uncompiled distinction, but forced rearrange still requires a swap
             const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
             if (isForcedRearrange) {
+                // Must swap SOMETHING - just swap first two
                 const newOrder = [...aiState.protocols];
                 [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
                 if (isValidArrangement(newOrder)) {
@@ -306,6 +324,10 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
         }
 
+        // Check if source is forced effect (not Control Mechanic)
+        // CRITICAL: Must check this BEFORE returning unchanged order!
+        const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
+
         // Only swap if it brings us significantly closer to victory (distance <= 3)
         // AND it's better than current state
         if (bestSwap && bestSwap.distanceToWin <= 3) {
@@ -323,17 +345,21 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
         }
 
-        // Check if source is forced effect (not Control Mechanic)
-        const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
-
         if (isForcedRearrange) {
-            const newOrder = [...aiState.protocols];
-            [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-            if (isValidArrangement(newOrder)) {
-                return { type: 'rearrangeProtocols', newOrder };
+            // FORCED rearrange (e.g., Psychic-2) - we MUST swap at least 2 protocols
+            // Try to find ANY valid swap
+            for (let i = 0; i < 3; i++) {
+                for (let j = i + 1; j < 3; j++) {
+                    const newOrder = [...aiState.protocols];
+                    [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+                    if (isValidArrangement(newOrder)) {
+                        return { type: 'rearrangeProtocols', newOrder };
+                    }
+                }
             }
         }
 
+        // Control Mechanic - no good swap found, SKIP (only for voluntary rearrange)
         return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
     }
 

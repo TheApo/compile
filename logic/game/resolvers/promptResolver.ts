@@ -32,12 +32,16 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
         // Execute the draw
         newState = drawForPlayer(newState, drawingPlayer || actor, count);
 
-        // Check if there's a follow-up effect from conditional chaining
+        // Check if there's a follow-up effect from conditional chaining (if_executed)
         const followUpEffect = (prevState.actionRequired as any).followUpEffect;
-        if (followUpEffect) {
+        const conditionalType = (prevState.actionRequired as any).conditionalType;
+        console.log('[DEBUG resolveOptionalDrawPrompt] followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType);
 
-            // Execute the follow-up effect (e.g., delete other card)
+        if (followUpEffect) {
+            // Execute the follow-up effect (e.g., delete other card for Death-1)
             const sourceCard = findCardOnBoard(newState, sourceCardId);
+            console.log('[DEBUG resolveOptionalDrawPrompt] sourceCard found:', !!sourceCard, 'sourceCardId:', sourceCardId);
+
             if (sourceCard) {
                 const laneIndex = newState[sourceCard.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
                 const opponent: Player = actor === 'player' ? 'opponent' : 'player';
@@ -48,13 +52,49 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                     opponent,
                     triggerType: 'start' as const
                 };
+                console.log('[DEBUG resolveOptionalDrawPrompt] Executing followUpEffect:', followUpEffect.id);
                 const result = executeCustomEffect(sourceCard.card, laneIndex, newState, context, followUpEffect);
                 newState = result.newState;
 
                 // CRITICAL: Queue pending custom effects (Death-1: nested conditionals)
                 newState = queuePendingCustomEffects(newState);
             } else {
-                newState.actionRequired = null;
+                // Source card not found on board - it might have been deleted or returned
+                // Still try to execute the follow-up effect with a synthetic card
+                console.log('[DEBUG resolveOptionalDrawPrompt] Source card not found! Creating synthetic card for follow-up.');
+                const opponent: Player = actor === 'player' ? 'opponent' : 'player';
+
+                // Find any lane where the actor has cards (for context)
+                let fallbackLaneIndex = 0;
+                for (let i = 0; i < 3; i++) {
+                    if (newState[actor].lanes[i].length > 0) {
+                        fallbackLaneIndex = i;
+                        break;
+                    }
+                }
+
+                // Create a minimal synthetic card for the context
+                const syntheticCard: PlayedCard = {
+                    id: sourceCardId,
+                    protocol: 'Unknown',
+                    value: 0,
+                    isFaceUp: true
+                };
+
+                const context: EffectContext = {
+                    cardOwner: actor,
+                    actor,
+                    currentTurn: newState.turn,
+                    opponent,
+                    triggerType: 'start' as const
+                };
+
+                console.log('[DEBUG resolveOptionalDrawPrompt] Executing followUpEffect with synthetic card:', followUpEffect.id);
+                const result = executeCustomEffect(syntheticCard, fallbackLaneIndex, newState, context, followUpEffect);
+                newState = result.newState;
+
+                // CRITICAL: Queue pending custom effects
+                newState = queuePendingCustomEffects(newState);
             }
         } else {
             newState.actionRequired = null;
@@ -66,53 +106,8 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
     return newState;
 };
 
-export const resolveDeath1Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_death_1_effect') return prevState;
-
-    const { sourceCardId, actor } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        newState = log(newState, actor, `Death-1: ${actorName} chooses to draw and delete.`);
-        // The actor draws one card.
-        newState = drawForPlayer(newState, actor, 1);
-        newState.actionRequired = {
-            type: 'select_cards_to_delete',
-            count: 1,
-            sourceCardId,
-            disallowedIds: [sourceCardId],
-            actor,
-            // Generic handler: any uncovered card
-        };
-    } else {
-        newState = log(newState, actor, `Death-1: ${actorName} skips the effect.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
-
-export const resolveLove1Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_give_card_for_love_1') return prevState;
-
-    const { actor } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        newState = log(newState, actor, `Love-1 End: ${actorName} chooses to give 1 card to draw 2.`);
-        newState.actionRequired = {
-            type: 'select_card_from_hand_to_give',
-            sourceCardId: prevState.actionRequired.sourceCardId,
-            sourceEffect: 'love_1_end',
-            actor,
-        };
-    } else {
-        newState = log(newState, actor, `Love-1 End: ${actorName} skips the effect.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
+// REMOVED: resolveDeath1Prompt - Death-1 now uses custom protocol with prompt_optional_draw + conditional
+// REMOVED: resolveLove1Prompt - Love-1 now uses custom protocol with prompt_optional_effect
 
 export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player: Player): GameState => {
     if (prevState.actionRequired?.type !== 'plague_4_player_flip_optional') return prevState;
@@ -142,29 +137,7 @@ export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player
     return newState;
 };
 
-export const resolveFire3Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_fire_3_discard') return prevState;
-
-    const { actor } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        newState = log(newState, actor, `Fire-3 End: ${actorName} chooses to discard 1 to flip 1.`);
-        newState.actionRequired = {
-            type: 'discard',
-            actor: actor,
-            count: 1,
-            sourceCardId: prevState.actionRequired.sourceCardId,
-            sourceEffect: 'fire_3',
-            previousHandSize: newState[actor].hand.length, // Track for "If you do" check
-        } as any;
-    } else {
-        newState = log(newState, actor, `Fire-3 End: ${actorName} skips the effect.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
+// REMOVED: resolveFire3Prompt - Fire-3 now uses custom protocol with prompt_optional_discard_custom
 
 export const resolveOptionalDiscardCustomPrompt = (prevState: GameState, accept: boolean): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_optional_discard_custom') return prevState;
@@ -303,98 +276,8 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
     }
 };
 
-export const resolveSpeed3Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_shift_for_speed_3') return prevState;
-
-    const { actor, sourceCardId } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        // CRITICAL: Check if there are valid targets (cards in other protocols)
-        // A valid target is an uncovered card that is not the source card.
-        const validTargets: PlayedCard[] = [];
-        for (const lane of newState[actor].lanes) {
-            if (lane.length > 0) {
-                const topCard = lane[lane.length - 1]; // This is the uncovered card.
-                if (topCard.id !== sourceCardId) {
-                    validTargets.push(topCard);
-                }
-            }
-        }
-
-        if (validTargets.length > 0) {
-            newState = log(newState, actor, `Speed-3 End: ${actorName} chooses to shift a card.`);
-            newState.actionRequired = {
-                type: 'select_own_card_to_shift_for_speed_3',
-                sourceCardId,
-                actor,
-            };
-        } else {
-            // No valid targets - auto-skip
-            newState = log(newState, actor, `Speed-3 End: ${actorName} has no cards to shift, skipping effect.`);
-            newState.actionRequired = null;
-        }
-    } else {
-        newState = log(newState, actor, `Speed-3 End: ${actorName} skips the shift.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
-
-export const resolveLight2Prompt = (prevState: GameState, choice: 'shift' | 'flip' | 'skip'): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_shift_or_flip_for_light_2') return prevState;
-
-    const { actor, sourceCardId, revealedCardId } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    switch (choice) {
-        case 'shift': {
-            newState = log(newState, actor, `Light-2: ${actorName} chooses to shift the revealed card.`);
-            // Find the revealed card's lane to provide originalLaneIndex
-            const revealedCardInfo = findCardOnBoard(prevState, revealedCardId);
-            let originalLaneIndex = -1;
-            if (revealedCardInfo) {
-                for (let i = 0; i < prevState[revealedCardInfo.owner].lanes.length; i++) {
-                    if (prevState[revealedCardInfo.owner].lanes[i].some(c => c.id === revealedCardId)) {
-                        originalLaneIndex = i;
-                        break;
-                    }
-                }
-            }
-            newState.actionRequired = {
-                type: 'select_lane_for_shift',
-                sourceCardId,
-                cardToShiftId: revealedCardId,  // Generic: specify which card to shift
-                cardOwner: revealedCardInfo?.owner,
-                originalLaneIndex,
-                actor,
-            };
-            break;
-        }
-        case 'flip': {
-            newState = log(newState, actor, `Light-2: ${actorName} chooses to flip the revealed card face-up.`);
-            // FIX: Clear the current action *before* flipping and triggering the next effect.
-            // This prevents the Light-2 prompt from persisting and causing an infinite loop.
-            const stateWithoutPrompt = { ...newState, actionRequired: null };
-            let stateAfterFlip = findAndFlipCards(new Set([revealedCardId]), stateWithoutPrompt);
-            stateAfterFlip.animationState = { type: 'flipCard', cardId: revealedCardId };
-            
-            // Now trigger the on-play effect since it's officially flipped
-            const result = handleOnFlipToFaceUp(stateAfterFlip, revealedCardId);
-            newState = result.newState;
-    
-            // The on-play effect might create a new action, which is fine. The old one is gone.
-            break;
-        }
-        case 'skip':
-            newState = log(newState, actor, `Light-2: ${actorName} chooses to do nothing with the revealed card.`);
-            newState.actionRequired = null;
-            break;
-    }
-    return newState;
-};
+// REMOVED: resolveSpeed3Prompt - Speed-3 now uses custom protocol system with generic select_card_to_shift
+// REMOVED: resolveLight2Prompt - Light-2 now uses custom protocol system with prompt_shift_or_flip_board_card_custom
 
 export const resolveRearrangeProtocols = (
     prevState: GameState,
@@ -487,12 +370,12 @@ export const resolveRearrangeProtocols = (
 
     if (originalAction) {
         console.log('[DEBUG resolveRearrangeProtocols] originalAction:', originalAction);
+        // Reset indent to 0 before resuming the main action (compile/refresh)
+        stateAfterRecalc = { ...stateAfterRecalc, _logIndentLevel: 0 };
         if (originalAction.type === 'compile') {
-            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Compile action...`);
             return performCompile(stateAfterRecalc, originalAction.laneIndex, onEndGame);
         } else if (originalAction.type === 'fill_hand') {
             console.log('[DEBUG resolveRearrangeProtocols] Calling performFillHand for actor:', actor, 'hand before:', stateAfterRecalc[actor].hand.length);
-            stateAfterRecalc = log(stateAfterRecalc, actor, `Resuming Refresh action...`);
             const stateAfterFill = performFillHand(stateAfterRecalc, actor);
             console.log('[DEBUG resolveRearrangeProtocols] After performFillHand, hand length:', stateAfterFill[actor].hand.length);
             console.log('[DEBUG resolveRearrangeProtocols] RETURNING state with', stateAfterFill[actor].hand.length, 'cards');
@@ -529,89 +412,9 @@ export const resolveRearrangeProtocols = (
 };
 
 
-export const resolvePsychic4Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_return_for_psychic_4') return prevState;
-    
-    const { actor } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        newState = log(newState, actor, `Psychic-4 End: ${actorName} chooses to return an opponent's card.`);
-        newState.actionRequired = {
-            type: 'select_opponent_card_to_return',
-            sourceCardId: prevState.actionRequired.sourceCardId,
-            actor,
-        };
-    } else {
-        newState = log(newState, actor, `Psychic-4 End: ${actorName} skips the effect.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
-
-export const resolveSpirit1Prompt = (prevState: GameState, choice: 'discard' | 'flip'): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_spirit_1_start') return prevState;
-
-    const { actor, sourceCardId } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (choice === 'discard') {
-        newState = log(newState, actor, `Spirit-1 Start: ${actorName} chooses to discard 1 card.`);
-        newState.actionRequired = {
-            type: 'discard',
-            actor: actor,
-            count: 1,
-            sourceCardId,
-            sourceEffect: 'spirit_1_start',
-        };
-    } else { // flip
-        newState = log(newState, actor, `Spirit-1 Start: ${actorName} chooses to flip the card.`);
-        newState = findAndFlipCards(new Set([sourceCardId]), newState);
-        newState.animationState = { type: 'flipCard', cardId: sourceCardId };
-        newState.actionRequired = null;
-    }
-    return newState;
-};
-
-export const resolveSpirit3Prompt = (prevState: GameState, accept: boolean): GameState => {
-    if (prevState.actionRequired?.type !== 'prompt_shift_for_spirit_3') return prevState;
-
-    const { actor, sourceCardId } = prevState.actionRequired;
-    const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-    let newState = { ...prevState };
-
-    if (accept) {
-        const cardInfo = findCardOnBoard(newState, sourceCardId);
-        if (cardInfo) {
-            const { owner, card } = cardInfo;
-            let originalLaneIndex = -1;
-            for (let i = 0; i < newState[owner].lanes.length; i++) {
-                if (newState[owner].lanes[i].some(c => c.id === card.id)) {
-                    originalLaneIndex = i;
-                    break;
-                }
-            }
-            if (originalLaneIndex !== -1) {
-                newState = log(newState, actor, `Spirit-3 Trigger: ${actorName} chooses to shift the card.`);
-                newState.actionRequired = {
-                    type: 'select_lane_for_shift',
-                    cardToShiftId: sourceCardId,
-                    cardOwner: owner,
-                    originalLaneIndex: originalLaneIndex,
-                    sourceCardId: sourceCardId,
-                    actor: actor,
-                    // Spirit-3 only shifts, it does NOT flip afterwards
-                };
-            }
-        }
-    } else {
-        newState = log(newState, actor, `Spirit-3 Trigger: ${actorName} skips the shift.`);
-        newState.actionRequired = null;
-    }
-    return newState;
-};
+// REMOVED: resolvePsychic4Prompt - Psychic-4 now uses custom protocol with prompt_optional_effect
+// REMOVED: resolveSpirit1Prompt - Spirit-1 now uses custom protocol with custom_choice
+// REMOVED: resolveSpirit3Prompt - Spirit-3 now uses custom protocol system with after_draw trigger
 
 export const resolveSwapProtocols = (prevState: GameState, indices: [number, number], onEndGame: (winner: Player, finalState: GameState) => void): GameState => {
     if (prevState.actionRequired?.type !== 'prompt_swap_protocols') return prevState;

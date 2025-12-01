@@ -15,17 +15,14 @@ interface PhaseControllerProps {
     onResolveFire3Prompt: (accept: boolean) => void;
     onResolveOptionalDiscardCustomPrompt: (accept: boolean) => void;
     onResolveOptionalEffectPrompt: (accept: boolean) => void;
-    onResolveSpeed3Prompt: (accept: boolean) => void;
     onResolveFire4Discard: (cardIds: string[]) => void;
     onResolveHate1Discard: (cardIds: string[]) => void;
-    onResolveLight2Prompt: (choice: 'shift' | 'flip' | 'skip') => void;
     onResolveRevealBoardCardPrompt: (choice: 'shift' | 'flip' | 'skip') => void;
     onResolveOptionalDrawPrompt: (accept: boolean) => void;
     onResolveDeath1Prompt: (accept: boolean) => void;
     onResolveLove1Prompt: (accept: boolean) => void;
     onResolvePsychic4Prompt: (accept: boolean) => void;
     onResolveSpirit1Prompt: (choice: 'discard' | 'flip') => void;
-    onResolveSpirit3Prompt: (accept: boolean) => void;
     onResolveControlMechanicPrompt: (choice: 'player' | 'opponent' | 'skip') => void;
     onResolveCustomChoice: (optionIndex: number) => void;
     selectedCardId: string | null;
@@ -37,9 +34,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     gameState, onFillHand, onSkipAction,
     onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt, onResolveOptionalDiscardCustomPrompt,
     onResolveOptionalEffectPrompt,
-    onResolveSpeed3Prompt,
-    onResolveFire4Discard, onResolveHate1Discard, onResolveLight2Prompt, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
-    onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt, onResolveSpirit3Prompt,
+    onResolveFire4Discard, onResolveHate1Discard, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
+    onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt,
     onResolveControlMechanicPrompt, onResolveCustomChoice,
     selectedCardId, multiSelectedCardIds, actionRequiredClass
 }) => {
@@ -132,14 +128,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
-        if (actionRequired?.type === 'prompt_shift_for_speed_3') {
-             return (
-                <>
-                    <button className="btn" onClick={() => onResolveSpeed3Prompt(true)}>Shift</button>
-                    <button className="btn btn-back" onClick={() => onResolveSpeed3Prompt(false)}>Skip</button>
-                </>
-            );
-        }
+        // REMOVED: prompt_shift_for_speed_3 - Speed-3 now uses custom protocol system
 
         if (actionRequired?.type === 'prompt_spirit_1_start') {
             return (
@@ -150,14 +139,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
            );
         }
 
-        if (actionRequired?.type === 'prompt_shift_for_spirit_3') {
-            return (
-               <>
-                   <button className="btn" onClick={() => onResolveSpirit3Prompt(true)}>Shift</button>
-                   <button className="btn btn-back" onClick={() => onResolveSpirit3Prompt(false)}>Skip</button>
-               </>
-           );
-        }
+        // REMOVED: prompt_shift_for_spirit_3 - Spirit-3 now uses custom protocol system
 
         // NEW: Custom Choice effect (Spirit_custom-1: Either discard or flip)
         if (actionRequired?.type === 'custom_choice') {
@@ -197,15 +179,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
-        if (actionRequired?.type === 'prompt_shift_or_flip_for_light_2') {
-            return (
-                <>
-                    <button className="btn" onClick={() => onResolveLight2Prompt('shift')}>Shift</button>
-                    <button className="btn" onClick={() => onResolveLight2Prompt('flip')}>Flip Back</button>
-                    <button className="btn btn-back" onClick={() => onResolveLight2Prompt('skip')}>Skip</button>
-                </>
-            );
-        }
+        // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
 
         if (actionRequired?.type === 'prompt_shift_or_flip_board_card_custom') {
             return (
@@ -386,9 +360,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 }
                 case 'select_card_to_flip_for_fire_3':
                     return 'Action: Select a card to flip';
-                case 'prompt_shift_for_speed_3':
-                    return 'End Phase: Shift 1 card?';
-                case 'select_own_card_to_shift_for_speed_3':
+                // REMOVED: prompt_shift_for_speed_3, select_own_card_to_shift_for_speed_3 - now uses custom protocol
                 case 'select_own_other_card_to_shift':
                     return 'Action: Select one of your cards to shift';
                 case 'select_opponent_face_down_card_to_shift':
@@ -397,8 +369,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Start Phase: Discard 1 card or flip Spirit-1?';
                 case 'select_any_card_to_flip_optional':
                     return 'Action: You may flip one card. Select a card or skip.';
-                case 'prompt_shift_for_spirit_3':
-                    return 'Triggered: You may shift your Spirit-3. Select a lane or skip.';
+                // REMOVED: prompt_shift_for_spirit_3 - now uses custom protocol with after_draw trigger
                 case 'prompt_swap_protocols':
                     return 'Action: Swap two protocols.';
                 case 'select_cards_from_hand_to_discard_for_fire_4':
@@ -413,10 +384,8 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select another lane to play a card into';
                 case 'select_card_to_flip_for_light_0':
                     return 'Action: Select any card to flip';
-                case 'select_face_down_card_to_reveal_for_light_2':
-                    return 'Action: Select a face-down card to reveal';
-                case 'prompt_shift_or_flip_for_light_2':
-                    return 'Action: Choose to shift, flip back, or skip';
+                // REMOVED: select_face_down_card_to_reveal_for_light_2 and prompt_shift_or_flip_for_light_2
+                // Light-2 now uses select_board_card_to_reveal_custom and prompt_shift_or_flip_board_card_custom
                 case 'prompt_shift_or_flip_board_card_custom':
                     return 'Action: Choose to shift, flip, or skip';
                 case 'select_board_card_to_reveal_custom':

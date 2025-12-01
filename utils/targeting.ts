@@ -4,7 +4,7 @@
  */
 
 import { GameState, PlayedCard, Player } from "../types";
-import { findAllHighestUncoveredCards } from "../logic/game/helpers/actionUtils";
+// REMOVED: findAllHighestUncoveredCards - no longer needed after Hate-2 migration to generic handler
 import { isFrost1Active } from "../logic/game/passiveRuleChecker";
 import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
 
@@ -233,8 +233,7 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Default: only uncovered (for standard cards)
             return isUncovered;
         }
-        case 'select_card_to_delete_for_death_1':
-            return card.id !== actionRequired.sourceCardId && isUncovered;
+        // REMOVED: select_card_to_delete_for_death_1 - Death-1 now uses generic select_cards_to_delete
         case 'select_face_down_card_to_delete':
             return !card.isFaceUp && isUncovered;
         case 'select_low_value_card_to_delete':
@@ -270,24 +269,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Default: any card (own or opponent)
             return isUncovered;
         }
-        case 'select_card_to_flip_for_fire_3': {
-            // Frost-1: Only face-up cards can be flipped (to face-down)
-            const frost1Active = isFrost1Active(gameState);
-            if (frost1Active && !card.isFaceUp) return false;
-            return isUncovered;
-        }
+        // REMOVED: select_card_to_flip_for_fire_3 - Fire-3 now uses generic select_card_to_flip
         case 'select_card_to_shift_for_gravity_1':
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
-        case 'select_card_to_flip_and_shift_for_gravity_2': {
-            // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, laneIndex)) return false;
-            // Frost-1: Only face-up cards can be flipped (to face-down)
-            const frost1Active = isFrost1Active(gameState);
-            if (frost1Active && !card.isFaceUp) return false;
-            return isUncovered;
-        }
+        // REMOVED: select_card_to_flip_and_shift_for_gravity_2 - Gravity-2 now uses generic select_card_to_flip
         case 'select_face_down_card_to_shift_for_gravity_4':
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
@@ -301,14 +288,8 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
         case 'select_any_face_down_card_to_flip_optional':
             return !card.isFaceUp && isUncovered;
-        case 'select_card_to_flip_for_light_0': {
-            // Frost-1: Only face-up cards can be flipped (to face-down)
-            const frost1Active = isFrost1Active(gameState);
-            if (frost1Active && !card.isFaceUp) return false;
-            return isUncovered;
-        }
-        case 'select_face_down_card_to_reveal_for_light_2':
-            return !card.isFaceUp && isUncovered;
+        // REMOVED: select_card_to_flip_for_light_0 - Light-0 now uses generic select_card_to_flip
+        // REMOVED: select_face_down_card_to_reveal_for_light_2 - Light-2 now uses select_board_card_to_reveal_custom
         case 'select_board_card_to_reveal_custom': {
             // Generic board card reveal for custom protocols (Light-2)
             // Uses targetFilter from actionRequired
@@ -332,22 +313,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
 
             return true;
         }
-        case 'select_any_other_card_to_flip_for_water_0': {
-            // Frost-1: Only face-up cards can be flipped (to face-down)
-            const frost1Active = isFrost1Active(gameState);
-            if (frost1Active && !card.isFaceUp) return false;
-            return card.id !== actionRequired.sourceCardId && isUncovered;
-        }
-        case 'select_own_card_to_return_for_water_4':
-            return owner === actionRequired.actor && isUncovered;
+        // REMOVED: select_any_other_card_to_flip_for_water_0 - Water-0 now uses generic select_card_to_flip
+        // REMOVED: select_own_card_to_return_for_water_4 - Water-4 now uses generic select_card_to_return
         case 'select_own_other_card_to_shift': // Speed-3 Middle
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return owner === actionRequired.actor && card.id !== actionRequired.sourceCardId && isUncovered;
-        case 'select_own_card_to_shift_for_speed_3': // Speed-3 End
-            // Frost-3 blocks shifts from its lane
-            if (hasFrost3InLane(gameState, laneIndex)) return false;
-            return owner === actionRequired.actor && isUncovered;
+        // REMOVED: select_own_card_to_shift_for_speed_3 - Speed-3 now uses generic select_card_to_shift
         case 'select_opponent_face_down_card_to_shift': // Speed-4
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
@@ -358,26 +330,9 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return owner !== actionRequired.actor && isUncovered;
         case 'select_opponent_card_to_return':
             return owner === 'opponent' && isUncovered;
-        case 'select_own_highest_card_to_delete_for_hate_2': {
-            if (!isUncovered) return false;
-            const highestCards = findAllHighestUncoveredCards(gameState, actionRequired.actor);
-            return highestCards.some(c => c.card.id === card.id);
-        }
-        case 'select_opponent_highest_card_to_delete_for_hate_2': {
-            if (!isUncovered) return false;
-            const opponent = actionRequired.actor === 'player' ? 'opponent' : 'player';
-            const highestCards = findAllHighestUncoveredCards(gameState, opponent);
-            return highestCards.some(c => c.card.id === card.id);
-        }
-        case 'select_card_to_delete_for_anarchy_2': {
-            // Anarchy-2: Can delete ANY card (covered or uncovered) if it's in a lane with matching protocol
-            const playerProtocolAtLane = gameState.player.protocols[laneIndex];
-            const opponentProtocolAtLane = gameState.opponent.protocols[laneIndex];
-            const cardProtocol = card.protocol;
-
-            // Card's protocol must match at least one protocol in its lane
-            return cardProtocol === playerProtocolAtLane || cardProtocol === opponentProtocolAtLane;
-        }
+        // REMOVED: select_own_highest_card_to_delete_for_hate_2 - Hate-2 now uses generic select_cards_to_delete with calculation: highest_value
+        // REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - Hate-2 now uses generic select_cards_to_delete with calculation: highest_value
+        // REMOVED: select_card_to_delete_for_anarchy_2 - Anarchy-2 now uses generic select_cards_to_delete with protocolMatching: must_match
         case 'select_card_to_shift_for_anarchy_1': {
             // Anarchy-1: Can shift any uncovered card (validation happens in laneResolver)
             // Frost-3 blocks shifts from its lane

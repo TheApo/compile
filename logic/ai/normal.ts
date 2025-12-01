@@ -904,17 +904,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: 0 };
         }
 
-        // =========================================================================
-        // PROMPTS - Use generic resolvePrompt for all legacy prompts
-        // =========================================================================
-        case 'prompt_death_1_effect': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
-        case 'prompt_give_card_for_love_1': return { type: 'resolvePrompt', accept: false };
-        // NOTE: plague_4_player_flip_optional removed - now handled via prompt_optional_effect
-        case 'prompt_fire_3_discard': return { type: 'resolvePrompt', accept: state.opponent.hand.length > 2 };
-        case 'prompt_shift_for_speed_3': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
-        case 'prompt_shift_for_spirit_3': return { type: 'resolvePrompt', accept: !shouldMakeMistake() };
-        case 'prompt_return_for_psychic_4': return { type: 'resolvePrompt', accept: true };
-        case 'prompt_spirit_1_start': return { type: 'resolvePrompt', accept: true }; // flip = accept
+        // REMOVED: Legacy prompts (prompt_death_1_effect, prompt_give_card_for_love_1, prompt_fire_3_discard,
+        // prompt_shift_for_speed_3, prompt_shift_for_spirit_3, prompt_return_for_psychic_4, prompt_spirit_1_start)
+        // All now use custom protocol system with generic prompt_optional_* handlers
         // Generic optional effect prompt for custom protocols
         case 'prompt_optional_effect': {
             // Intelligent decision based on the effect type and context
@@ -1006,27 +998,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_own_highest_card_to_delete_for_hate_2': {
-            const actor = action.actor;
-            const uncoveredCards: Array<{ card: PlayedCard; laneIndex: number; value: number }> = [];
-
-            state[actor].lanes.forEach((lane, laneIndex) => {
-                if (lane.length > 0) {
-                    const uncovered = lane[lane.length - 1];
-                    const value = uncovered.isFaceUp ? uncovered.value : 2;
-                    uncoveredCards.push({ card: uncovered, laneIndex, value });
-                }
-            });
-
-            if (uncoveredCards.length === 0) return { type: 'skip' };
-
-            const maxValue = Math.max(...uncoveredCards.map(c => c.value));
-            const highestCards = uncoveredCards.filter(c => c.value === maxValue);
-
-            return { type: 'deleteCard', cardId: highestCards[0].card.id };
-        }
-
-        // LEGACY REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - now uses generic select_cards_to_delete with calculation: highest_value
+        // REMOVED: select_own_highest_card_to_delete_for_hate_2 - Hate-2 now uses generic select_cards_to_delete with calculation: highest_value
 
         case 'select_opponent_face_up_card_to_flip': {
             const getUncovered = (p: Player) => state[p].lanes
@@ -1045,31 +1017,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_face_down_card_to_reveal_for_light_2': {
-            const getUncovered = (player: Player): PlayedCard[] => {
-                return state[player].lanes
-                    .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                    .filter((c): c is PlayedCard => c !== null);
-            };
-            const allUncoveredPlayer = getUncovered('player');
-            const allUncoveredOpponent = getUncovered('opponent');
+        // REMOVED: select_face_down_card_to_reveal_for_light_2 - Light-2 now uses select_board_card_to_reveal_custom
 
-            const opponentFaceDown = allUncoveredPlayer.filter(c => !c.isFaceUp);
-            if (opponentFaceDown.length > 0) {
-                // Easy AI: just pick the first one it finds.
-                return { type: 'deleteCard', cardId: opponentFaceDown[0].id };
-            }
-            const ownFaceDown = allUncoveredOpponent.filter(c => !c.isFaceUp);
-            if (ownFaceDown.length > 0) {
-                return { type: 'deleteCard', cardId: ownFaceDown[0].id };
-            }
-            return { type: 'skip' }; // Should not happen if effect generation is correct.
-        }
-
-        case 'select_any_other_card_to_flip_for_water_0':
-        // LEGACY REMOVED: select_card_to_flip_for_fire_3 - now uses generic select_card_to_flip
-        case 'select_card_to_flip_for_light_0':
-        // LEGACY REMOVED: select_covered_card_to_flip_for_chaos_0 - now uses generic select_card_to_flip with each_lane scope
+        // REMOVED: select_any_other_card_to_flip_for_water_0 - Water-0 now uses generic select_card_to_flip
+        // REMOVED: select_card_to_flip_for_light_0 - Light-0 now uses generic select_card_to_flip
         case 'select_covered_card_in_line_to_flip_optional': {
             const isOptional = 'optional' in action && action.optional;
             const cannotTargetSelfTypes: ActionRequired['type'][] = ['select_any_other_card_to_flip', 'select_any_other_card_to_flip_for_water_0'];
@@ -1079,11 +1030,90 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Special case for Darkness-2: "flip 1 covered card in this line."
             if (action.type === 'select_covered_card_in_line_to_flip_optional') {
                 const { laneIndex } = action;
-                const playerCovered = state.player.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                if (playerCovered.length > 0) return { type: 'flipCard', cardId: playerCovered[0].id };
-                const opponentCovered = state.opponent.lanes[laneIndex].filter((c, i, arr) => i < arr.length - 1);
-                if (opponentCovered.length > 0) return { type: 'flipCard', cardId: opponentCovered[0].id };
-                return { type: 'skip' }; // No covered cards to flip.
+                const aiLane = state.opponent.lanes[laneIndex];
+                const playerLane = state.player.lanes[laneIndex];
+
+                // Get covered cards (not the top card)
+                const aiCovered = aiLane.filter((c, i, arr) => i < arr.length - 1);
+                const playerCovered = playerLane.filter((c, i, arr) => i < arr.length - 1);
+
+                // Calculate current lane value for AI
+                const currentAiLaneValue = state.opponent.laneValues[laneIndex];
+                const aiNotCompiled = !state.opponent.compiled[laneIndex];
+
+                // PRIORITY 1: Check if flipping own face-down covered card could lead to compile (value >= 10)
+                // IMPORTANT: Face-down card value depends on passive effects (e.g., Darkness-2 makes them worth 4)
+                // Use getEffectiveCardValue to get the CURRENT face-down value, then compare with face-up value
+                if (aiNotCompiled) {
+                    let bestCompileFlip: { card: PlayedCard; newValue: number } | null = null;
+                    let bestGainFlip: { card: PlayedCard; gain: number; newValue: number } | null = null;
+
+                    for (const card of aiCovered) {
+                        if (!card.isFaceUp) {
+                            // Get current face-down value (accounts for Darkness-2, custom protocols, etc.)
+                            const currentFaceDownValue = getEffectiveCardValue(card, aiLane, state, laneIndex, 'opponent');
+                            // Face-up value is always the card's actual value
+                            const faceUpValue = card.value;
+                            // Gain from flipping = faceUpValue - currentFaceDownValue
+                            const gain = faceUpValue - currentFaceDownValue;
+                            const potentialValue = currentAiLaneValue + gain;
+
+                            // Check if this enables compile
+                            if (potentialValue >= 10) {
+                                if (!bestCompileFlip || potentialValue > bestCompileFlip.newValue) {
+                                    bestCompileFlip = { card, newValue: potentialValue };
+                                }
+                            }
+
+                            // Track best value gain (only if gain > 0)
+                            if (gain > 0 && (!bestGainFlip || gain > bestGainFlip.gain)) {
+                                bestGainFlip = { card, gain, newValue: potentialValue };
+                            }
+                        }
+                    }
+
+                    // If we can compile, do it!
+                    if (bestCompileFlip) {
+                        return { type: 'flipCard', cardId: bestCompileFlip.card.id };
+                    }
+
+                    // If we can gain significant value (2+) and get close to compile (7+), do it
+                    if (bestGainFlip && bestGainFlip.gain >= 2 && bestGainFlip.newValue >= 7) {
+                        return { type: 'flipCard', cardId: bestGainFlip.card.id };
+                    }
+                }
+
+                // PRIORITY 2: Flip player's face-up covered card to reduce their value
+                const playerFaceUpCovered = playerCovered.filter(c => c.isFaceUp);
+                if (playerFaceUpCovered.length > 0) {
+                    // Pick highest value to maximize damage
+                    playerFaceUpCovered.sort((a, b) => b.value - a.value);
+                    return { type: 'flipCard', cardId: playerFaceUpCovered[0].id };
+                }
+
+                // PRIORITY 3: Flip own face-down covered card (only if we gain value)
+                // Must compare face-up value vs current face-down value (which may be 4 due to Darkness-2)
+                const aiFaceDownCoveredWithGain = aiCovered
+                    .filter(c => !c.isFaceUp)
+                    .map(c => ({
+                        card: c,
+                        gain: c.value - getEffectiveCardValue(c, aiLane, state, laneIndex, 'opponent')
+                    }))
+                    .filter(x => x.gain > 0)
+                    .sort((a, b) => b.gain - a.gain);
+
+                if (aiFaceDownCoveredWithGain.length > 0) {
+                    return { type: 'flipCard', cardId: aiFaceDownCoveredWithGain[0].card.id };
+                }
+
+                // PRIORITY 4: Flip player's face-down covered card (reveals info, no value change)
+                const playerFaceDownCovered = playerCovered.filter(c => !c.isFaceUp);
+                if (playerFaceDownCovered.length > 0) {
+                    return { type: 'flipCard', cardId: playerFaceDownCovered[0].id };
+                }
+
+                // No good targets - skip optional effect
+                return { type: 'skip' };
             }
 
             // FIX: Only target uncovered cards for standard flip effects.
@@ -1140,25 +1170,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_own_card_to_return_for_water_4': {
-            // Water-4: Return own card (only uncovered cards are valid)
-            const validOwnCards: PlayedCard[] = [];
-            state.opponent.lanes.forEach(lane => {
-                if (lane.length > 0) {
-                    // Only the top card (uncovered) is targetable
-                    validOwnCards.push(lane[lane.length - 1]);
-                }
-            });
-
-            if (validOwnCards.length > 0) {
-                // Normal AI: Pick a random uncovered card to return
-                const randomCard = validOwnCards[Math.floor(Math.random() * validOwnCards.length)];
-                return { type: 'returnCard', cardId: randomCard.id };
-            }
-            // This shouldn't happen if the action was generated correctly, but as a fallback:
-            if ('optional' in action && action.optional) return { type: 'skip' };
-            return { type: 'skip' };
-        }
+        // REMOVED: select_own_card_to_return_for_water_4 - Water-4 now uses generic select_card_to_return
 
         case 'select_card_to_shift_for_anarchy_0': {
             // Anarchy-0: "Shift 1 card" - NO restrictions
@@ -1197,24 +1209,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
-
-            const playerCards = getUncovered('player');
-            if (playerCards.length > 0) {
-                const randomCard = playerCards[Math.floor(Math.random() * playerCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
-            }
-
-            const opponentCards = getUncovered('opponent');
-            if (opponentCards.length > 0) {
-                const randomCard = opponentCards[Math.floor(Math.random() * opponentCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
+        // REMOVED: select_card_to_flip_and_shift_for_gravity_2 - Gravity-2 now uses generic select_card_to_flip
 
         case 'select_face_down_card_to_shift_for_gravity_4': {
             const { targetLaneIndex } = action;
@@ -1319,12 +1314,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' }; // Should not happen if action was generated correctly
         }
 
-        case 'select_own_card_to_shift_for_speed_3': {
-            const ownCards = state.opponent.lanes.flat();
-            // This action is mandatory and is only dispatched if the AI has at least one card.
-            // Easy AI just picks the first card it finds.
-            return { type: 'deleteCard', cardId: ownCards[0].id };
-        }
+        // REMOVED: select_own_card_to_shift_for_speed_3 - Speed-3 now uses generic select_card_to_shift
 
         case 'select_opponent_covered_card_to_shift': {
             const validTargets: PlayedCard[] = [];
@@ -1577,18 +1567,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Easy AI doesn't bother with this complex optional move.
             return { type: 'skip' };
 
-        case 'prompt_shift_or_flip_for_light_2': {
-            const { revealedCardId } = action;
-            const cardInfo = findCardOnBoard(state, revealedCardId);
-            // Use resolvePrompt with accept:true for flip, accept:false for skip
-            if (!cardInfo) return { type: 'resolvePrompt', accept: false }; // skip
-
-            // Normal AI: flip its own cards, skip player's cards.
-            if (cardInfo.owner === 'opponent') {
-                return { type: 'resolvePrompt', accept: true }; // flip
-            }
-            return { type: 'resolvePrompt', accept: false }; // skip
-        }
+        // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
 
         case 'plague_4_opponent_delete': {
             // Plague-4: Opponent (AI) must delete their OWN uncovered face-down card

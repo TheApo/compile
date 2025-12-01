@@ -8,7 +8,6 @@ import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifie
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
 // NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
-import { getEffectiveCardValue } from '../stateManager';
 import * as phaseManager from '../phaseManager';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
@@ -23,22 +22,10 @@ export type CardActionResult = {
 };
 
 // List of action types that trigger Metal-6's self-delete (flip actions only)
+// NOTE: Most legacy card-specific flip types have been removed - now using generic handlers
 const METAL6_FLIP_ACTION_TYPES = [
-    'select_covered_card_to_flip_for_chaos_0',
-    'select_any_other_card_to_flip',
-    'select_opponent_face_up_card_to_flip',
-    'select_own_face_up_covered_card_to_flip',
-    'select_covered_card_in_line_to_flip_optional',
-    'select_any_card_to_flip_optional',
-    'select_any_face_down_card_to_flip_optional',
-    'select_card_to_flip_for_fire_3',
-    'select_card_to_flip',
-    'select_opponent_card_to_flip',
-    'select_any_card_to_flip',
-    'select_card_to_flip_for_light_0',
-    'select_any_other_card_to_flip_for_water_0',
-    'select_card_to_flip_and_shift_for_gravity_2',
-    'select_face_down_card_to_reveal_for_light_2',
+    'select_card_to_flip',       // Generic flip handler (used by most custom protocols)
+    'select_any_card_to_flip',   // Life-1 multi-flip
 ];
 
 function handleMetal6Flip(state: GameState, targetCardId: string, action: ActionRequired): CardActionResult | null {
@@ -251,6 +238,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     remainingLanes: newRemainingLanes,
                     targetFilter: actionTargetFilter,  // CRITICAL: Pass targetFilter for targeting
                     params: actionParams,
+                    // CRITICAL: Pass through followUpEffect for if_executed conditionals
+                    followUpEffect: (prev.actionRequired as any)?.followUpEffect,
+                    conditionalType: (prev.actionRequired as any)?.conditionalType,
                 } as any;
             }
 
@@ -270,7 +260,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
                     // Source card was deleted/returned/flipped → Cancel the shift
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
-                    newState = log(prev, prev.actionRequired.actor, `Shift from ${cardName} was cancelled because the source is no longer active.`);
+                    // CRITICAL: Temporarily set log source to the cancelled card
+                    const previousLogSource = (prev as any)._logSource;
+                    newState = setLogSource(prev, cardName);
+                    newState = log(newState, prev.actionRequired.actor, `Shift was cancelled because the source is no longer active.`);
+                    newState = setLogSource(newState, previousLogSource);
                     newState = phaseManager.queuePendingCustomEffects(newState);
                     newState.actionRequired = null;
                     requiresTurnEnd = true;
@@ -337,6 +331,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         sourceCardId: prev.actionRequired.sourceCardId,
                         actor: prev.actionRequired.actor,
                         destinationRestriction: (prev.actionRequired as any).destinationRestriction,  // Pass through for custom protocols
+                        // CRITICAL: Pass through followUpEffect for if_executed conditionals (Speed-3: "If you do, flip this card")
+                        followUpEffect: (prev.actionRequired as any).followUpEffect,
+                        conditionalType: (prev.actionRequired as any).conditionalType,
                     };
                     newState.actionRequired = nextAction;
                 }
@@ -346,79 +343,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         }
         // NOTE: Legacy gravity_4, own_other, opponent_face_down, speed_3 shift handlers removed
         // Now handled by generic select_card_to_shift with targetFilter and followUpEffect
-        case 'select_card_to_delete_for_death_1': {
-            const { sourceCardId, actor } = prev.actionRequired;
-            const cardInfoToDelete = findCardOnBoard(prev, targetCardId);
-            const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
-
-            if (!cardInfoToDelete || !sourceCardInfo) return { nextState: prev };
-
-
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            const ownerName = cardInfoToDelete.owner === 'player' ? "Player's" : "Opponent's";
-            const cardName = cardInfoToDelete.card.isFaceUp ? `${cardInfoToDelete.card.protocol}-${cardInfoToDelete.card.value}` : 'a face-down card';
-            
-            newState = log(newState, actor, `Death-1: ${actorName} deletes ${ownerName} ${cardName} and the Death-1 card itself.`);
-            
-            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 2 };
-            const newPlayerState = { ...newState[actor], stats: newStats };
-            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-
-            // --- Uncover Logic Setup ---
-            const targetLaneIndex = prev[cardInfoToDelete.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
-            const targetLane = prev[cardInfoToDelete.owner].lanes[targetLaneIndex];
-            const targetWasTopCard = targetLane && targetLane.length > 0 && targetLane[targetLane.length - 1].id === targetCardId;
-
-            const sourceLaneIndex = prev[sourceCardInfo.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
-            const sourceLane = prev[sourceCardInfo.owner].lanes[sourceLaneIndex];
-            const sourceWasTopCard = sourceLane && sourceLane.length > 0 && sourceLane[sourceLane.length - 1].id === sourceCardId;
-
-            newState = phaseManager.queuePendingCustomEffects(newState);
-            newState.actionRequired = null;
-            requiresAnimation = {
-                animationRequests: [
-                    { type: 'delete', cardId: targetCardId, owner: cardInfoToDelete.owner },
-                    { type: 'delete', cardId: sourceCardId, owner: sourceCardInfo.owner }
-                ],
-                onCompleteCallback: (s, endTurnCb) => {
-                    // Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
-                    let stateAfterDelete = reactiveResult.newState;
-
-                    // --- Uncover Logic Execution ---
-                    if (targetWasTopCard) {
-                        const uncoverResult = handleUncoverEffect(stateAfterDelete, cardInfoToDelete.owner, targetLaneIndex);
-                        stateAfterDelete = uncoverResult.newState;
-                    }
-                    if (sourceWasTopCard) {
-                        const uncoverResult = handleUncoverEffect(stateAfterDelete, sourceCardInfo.owner, sourceLaneIndex);
-                        stateAfterDelete = uncoverResult.newState;
-                    }
-
-                    // IMPORTANT: Decrease indent after uncover effects complete (from on-cover effects)
-                    // This closes the indentation from executeOnCoverEffect
-                    stateAfterDelete = decreaseLogIndent(stateAfterDelete);
-
-                    // CRITICAL FIX: Don't clear actionRequired if uncover set one!
-                    // If there's an actionRequired from uncover, return it immediately
-                    if (stateAfterDelete.actionRequired) {
-                        return stateAfterDelete;
-                    }
-
-                    // Otherwise, check for queued actions
-                    if (stateAfterDelete.queuedActions && stateAfterDelete.queuedActions.length > 0) {
-                        const newQueue = [...stateAfterDelete.queuedActions];
-                        const nextAction = newQueue.shift();
-                        return { ...stateAfterDelete, actionRequired: nextAction, queuedActions: newQueue };
-                    }
-
-                    // This action happened in the start phase, so we use a different turn progression.
-                    return endTurnCb(stateAfterDelete);
-                }
-            };
-            requiresTurnEnd = false; // The onComplete callback will decide the turn progression.
-            break;
-        }
+        // REMOVED: select_card_to_delete_for_death_1 - Death-1 now uses custom protocol with delete_self followUp
         case 'delete_self': {
             // NEW: Composable self-delete (Death-1: "then delete this card")
             const { sourceCardId, cardToDeleteId, actor } = prev.actionRequired as any;
@@ -466,8 +391,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         case 'select_cards_to_delete':
         case 'select_face_down_card_to_delete':
         case 'select_low_value_card_to_delete':
-        case 'select_card_from_other_lanes_to_delete':
-        case 'select_card_to_delete_for_anarchy_2': {
+        case 'select_card_from_other_lanes_to_delete': {
+            // REMOVED: select_card_to_delete_for_anarchy_2 - now uses generic protocolMatching
             console.log('[CARD RESOLVER] DELETE CASE ENTERED:', prev.actionRequired.type);
             // Rule: An effect is cancelled if its source card is no longer active (face-up on the board).
             const { sourceCardId, actor } = prev.actionRequired;
@@ -483,24 +408,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
-
-
-            // CRITICAL VALIDATION for Anarchy-2: "Delete a covered or uncovered card in a line with a matching protocol"
-            if (prev.actionRequired.type === 'select_card_to_delete_for_anarchy_2') {
-                // Find which lane the card to delete is in
-                const cardLaneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
-                if (cardLaneIndex !== -1) {
-                    const playerProtocolAtLane = prev.player.protocols[cardLaneIndex];
-                    const opponentProtocolAtLane = prev.opponent.protocols[cardLaneIndex];
-                    const cardProtocol = cardInfo.card.protocol;
-
-                    // RULE: Card's protocol MUST match at least one protocol in its lane
-                    if (cardProtocol !== playerProtocolAtLane && cardProtocol !== opponentProtocolAtLane) {
-                        console.error(`Illegal Anarchy-2 delete: ${cardProtocol}-${cardInfo.card.value} in lane ${cardLaneIndex} (protocols: ${playerProtocolAtLane}/${opponentProtocolAtLane}) - card must be in lane with matching protocol`);
-                        return { nextState: prev }; // Block the illegal delete
-                    }
-                }
-            }
 
             // GENERIC VALIDATION for protocolMatching (custom protocols)
             if ((prev.actionRequired as any).protocolMatching) {
@@ -700,6 +607,105 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         ];
                     }
 
+                    // CRITICAL: Handle followUpEffect (Death-1: "then delete this card") when delete is complete
+                    // This only applies when we DON'T have a nextStepOfDeleteAction (i.e., this was the last/only delete)
+                    if (followUpEffect && !nextStepOfDeleteAction) {
+                        console.log('[DELETE CALLBACK] Delete complete, has followUpEffect:', followUpEffect.id);
+                        console.log('[DELETE CALLBACK] Current actionRequired:', stateAfterTriggers.actionRequired?.type);
+
+                        // If there's already an actionRequired (from uncover effect), queue the followUp for later
+                        if (stateAfterTriggers.actionRequired) {
+                            console.log('[DELETE CALLBACK] Queueing followUpEffect because uncover created actionRequired');
+
+                            // Find source card info for context
+                            const sourceCardForQueue = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
+                            const opponent: Player = originalAction.actor === 'player' ? 'opponent' : 'player';
+
+                            // Determine lane index for context
+                            let queueLaneIndex = -1;
+                            if (sourceCardForQueue) {
+                                queueLaneIndex = stateAfterTriggers[sourceCardForQueue.owner].lanes.findIndex(
+                                    l => l.some(c => c.id === originalAction.sourceCardId)
+                                );
+                            }
+
+                            // Create context for the queued effect
+                            const queueContext: EffectContext = {
+                                cardOwner: originalAction.actor,
+                                actor: originalAction.actor,
+                                currentTurn: stateAfterTriggers.turn,
+                                opponent,
+                                triggerType: 'start' as const
+                            };
+
+                            // Create a queued action that will execute the followUpEffect
+                            // CRITICAL: Use 'effects' array format as expected by phaseManager.ts
+                            const followUpAction = {
+                                type: 'execute_remaining_custom_effects',
+                                sourceCardId: originalAction.sourceCardId,
+                                actor: originalAction.actor,
+                                laneIndex: queueLaneIndex,
+                                effects: [followUpEffect],  // Use effects array format
+                                context: queueContext
+                            };
+
+                            stateAfterTriggers.queuedActions = [
+                                ...(stateAfterTriggers.queuedActions || []),
+                                followUpAction
+                            ];
+                        } else {
+                            // No current actionRequired - execute followUpEffect immediately
+                            const sourceCardForFollowUp = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
+                            const opponent: Player = originalAction.actor === 'player' ? 'opponent' : 'player';
+
+                            if (sourceCardForFollowUp) {
+                                const followUpLaneIndex = stateAfterTriggers[sourceCardForFollowUp.owner].lanes.findIndex(
+                                    l => l.some(c => c.id === originalAction.sourceCardId)
+                                );
+                                const context: EffectContext = {
+                                    cardOwner: originalAction.actor,
+                                    actor: originalAction.actor,
+                                    currentTurn: stateAfterTriggers.turn,
+                                    opponent,
+                                    triggerType: 'start' as const
+                                };
+
+                                // CRITICAL: Restore log context for followUpEffect
+                                const sourceCardName = `${sourceCardForFollowUp.card.protocol}-${sourceCardForFollowUp.card.value}`;
+                                stateAfterTriggers = setLogSource(stateAfterTriggers, sourceCardName);
+                                stateAfterTriggers = setLogPhase(stateAfterTriggers, 'start');
+
+                                const followUpResult = executeCustomEffect(
+                                    sourceCardForFollowUp.card,
+                                    followUpLaneIndex,
+                                    stateAfterTriggers,
+                                    context,
+                                    followUpEffect
+                                );
+                                stateAfterTriggers = followUpResult.newState;
+
+                                // Queue any pending effects from the follow-up
+                                stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
+                            } else {
+                                // Source card not found - create synthetic context for delete_self
+                                console.log('[DELETE CALLBACK] Source card not found for followUpEffect, using synthetic context');
+
+                                // For deleteSelf effects, we need to find the card by sourceCardId
+                                // It might have been moved or we need to execute directly
+                                if (followUpEffect.params?.deleteSelf) {
+                                    // CRITICAL: Restore log context before delete
+                                    stateAfterTriggers = setLogSource(stateAfterTriggers, 'the source card');
+                                    stateAfterTriggers = setLogPhase(stateAfterTriggers, 'start');
+
+                                    // Execute delete_self directly
+                                    const deleteResult = internalDeleteCard(stateAfterTriggers, originalAction.sourceCardId);
+                                    stateAfterTriggers = deleteResult.newState;
+                                    stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Deletes itself.`);
+                                }
+                            }
+                        }
+                    }
+
                     // 4. Handle action priority
                     const actionFromTriggers = stateAfterTriggers.actionRequired;
 
@@ -895,90 +901,8 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = false;
             break;
         }
-        case 'select_own_highest_card_to_delete_for_hate_2': {
-            const { sourceCardId, actor } = prev.actionRequired;
-            const cardInfo = findCardOnBoard(prev, targetCardId);
-            if (!cardInfo) return { nextState: prev };
-
-            // Validation: Must be one of the actor's highest uncovered cards
-            const highestCards = findAllHighestUncoveredCards(prev, actor);
-            const isValid = highestCards.some(c => c.card.id === targetCardId);
-            if (!isValid) {
-                newState = log(prev, actor, `Invalid selection: Card is not one of your highest value uncovered cards.`);
-                return { nextState: prev };
-            }
-
-
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            const cardName = cardInfo.card.isFaceUp ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a face-down card';
-            newState = log(newState, actor, `Hate-2: ${actorName} deletes their highest value uncovered card (${cardName}).`);
-
-            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
-            const newPlayerState = { ...newState[actor], stats: newStats };
-            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-
-            const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
-            const lane = prev[cardInfo.owner].lanes[laneIndex];
-            const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
-
-            newState = phaseManager.queuePendingCustomEffects(newState);
-            newState.actionRequired = null;
-            requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
-                onCompleteCallback: (s, endTurnCb) => {
-                    // Trigger reactive effects after delete (Hate-3 custom protocol)
-                    const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
-                    let stateAfterTriggers = reactiveResult.newState;
-
-                    // Handle uncovering
-                    if (wasTopCard) {
-                        const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardInfo.owner, laneIndex);
-                        stateAfterTriggers = uncoverResult.newState;
-                    }
-
-                    // CRITICAL: Only proceed to second clause if Hate-2 still exists, is face-up, and is uncovered
-                    const hate2CardInfo = findCardOnBoard(stateAfterTriggers, sourceCardId);
-                    const hate2IsUncovered = hate2CardInfo && isCardUncovered(stateAfterTriggers, sourceCardId);
-
-                    if (hate2CardInfo && hate2CardInfo.card.isFaceUp && hate2IsUncovered) {
-                        // Hate-2 still exists, is face-up, and is uncovered → Second clause: Select opponent's highest card
-                        const opponent = actor === 'player' ? 'opponent' : 'player';
-                        const nextAction: ActionRequired = {
-                            type: 'select_cards_to_delete',
-                            sourceCardId: sourceCardId,
-                            actor: actor, // Same actor selects opponent's card
-                            count: 1,
-                            disallowedIds: [sourceCardId],
-                            targetFilter: {
-                                owner: 'opponent',
-                                calculation: 'highest_value',
-                            },
-                        };
-
-                        // If uncover created an action, queue the opponent delete
-                        if (stateAfterTriggers.actionRequired) {
-                            stateAfterTriggers.queuedActions = [
-                                ...(stateAfterTriggers.queuedActions || []),
-                                nextAction
-                            ];
-                        } else {
-                            stateAfterTriggers.actionRequired = nextAction;
-                        }
-                        return stateAfterTriggers;
-                    } else {
-                        // Hate-2 was deleted, covered, or flipped face-down → Effect ends here (second clause does not trigger)
-                        const reason = !hate2CardInfo ? 'deleted itself' :
-                                      !hate2CardInfo.card.isFaceUp ? 'was flipped face-down' :
-                                      'is now covered';
-                        stateAfterTriggers = log(stateAfterTriggers, actor, `Hate-2 ${reason}, second clause does not trigger.`);
-                        return endTurnCb(stateAfterTriggers);
-                    }
-                }
-            };
-            requiresTurnEnd = false;
-            break;
-        }
-        // LEGACY REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - now uses generic select_cards_to_delete with targetFilter.calculation: 'highest_value'
+        // REMOVED: select_own_highest_card_to_delete_for_hate_2 - Hate-2 now uses custom protocol with calculation: 'highest_value'
+        // REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - now uses generic select_cards_to_delete
         case 'select_card_to_return': {
             const { sourceCardId, actor } = prev.actionRequired;
             const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
@@ -1057,14 +981,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             let stateAfterReturn = result.newState;
 
             // FIX: If the return triggered an interrupt (e.g., uncover effect),
-            // queue the Psychic-4 self-flip to happen after the interrupt resolves.
+            // queue the self-flip to happen after the interrupt resolves.
             if (stateAfterReturn.actionRequired) {
                 const flipAction: ActionRequired = {
-                    type: 'flip_self_for_psychic_4',
+                    type: 'flip_self',
                     sourceCardId: sourceCardId,
                     actor: actor,
                 };
-                // CRITICAL: Like Water-0, Psychic-4's self-flip should execute BEFORE pending effects
+                // CRITICAL: Self-flip should execute BEFORE pending effects
                 stateAfterReturn.queuedActions = [
                     flipAction,  // ← AN DEN ANFANG!
                     ...(stateAfterReturn.queuedActions || []),
@@ -1095,34 +1019,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
             break;
         }
-        case 'select_own_card_to_return_for_water_4': {
-
-            const result = internalReturnCard(prev, targetCardId);
-            newState = result.newState;
-            if (result.animationRequests) {
-                 requiresAnimation = {
-                    animationRequests: result.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        // Process any queued actions
-                        const stateAfterQueue = phaseManager.processQueuedActions(s);
-
-                        // If a queued action created a new actionRequired, return it
-                        if (stateAfterQueue.actionRequired) {
-                            return stateAfterQueue;
-                        }
-
-                        // Otherwise, END THE TURN (Water-4 effect is done)
-                        return endTurnCb(stateAfterQueue);
-                    }
-                };
-            } else {
-                // No animation - process queue immediately
-                newState = phaseManager.processQueuedActions(newState);
-            }
-            // CRITICAL FIX: Turn should end after Water-4 return (like all other on-play effects)
-            requiresTurnEnd = !newState.actionRequired;
-            break;
-        }
+        // REMOVED: select_own_card_to_return_for_water_4 - Water-4 now uses custom protocol with select_card_to_return
         case 'select_any_card_to_flip': { // Life-1
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
             const { count, sourceCardId, actor } = prev.actionRequired;
@@ -1180,205 +1077,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             requiresTurnEnd = !newState.actionRequired && (!newState.queuedActions || newState.queuedActions.length === 0);
             break;
         }
-        case 'select_card_to_flip_for_light_0': {
-            const { sourceCardId, actor } = prev.actionRequired;
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-            
-            // Get the card's info from the NEW state to check its current value
-            const cardInfoAfterFlip = findCardOnBoard(stateAfterFlip, targetCardId);
-            
-            let cardValue = 0;
-            if (cardInfoAfterFlip) {
-                const owner = cardInfoAfterFlip.owner;
-                const laneContext = stateAfterFlip[owner].lanes.find(l => l.some(c => c.id === targetCardId)) || [];
-                cardValue = getEffectiveCardValue(cardInfoAfterFlip.card, laneContext);
-            }
-
-            if (cardValue > 0) {
-                stateAfterFlip = log(stateAfterFlip, actor, `Light-0: Drawing ${cardValue} card(s).`);
-                stateAfterFlip = drawForPlayer(stateAfterFlip, actor, cardValue);
-            }
-
-            // Handle on-flip-to-face-up trigger. This is only necessary if the card was flipped from face-down to face-up.
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
-                newState = result.newState;
-            } else {
-                newState = stateAfterFlip;
-            }
-            
-            requiresTurnEnd = !newState.actionRequired;
-            break;
-        }
-        case 'select_any_other_card_to_flip_for_water_0': {
-            const { sourceCardId, actor } = prev.actionRequired;
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-        
-            // 1. Flip the target card.
-            let stateAfterTargetFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-        
-            // 2. Handle any on-flip effects from the just-flipped card. This might set a new actionRequired.
-            let onFlipResult: EffectResult = { newState: stateAfterTargetFlip };
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                onFlipResult = handleOnFlipToFaceUp(stateAfterTargetFlip, targetCardId);
-            }
-            let stateAfterInterrupt = onFlipResult.newState;
-        
-            // 3. ALWAYS queue the self-flip (don't execute immediately)
-            // The check for uncovered status will be done in phaseManager when the queued action is processed
-            // This prevents the bug where player can play another card before self-flip executes
-            const selfFlipAction: ActionRequired = {
-                type: 'flip_self_for_water_0',
-                sourceCardId: sourceCardId,
-                actor: actor,
-            };
-
-            console.log('[DEBUG] cardResolver - Water-0 self-flip action CREATED:', {
-                sourceCardId,
-                actor,
-                hasInterrupt: !!stateAfterInterrupt.actionRequired,
-                existingQueueLength: stateAfterInterrupt.queuedActions?.length || 0
-            });
-
-            if (stateAfterInterrupt.actionRequired) {
-                // Interrupt occurred - add self-flip to BEGINNING of queue
-                // CRITICAL: Water-0's self-flip must execute BEFORE any pending effects from the interrupted card chain
-                stateAfterInterrupt.queuedActions = [
-                    selfFlipAction,  // ← AN DEN ANFANG!
-                    ...(stateAfterInterrupt.queuedActions || []),
-                ];
-                console.log('[WATER-0 QUEUE] Added to BEGINNING of queue (interrupt case), new queue length:', stateAfterInterrupt.queuedActions.length);
-                console.log('[WATER-0 QUEUE] Current actionRequired:', stateAfterInterrupt.actionRequired.type);
-            } else {
-                // No interrupt - add self-flip as the ONLY queued action
-                stateAfterInterrupt.queuedActions = [selfFlipAction];
-                console.log('[WATER-0 QUEUE] Created NEW queue (no interrupt), queue length:', stateAfterInterrupt.queuedActions.length);
-            }
-        
-            newState = stateAfterInterrupt;
-
-            // If the interrupt created a new action, we stop and wait for it.
-            // If NO interrupt but queue exists, process the queue immediately!
-            const hasQueue = newState.queuedActions && newState.queuedActions.length > 0;
-
-            if (hasQueue && !newState.actionRequired) {
-                console.log('[WATER-0 NO INTERRUPT] Queue exists but no actionRequired - processing queue immediately');
-                newState = phaseManager.processQueuedActions(newState);
-                console.log('[WATER-0 NO INTERRUPT] After queue processing - actionRequired?', newState.actionRequired?.type || 'null');
-            }
-
-            requiresTurnEnd = !newState.actionRequired;
-        
-            // Pass on any animation requests from the interrupt.
-            if (onFlipResult.animationRequests) {
-                requiresAnimation = {
-                    animationRequests: onFlipResult.animationRequests,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        // After animations, if there's no action, end the turn.
-                        if (s.actionRequired) return s;
-                        return endTurnCb(s);
-                    }
-                };
-            }
-            break;
-        }
-        case 'select_card_to_flip_and_shift_for_gravity_2': {
-            const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
-            const { sourceCardId, targetLaneIndex, actor } = prev.actionRequired;
-
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, null);
-
-            if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
-                const result = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
-                const interruptAction = result.newState.actionRequired;
-
-                console.log(`[Gravity-2] After flip, interruptAction:`, interruptAction?.type || 'none');
-
-                // CRITICAL: If the flipped card triggers an effect, we need to COMPLETE that first,
-                // then do the shift ONLY if:
-                // 1. The flipped card still exists (not deleted/returned)
-                // 2. The source card (Gravity-2) still exists (not deleted/returned)
-                if (interruptAction) {
-                    // If there's an interrupt, queue the shift action.
-                    // The validation (checking if source is still face-up) happens in processQueuedActions.
-                    const flippedCardStillExists = findCardOnBoard(result.newState, targetCardId);
-
-                    console.log(`[Gravity-2] Flipped card still exists:`, !!flippedCardStillExists);
-
-                    if (flippedCardStillExists) {
-                        // Flipped card still exists - queue the shift to happen AFTER the interrupt
-                        // Note: We don't check if source is face-up here because the interrupt hasn't been resolved yet!
-                        const shiftAction: ActionRequired = {
-                            type: 'gravity_2_shift_after_flip',
-                            cardToShiftId: targetCardId,
-                            targetLaneIndex,
-                            cardOwner: cardInfoBeforeFlip!.owner,
-                            sourceCardId,
-                            actor,
-                        };
-                        result.newState.queuedActions = [
-                            ...(result.newState.queuedActions || []),
-                            shiftAction
-                        ];
-
-                        console.log(`[Gravity-2] Queued shift action. Queue length:`, result.newState.queuedActions.length);
-                    }
-                    // If the flipped card was deleted/returned during the interrupt, don't queue the shift
-
-                    newState = result.newState;
-                    requiresTurnEnd = false;
-                    break;
-                }
-                stateAfterFlip = result.newState;
-            }
-
-            console.log(`[Gravity-2] No interrupt detected, performing immediate shift`);
-            // No interrupt - perform shift immediately
-            const shiftResult = internalShiftCard(stateAfterFlip, targetCardId, cardInfoBeforeFlip!.owner, targetLaneIndex, actor);
-            newState = shiftResult.newState;
-
-            requiresTurnEnd = !newState.actionRequired;
-            break;
-        }
-        case 'gravity_2_shift_after_flip': {
-            // This is the queued shift action after Gravity-2 flip triggered an interrupt
-            const { cardToShiftId, targetLaneIndex, cardOwner, actor, sourceCardId } = prev.actionRequired;
-
-            // CRITICAL: Validate that both cards still exist AND source is still face-up before performing the shift!
-            const flippedCardStillExists = findCardOnBoard(prev, cardToShiftId);
-            const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
-            const sourceCardStillValid = sourceCardInfo && sourceCardInfo.card.isFaceUp;
-
-            if (!flippedCardStillExists || !sourceCardStillValid) {
-                // One of the cards was deleted/returned, or source was flipped face-down → Cancel the shift
-                newState = { ...prev, actionRequired: null };
-                requiresTurnEnd = true;
-                break;
-            }
-
-            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
-            newState = shiftResult.newState;
-            requiresTurnEnd = !newState.actionRequired;
-            break;
-        }
-        case 'select_face_down_card_to_reveal_for_light_2': {
-            const { sourceCardId, actor } = prev.actionRequired;
-            const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
-            const cardInfo = findCardOnBoard(prev, targetCardId);
-            const cardName = cardInfo ? `${cardInfo.card.protocol}-${cardInfo.card.value}` : 'a card';
-            newState = log(prev, actor, `Light-2: ${actorName} reveals ${cardName}.`);
-            newState.actionRequired = {
-                type: 'prompt_shift_or_flip_for_light_2',
-                sourceCardId,
-                revealedCardId: targetCardId,
-                optional: true,
-                actor,
-            };
-            requiresTurnEnd = false; // Action has a follow-up
-            break;
-        }
+        // REMOVED: select_card_to_flip_for_light_0 - Light-0 now uses custom protocol with select_card_to_flip + followUpEffect
+        // REMOVED: select_any_other_card_to_flip_for_water_0 - Water-0 now uses custom protocol with select_card_to_flip + flip_self followUp
+        // REMOVED: select_card_to_flip_and_shift_for_gravity_2 - Gravity-2 now uses custom protocol
+        // REMOVED: gravity_2_shift_after_flip - replaced by generic shift_flipped_card_optional
+        // REMOVED: select_face_down_card_to_reveal_for_light_2 - Light-2 now uses select_board_card_to_reveal_custom
         case 'select_board_card_to_reveal_custom': {
             const { sourceCardId, actor, followUpAction, optional } = prev.actionRequired;
             const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);

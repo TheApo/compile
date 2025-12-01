@@ -7,7 +7,7 @@ import { GameState, PlayedCard, Player, EffectResult, EffectContext } from '../.
 import { refreshHandForPlayer } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor';
 import { recalculateAllLaneValues } from '../stateManager';
-import { log, setLogSource, setLogPhase } from '../../utils/log';
+import { log, setLogSource, setLogPhase, increaseLogIndent } from '../../utils/log';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule } from '../passiveRuleChecker';
 
@@ -265,7 +265,9 @@ export const performFillHand = (prevState: GameState, player: Player): GameState
 
 export const fillHand = (prevState: GameState, player: Player): GameState => {
     if (prevState.useControlMechanic && prevState.controlCardHolder === player) {
-        const newState = log(prevState, player, `${player === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols before refreshing.`);
+        let newState = log(prevState, player, `${player === 'player' ? 'Player' : 'Opponent'} has Control and may rearrange protocols before refreshing.`);
+        // Increase indent for Control mechanic sub-actions (skip/rearrange)
+        newState = increaseLogIndent(newState);
         return {
             ...newState,
             controlCardHolder: null, // Reset control immediately

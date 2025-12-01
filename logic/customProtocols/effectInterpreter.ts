@@ -409,11 +409,11 @@ export function executeCustomEffect(
     // Handle conditional follow-up effects
     if (effectDef.conditional && effectDef.conditional.thenEffect) {
         const { newState } = result;
-        console.log('[Custom Effect] Effect has conditional follow-up:', effectDef.id, 'Conditional type:', effectDef.conditional.type, 'Action created?', !!newState.actionRequired);
+        console.log('[Custom Effect] Effect has conditional follow-up:', effectDef.id, 'Conditional type:', effectDef.conditional.type, 'Action created?', !!newState.actionRequired, 'actionRequired.type:', newState.actionRequired?.type);
 
         if (newState.actionRequired) {
             // Store the conditional for later execution (after user completes the action)
-            console.log('[Custom Effect] Storing follow-up effect for later execution:', effectDef.conditional.thenEffect.id);
+            console.log('[Custom Effect] Storing follow-up effect for later execution:', effectDef.conditional.thenEffect.id, 'to actionRequired type:', newState.actionRequired.type);
 
             // CRITICAL: Store conditional type so we know if it's if_executed or then
             const stateWithFollowUp = {
@@ -702,6 +702,7 @@ function executeDrawEffect(
 
     // NEW: Handle optional draw (Death-1: "You may draw 1 card")
     if (params.optional) {
+        console.log('[Draw Effect] Creating prompt_optional_draw for optional draw, card:', card.protocol, '-', card.value);
         newState.actionRequired = {
             type: 'prompt_optional_draw',
             sourceCardId: card.id,

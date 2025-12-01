@@ -40,34 +40,7 @@ export function drawCards(deck: Card[], discard: Card[], count: number): { drawn
     return { drawnCards: drawn, remainingDeck: currentDeck, newDiscard: currentDiscard, reshuffled };
 }
 
-/**
- * Checks for the Spirit-3 trigger after a player draws cards.
- * @param state - The current GameState.
- * @param player - The player who drew cards.
- * @returns The new GameState with a queued action if Spirit-3 is present.
- */
-export function checkForSpirit3Trigger(state: GameState, player: Player): GameState {
-    const playerState = state[player];
-    let newState = state;
-
-    const allSpirit3Cards = playerState.lanes.flat().filter(c => c.protocol === 'Spirit' && c.value === 3 && c.isFaceUp);
-    if (allSpirit3Cards.length > 0) {
-        for (const spirit3 of allSpirit3Cards) {
-             newState = log(newState, player, "Spirit-3 triggers after drawing: You may shift this card.");
-             const action: ActionRequired = {
-                type: 'prompt_shift_for_spirit_3',
-                sourceCardId: spirit3.id,
-                optional: true,
-                actor: player,
-             };
-             newState.queuedActions = [
-                ...(newState.queuedActions || []),
-                action
-             ];
-        }
-    }
-    return newState;
-}
+// REMOVED: checkForSpirit3Trigger - Spirit-3 now uses custom protocol system with after_draw reactive trigger
 
 /**
  * A helper function to apply the draw logic to a player's state from their own deck.

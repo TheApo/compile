@@ -34,21 +34,18 @@ type ActionDispatchers = {
     resolveFire3Prompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalDiscardCustomPrompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalEffectPrompt: (s: GameState, a: boolean) => GameState,
-    resolveSpeed3Prompt: (s: GameState, a: boolean) => GameState,
     resolveFire4Discard: (s: GameState, cardIds: string[]) => GameState,
     resolveHate1Discard: (s: GameState, cardIds: string[]) => GameState,
-    resolveLight2Prompt: (s: GameState, choice: 'shift' | 'flip' | 'skip') => GameState,
     resolveRearrangeProtocols: (s: GameState, newOrder: string[]) => GameState,
     resolveActionWithHandCard: (s: GameState, cardId: string) => GameState,
     resolvePsychic4Prompt: (s: GameState, a: boolean) => GameState,
     resolveSpirit1Prompt: (s: GameState, choice: 'discard' | 'flip') => GameState,
-    resolveSpirit3Prompt: (s: GameState, accept: boolean) => GameState,
     resolveSwapProtocols: (s: GameState, indices: [number, number]) => GameState,
     revealOpponentHand: (s: GameState) => GameState,
     resolveCustomChoice: (s: GameState, choiceIndex: number) => GameState,
 }
 
-type OpponentActionDispatchers = Pick<ActionDispatchers, 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit1Prompt' | 'resolveSpirit3Prompt' | 'resolvePsychic4Prompt'>;
+type OpponentActionDispatchers = Pick<ActionDispatchers, 'playCard' | 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit1Prompt' | 'resolvePsychic4Prompt'>;
 
 
 type PhaseManager = {
@@ -59,6 +56,75 @@ type PhaseManager = {
 }
 
 type TrackPlayerRearrange = (actor: 'player' | 'opponent') => void;
+
+// Helper function to correctly end an action based on current phase
+// CRITICAL: Start phase actions must use continueTurnAfterStartPhaseAction
+// Otherwise the turn gets stuck (e.g., after Spirit-1's "discard or flip" choice)
+const endActionForPhase = (state: GameState, phaseManager: PhaseManager): GameState => {
+    if (state.phase === 'start') {
+        return phaseManager.continueTurnAfterStartPhaseAction(state);
+    }
+    return phaseManager.processEndOfAction(state);
+};
+
+// Helper function to handle AI playing a card (used by both handleMandatoryPlayerTurnAction and handleRequiredAction)
+// isDuringOpponentTurn: true = during opponent's turn (may need to call runOpponentTurn for follow-ups)
+//                       false = during player's turn (interrupt scenario, just endActionForPhase)
+const handleAIPlayCard = (
+    state: GameState,
+    aiDecision: { cardId: string; laneIndex: number; isFaceUp: boolean },
+    setGameState: Dispatch<SetStateAction<GameState>>,
+    difficulty: Difficulty,
+    actions: Pick<ActionDispatchers, 'playCard'>,
+    processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
+    phaseManager: PhaseManager,
+    isDuringOpponentTurn: boolean
+): GameState => {
+    const { cardId, laneIndex, isFaceUp } = aiDecision;
+    const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(
+        { ...state, actionRequired: null },
+        cardId,
+        laneIndex,
+        isFaceUp,
+        'opponent'
+    );
+
+    const stateWithPlayAnimation = {
+        ...stateAfterPlayLogic,
+        animationState: { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player }
+    };
+
+    setTimeout(() => {
+        setGameState(s => {
+            let stateToProcess = { ...s, animationState: null };
+
+            if (onCoverAnims && onCoverAnims.length > 0) {
+                processAnimationQueue(onCoverAnims, () => setGameState(s2 => {
+                    if (isDuringOpponentTurn && s2.actionRequired) {
+                        runOpponentTurn(s2, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                        return s2;
+                    }
+                    if (s2.actionRequired && s2.actionRequired.actor === 'opponent') {
+                        return s2;
+                    }
+                    return endActionForPhase(s2, phaseManager);
+                }));
+                return stateToProcess;
+            }
+
+            if (isDuringOpponentTurn && stateToProcess.actionRequired) {
+                runOpponentTurn(stateToProcess, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                return stateToProcess;
+            }
+            if (stateToProcess.actionRequired && stateToProcess.actionRequired.actor === 'opponent') {
+                return stateToProcess;
+            }
+            return endActionForPhase(stateToProcess, phaseManager);
+        });
+    }, 500);
+
+    return stateWithPlayAnimation;
+};
 
 const getAIAction = (state: GameState, action: ActionRequired | null, difficulty: Difficulty): AIAction => {
     switch (difficulty) {
@@ -154,7 +220,7 @@ export const resolveRequiredOpponentAction = (
             if (newState.actionRequired) {
                 return newState;
             }
-            return phaseManager.processEndOfAction(newState);
+            return endActionForPhase(newState, phaseManager);
         }
 
         // NOTE: Legacy plague/hate handlers removed - now use generic discard handler above
@@ -168,14 +234,14 @@ export const resolveRequiredOpponentAction = (
             console.log('[DEBUG aiManager] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
             const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
             console.log('[DEBUG aiManager] After resolveRearrangeProtocols, actor hand:', newState[action.actor].hand.length);
-            const finalState = phaseManager.processEndOfAction(newState);
-            console.log('[DEBUG aiManager] After processEndOfAction, actor hand:', finalState[action.actor].hand.length);
+            const finalState = endActionForPhase(newState, phaseManager);
+            console.log('[DEBUG aiManager] After endActionForPhase, actor hand:', finalState[action.actor].hand.length);
             return finalState;
         }
 
         if (action.type === 'reveal_opponent_hand') {
             const newState = actions.revealOpponentHand(state);
-            return phaseManager.processEndOfAction(newState);
+            return endActionForPhase(newState, phaseManager);
         }
 
         // NOTE: Spirit-3 prompt now uses generic prompt_optional_effect handler
@@ -184,18 +250,20 @@ export const resolveRequiredOpponentAction = (
         if (aiDecision.type === 'selectLane') {
             const { nextState, requiresAnimation } = resolveActionWithLane(state, aiDecision.laneIndex);
             if (requiresAnimation) {
+                const wasStartPhase = state.phase === 'start';
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
                         const finalState = requiresAnimation.onCompleteCallback(s, s2 => s2);
                         if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
                             return finalState;
                         }
-                        return phaseManager.processEndOfAction(finalState);
+                        // Use saved phase info since state might have changed
+                        return wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
                     });
                 });
                 return nextState;
             }
-            return phaseManager.processEndOfAction(nextState);
+            return endActionForPhase(nextState, phaseManager);
         }
 
         // --- Generic Card Selection Handler ---
@@ -203,13 +271,15 @@ export const resolveRequiredOpponentAction = (
             const { nextState, requiresAnimation } = resolveActionWithCard(state, aiDecision.cardId);
 
             if (requiresAnimation) {
+                const wasStartPhase = state.phase === 'start';
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
                         const finalState = requiresAnimation.onCompleteCallback(s, s2 => s2);
                         if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
                             return finalState;
                         }
-                        return phaseManager.processEndOfAction(finalState);
+                        // Use saved phase info since state might have changed
+                        return wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
                     });
                 });
                 return nextState;
@@ -218,12 +288,17 @@ export const resolveRequiredOpponentAction = (
             if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {
                 return nextState;
             }
-            return phaseManager.processEndOfAction(nextState);
+            return endActionForPhase(nextState, phaseManager);
         }
-        
+
+        // --- Play Card from Hand Handler (Speed-0, Darkness-3 interrupt during player turn) ---
+        if (aiDecision.type === 'playCard' && action.type === 'select_card_from_hand_to_play') {
+            return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, false);
+        }
+
         console.warn(`AI has no logic for mandatory action during player turn, clearing it: ${action.type}`);
         const stateWithClearedAction = { ...state, actionRequired: null };
-        return phaseManager.processEndOfAction(stateWithClearedAction);
+        return endActionForPhase(stateWithClearedAction, phaseManager);
     });
 };
 
@@ -311,6 +386,8 @@ const handleRequiredAction = (
         if (choice === 'skip') {
             let stateAfterSkip = log(state, actor, "Opponent skips rearranging protocols.");
             stateAfterSkip.actionRequired = null;
+            // Reset indent to 0 before resuming the main action (compile/refresh)
+            stateAfterSkip = { ...stateAfterSkip, _logIndentLevel: 0 };
 
             if (originalAction.type === 'compile') {
                 const laneIndex = originalAction.laneIndex;
@@ -355,7 +432,7 @@ const handleRequiredAction = (
     if (aiDecision.type === 'resolveOptionalDiscardCustomPrompt' && action.type === 'prompt_optional_discard_custom') {
         const nextState = actions.resolveOptionalDiscardCustomPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action (discard), re-run processor
-        return phaseManager.processEndOfAction(nextState); // Skipped, so end turn
+        return endActionForPhase(nextState, phaseManager); // Skipped, so end turn
     }
 
     // GENERIC: Handle ALL optional effect prompts
@@ -376,7 +453,7 @@ const handleRequiredAction = (
             }
             return stateAfterAction;
         }
-        return phaseManager.processEndOfAction(nextState); // Skipped or completed
+        return endActionForPhase(nextState, phaseManager); // Skipped or completed
     }
 
     // NOTE: Legacy Speed-3, Psychic-4, Spirit-1, Spirit-3 prompt handlers removed
@@ -384,13 +461,13 @@ const handleRequiredAction = (
 
     if (aiDecision.type === 'resolveSwapProtocols' && action.type === 'prompt_swap_protocols') {
         const nextState = actions.resolveSwapProtocols(state, aiDecision.indices);
-        return phaseManager.processEndOfAction(nextState);
+        return endActionForPhase(nextState, phaseManager);
     }
 
     if (aiDecision.type === 'resolveCustomChoice' && action.type === 'custom_choice') {
         const nextState = actions.resolveCustomChoice(state, aiDecision.optionIndex);
         if (nextState.actionRequired) return nextState; // Choice may create follow-up action
-        return phaseManager.processEndOfAction(nextState);
+        return endActionForPhase(nextState, phaseManager);
     }
 
     // NOTE: Legacy Fire-4 and Hate-1 discard handlers removed
@@ -401,7 +478,7 @@ const handleRequiredAction = (
         (action.type === 'prompt_shift_or_flip_revealed_card' || action.type === 'prompt_shift_or_flip_board_card_custom')) {
         const nextState = resolvers.resolveRevealBoardCardPrompt(state, aiDecision.choice);
         if (nextState.actionRequired) return nextState;
-        return phaseManager.processEndOfAction(nextState);
+        return endActionForPhase(nextState, phaseManager);
     }
 
     if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
@@ -413,8 +490,8 @@ const handleRequiredAction = (
         console.log('[DEBUG aiManager 2] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
         const nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
         console.log('[DEBUG aiManager 2] After resolveRearrangeProtocols, actor hand:', nextState[action.actor].hand.length);
-        const finalState = phaseManager.processEndOfAction(nextState);
-        console.log('[DEBUG aiManager 2] After processEndOfAction, actor hand:', finalState[action.actor].hand.length);
+        const finalState = endActionForPhase(nextState, phaseManager);
+        console.log('[DEBUG aiManager 2] After endActionForPhase, actor hand:', finalState[action.actor].hand.length);
         return finalState;
     }
 
@@ -446,7 +523,7 @@ const handleRequiredAction = (
             return nextState;
         }
         // Non-animated case: return state, runOpponentTurn will handle continuation
-        return phaseManager.processEndOfAction(nextState);
+        return endActionForPhase(nextState, phaseManager);
     }
 
     if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard') {
@@ -487,52 +564,20 @@ const handleRequiredAction = (
         }
 
         if (requiresTurnEnd) {
-            return phaseManager.processEndOfAction(nextState);
+            return endActionForPhase(nextState, phaseManager);
         } else {
             // CRITICAL FIX: If there are queuedActions (e.g., Gravity-2 shift after flip),
-            // we MUST process them via processEndOfAction. Otherwise the turn continues
+            // we MUST process them via endActionForPhase. Otherwise the turn continues
             // without executing the queued effects, causing the AI to play another card!
             if (nextState.queuedActions && nextState.queuedActions.length > 0) {
-                return phaseManager.processEndOfAction(nextState);
+                return endActionForPhase(nextState, phaseManager);
             }
             return nextState; // Action has a follow up actionRequired, re-run manager
         }
     }
 
     if (aiDecision.type === 'playCard' && action.type === 'select_card_from_hand_to_play') {
-        const { cardId, laneIndex, isFaceUp } = aiDecision;
-        const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(
-            {...state, actionRequired: null}, 
-            cardId, 
-            laneIndex, 
-            isFaceUp, 
-            'opponent'
-        );
-        
-        // FIX: Replaced undefined variable 'newState' with 'stateAfterPlayLogic'.
-        const stateWithPlayAnimation = { ...stateAfterPlayLogic, animationState: { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player }};
-        
-        setTimeout(() => {
-            setGameState(s => {
-                let stateToProcess = { ...s, animationState: null };
-                
-                // FIX: Replaced undefined variable 'animationRequests' with 'onCoverAnims'.
-                if (onCoverAnims && onCoverAnims.length > 0) {
-                    // FIX: Replaced undefined variable 'animationRequests' with 'onCoverAnims'.
-                    processAnimationQueue(onCoverAnims, () => setGameState(s2 => phaseManager.processEndOfAction(s2)));
-                    return stateToProcess;
-                }
-
-                if (stateToProcess.actionRequired) {
-                    runOpponentTurn(stateToProcess, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                    return stateToProcess;
-                } else {
-                    return phaseManager.processEndOfAction(stateToProcess);
-                }
-            });
-        }, 500);
-        
-        return stateWithPlayAnimation;
+        return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, true);
     }
 
     if (aiDecision.type === 'discardCards' && action.type === 'discard') {
@@ -547,15 +592,15 @@ const handleRequiredAction = (
 
         const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
         if (newState.actionRequired) return newState; // Handle chained effects
-        return phaseManager.processEndOfAction(newState);
+        return endActionForPhase(newState, phaseManager);
     }
-    
+
     if (aiDecision.type === 'giveCard' && action.type === 'select_card_from_hand_to_give') {
         const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
         if (newState.actionRequired) return newState; // Love-3 has a follow up
-        return phaseManager.processEndOfAction(newState);
+        return endActionForPhase(newState, phaseManager);
     }
-    
+
     if (aiDecision.type === 'revealCard' && action.type === 'select_card_from_hand_to_reveal') {
         const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
         return newState; // Should create a new action to flip
@@ -563,7 +608,7 @@ const handleRequiredAction = (
 
     console.warn(`AI has no logic for mandatory action, clearing it: ${action.type}`);
     const stateWithClearedAction = { ...state, actionRequired: null };
-    return phaseManager.processEndOfAction(stateWithClearedAction);
+    return endActionForPhase(stateWithClearedAction, phaseManager);
 };
 
 

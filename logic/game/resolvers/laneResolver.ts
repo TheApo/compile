@@ -8,10 +8,9 @@ import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRe
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log, decreaseLogIndent } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
-import { getEffectiveCardValue, recalculateAllLaneValues } from '../stateManager';
+import { recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
 // NOTE: Old hardcoded effects removed - all protocols now use custom effects
-import { executeOnCoverEffect } from '../../effectExecutor';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
@@ -86,6 +85,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState.actionRequired = null;
 
             if (animationRequests.length > 0) {
+                // NEW: Extract followUpEffect for if_executed conditionals
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+
                 requiresAnimation = {
                     animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
@@ -93,7 +96,33 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         if (s.actionRequired) return s;
                         // Check for queued actions
                         if (s.queuedActions && s.queuedActions.length > 0) return s;
-                        return endTurnCb(s);
+
+                        let finalState = s;
+
+                        // NEW: Handle generic followUpEffect for custom protocols
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || animationRequests.length > 0;
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                    if (finalState.actionRequired) {
+                                        return finalState;
+                                    }
+                                }
+                            }
+                        }
+
+                        return endTurnCb(finalState);
                     }
                 };
             }
@@ -345,6 +374,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NEW: Handle generic followUpEffect for custom protocols ("Shift 1. If you do, draw 2.")
                         const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                         const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                        console.log('[laneResolver] After shift - followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType, 'sourceCardId:', sourceCardId, 'cardToShiftId:', cardToShiftId);
                         if (followUpEffect && sourceCardId) {
                             // For 'if_executed' conditionals, only execute if the shift actually happened
                             const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId; // shift happened if cardToShiftId exists
@@ -495,6 +525,33 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     const reactiveShiftResult = processReactiveEffects(newState, 'after_shift', { player: actor, cardId: cardToShiftId });
                     newState = reactiveShiftResult.newState;
 
+                    // NEW: Handle generic followUpEffect for custom protocols (NO ANIMATION case)
+                    // This handles "Shift 1. If you do, flip this card." like Speed-3
+                    const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                    const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                    console.log('[laneResolver NO ANIM] After shift - followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType, 'sourceCardId:', sourceCardId, 'cardToShiftId:', cardToShiftId);
+                    if (followUpEffect && sourceCardId) {
+                        // For 'if_executed' conditionals, only execute if the shift actually happened
+                        const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+
+                        if (shouldExecute) {
+                            console.log('[laneResolver NO ANIM] Executing followUpEffect after shift');
+                            const sourceCardForFollow = findCardOnBoard(newState, sourceCardId);
+                            if (sourceCardForFollow && sourceCardForFollow.card.isFaceUp) {
+                                const laneForFollow = newState[sourceCardForFollow.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                const laneIndexForFollow = newState[sourceCardForFollow.owner].lanes.indexOf(laneForFollow!);
+                                const context = {
+                                    cardOwner: sourceCardForFollow.owner,
+                                    actor: actor,
+                                    currentTurn: newState.turn,
+                                    opponent: (sourceCardForFollow.owner === 'player' ? 'opponent' : 'player') as Player,
+                                };
+                                const result = executeCustomEffect(sourceCardForFollow.card, laneIndexForFollow, newState, context, followUpEffect);
+                                newState = result.newState;
+                            }
+                        }
+                    }
+
                     // CRITICAL: Queue pending custom effects before clearing actionRequired
                     newState = queuePendingCustomEffects(newState);
                     newState.actionRequired = null;
@@ -556,15 +613,66 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
+
+            // NEW: Extract followUpEffect for if_executed conditionals
+            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+            const conditionalType = (prev.actionRequired as any)?.conditionalType;
+            const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
+
             if (shiftResult.animationRequests) {
                  // FIX: Implemented `onCompleteCallback` for consistency, ensuring any post-animation logic can be handled.
                  requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
+                        let finalState = s;
+
+                        // NEW: Handle generic followUpEffect for custom protocols
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                    if (finalState.actionRequired) {
+                                        return finalState;
+                                    }
+                                }
+                            }
+                        }
+
                         // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
-                        return endTurnCb(s);
+                        return endTurnCb(finalState);
                     }
                 };
+            } else {
+                // No animation - execute followUpEffect immediately if present
+                if (followUpEffect && sourceCardId) {
+                    const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+                    if (shouldExecute) {
+                        const sourceCard = findCardOnBoard(newState, sourceCardId);
+                        if (sourceCard && sourceCard.card.isFaceUp) {
+                            const lane = newState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                            const laneIdx = newState[sourceCard.owner].lanes.indexOf(lane!);
+                            const context = {
+                                cardOwner: sourceCard.owner,
+                                actor: actor,
+                                currentTurn: newState.turn,
+                                opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                            };
+                            const result = executeCustomEffect(sourceCard.card, laneIdx, newState, context, followUpEffect);
+                            newState = result.newState;
+                        }
+                    }
+                }
             }
             break;
         }
@@ -734,6 +842,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState = queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             if (cardsToDelete.length > 0) {
+                // NEW: Extract followUpEffect for if_executed conditionals
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                const sourceCardId = prev.actionRequired.sourceCardId;
+
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
@@ -741,6 +854,29 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
+
+                        // NEW: Handle generic followUpEffect for custom protocols
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || cardsToDelete.length > 0;
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(stateAfterDelete, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = stateAfterDelete[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = stateAfterDelete[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: stateAfterDelete.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, stateAfterDelete, context, followUpEffect);
+                                    stateAfterDelete = result.newState;
+                                    if (stateAfterDelete.actionRequired) {
+                                        return stateAfterDelete;
+                                    }
+                                }
+                            }
+                        }
 
                         return endTurnCb(stateAfterDelete);
                     }
@@ -809,151 +945,47 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState = queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             if (cardsToReturn.length > 0) {
+                // NEW: Extract followUpEffect for if_executed conditionals
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                const sourceCardId = prev.actionRequired.sourceCardId;
+
                 requiresAnimation = {
                     animationRequests: cardsToReturn,
                     onCompleteCallback: (s, endTurnCb) => {
-                        return endTurnCb(s);
-                    }
-                };
-            }
-            break;
-        }
-        case 'select_lane_for_death_2': {
-            // DEPRECATED: Keep for backwards compatibility with original Death-2
-            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
-            const actor = prev.actionRequired.actor;
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            const targetProtocolName = prev.player.protocols[targetLaneIndex];
-            newState = log(newState, actor, `Death-2: ${actorName} targets Protocol ${targetProtocolName}.`);
+                        let finalState = s;
 
-            const cardsToDelete: AnimationRequest[] = [];
-            const deletedCardNames: string[] = [];
-
-            for (const p of ['player', 'opponent'] as Player[]) {
-                const playerState = prev[p];
-                const faceDownValueInLane = playerState.lanes[targetLaneIndex]
-                    .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
-
-                for (const card of playerState.lanes[targetLaneIndex]) {
-                    const value = card.isFaceUp ? card.value : faceDownValueInLane;
-                    if (value === 1 || value === 2) {
-                        cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
-                        const ownerName = p === 'player' ? "Player's" : "Opponent's";
-                        const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
-                        deletedCardNames.push(`${ownerName} ${cardName}`);
-                    }
-                }
-            }
-
-            if (deletedCardNames.length > 0) {
-                const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
-                const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Death-2';
-                newState = log(newState, actor, `${sourceCardName}: Deleting ${deletedCardNames.join(', ')}.`);
-
-                const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + deletedCardNames.length };
-                const newPlayerState = { ...newState[actor], stats: newStats };
-                newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-            }
-
-            // CRITICAL: Queue pending custom effects before clearing actionRequired
-            newState = queuePendingCustomEffects(newState);
-            newState.actionRequired = null;
-            if (cardsToDelete.length > 0) {
-                // Track which lanes had top cards deleted for uncover effects
-                const lanesWithTopCardDeleted: { owner: Player, laneIndex: number }[] = [];
-                for (const deleteReq of cardsToDelete) {
-                    const lane = prev[deleteReq.owner].lanes[targetLaneIndex];
-                    if (lane.length > 0 && lane[lane.length - 1].id === deleteReq.cardId) {
-                        // Check if there's a card below that will be uncovered
-                        if (lane.length > 1) {
-                            lanesWithTopCardDeleted.push({ owner: deleteReq.owner, laneIndex: targetLaneIndex });
-                        }
-                    }
-                }
-
-                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers after the animations have finished.
-                requiresAnimation = {
-                    animationRequests: cardsToDelete,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        let stateAfterDelete = s;
-                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
-                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
-                        stateAfterDelete = reactiveResult.newState;
-
-                        // CRITICAL FIX: Handle uncover effects for cards that were uncovered by the delete
-                        for (const { owner, laneIndex } of lanesWithTopCardDeleted) {
-                            const uncoverResult = handleUncoverEffect(stateAfterDelete, owner, laneIndex);
-                            stateAfterDelete = uncoverResult.newState;
-                            // If uncover created an actionRequired (interrupt), stop processing and return
-                            if (stateAfterDelete.actionRequired) {
-                                // If we're inside an interrupt, use processEndOfAction
-                                if (stateAfterDelete._interruptedTurn) {
-                                    return processEndOfAction(stateAfterDelete);
+                        // NEW: Handle generic followUpEffect for custom protocols
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || cardsToReturn.length > 0;
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                    if (finalState.actionRequired) {
+                                        return finalState;
+                                    }
                                 }
-                                return stateAfterDelete;
                             }
                         }
 
-                        // If we're inside an interrupt, use processEndOfAction
-                        if (stateAfterDelete._interruptedTurn) {
-                            return processEndOfAction(stateAfterDelete);
-                        }
-
-                        return endTurnCb(stateAfterDelete);
+                        return endTurnCb(finalState);
                     }
                 };
             }
             break;
         }
-        case 'select_lane_for_metal_3_delete': {
-            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
-            const actor = prev.actionRequired.actor;
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            const targetProtocolName = prev.player.protocols[targetLaneIndex];
-
-            // CRITICAL VALIDATION: Only delete if the lane has 8 or more cards
-            const totalCardsInLane = prev.player.lanes[targetLaneIndex].length + prev.opponent.lanes[targetLaneIndex].length;
-            if (totalCardsInLane < 8) {
-                newState = log(newState, actor, `Metal-3: ${actorName} cannot delete Protocol ${targetProtocolName} (only ${totalCardsInLane} cards, need 8+).`);
-                // CRITICAL: Queue pending custom effects before clearing actionRequired
-                newState = queuePendingCustomEffects(newState);
-                newState.actionRequired = null;
-                break;
-            }
-
-            newState = log(newState, actor, `Metal-3: ${actorName} targets Protocol ${targetProtocolName} for deletion.`);
-
-            const cardsToDelete: AnimationRequest[] = [];
-
-            for (const p of ['player', 'opponent'] as Player[]) {
-                for (const card of prev[p].lanes[targetLaneIndex]) {
-                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
-                }
-            }
-
-            const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
-            const newPlayerState = { ...newState[actor], stats: newStats };
-            newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
-
-            // CRITICAL: Queue pending custom effects before clearing actionRequired
-            newState = queuePendingCustomEffects(newState);
-            newState.actionRequired = null;
-            if (cardsToDelete.length > 0) {
-                // FIX: Implemented `onCompleteCallback` to handle post-delete triggers (like Hate-3).
-                requiresAnimation = {
-                    animationRequests: cardsToDelete,
-                    onCompleteCallback: (s, endTurnCb) => {
-                        let stateAfterDelete = s;
-                        // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
-                        const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
-                        stateAfterDelete = reactiveResult.newState;
-
-                        return endTurnCb(stateAfterDelete);
-                    }
-                };
-            }
-            break;
-        }
+        // REMOVED: select_lane_for_death_2 - Death-2 now uses generic select_lane_for_delete with targetFilter
+        // REMOVED: select_lane_for_metal_3_delete - Metal-3 now uses generic select_lane_for_delete_all
         case 'select_lane_for_delete_all': {
             // Generic handler for deleting all cards in a lane (used by Metal-3 custom, etc.)
             const actor = prev.actionRequired.actor;
@@ -997,6 +1029,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             newState.actionRequired = null;
 
             if (cardsToDelete.length > 0) {
+                // NEW: Extract followUpEffect for if_executed conditionals
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                const sourceCardId = prev.actionRequired.sourceCardId;
+
                 requiresAnimation = {
                     animationRequests: cardsToDelete,
                     onCompleteCallback: (s, endTurnCb) => {
@@ -1004,66 +1041,37 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
+
+                        // NEW: Handle generic followUpEffect for custom protocols
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || cardsToDelete.length > 0;
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(stateAfterDelete, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = stateAfterDelete[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = stateAfterDelete[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: stateAfterDelete.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, stateAfterDelete, context, followUpEffect);
+                                    stateAfterDelete = result.newState;
+                                    if (stateAfterDelete.actionRequired) {
+                                        return stateAfterDelete;
+                                    }
+                                }
+                            }
+                        }
+
                         return endTurnCb(stateAfterDelete);
                     }
                 };
             }
             break;
         }
-        case 'select_lane_for_life_3_play': {
-            const { actor } = prev.actionRequired;
-            const stateBeforePlay = { ...prev, actionRequired: null };
-            
-            let stateAfterOnCover = stateBeforePlay;
-            let onCoverResult: EffectResult = { newState: stateAfterOnCover };
-            const cardToBeCovered = stateBeforePlay[actor].lanes[targetLaneIndex].length > 0
-                ? stateBeforePlay[actor].lanes[targetLaneIndex][stateBeforePlay[actor].lanes[targetLaneIndex].length - 1]
-                : null;
-            if (cardToBeCovered) {
-                const coverContext: EffectContext = {
-                    cardOwner: actor,
-                    actor: actor,
-                    currentTurn: stateBeforePlay.turn,
-                    opponent: actor === 'player' ? 'opponent' : 'player',
-                    triggerType: 'cover'
-                };
-                onCoverResult = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateBeforePlay, coverContext);
-                stateAfterOnCover = onCoverResult.newState;
-            }
-
-            const playerStateAfterOnCover = { ...stateAfterOnCover[actor] };
-            const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerStateAfterOnCover.deck, playerStateAfterOnCover.discard, 1);
-
-            if (drawnCards.length > 0) {
-                const newCard = { ...drawnCards[0], id: uuidv4(), isFaceUp: false };
-                const newLanes = [...playerStateAfterOnCover.lanes];
-                newLanes[targetLaneIndex] = [...newLanes[targetLaneIndex], newCard];
-
-                const newPlayerState = {
-                    ...playerStateAfterOnCover,
-                    lanes: newLanes,
-                    deck: remainingDeck,
-                    discard: newDiscard,
-                };
-
-                newState = { ...stateAfterOnCover, [actor]: newPlayerState };
-                newState = log(newState, actor, `Life-3 On-Cover: Plays a card face-down.`);
-                
-                if(onCoverResult.animationRequests) {
-                    // FIX: Implemented `onCompleteCallback` for on-cover animations.
-                    requiresAnimation = {
-                        animationRequests: onCoverResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
-                            return endTurnCb(s);
-                        }
-                    };
-                }
-            } else {
-                newState = stateAfterOnCover;
-            }
-            break;
-        }
+        // REMOVED: select_lane_for_life_3_play - Life-3 now uses generic select_lane_for_play with source='deck'
         // LEGACY REMOVED: select_lane_to_shift_revealed_card_for_light_2 - now uses generic select_lane_for_shift
         case 'select_lane_to_shift_revealed_board_card_custom': {
             const { revealedCardId, actor } = prev.actionRequired;
@@ -1084,86 +1092,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             }
             break;
         }
-        case 'select_lane_to_shift_cards_for_light_3': {
-            const { sourceLaneIndex, actor } = prev.actionRequired;
-            const opponent = actor === 'player' ? 'opponent' : 'player';
-
-            const actorFaceDown = prev[actor].lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
-            const opponentFaceDown = prev[opponent].lanes[sourceLaneIndex].filter(c => !c.isFaceUp);
-
-            const newActorLanes = prev[actor].lanes.map((lane, i) => {
-                if (i === sourceLaneIndex) return lane.filter(c => c.isFaceUp);
-                if (i === targetLaneIndex) return [...lane, ...actorFaceDown];
-                return lane;
-            });
-
-            const newOpponentLanes = prev[opponent].lanes.map((lane, i) => {
-                if (i === sourceLaneIndex) return lane.filter(c => c.isFaceUp);
-                if (i === targetLaneIndex) return [...lane, ...opponentFaceDown];
-                return lane;
-            });
-            
-            const totalShifted = actorFaceDown.length + opponentFaceDown.length;
-            const newStats = { ...prev.stats[actor], cardsShifted: prev.stats[actor].cardsShifted + totalShifted };
-            const newPlayerState = { ...prev[actor], lanes: newActorLanes, stats: newStats };
-
-            newState = {
-                ...prev,
-                [actor]: newPlayerState,
-                [opponent]: { ...prev[opponent], lanes: newOpponentLanes },
-                stats: { ...prev.stats, [actor]: newStats },
-                actionRequired: null,
-            };
-            
-            if (totalShifted > 0) {
-                const sourceProtocol = prev[actor].protocols[sourceLaneIndex];
-                const targetProtocol = prev[actor].protocols[targetLaneIndex];
-                newState = log(newState, actor, `Light-3: Shifts ${totalShifted} face-down card(s) from Protocol ${sourceProtocol} to Protocol ${targetProtocol}.`);
-            }
-            break;
-        }
-        case 'select_lane_for_water_3': {
-            // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
-            const player = prev.actionRequired.actor;
-            const opponent = player === 'player' ? 'opponent' : 'player';
-            
-            const playerState = { ...prev[player] };
-            const opponentState = { ...prev[opponent] };
-
-            const playerCardsToReturn = playerState.lanes[targetLaneIndex].filter(c => getEffectiveCardValue(c, playerState.lanes[targetLaneIndex]) === 2);
-            const opponentCardsToReturn = opponentState.lanes[targetLaneIndex].filter(c => getEffectiveCardValue(c, opponentState.lanes[targetLaneIndex]) === 2);
-
-            if (playerCardsToReturn.length === 0 && opponentCardsToReturn.length === 0) {
-                newState = { ...prev, actionRequired: null };
-                break;
-            }
-
-            const playerReturnIds = new Set(playerCardsToReturn.map(c => c.id));
-            const opponentReturnIds = new Set(opponentCardsToReturn.map(c => c.id));
-
-            playerState.lanes[targetLaneIndex] = playerState.lanes[targetLaneIndex].filter(c => !playerReturnIds.has(c.id));
-            opponentState.lanes[targetLaneIndex] = opponentState.lanes[targetLaneIndex].filter(c => !opponentReturnIds.has(c.id));
-
-            playerState.hand.push(...playerCardsToReturn);
-            opponentState.hand.push(...opponentCardsToReturn);
-
-            newState = {
-                ...prev,
-                [player]: playerState,
-                [opponent]: opponentState,
-                actionRequired: null,
-            };
-            
-            const totalReturned = playerCardsToReturn.length + opponentCardsToReturn.length;
-            if (totalReturned > 0) {
-                const playerName = player === 'player' ? 'Player' : 'Opponent';
-                const sourceCard = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
-                const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'a card effect';
-                const laneNames = ['left', 'middle', 'right'];
-                newState = log(newState, player, `${sourceName}: ${playerName} selects ${laneNames[targetLaneIndex]} lane and returns ${totalReturned} card(s) with value 2 (Player: ${playerCardsToReturn.length}, Opponent: ${opponentCardsToReturn.length}).`);
-            }
-            break;
-        }
+        // REMOVED: select_lane_to_shift_cards_for_light_3 - Light-3 now uses generic select_lane_for_shift_all
+        // REMOVED: select_lane_for_water_3 - Water-3 now uses generic select_lane_for_return with targetFilter
         default: return { nextState: prev };
     }
 
