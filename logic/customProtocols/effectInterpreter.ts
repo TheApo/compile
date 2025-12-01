@@ -229,11 +229,14 @@ export function executeCustomEffect(
                     cardsNeeded
                 );
 
+                // CRITICAL: Generate new unique IDs for drawn cards (same as drawForPlayer)
+                const newHandCards = drawnCards.map(c => ({ ...c, id: uuidv4() }));
+
                 let newState = {
                     ...state,
                     [actor]: {
                         ...state[actor],
-                        hand: [...state[actor].hand, ...drawnCards],
+                        hand: [...state[actor].hand, ...newHandCards],
                         deck: remainingDeck,
                         discard: newDiscard
                     }

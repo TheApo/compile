@@ -913,6 +913,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const { effectDef, sourceCardId } = action as any;
             const effectAction = effectDef?.params?.action;
 
+            // For 'give' actions (Love-1 End): ALWAYS skip
+            // Giving a card to opponent is terrible - never do it
+            if (effectAction === 'give') {
+                return { type: 'resolveOptionalEffectPrompt', accept: false };
+            }
+
             // For 'flip' actions on own cards: check if flipping improves or maintains value
             if (effectAction === 'flip' && sourceCardId) {
                 const cardInfo = findCardOnBoard(state, sourceCardId);

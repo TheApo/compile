@@ -581,8 +581,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // =========================================================================
         // PROMPTS - GENERIC
         // =========================================================================
-        case 'prompt_optional_effect':
+        case 'prompt_optional_effect': {
+            // For 'give' actions (Love-1 End): ALWAYS skip
+            // Giving a card to opponent is terrible - never do it
+            const effectAction = (action as any).effectDef?.params?.action;
+            if (effectAction === 'give') {
+                return { type: 'resolveOptionalEffectPrompt', accept: false };
+            }
             return { type: 'resolveOptionalEffectPrompt', accept: true };
+        }
 
         case 'prompt_optional_discard_custom':
             return { type: 'resolveOptionalDiscardCustomPrompt', accept: false };
