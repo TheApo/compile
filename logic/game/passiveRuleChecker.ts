@@ -183,8 +183,22 @@ export function canPlayCard(
         return appliesToLane && appliesToPlayer;
     });
 
+    // CRITICAL: Check if there's a 'require_non_matching_protocol' rule (Anarchy-1)
+    // If active, the BASE RULE is INVERTED - non-matching is required, matching is blocked
+    const hasNonMatchingRule = rules.some(({ rule, cardOwner, laneIndex: ruleLaneIndex }) => {
+        if (rule.type !== 'require_non_matching_protocol') return false;
+        const appliesToLane = rule.scope === 'global' || ruleLaneIndex === laneIndex;
+        const appliesToPlayer =
+            rule.target === 'all' ||
+            (rule.target === 'self' && cardOwner === player) ||
+            (rule.target === 'opponent' && cardOwner === opponent);
+        return appliesToLane && appliesToPlayer;
+    });
+
     // BASE RULE: Face-up play requires matching protocol (unless bypassed by passive rule)
-    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule) {
+    // EXCEPTION: If require_non_matching_protocol is active, the rule is INVERTED
+    // (non-matching is required, which was already checked above in the switch)
+    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule) {
         return { allowed: false, reason: `Face-up play requires matching protocol` };
     }
 

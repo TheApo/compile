@@ -964,6 +964,20 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const { sourceCardId, actor } = prev.actionRequired;
             const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
             const conditionalType = (prev.actionRequired as any)?.conditionalType;
+            const targetFilter = (prev.actionRequired as any)?.targetFilter;
+
+            // CRITICAL: Validate that target card is uncovered (unless targetFilter explicitly allows covered)
+            const targetCardInfo = findCardOnBoard(prev, targetCardId);
+            if (targetCardInfo) {
+                const lane = prev[targetCardInfo.owner].lanes[targetCardInfo.laneIndex];
+                const isUncovered = lane[lane.length - 1]?.id === targetCardId;
+                const allowsCovered = targetFilter?.position === 'covered' || targetFilter?.position === 'any';
+
+                if (!isUncovered && !allowsCovered) {
+                    console.error(`[cardResolver] Invalid return target: ${targetCardInfo.card.protocol}-${targetCardInfo.card.value} is covered`);
+                    return { nextState: prev, requiresTurnEnd: false };
+                }
+            }
 
             const result = internalReturnCard(prev, targetCardId);
             newState = result.newState;

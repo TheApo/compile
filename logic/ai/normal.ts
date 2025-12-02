@@ -753,7 +753,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_return':
         case 'select_opponent_card_to_return': {
             // Return card - use targetFilter for full flexibility
-            const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
+            // CRITICAL: Default to uncovered only - return effects target uncovered cards unless specified otherwise
+            const rawTargetFilter = ((action as any).targetFilter || {}) as TargetFilter;
+            const targetFilter: TargetFilter = {
+                position: 'uncovered', // Default: only uncovered cards can be returned
+                ...rawTargetFilter
+            };
             const targetOwner = (action as any).targetOwner || targetFilter.owner;
             const sourceCardId = action.sourceCardId;
             const cardOwner = action.actor;

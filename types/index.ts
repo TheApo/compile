@@ -469,6 +469,8 @@ export interface GameState {
     _logIndentLevel?: number;
     _currentEffectSource?: string;
     _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile';
+    /** Clean effect chain management - replaces scattered followUpEffect/outerSourceCardId/etc. */
+    effectChain?: import('../logic/effectChain').EffectChain;
     stats: {
         player: PlayerStats,
         opponent: PlayerStats,

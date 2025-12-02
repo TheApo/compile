@@ -267,24 +267,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             const sourceCard = findCardOnBoard(finalState, sourceCardId);
                             // CRITICAL: Only queue Anarchy-0 draw if it's still uncovered AND face-up
                             // If the shift covered Anarchy-0, its effect should be cancelled
-                            if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0 && sourceCard.card.isFaceUp) {
-                                const anarchyLane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                                const isStillUncovered = anarchyLane && anarchyLane.length > 0 && anarchyLane[anarchyLane.length - 1].id === sourceCardId;
-
-                                if (isStillUncovered) {
-                                    const anarchyDrawAction: ActionRequired = {
-                                        type: 'anarchy_0_conditional_draw',
-                                        sourceCardId: sourceCardId,
-                                        actor: actor,
-                                    };
-                                    finalState.queuedActions = [
-                                        ...(finalState.queuedActions || []),
-                                        anarchyDrawAction
-                                    ];
-                                } else {
-                                    finalState = log(finalState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
-                                }
-                            }
+                            // REMOVED: Legacy anarchy_0_conditional_draw - Anarchy-0 now uses custom protocol system
+                            // The draw effect is handled via _pendingCustomEffects below
 
                             // NEW: Queue pending effects from custom cards if shift created an interrupt
                             const pendingEffects = (finalState as any)._pendingCustomEffects;
@@ -450,26 +434,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         ];
                     }
 
-                    const sourceCard = findCardOnBoard(newState, sourceCardId);
-                    // CRITICAL: Only queue Anarchy-0 draw if it's still uncovered AND face-up
-                    if (sourceCard && sourceCard.card.protocol === 'Anarchy' && sourceCard.card.value === 0 && sourceCard.card.isFaceUp) {
-                        const anarchyLane = newState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                        const isStillUncovered = anarchyLane && anarchyLane.length > 0 && anarchyLane[anarchyLane.length - 1].id === sourceCardId;
-
-                        if (isStillUncovered) {
-                            const anarchyDrawAction: ActionRequired = {
-                                type: 'anarchy_0_conditional_draw',
-                                sourceCardId: sourceCardId,
-                                actor: actor,
-                            };
-                            newState.queuedActions = [
-                                ...(newState.queuedActions || []),
-                                anarchyDrawAction
-                            ];
-                        } else {
-                            newState = log(newState, actor, `Anarchy-0's conditional draw is cancelled because the card is now covered.`);
-                        }
-                    }
+                    // NOTE: Anarchy-0's conditional draw is now handled via custom protocol system
+                    // (_pendingCustomEffects and execute_remaining_custom_effects)
+                    // The legacy anarchy_0_conditional_draw code has been removed to avoid duplicate queueing
                     // NOTE: Do NOT decrease log indent here - the original effect is not complete yet
                     // The indent will be decreased when the queued action executes
                 } else {

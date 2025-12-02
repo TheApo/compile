@@ -452,12 +452,16 @@ export function executeCustomEffect(
             console.log('[Custom Effect] Storing follow-up effect for later execution:', effectDef.conditional.thenEffect.id, 'to actionRequired type:', newState.actionRequired.type);
 
             // CRITICAL: Store conditional type so we know if it's if_executed or then
+            // CRITICAL FIX: Also store the OUTER source card info, in case the actionRequired
+            // was created by a DIFFERENT card (e.g., Spirit-3's after_draw interrupted Fire-0's on_cover)
             const stateWithFollowUp = {
                 ...newState,
                 actionRequired: {
                     ...newState.actionRequired,
                     followUpEffect: effectDef.conditional.thenEffect,
                     conditionalType: effectDef.conditional.type, // NEW: Store conditional type (if_executed or then)
+                    outerSourceCardId: card.id, // The card that has the thenEffect (e.g., Fire-0)
+                    outerLaneIndex: laneIndex,  // Lane of the outer source card
                 } as any
             };
             result = { newState: stateWithFollowUp };

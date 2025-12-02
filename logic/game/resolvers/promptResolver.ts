@@ -263,6 +263,52 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             return followUpResult.newState;
         }
 
+        // CRITICAL FIX: Check if there's an OUTER followUpEffect (from an interrupted effect like Fire-0's on_cover)
+        // This needs to be executed even if the optional effect (Spirit-3's shift) has no conditional
+        const outerFollowUpEffect = (prevState.actionRequired as any)?.followUpEffect;
+        const outerFollowUpSourceCardId = (prevState.actionRequired as any)?.outerSourceCardId;
+        const outerFollowUpLaneIndex = (prevState.actionRequired as any)?.outerLaneIndex;
+
+        if (outerFollowUpEffect && outerFollowUpSourceCardId) {
+            let finalState = result.newState;
+
+            // If the effect created an actionRequired (like lane selection for shift),
+            // attach the outer followUpEffect to it for execution after user input
+            if (finalState.actionRequired) {
+                console.log('[Optional Effect Accept] Attaching outer followUpEffect to new actionRequired');
+                return {
+                    ...finalState,
+                    actionRequired: {
+                        ...finalState.actionRequired,
+                        followUpEffect: outerFollowUpEffect,
+                        outerSourceCardId: outerFollowUpSourceCardId,
+                        outerLaneIndex: outerFollowUpLaneIndex,
+                    } as any
+                };
+            }
+
+            // Effect completed immediately (no actionRequired), execute outer followUpEffect now
+            console.log('[Optional Effect Accept] Executing outer followUpEffect immediately:', outerFollowUpEffect.id);
+            const outerSourceCard = [...finalState.player.lanes.flat(), ...finalState.opponent.lanes.flat()]
+                .find(c => c.id === outerFollowUpSourceCardId);
+
+            if (outerSourceCard) {
+                const outerSourceOwner = finalState.player.lanes.flat().some(c => c.id === outerFollowUpSourceCardId)
+                    ? 'player' as const
+                    : 'opponent' as const;
+
+                const outerContext = {
+                    cardOwner: outerSourceOwner,
+                    opponent: outerSourceOwner === 'player' ? 'opponent' as const : 'player' as const,
+                    currentTurn: finalState.turn,
+                    actor: outerSourceOwner,
+                };
+
+                const followUpResult = executeCustomEffect(outerSourceCard, outerFollowUpLaneIndex || 0, finalState, outerContext, outerFollowUpEffect);
+                return followUpResult.newState;
+            }
+        }
+
         return result.newState;
     } else {
         // User declines the optional effect
@@ -272,6 +318,48 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         // CRITICAL: If there's an if_executed conditional, it should NOT execute
         // The effect was declined, so followUp is skipped
         newState.actionRequired = null;
+
+        // CRITICAL FIX: Check if there was a followUpEffect from an OUTER effect (e.g., Fire-0's on_cover)
+        // This happens when Spirit-3's after_draw interrupted Fire-0's "draw, then flip" sequence.
+        // The followUpEffect was attached to Spirit-3's prompt, and now we need to execute it.
+        const outerFollowUpEffect = (prevState.actionRequired as any)?.followUpEffect;
+        const outerFollowUpSourceCardId = (prevState.actionRequired as any)?.outerSourceCardId;
+        const outerFollowUpLaneIndex = (prevState.actionRequired as any)?.outerLaneIndex;
+
+        if (outerFollowUpEffect && outerFollowUpSourceCardId) {
+            const outerSourceCard = [...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()]
+                .find(c => c.id === outerFollowUpSourceCardId);
+
+            if (outerSourceCard) {
+                // Find the lane index of the outer source card
+                let resolvedLaneIndex = outerFollowUpLaneIndex;
+                if (resolvedLaneIndex === undefined) {
+                    for (const player of ['player', 'opponent'] as const) {
+                        for (let i = 0; i < newState[player].lanes.length; i++) {
+                            if (newState[player].lanes[i].some(c => c.id === outerFollowUpSourceCardId)) {
+                                resolvedLaneIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                const outerSourceOwner = newState.player.lanes.flat().some(c => c.id === outerFollowUpSourceCardId)
+                    ? 'player' as const
+                    : 'opponent' as const;
+
+                const outerContext = {
+                    cardOwner: outerSourceOwner,
+                    opponent: outerSourceOwner === 'player' ? 'opponent' as const : 'player' as const,
+                    currentTurn: newState.turn,
+                    actor: outerSourceOwner,
+                };
+
+                const followUpResult = executeCustomEffect(outerSourceCard, resolvedLaneIndex || 0, newState, outerContext, outerFollowUpEffect);
+                return followUpResult.newState;
+            }
+        }
+
         return newState;
     }
 };
