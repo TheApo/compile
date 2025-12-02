@@ -54,25 +54,84 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
         let currentState = stateWithContext;
 
+        console.log(`[DEBUG executeOnPlayEffect] Starting effects for ${cardName}, middleEffects count: ${customCard.customEffects.middleEffects.length}`);
+        console.log(`[DEBUG executeOnPlayEffect] Effects order:`, customCard.customEffects.middleEffects.map((e: any, i: number) => `${i}: ${e.id} (${e.params?.action})`));
+        console.log(`[DEBUG executeOnPlayEffect] lastCustomEffectTargetCardId: ${currentState.lastCustomEffectTargetCardId}`);
+        console.log(`[DEBUG executeOnPlayEffect] _pendingCustomEffects: ${JSON.stringify((currentState as any)._pendingCustomEffects?.effects?.map((e: any) => e.id))}`);
+
+        // CRITICAL: If there are pending effects from a DIFFERENT card (e.g., Darkness-1's shift effect
+        // still pending while Spirit-2 is being uncovered), we must queue them to execute AFTER this card
+        // finishes. We must do this BEFORE clearing lastCustomEffectTargetCardId!
+        const existingPendingEffects = (currentState as any)._pendingCustomEffects;
+        if (existingPendingEffects && existingPendingEffects.sourceCardId !== card.id) {
+            console.log(`[effectExecutor] Found pending effects from different card (${existingPendingEffects.sourceCardId}), queueing them for later`);
+            console.log(`[effectExecutor] Effects to queue:`, existingPendingEffects.effects.map((e: any) => e.id));
+
+            // CRITICAL: Preserve the lastCustomEffectTargetCardId for "Flip X. Shift THAT card" chains
+            // When Darkness-1 flips Fire-2, the shift should target Fire-2
+            // We capture this BEFORE clearing it below!
+            const savedTargetCardId = currentState.lastCustomEffectTargetCardId;
+
+            const pendingAction: any = {
+                type: 'execute_remaining_custom_effects',
+                sourceCardId: existingPendingEffects.sourceCardId,
+                laneIndex: existingPendingEffects.laneIndex,
+                effects: existingPendingEffects.effects,
+                context: existingPendingEffects.context,
+                actor: existingPendingEffects.context.cardOwner,
+                // CRITICAL: Pass the target card ID for "shift THAT card" effects
+                selectedCardFromPreviousEffect: savedTargetCardId || existingPendingEffects.selectedCardFromPreviousEffect,
+            };
+            console.log(`[effectExecutor] Queued action with selectedCardFromPreviousEffect:`, pendingAction.selectedCardFromPreviousEffect);
+
+            currentState = {
+                ...currentState,
+                queuedActions: [...(currentState.queuedActions || []), pendingAction]
+            };
+            delete (currentState as any)._pendingCustomEffects;
+        }
+
+        // CRITICAL: Clear lastCustomEffectTargetCardId when a new card starts executing its effects
+        // This prevents stale values from previous effect chains (e.g., Spirit-3 shift) from being
+        // incorrectly picked up by effects that use useCardFromPreviousEffect (e.g., Darkness-1 shift)
+        // NOTE: This must happen AFTER we've saved pending effects above!
+        if (currentState.lastCustomEffectTargetCardId) {
+            console.log(`[effectExecutor] Clearing stale lastCustomEffectTargetCardId (${currentState.lastCustomEffectTargetCardId}) for new card ${cardName}`);
+            currentState = { ...currentState, lastCustomEffectTargetCardId: null };
+        }
+
         // Execute all middle effects sequentially
         for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
             const effectDef = customCard.customEffects.middleEffects[i];
+            console.log(`[DEBUG executeOnPlayEffect] Executing effect ${i}: ${effectDef.id} (${effectDef.params?.action}) for ${cardName}`);
+
+            // CRITICAL: Store remaining effects BEFORE executing the current effect
+            // This ensures that if a reactive effect (like Spirit-3 after_draw) interrupts,
+            // the remaining effects are already saved and can be queued
+            const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
+            if (remainingEffects.length > 0) {
+                console.log(`[effectExecutor] Pre-storing ${remainingEffects.length} pending effects for ${card.protocol}-${card.value} before effect ${i + 1}`);
+                (currentState as any)._pendingCustomEffects = {
+                    sourceCardId: card.id,
+                    laneIndex,
+                    context,
+                    effects: remainingEffects
+                };
+            }
+
             const result = executeCustomEffect(card, laneIndex, currentState, context, effectDef);
             currentState = result.newState;
 
-            // If an action is required, save remaining effects and return
+            // If an action is required, the remaining effects are already stored, just return
             if (currentState.actionRequired) {
-                const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
-                if (remainingEffects.length > 0) {
-                    // CRITICAL: Store in state, not in actionRequired (which gets deleted)
-                    (currentState as any)._pendingCustomEffects = {
-                        sourceCardId: card.id,
-                        laneIndex,
-                        context,
-                        effects: remainingEffects
-                    };
-                }
+                console.log(`[effectExecutor] actionRequired after effect ${i + 1}, remaining effects already stored: ${remainingEffects.length}`);
                 return { newState: recalculateAllLaneValues(currentState) };
+            }
+
+            // Effect completed without actionRequired - clear pending effects if this was the last effect
+            // (they'll be re-stored at the start of the next iteration if there are more effects)
+            if ((currentState as any)._pendingCustomEffects) {
+                delete (currentState as any)._pendingCustomEffects;
             }
         }
 

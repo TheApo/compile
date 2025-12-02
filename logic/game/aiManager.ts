@@ -440,20 +440,9 @@ const handleRequiredAction = (
         console.log('[AI resolveOptionalEffectPrompt] accept:', aiDecision.accept, 'phase:', state.phase);
         const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action created, re-run processor
-
-        // CRITICAL FIX: For start phase, use continueTurnAfterStartPhaseAction and schedule continuation
-        if (state.phase === 'start') {
-            console.log('[AI resolveOptionalEffectPrompt] Start phase - using continueTurnAfterStartPhaseAction');
-            const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(nextState);
-            if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
-                console.log('[AI resolveOptionalEffectPrompt] Scheduling runOpponentTurn continuation');
-                setTimeout(() => {
-                    runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-                }, 500);
-            }
-            return stateAfterAction;
-        }
-        return endActionForPhase(nextState, phaseManager); // Skipped or completed
+        // Use endActionForPhase which correctly handles both start and action phases
+        // The useEffect in useGameState will trigger runOpponentTurn when needed
+        return endActionForPhase(nextState, phaseManager);
     }
 
     // NOTE: Legacy Speed-3, Psychic-4, Spirit-1, Spirit-3 prompt handlers removed

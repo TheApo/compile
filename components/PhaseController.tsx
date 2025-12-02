@@ -54,7 +54,10 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     // FIX: Safely access sourceCardId as it's not present on all action types.
     const sourceCardId = actionRequired?.sourceCardId;
     const sourceCard = sourceCardId ? findCardById(sourceCardId) : null;
-    const turnText = turn.charAt(0).toUpperCase() + turn.slice(1);
+    // FIX: When an action is required, show the actor of that action, not the current turn
+    // This fixes the UI showing "Opponent's Turn" when the player needs to act on their own card's effect
+    const displayTurn = actionRequired?.actor || turn;
+    const turnText = displayTurn.charAt(0).toUpperCase() + displayTurn.slice(1);
 
     const renderActions = () => {
         if (turn !== 'player' && (!actionRequired || actionRequired.actor !== 'player')) {
@@ -301,6 +304,27 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a lane to shift all cards to';
                 case 'select_opponent_card_to_flip':
                     return 'Action: Select an opponent\'s card to flip';
+                case 'select_card_to_flip': {
+                    // Generic flip handler - generate descriptive text from targetFilter
+                    const targetFilter = (actionRequired as any).targetFilter || {};
+                    const owner = targetFilter.owner || 'any';
+                    const faceState = targetFilter.faceState || 'any';
+                    const position = targetFilter.position || 'uncovered';
+
+                    let description = 'Action: Flip ';
+                    if (owner === 'own') description += 'one of your ';
+                    else if (owner === 'opponent') description += "an opponent's ";
+                    else description += 'a ';
+
+                    if (faceState === 'face_down') description += 'face-down ';
+                    else if (faceState === 'face_up') description += 'face-up ';
+
+                    if (position === 'covered') description += 'covered ';
+                    else if (position === 'uncovered') description += 'uncovered ';
+
+                    description += 'card';
+                    return description;
+                }
                 case 'shift_flipped_card_optional':
                     return 'Action: You may shift the card you just flipped. Select a lane or skip.';
                 case 'select_covered_card_in_line_to_flip_optional':
@@ -412,6 +436,27 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'End Phase: Return an opponent\'s card?';
                 case 'select_any_opponent_card_to_shift':
                     return 'Action: Select an opponent\'s card to shift';
+                case 'select_card_to_shift': {
+                    // Generic shift handler - generate descriptive text from targetFilter
+                    const targetFilter = (actionRequired as any).targetFilter || {};
+                    const owner = targetFilter.owner || 'any';
+                    const faceState = targetFilter.faceState || 'any';
+                    const position = targetFilter.position || 'uncovered';
+
+                    let description = 'Action: Select ';
+                    if (owner === 'own') description += 'one of your ';
+                    else if (owner === 'opponent') description += "an opponent's ";
+                    else description += 'a ';
+
+                    if (faceState === 'face_down') description += 'face-down ';
+                    else if (faceState === 'face_up') description += 'face-up ';
+
+                    if (position === 'covered') description += 'covered ';
+                    else if (position === 'uncovered') description += 'uncovered ';
+
+                    description += 'card to shift';
+                    return description;
+                }
                 case 'select_opponent_card_to_return':
                     return 'Action: Select an opponent\'s card to return';
                 case 'select_own_highest_card_to_delete_for_hate_2':

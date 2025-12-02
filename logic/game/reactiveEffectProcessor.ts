@@ -36,9 +36,11 @@ export function processReactiveEffects(
 
     // CRITICAL: Track processed triggers to prevent infinite loops and double-triggering
     // (like Speed_custom-1: after_clear_cache draws a card, which triggers another clear_cache)
-    // (like Spirit-3: after_draw shift, which should NOT re-trigger after the shift completes)
+    // NOTE: after_clear_cache should only trigger once per turn (when hand limit is checked)
     const processedClearCacheTriggerIds = (newState as any).processedClearCacheTriggerIds || [];
-    const processedAfterDrawTriggerIds = (newState as any).processedAfterDrawTriggerIds || [];
+    // NOTE: after_draw triggers are NOT tracked across different draw events!
+    // Spirit-3 should trigger on EVERY draw, just not multiple times within the same draw event.
+    // The _processingReactiveEffects flag already prevents recursive triggering within the same event.
 
     // Find all face-up custom protocol cards with matching reactive trigger
     const reactiveCards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; box: 'top' }> = [];
@@ -67,10 +69,9 @@ export function processReactiveEffects(
                                 console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
                                 return;
                             }
-                            if (triggerType === 'after_draw' && processedAfterDrawTriggerIds.includes(card.id)) {
-                                console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_draw - already triggered this turn`);
-                                return;
-                            }
+                            // NOTE: after_draw triggers are NOT skipped based on previous triggers!
+                            // Spirit-3 should trigger on EVERY draw event.
+                            // The _processingReactiveEffects flag prevents recursive triggering within the same event.
                             reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
                         }
                     }
@@ -198,11 +199,8 @@ export function processReactiveEffects(
             (newState as any).processedClearCacheTriggerIds = [...currentProcessedIds, card.id];
             console.log(`[Reactive Effects] Marked ${cardName} as processed for after_clear_cache`);
         }
-        if (triggerType === 'after_draw') {
-            const currentProcessedIds = (newState as any).processedAfterDrawTriggerIds || [];
-            (newState as any).processedAfterDrawTriggerIds = [...currentProcessedIds, card.id];
-            console.log(`[Reactive Effects] Marked ${cardName} as processed for after_draw`);
-        }
+        // NOTE: after_draw triggers are NOT marked as processed!
+        // Spirit-3 should be able to trigger on every separate draw event.
 
         // Execute all filtered effects for this card
         for (const effectDef of filteredEffects) {
@@ -212,6 +210,27 @@ export function processReactiveEffects(
             // If an action is required, stop and return
             if (newState.actionRequired) {
                 console.log(`[Reactive Effects] Action required after ${cardName} reactive effect`);
+
+                // CRITICAL: If there are pending effects from the original card (e.g., Darkness-0 shift
+                // being interrupted by Spirit-3 after_draw), queue them to execute after the reactive prompt
+                const pendingEffects = (newState as any)._pendingCustomEffects;
+                if (pendingEffects && pendingEffects.effects.length > 0) {
+                    console.log(`[Reactive Effects] Queueing ${pendingEffects.effects.length} pending effects from original card`);
+                    const pendingAction: any = {
+                        type: 'execute_remaining_custom_effects',
+                        sourceCardId: pendingEffects.sourceCardId,
+                        laneIndex: pendingEffects.laneIndex,
+                        effects: pendingEffects.effects,
+                        context: pendingEffects.context,
+                        actor: pendingEffects.context.cardOwner,
+                    };
+                    newState.queuedActions = [
+                        pendingAction,
+                        ...(newState.queuedActions || [])
+                    ];
+                    delete (newState as any)._pendingCustomEffects;
+                }
+
                 // Clear recursion flag before returning
                 delete (newState as any)._processingReactiveEffects;
                 return { newState };

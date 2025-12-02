@@ -309,6 +309,7 @@ export const processQueuedActions = (state: GameState): GameState => {
         // Internal queue action type for executing remaining custom effects
         if ((nextAction as any).type === 'execute_remaining_custom_effects') {
             const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
+            console.log(`[DEBUG execute_remaining_custom_effects] Processing queue action with ${effects?.length} effects:`, effects?.map((e: any) => e.id));
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
 
             // CRITICAL: Check if source card still exists and is active
@@ -334,11 +335,15 @@ export const processQueuedActions = (state: GameState): GameState => {
             // If we have a selected card from previous effect (e.g., "Flip 1 card. Shift THAT card"), store it
             if (selectedCardFromPreviousEffect) {
                 (mutableState as any)._selectedCardFromPreviousEffect = selectedCardFromPreviousEffect;
+                // CRITICAL: Also set lastCustomEffectTargetCardId so that useCardFromPreviousEffect works
+                // This is needed because the shift effect checks lastCustomEffectTargetCardId first
+                mutableState.lastCustomEffectTargetCardId = selectedCardFromPreviousEffect;
             }
 
             // Execute remaining effects sequentially
             for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
                 const effectDef = effects[effectIndex];
+                console.log(`[DEBUG execute_remaining_custom_effects] Executing effect ${effectIndex}: ${effectDef.id} (${effectDef.params?.action})`);
                 const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
                 mutableState = result.newState;
 

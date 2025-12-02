@@ -53,6 +53,22 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
     // Rule: By default, only uncovered cards are targetable.
     const isUncovered = card.id === lane[lane.length - 1]?.id;
 
+    // SPECIAL: During lane selection for shift, highlight the card being shifted (red)
+    if (actionRequired.type === 'select_lane_for_shift') {
+        const cardToShiftId = (actionRequired as any).cardToShiftId;
+        if (cardToShiftId && card.id === cardToShiftId) {
+            return true; // Highlight the card being shifted
+        }
+        return false; // Don't highlight other cards during lane selection
+    }
+    if (actionRequired.type === 'shift_flipped_card_optional') {
+        const shiftCardId = (actionRequired as any).cardId;
+        if (shiftCardId && card.id === shiftCardId) {
+            return true; // Highlight the card being shifted
+        }
+        return false; // Don't highlight other cards during lane selection
+    }
+
     switch (actionRequired.type) {
         case 'select_opponent_face_up_card_to_flip': {
             // Frost-1: Only face-up cards can be flipped (to face-down) - already face-up so OK
@@ -366,7 +382,6 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const position = targetFilter.position || 'uncovered';
             const cardIndex = lane.findIndex(c => c.id === card.id);
             const isCovered = cardIndex < lane.length - 1;
-            console.log(`[Targeting DEBUG] select_card_to_shift: card=${card.protocol}-${card.value}, position filter=${position}, cardIndex=${cardIndex}, laneLength=${lane.length}, isCovered=${isCovered}, isUncovered=${isUncovered}`);
             if (position === 'uncovered' && !isUncovered) return false;
             if (position === 'covered' && !isCovered) return false;
 

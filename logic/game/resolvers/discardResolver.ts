@@ -162,7 +162,9 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     } else {
         newState = setLogSource(newState, undefined);
         newState = setLogPhase(newState, undefined);
-        newState = { ...newState, _logIndentLevel: 0 }; // Reset indent for hand limit discards
+        // NOTE: Do NOT reset indent for hand limit discards!
+        // The indent was already set by phaseManager when "Check Cache: ..." was logged
+        // and individual discard messages should remain indented
     }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';

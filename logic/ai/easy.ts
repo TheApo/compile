@@ -202,6 +202,28 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
     type ScoredPlay = { cardId: string; laneIndex: number; isFaceUp: boolean; score: number };
     const scoredPlays: ScoredPlay[] = [];
 
+    // Count total cards on board (for early game detection)
+    const totalCardsOnBoard = player.lanes.flat().length + opponent.lanes.flat().length;
+    const isEarlyGame = totalCardsOnBoard <= 3;
+
+    // Check if opponent (player) has any targets for disruption effects
+    const playerHasCards = player.lanes.flat().length > 0;
+
+    // Helper: Check if a card's effect has valid targets
+    const effectHasValidTargets = (card: PlayedCard, laneIndex: number): boolean => {
+        // Cards with flip/delete/shift/return effects need targets
+        const needsTargets = card.keywords['flip'] || card.keywords['delete'] ||
+                            card.keywords['shift'] || card.keywords['return'];
+        if (!needsTargets) return true;
+
+        // Check if there are any other cards on board
+        const otherCardsExist = playerHasCards ||
+            opponent.lanes.some((lane, idx) => idx !== laneIndex && lane.length > 0) ||
+            (opponent.lanes[laneIndex].length > 0);
+
+        return otherCardsExist;
+    };
+
     for (const card of playableHand) {
         for (let laneIndex = 0; laneIndex < 3; laneIndex++) {
             if (opponent.compiled[laneIndex]) continue;
@@ -216,9 +238,25 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
                 if (valueAfter >= 10 && valueAfter > playerValue) {
                     score = 1000 + valueAfter;
                 } else if (valueAfter < 10) {
-                    score = 100 + valueAfter;
+                    // PRIMARY GOAL: Build lane value toward compile
+                    // Higher value cards contribute more
+                    score = 100 + valueAfter + (card.value * 5);
                 } else {
                     score = 50 + card.value;
+                }
+
+                // PENALTY: Low-value cards (0-2) in early game without targets
+                if (isEarlyGame && card.value <= 2) {
+                    if (!effectHasValidTargets(card, laneIndex)) {
+                        score -= 200; // Heavy penalty - effect is useless
+                    } else {
+                        score -= 50; // Still not great, low value
+                    }
+                }
+
+                // PENALTY: Draw effect that would cause discard (hand >= 5)
+                if (card.keywords['draw'] && opponent.hand.length >= 5) {
+                    score -= 30;
                 }
 
                 scoredPlays.push({ cardId: card.id, laneIndex, isFaceUp: true, score });

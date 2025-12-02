@@ -66,16 +66,29 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
         const hadCardBelow = lane && lane.length > 1;
 
+        // CRITICAL: Capture pending effects BEFORE the callback runs
+        // The callback receives a fresh state after animation, so we need to preserve _pendingCustomEffects
+        const savedPendingEffects = (state as any)._pendingCustomEffects;
+
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
+            // CRITICAL: Restore pending effects from before the animation
+            // These are the remaining effects from Darkness-1 (the shift effect)
+            let workingState = { ...s };
+            if (savedPendingEffects) {
+                (workingState as any)._pendingCustomEffects = savedPendingEffects;
+                // Also set lastCustomEffectTargetCardId to the flipped card (Metal-6)
+                // This allows the shift effect to detect that the card no longer exists
+                workingState.lastCustomEffectTargetCardId = targetCardId;
+            }
+
             // Trigger reactive effects after delete (Hate-3 custom protocol)
-            const reactiveResult = processReactiveEffects(s, 'after_delete', { player: s.turn });
+            const reactiveResult = processReactiveEffects(workingState, 'after_delete', { player: workingState.turn });
             let stateAfterTriggers = reactiveResult.newState;
 
             // CRITICAL: Handle uncover effect if Metal-6 was top card and there was a card below
             if (wasTopCard && hadCardBelow) {
                 const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardOwner, laneIndex);
                 stateAfterTriggers = uncoverResult.newState;
-                console.log('[Metal-6 Delete] Uncover effect triggered. actionRequired:', stateAfterTriggers.actionRequired?.type || 'null');
             }
 
             // NOTE: Legacy Light-0 and Water-0 specific handlers removed
@@ -90,13 +103,21 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             // CRITICAL: If the input state already has actionRequired or queuedActions,
             // it means processQueuedActions already ran and set up the next action.
             // We should NOT override it by calling queuePendingCustomEffects again.
-            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) {
-                // Preserve actionRequired/queuedActions from input state
+            if (workingState.actionRequired || (workingState.queuedActions && workingState.queuedActions.length > 0)) {
+                // Preserve actionRequired/queuedActions from working state
                 return {
                     ...stateAfterTriggers,
-                    actionRequired: s.actionRequired,
-                    queuedActions: s.queuedActions
+                    actionRequired: workingState.actionRequired,
+                    queuedActions: workingState.queuedActions
                 };
+            }
+
+            // CRITICAL: Restore pending effects if they were lost during processing
+            // This happens because processReactiveEffects and handleUncoverEffect create new state objects
+            if (savedPendingEffects && !(stateAfterTriggers as any)._pendingCustomEffects) {
+                (stateAfterTriggers as any)._pendingCustomEffects = savedPendingEffects;
+                // Also restore the target card ID for "shift THAT card" effects
+                stateAfterTriggers.lastCustomEffectTargetCardId = targetCardId;
             }
 
             stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
@@ -105,6 +126,32 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
                 const newQueue = [...stateAfterTriggers.queuedActions];
                 const nextAction = newQueue.shift();
+
+                // CRITICAL FIX: execute_remaining_custom_effects is an INTERNAL action type
+                // It must be processed by processQueuedActions, NOT set as actionRequired!
+                // Setting it as actionRequired causes a softlock because there's no UI for it.
+                if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                    // Put the action back in queue and process it properly
+                    const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...newQueue] };
+                    const processedState = phaseManager.processQueuedActions(stateWithQueue);
+
+                    // If processing created an actionRequired (like a shift prompt), return it
+                    if (processedState.actionRequired) {
+                        return processedState;
+                    }
+
+                    // If no actionRequired, check for more queued actions
+                    if (processedState.queuedActions && processedState.queuedActions.length > 0) {
+                        const nextQueue = [...processedState.queuedActions];
+                        const nextNextAction = nextQueue.shift();
+                        return { ...processedState, actionRequired: nextNextAction, queuedActions: nextQueue };
+                    }
+
+                    // Nothing left to do - end turn
+                    return endTurnCb(processedState);
+                }
+
+                // For other action types, set as actionRequired normally
                 return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue };
             }
             return endTurnCb(stateAfterTriggers);
@@ -777,6 +824,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             const queueCopy = [...stateAfterTriggers.queuedActions];
                             const nextAction = queueCopy.shift();
 
+                            // CRITICAL FIX: execute_remaining_custom_effects must be processed by processQueuedActions
+                            if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                                const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...queueCopy] };
+                                const processedState = phaseManager.processQueuedActions(stateWithQueue);
+                                if (processedState.actionRequired) {
+                                    return processedState;
+                                }
+                                return stateAfterTriggers; // Return without ending turn
+                            }
+
                             // Return state with next queued action as actionRequired
                             return {
                                 ...stateAfterTriggers,
@@ -1159,11 +1216,23 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     // Continue processing remaining queue
                     if (newQueue.length > 0) {
                         const nextNextAction = newQueue.shift();
+                        // CRITICAL FIX: execute_remaining_custom_effects must be processed properly
+                        if ((nextNextAction as any)?.type === 'execute_remaining_custom_effects') {
+                            const stateWithQueue = { ...loggedState, queuedActions: [nextNextAction, ...newQueue] };
+                            return { nextState: stateWithQueue, requiresTurnEnd: false };
+                        }
                         return { nextState: { ...loggedState, actionRequired: nextNextAction, queuedActions: newQueue }, requiresTurnEnd: false };
                     } else {
                         return { nextState: { ...loggedState, actionRequired: null, queuedActions: [] }, requiresTurnEnd: true };
                     }
                 }
+            }
+
+            // CRITICAL FIX: execute_remaining_custom_effects is an internal action
+            // It must be processed by processQueuedActions, not set as actionRequired
+            if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                const stateWithQueue = { ...newState, queuedActions: [nextAction, ...newQueue] };
+                return { nextState: stateWithQueue, requiresTurnEnd: false };
             }
 
             return { nextState: { ...newState, actionRequired: nextAction, queuedActions: newQueue }, requiresTurnEnd: false };

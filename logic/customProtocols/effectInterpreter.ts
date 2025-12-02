@@ -138,20 +138,49 @@ export function executeCustomEffect(
             }
 
             case 'shift': {
-                canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
-                    // Check excludeSelf
-                    if (targetFilter.excludeSelf && c.id === card.id) return false;
-                    // Check owner filter
-                    if (targetFilter.owner === 'own' && owner !== actor) return false;
-                    if (targetFilter.owner === 'opponent' && owner === actor) return false;
-                    // Check position filter (default: uncovered)
-                    const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                // CRITICAL: If useCardFromPreviousEffect is true, check if the target card still exists
+                // This handles "Flip 1 card. You may shift THAT card" where the flipped card (e.g., Metal-6)
+                // might have deleted itself
+                if (effectDef.useCardFromPreviousEffect) {
+                    const targetCardId = state.lastCustomEffectTargetCardId || (state as any)._selectedCardFromPreviousEffect;
+                    if (targetCardId) {
+                        const targetCardInfo = findCardOnBoard(state, targetCardId);
+                        canExecute = !!targetCardInfo;
+                        if (!canExecute) skipReason = 'Target card no longer exists';
+                    } else {
+                        // No target card stored - effect cannot be executed
+                        canExecute = false;
+                        skipReason = 'No target card from previous effect';
+                    }
+                } else {
+                    // CRITICAL: Spirit-3 special case - "shift this card, even if covered"
+                    // When position === 'any' AND owner === 'own' AND !excludeSelf,
+                    // the card is shifting ITSELF, not selecting other targets
                     const posFilter = targetFilter.position || 'uncovered';
-                    if (posFilter === 'uncovered' && !isUncovered) return false;
-                    if (posFilter === 'covered' && isUncovered) return false;
-                    return true;
-                });
-                if (!canExecute) skipReason = 'No valid cards to shift';
+                    const isShiftSelfEvenIfCovered = posFilter === 'any' &&
+                                                     targetFilter.owner === 'own' &&
+                                                     !targetFilter.excludeSelf;
+
+                    if (isShiftSelfEvenIfCovered) {
+                        // Spirit-3: Always can shift itself (it's face-up, that's the only requirement)
+                        canExecute = true;
+                    } else {
+                        canExecute = hasValidBoardTargets((c, owner, laneIdx, cardIdx) => {
+                            // Check excludeSelf
+                            if (targetFilter.excludeSelf && c.id === card.id) return false;
+                            // Check owner filter
+                            if (targetFilter.owner === 'own' && owner !== actor) return false;
+                            if (targetFilter.owner === 'opponent' && owner === actor) return false;
+                            // Check position filter (default: uncovered)
+                            const isUncovered = cardIdx === state[owner].lanes[laneIdx].length - 1;
+                            if (posFilter === 'uncovered' && !isUncovered) return false;
+                            if (posFilter === 'covered' && isUncovered) return false;
+                            // position === 'any' allows both covered and uncovered
+                            return true;
+                        });
+                        if (!canExecute) skipReason = 'No valid cards to shift';
+                    }
+                }
                 break;
             }
 
@@ -366,7 +395,11 @@ export function executeCustomEffect(
             break;
 
         case 'shift':
-            result = executeShiftEffect(card, laneIndex, state, context, params);
+            // CRITICAL: Pass useCardFromPreviousEffect from effectDef (it's not in params!)
+            result = executeShiftEffect(card, laneIndex, state, context, {
+                ...params,
+                useCardFromPreviousEffect: effectDef.useCardFromPreviousEffect
+            });
             break;
 
         case 'return':
@@ -1714,9 +1747,14 @@ function executeShiftEffect(
     const { cardOwner } = context;
     let newState = { ...state };
 
+    console.log(`[DEBUG executeShiftEffect] Called for ${card.protocol}-${card.value}`);
+    console.log(`[DEBUG executeShiftEffect] params.useCardFromPreviousEffect: ${params.useCardFromPreviousEffect}`);
+    console.log(`[DEBUG executeShiftEffect] state.lastCustomEffectTargetCardId: ${state.lastCustomEffectTargetCardId}`);
+
     // NEW: Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
     if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
+        console.log(`[DEBUG executeShiftEffect] TAKING lastCustomEffectTargetCardId PATH!`);
         const targetCardId = state.lastCustomEffectTargetCardId;
         const targetCardInfo = findCardOnBoard(state, targetCardId);
 
@@ -1776,11 +1814,21 @@ function executeShiftEffect(
     }
 
     // NEW: If using card from previous effect (e.g., "Flip 1 card. Shift THAT card"), use it directly
+    // CRITICAL: Only use _selectedCardFromPreviousEffect if this effect explicitly requests it
+    // Otherwise, clear it to avoid interference from previous effects
     const selectedCardId = (state as any)._selectedCardFromPreviousEffect;
 
-    if (selectedCardId) {
-        // Clear the stored card ID
+    // Always clear the stored card ID to prevent stale state from affecting subsequent effects
+    if ((newState as any)._selectedCardFromPreviousEffect) {
         delete (newState as any)._selectedCardFromPreviousEffect;
+    }
+
+    // Only use the selected card if this effect explicitly uses it (via params.useCardFromPreviousEffect)
+    // This block handles effects like Darkness-1: "Flip 1 card. Shift THAT card."
+    // where the shift effect has useCardFromPreviousEffect: true
+    // Note: The earlier block (line ~1719) handles useCardFromPreviousEffect with lastCustomEffectTargetCardId
+    // This block is a fallback using _selectedCardFromPreviousEffect (deprecated pattern)
+    if (selectedCardId && params.useCardFromPreviousEffect) {
 
         // Check if there's a fixed destination restriction (Gravity-2: "to this line")
         const destinationRestriction = params.destinationRestriction;

@@ -605,7 +605,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 <h2 onClick={handleMainframeClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Click 5 times to toggle debug mode">Mainframe</h2>
                 <GameInfoPanel
                     gameState={gameState}
-                    turn={gameState.turn}
+                    turn={gameState.actionRequired?.actor || gameState.turn}
                     animationState={gameState.animationState}
                     difficulty={difficulty}
                     onPlayerClick={() => setDebugModalPlayer('player')}

@@ -365,23 +365,34 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         }
 
         if (result.newState.actionRequired) {
-            // CRITICAL FIX: Queue pending custom effects before handling interrupts
-            result.newState = queuePendingCustomEffects(result.newState);
-
             const newActionActor = result.newState.actionRequired.actor;
             // If an interrupt is already in progress...
             if (state._interruptedTurn) {
                 // ...and the new action is for the ORIGINAL turn player...
                 if (newActionActor === state._interruptedTurn) {
-                    // ...queue the action instead of creating a nested interrupt.
+                    // CRITICAL FIX: When queueing the actionRequired, we need to:
+                    // 1. First queue the actionRequired (e.g., flip)
+                    // 2. THEN queue the pending effects (e.g., shift)
+                    // This ensures the flip happens before the shift!
+                    const currentAction = result.newState.actionRequired;
+                    result.newState.actionRequired = null;
+
+                    // Queue the current action FIRST
                     result.newState.queuedActions = [
                         ...(result.newState.queuedActions || []),
-                        result.newState.actionRequired
+                        currentAction
                     ];
-                    result.newState.actionRequired = null;
+
+                    // THEN queue pending custom effects (they come AFTER the current action)
+                    result.newState = queuePendingCustomEffects(result.newState);
+
                     return result;
                 }
             }
+
+            // CRITICAL FIX: Queue pending custom effects after handling interrupts
+            // (only if we didn't already queue them above)
+            result.newState = queuePendingCustomEffects(result.newState);
 
             // Standard interrupt logic if no interrupt is in progress, or if the new action
             // is for the currently interrupting player.
