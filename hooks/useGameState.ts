@@ -98,9 +98,18 @@ export const useGameState = (
 
                 setTimeout(() => {
                     setGameState(s => {
-                        // Just delete the card and recalculate values.
-                        // The uncover effect is handled by the resolver's onCompleteCallback,
-                        // which runs after this animation completes.
+                        // CRITICAL: Check if card still exists on board
+                        // Some effects (like deleteSelf in on_cover) already delete the card in the executor
+                        // In that case, we just clear the animation without trying to delete again
+                        const cardStillExists = s.player.lanes.flat().some(c => c.id === nextRequest.cardId) ||
+                                                s.opponent.lanes.flat().some(c => c.id === nextRequest.cardId);
+
+                        if (!cardStillExists) {
+                            // Card already deleted - just clear animation
+                            return { ...s, animationState: null };
+                        }
+
+                        // Card still exists - delete it now
                         let stateAfterDelete = deleteCardFromBoard(s, nextRequest.cardId);
                         stateAfterDelete = stateManager.recalculateAllLaneValues(stateAfterDelete);
 

@@ -193,6 +193,10 @@ export const advancePhase = (state: GameState): GameState => {
             nextState = setLogPhase(nextState, undefined);
             nextState = { ...nextState, _logIndentLevel: 0 };
 
+            // CRITICAL: Recalculate ALL lane values at the start of a new turn
+            // This ensures values are correct after effects like flipSelf that may not trigger recalculation
+            nextState = recalculateAllLaneValues(nextState);
+
             return {
                 ...nextState,
                 [turnPlayer]: endingPlayerState, // Apply the reset to the player whose turn just ended
@@ -302,6 +306,42 @@ export const processQueuedActions = (state: GameState): GameState => {
                               !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
                               'now covered';
                 mutableState = log(mutableState, actor, `The self-flip effect from ${cardName} was cancelled because it is ${reason}.`);
+            }
+            continue; // Action resolved (or cancelled), move to next in queue
+        }
+
+        // GENERIC: Auto-resolve execute_follow_up_effect actions (Speed-3 "If you do, flip this card")
+        // This handles conditional effects that were queued because an interrupt (uncover) occurred
+        if (nextAction.type === 'execute_follow_up_effect') {
+            const { sourceCardId, followUpEffect, actor } = nextAction as any;
+            const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+
+            // CRITICAL: Only execute if source card is still on the board, face-up AND uncovered
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
+                const lane = mutableState[sourceCardInfo.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                const laneIdx = mutableState[sourceCardInfo.owner].lanes.indexOf(lane!);
+                const context = {
+                    cardOwner: sourceCardInfo.owner,
+                    actor: actor,
+                    currentTurn: mutableState.turn,
+                    opponent: (sourceCardInfo.owner === 'player' ? 'opponent' : 'player') as Player,
+                };
+                console.log(`[execute_follow_up_effect] Executing queued followUpEffect: ${followUpEffect.id} for ${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`);
+                const result = executeCustomEffect(sourceCardInfo.card, laneIdx, mutableState, context, followUpEffect);
+                mutableState = result.newState;
+
+                // If the followUpEffect created a new actionRequired, we need to pause
+                if (mutableState.actionRequired) {
+                    mutableState = { ...mutableState, queuedActions };
+                    return mutableState;
+                }
+            } else {
+                const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+                const reason = !sourceCardInfo ? 'deleted' :
+                              !sourceCardInfo.card.isFaceUp ? 'flipped face-down' :
+                              'now covered';
+                mutableState = log(mutableState, actor, `The follow-up effect from ${cardName} was cancelled because it is ${reason}.`);
             }
             continue; // Action resolved (or cancelled), move to next in queue
         }

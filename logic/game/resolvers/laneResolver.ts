@@ -250,7 +250,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
                         // CRITICAL: If uncover created an interrupt, we need to queue the follow-up effects
                         if (uncoverCreatedInterrupt) {
-                            // Speed-3 or Anarchy-0 effects need to happen AFTER the interrupt resolves
+                            // LEGACY: Speed-3's speed_3_end effect
                             if (sourceEffect === 'speed_3_end') {
                                 const speed3CardId = prev.actionRequired.sourceCardId;
                                 const speed3FlipAction: ActionRequired = {
@@ -262,6 +262,27 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                     ...(finalState.queuedActions || []),
                                     speed3FlipAction
                                 ];
+                            }
+
+                            // NEW: Queue generic followUpEffect for custom protocols (Speed-3 "If you do, flip this card")
+                            // This ensures the followUp executes AFTER the uncover interrupt resolves
+                            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                            const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                            if (followUpEffect && sourceCardId) {
+                                const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+                                if (shouldExecute) {
+                                    console.log('[laneResolver ANIM select_lane_for_shift] Queueing followUpEffect due to uncover interrupt:', followUpEffect.id);
+                                    const queuedFollowUp = {
+                                        type: 'execute_follow_up_effect',
+                                        sourceCardId: sourceCardId,
+                                        followUpEffect: followUpEffect,
+                                        actor: actor,
+                                    };
+                                    finalState.queuedActions = [
+                                        ...(finalState.queuedActions || []),
+                                        queuedFollowUp
+                                    ];
+                                }
                             }
 
                             const sourceCard = findCardOnBoard(finalState, sourceCardId);
@@ -421,6 +442,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             } else {
                 // CRITICAL: If uncover created an interrupt, queue the follow-up effects
                 if (uncoverCreatedInterrupt) {
+                    // LEGACY: Speed-3's speed_3_end effect
                     if (sourceEffect === 'speed_3_end') {
                         const speed3CardId = prev.actionRequired.sourceCardId;
                         const speed3FlipAction: ActionRequired = {
@@ -432,6 +454,27 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             ...(newState.queuedActions || []),
                             speed3FlipAction
                         ];
+                    }
+
+                    // NEW: Queue generic followUpEffect for custom protocols (Speed-3 "If you do, flip this card")
+                    // This ensures the followUp executes AFTER the uncover interrupt resolves
+                    const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                    const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                    if (followUpEffect && sourceCardId) {
+                        const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+                        if (shouldExecute) {
+                            console.log('[laneResolver select_lane_for_shift] Queueing followUpEffect due to uncover interrupt:', followUpEffect.id);
+                            const queuedFollowUp = {
+                                type: 'execute_follow_up_effect',
+                                sourceCardId: sourceCardId,
+                                followUpEffect: followUpEffect,
+                                actor: actor,
+                            };
+                            newState.queuedActions = [
+                                ...(newState.queuedActions || []),
+                                queuedFollowUp
+                            ];
+                        }
                     }
 
                     // NOTE: Anarchy-0's conditional draw is now handled via custom protocol system
@@ -563,6 +606,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
             const actor = prev.actionRequired.actor;
 
+            console.log('[DEBUG shift_flipped_card_optional] === START ===');
+            console.log('[DEBUG shift_flipped_card_optional] actionRequired:', JSON.stringify(prev.actionRequired, null, 2));
+
             // CRITICAL: Find which player owns the card (Spirit-3 on player side, Darkness-1 on opponent side)
             let cardOwner: Player | null = null;
             for (const player of ['player', 'opponent'] as Player[]) {
@@ -578,68 +624,47 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 break;
             }
 
-            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
-            newState = shiftResult.newState;
-
-            // NEW: Extract followUpEffect for if_executed conditionals
+            // NEW: Extract followUpEffect for if_executed conditionals BEFORE shift
             const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
             const conditionalType = (prev.actionRequired as any)?.conditionalType;
             const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
 
+            console.log('[DEBUG shift_flipped_card_optional] followUpEffect:', followUpEffect ? followUpEffect.id : 'NONE');
+            console.log('[DEBUG shift_flipped_card_optional] conditionalType:', conditionalType);
+            console.log('[DEBUG shift_flipped_card_optional] sourceCardId:', sourceCardId);
+
+            const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
+            newState = shiftResult.newState;
+
+            // CRITICAL FIX: If there's a followUpEffect (e.g., Speed-3's "If you do, flip this card"),
+            // we need to queue it so it executes AFTER any uncover effects from the shift.
+            // The shift may uncover a card (like Speed-5) that triggers its own effects first.
+            if (followUpEffect && sourceCardId) {
+                const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
+                if (shouldExecute) {
+                    // Queue the followUpEffect to execute after any pending actions
+                    const queuedFollowUp = {
+                        type: 'execute_follow_up_effect',
+                        sourceCardId: sourceCardId,
+                        followUpEffect: followUpEffect,
+                        actor: actor,
+                    };
+                    newState = {
+                        ...newState,
+                        queuedActions: [...(newState.queuedActions || []), queuedFollowUp]
+                    };
+                    console.log('[shift_flipped_card_optional] Queued followUpEffect for later execution:', followUpEffect.id);
+                }
+            }
+
             if (shiftResult.animationRequests) {
-                 // FIX: Implemented `onCompleteCallback` for consistency, ensuring any post-animation logic can be handled.
                  requiresAnimation = {
                     animationRequests: shiftResult.animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        let finalState = s;
-
-                        // NEW: Handle generic followUpEffect for custom protocols
-                        if (followUpEffect && sourceCardId) {
-                            const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
-                            if (shouldExecute) {
-                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
-                                if (sourceCard && sourceCard.card.isFaceUp) {
-                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
-                                    const context = {
-                                        cardOwner: sourceCard.owner,
-                                        actor: actor,
-                                        currentTurn: finalState.turn,
-                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
-                                    };
-                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
-                                    finalState = result.newState;
-                                    if (finalState.actionRequired) {
-                                        return finalState;
-                                    }
-                                }
-                            }
-                        }
-
                         // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
-                        return endTurnCb(finalState);
+                        return endTurnCb(s);
                     }
                 };
-            } else {
-                // No animation - execute followUpEffect immediately if present
-                if (followUpEffect && sourceCardId) {
-                    const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
-                    if (shouldExecute) {
-                        const sourceCard = findCardOnBoard(newState, sourceCardId);
-                        if (sourceCard && sourceCard.card.isFaceUp) {
-                            const lane = newState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
-                            const laneIdx = newState[sourceCard.owner].lanes.indexOf(lane!);
-                            const context = {
-                                cardOwner: sourceCard.owner,
-                                actor: actor,
-                                currentTurn: newState.turn,
-                                opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
-                            };
-                            const result = executeCustomEffect(sourceCard.card, laneIdx, newState, context, followUpEffect);
-                            newState = result.newState;
-                        }
-                    }
-                }
             }
             break;
         }

@@ -267,37 +267,8 @@ function applyStaticValueModifiers(state: GameState, playerBase: number[], oppon
     // NOTE: Metal-0 hardcoded logic removed - now uses custom protocol value_modifier
     // Cross-lane effects are now handled via applyCustomValueModifiers
 
-    // Lane-specific effects
-    for (let i = 0; i < 3; i++) {
-        // Player lane modifiers
-        for (const card of state.player.lanes[i]) {
-            if (card.isFaceUp) {
-                switch (`${card.protocol}-${card.value}`) {
-                    case 'Apathy-0': { // Your total value in this line is increased by 1 for each face-down card in this line.
-                        const playerFaceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
-                        const opponentFaceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalPlayerValues[i] += (playerFaceDownCount + opponentFaceDownCount);
-                        break;
-                    }
-                    // NOTE: Darkness-2 is handled in getEffectiveCardValue, not here (to avoid double-counting)
-                }
-            }
-        }
-         // Opponent lane modifiers
-        for (const card of state.opponent.lanes[i]) {
-            if (card.isFaceUp) {
-                 switch (`${card.protocol}-${card.value}`) {
-                    case 'Apathy-0': {
-                        const playerFaceDownCount = state.player.lanes[i].filter(c => !c.isFaceUp).length;
-                        const opponentFaceDownCount = state.opponent.lanes[i].filter(c => !c.isFaceUp).length;
-                        finalOpponentValues[i] += (playerFaceDownCount + opponentFaceDownCount);
-                        break;
-                    }
-                    // NOTE: Darkness-2 is handled in getEffectiveCardValue, not here (to avoid double-counting)
-                }
-            }
-        }
-    }
+    // NOTE: Apathy-0 hardcoded logic removed - now uses custom protocol value_modifier
+    // NOTE: Darkness-2 is handled in getEffectiveCardValue, not here (to avoid double-counting)
 
     return { finalPlayerValues, finalOpponentValues };
 }
@@ -307,7 +278,7 @@ export const recalculateAllLaneValues = (state: GameState): GameState => {
     const playerBaseValues = state.player.lanes.map((lane, idx) => calculateBaseLaneValue(lane, state, idx, 'player'));
     const opponentBaseValues = state.opponent.lanes.map((lane, idx) => calculateBaseLaneValue(lane, state, idx, 'opponent'));
 
-    // Apply hardcoded modifiers (Apathy-0, Darkness-2, Metal-0)
+    // Apply hardcoded modifiers (Darkness-2 only - others moved to custom protocols)
     const staticResult = applyStaticValueModifiers(state, playerBaseValues, opponentBaseValues);
 
     // Apply custom protocol value modifiers

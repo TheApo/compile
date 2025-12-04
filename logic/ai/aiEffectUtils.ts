@@ -33,18 +33,45 @@ export function hasRequireFaceDownPlayRule(state: GameState, affectedPlayer: Pla
 }
 
 /**
- * Check if a card has a "delete self when covered" effect (like Metal-6)
+ * Check if a card has a "delete self when covered or flipped" effect (like Metal-6)
+ * These cards delete themselves when something is played on top of them.
  */
 export function hasDeleteSelfOnCoverEffect(card: PlayedCard): boolean {
     const customCard = card as any;
     if (!customCard.customEffects) return false;
 
-    const bottomEffects = customCard.customEffects.bottomEffects || [];
-    return bottomEffects.some((effect: any) => {
-        return effect.trigger === 'on_cover' &&
-            effect.params.action === 'delete' &&
-            effect.params.deleteSelf === true;
+    // Check ALL effect positions (Metal-6 uses topEffects)
+    const allEffects = [
+        ...(customCard.customEffects.topEffects || []),
+        ...(customCard.customEffects.middleEffects || []),
+        ...(customCard.customEffects.bottomEffects || [])
+    ];
+
+    return allEffects.some((effect: any) => {
+        const trigger = effect.trigger;
+        const isOnCoverTrigger = trigger === 'on_cover' || trigger === 'on_cover_or_flip';
+        return isOnCoverTrigger &&
+            effect.params?.action === 'delete' &&
+            effect.params?.deleteSelf === true;
     });
+}
+
+/**
+ * Check if the TOP card in a lane has a "delete self on cover" effect.
+ * Returns the card's value if it does, null otherwise.
+ * Used by AI to avoid wasting value by playing on top of such cards.
+ */
+export function getTopCardDeleteSelfValue(state: GameState, player: Player, laneIndex: number): number | null {
+    const lane = state[player].lanes[laneIndex];
+    if (lane.length === 0) return null;
+
+    const topCard = lane[lane.length - 1];
+    if (!topCard.isFaceUp) return null; // Can't know effect if face-down
+
+    if (hasDeleteSelfOnCoverEffect(topCard)) {
+        return topCard.value;
+    }
+    return null;
 }
 
 /**
@@ -82,7 +109,8 @@ export function hasDeleteHighestOwnCardEffect(card: PlayedCard): boolean {
     return allEffects.some((effect: any) => {
         return effect.params.action === 'delete' &&
             effect.params.targetFilter?.owner === 'own' &&
-            effect.params.targetFilter?.valueFilter === 'highest';
+            (effect.params.targetFilter?.valueFilter === 'highest' ||
+             effect.params.targetFilter?.calculation === 'highest_value');
     });
 }
 

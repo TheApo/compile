@@ -26,7 +26,8 @@ import {
     hasDeleteHighestOwnCardEffect,
     hasShiftToFromLaneEffect,
     hasShiftToNonMatchingProtocolEffect,
-    getLaneFaceDownValueBoost
+    getLaneFaceDownValueBoost,
+    getTopCardDeleteSelfValue
 } from './aiEffectUtils';
 
 type ScoredMove = {
@@ -99,9 +100,11 @@ const matchesTargetFilter = (
     targetFilter: TargetFilter,
     sourceCardId?: string
 ): boolean => {
-    // Position filter
-    if (targetFilter.position === 'uncovered' && !isTopCard) return false;
-    if (targetFilter.position === 'covered' && isTopCard) return false;
+    // Position filter - DEFAULT IS UNCOVERED if not specified!
+    // This is a game rule: effects target uncovered cards unless explicitly stated otherwise
+    const position = targetFilter.position || 'uncovered';
+    if (position === 'uncovered' && !isTopCard) return false;
+    if (position === 'covered' && isTopCard) return false;
 
     // Face state filter
     if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return false;
@@ -140,6 +143,98 @@ const getBestMove = (state: GameState): AIAction => {
     // Count cards on opponent's (player's) board for disruption targeting
     const playerCardsOnBoard = state.player.lanes.flat().length;
     const opponentHasTargets = playerCardsOnBoard > 0;
+
+    // =========================================================================
+    // LANE FOCUS STRATEGY: When 0 protocols compiled, focus on ONE lane
+    // Choose the best lane based on hand cards (which protocol can we play most?)
+    // =========================================================================
+    const ourCompiledCount = state.opponent.compiled.filter(Boolean).length;
+    let focusLaneIndex = -1; // -1 means no focus (play freely)
+
+    // ALWAYS choose a focus lane if we haven't compiled all 3 yet
+    if (ourCompiledCount < 3) {
+        // Find the best lane to focus on based on:
+        // 1. Current lane value (MOST IMPORTANT - higher = closer to compile)
+        // 2. Which protocol do we have cards for in hand?
+        // 3. Is the lane blocked by player having 10+?
+
+        const laneScores: { laneIndex: number; score: number; reason: string }[] = [];
+
+        for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
+            if (state.opponent.compiled[laneIdx]) continue; // Already compiled
+
+            const ourProtocol = state.opponent.protocols[laneIdx];
+            const playerProtocol = state.player.protocols[laneIdx];
+            const ourValue = state.opponent.laneValues[laneIdx];
+            const playerValue = state.player.laneValues[laneIdx];
+
+            // Count matching cards in hand that we CAN play face-up
+            const matchingCards = state.opponent.hand.filter(
+                c => c.protocol === ourProtocol || c.protocol === playerProtocol
+            );
+
+            // Check if player has 10+ and we CAN'T catch up with our cards
+            if (playerValue >= 10 && !state.player.compiled[laneIdx]) {
+                // Calculate max value we could add with our matching cards
+                const maxCardValue = Math.max(...matchingCards.map(c => c.value), 0);
+                const ourPotentialMax = ourValue + maxCardValue;
+
+                if (ourPotentialMax <= playerValue) {
+                    // We CAN'T block this lane - skip it!
+                    continue;
+                }
+            }
+
+            let score = 0;
+            let reason = `Lane ${laneIdx} (${ourProtocol}): value=${ourValue}`;
+
+            // MOST IMPORTANT: Current lane value - closer to 10 = MUCH better!
+            // A lane at 6 is WAY better than a lane at 0
+            score += ourValue * 15; // Was 5, now 15
+
+            if (ourValue >= 8) {
+                score += 100; // Almost there! Huge bonus
+                reason += ` [ALMOST COMPILE: ${ourValue}]`;
+            } else if (ourValue >= 6) {
+                score += 60; // Very close
+                reason += ` [Near compile: ${ourValue}]`;
+            } else if (ourValue >= 4) {
+                score += 30; // Getting there
+                reason += ` [Building: ${ourValue}]`;
+            }
+
+            // Matching cards bonus (but less important than current value)
+            score += matchingCards.length * 10;
+            if (matchingCards.length > 0) {
+                reason += ` [${matchingCards.length} cards]`;
+            }
+
+            // High value cards in hand for this protocol - can finish faster
+            const highValueCards = matchingCards.filter(c => c.value >= 4);
+            score += highValueCards.length * 20;
+
+            // Penalty if player is ahead
+            if (playerValue > ourValue) {
+                score -= (playerValue - ourValue) * 5;
+            }
+
+            // If we have 0 matching cards but lane has value, we can still play face-down
+            // Don't completely skip, but penalize
+            if (matchingCards.length === 0) {
+                score -= 30;
+                reason += ` [No matching cards - face-down only]`;
+            }
+
+            laneScores.push({ laneIndex: laneIdx, score, reason });
+        }
+
+        // Sort by score and pick the best
+        laneScores.sort((a, b) => b.score - a.score);
+        if (laneScores.length > 0) {
+            focusLaneIndex = laneScores[0].laneIndex;
+            console.log(`[AI Normal] Focus lane: ${focusLaneIndex} (compiled: ${ourCompiledCount}) - ${laneScores[0].reason} [score: ${laneScores[0].score}]`);
+        }
+    }
 
     // Helper: Check if a card's effect has valid targets
     const effectHasValidTargets = (card: PlayedCard, laneIndex: number): boolean => {
@@ -212,13 +307,35 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // GENERIC: Check if card has "delete self on cover" effect (like Metal-6)
-            // Only play if it will reach compile threshold
+            // Only play if lane already has enough value (4+) so we can reach compile (10+)
+            // Because if something is played on top later, this card deletes itself
             if (hasDeleteSelfOnCoverEffect(card as PlayedCard)) {
                 const currentLaneValue = state.opponent.laneValues[i];
+                // Lane needs at least 4 so that card.value + 4 >= 10
+                const minLaneValueNeeded = Math.max(0, 10 - card.value);
+                if (currentLaneValue < minLaneValueNeeded) continue;
+                // Also check we'd actually beat the player
                 const valueAfterPlaying = currentLaneValue + card.value;
-                if (valueAfterPlaying < 10) continue;
                 const playerValue = state.player.laneValues[i];
                 if (valueAfterPlaying <= playerValue) continue;
+            }
+
+            // GENERIC: Check if TOP card in lane has "delete self on cover" effect
+            // If we play on top of such a card (like Metal-6), it will delete itself
+            // Only do this if the lane already has good value OR we'd reach compile
+            const topCardDeleteValue = getTopCardDeleteSelfValue(state, 'opponent', i);
+            if (topCardDeleteValue !== null) {
+                const currentLaneValue = state.opponent.laneValues[i];
+                const valueAfterPlayingMinusDeleted = currentLaneValue + card.value - topCardDeleteValue;
+                // Only play on top if:
+                // 1. We'd still reach compile (10+) after the deletion, OR
+                // 2. The lane already has enough base value (4+) that losing the card is acceptable
+                const wouldStillCompile = valueAfterPlayingMinusDeleted >= 10 &&
+                    valueAfterPlayingMinusDeleted > state.player.laneValues[i];
+                const laneHasGoodBase = (currentLaneValue - topCardDeleteValue) >= 4;
+                if (!wouldStillCompile && !laneHasGoodBase) {
+                    continue; // Skip - would waste the top card's value
+                }
             }
 
             // Use the already computed playerCanCompileHere check
@@ -311,6 +428,17 @@ const getBestMove = (state: GameState): AIAction => {
                         score -= 40;
                         reason += ` [Disruption but no targets]`;
                     }
+
+                    // FOCUS LANE STRATEGY: VERY strong bonus for focus lane, heavy penalty for others
+                    if (focusLaneIndex !== -1) {
+                        if (i === focusLaneIndex) {
+                            score += 150; // VERY strong bonus for focus lane
+                            reason += ` [FOCUS LANE]`;
+                        } else {
+                            score -= 100; // Heavy penalty for non-focus lanes
+                            reason += ` [Not focus lane]`;
+                        }
+                    }
                 }
 
                 possibleMoves.push({
@@ -321,41 +449,56 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // FACE-DOWN PLAY - use generic canPlayCard result
+            // IMPORTANT: Face-down only in EMERGENCY situations!
+            // - When lane is at 8-9 and needs just a bit more to compile
+            // - When we MUST block player compile and can't do face-up
+            // - When we have no face-up options at all
             if (playCheckFaceDown.allowed) {
                 const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
                 const resultingValue = state.opponent.laneValues[i] + valueToAdd;
-                let score = 0;
+                const currentLaneValue = state.opponent.laneValues[i];
+                let score = -100; // BASE PENALTY: Face-down is generally bad
                 let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i}`;
 
+                // EMERGENCY 1: Must block player compile
                 if (canPlayerCompileThisLane) {
                     if (resultingValue > state.player.laneValues[i]) {
-                        score = 170 + resultingValue * 5;
+                        score = 150; // OK to block, but face-up blocking is better
                         reason += ` [Blocks compile]`;
                     } else {
-                        score = -140;
+                        score = -200; // Can't even block - terrible
                         reason += ` [Fails to block]`;
                     }
-                } else {
-                    // Face-down value (usually 2) - decent but face-up high values are better
-                    score += valueToAdd * 8;
-
-                    // GENERIC: Bonus for cards with "delete highest own card" effect played face-down
-                    // They still trigger their effect when uncovered later
-                    if (hasDeleteHighestOwnCardEffect(card as PlayedCard)) {
-                        score += 25;
-                        reason += ` [Delete effect bonus]`;
+                }
+                // EMERGENCY 2: Lane is at 8-9 and face-down would reach compile
+                else if (currentLaneValue >= 8 && currentLaneValue < 10 && resultingValue >= 10 && !state.opponent.compiled[i]) {
+                    if (resultingValue > state.player.laneValues[i]) {
+                        score = 100; // Good - finish the compile!
+                        reason += ` [EMERGENCY: Finish compile at ${currentLaneValue}]`;
+                    } else {
+                        score = -50; // Would compile but player is ahead
+                        reason += ` [Compile but player ahead]`;
                     }
+                }
+                // EMERGENCY 3: No face-up option available and we have a low-value card (0-1)
+                else if (!playCheckFaceUp.allowed && card.value <= 1) {
+                    score = -20; // Slightly less bad - we have no choice
+                    reason += ` [No face-up option, low value]`;
+                }
+                // NON-EMERGENCY: Just a regular face-down play - heavily penalized
+                else {
+                    score = -120; // Very bad - face-up is almost always better
+                    reason += ` [Avoid: Face-up is better]`;
+                }
 
-                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
-                        score += 110;
-                        reason += ` [Compile setup]`;
-                    }
-
-                    // Face-down is good for high-value cards we can't play face-up
-                    // (saves them for later flip)
-                    if (card.value >= 4 && !playCheckFaceUp.allowed) {
-                        score += 20;
-                        reason += ` [Saving high value]`;
+                // Focus lane bonus/penalty still applies (but face-down is still bad)
+                if (focusLaneIndex !== -1) {
+                    if (i === focusLaneIndex) {
+                        score += 50; // Some bonus for focus lane
+                        reason += ` [Focus lane]`;
+                    } else {
+                        score -= 80; // Heavy penalty for non-focus
+                        reason += ` [Not focus lane]`;
                     }
                 }
 
@@ -368,18 +511,28 @@ const getBestMove = (state: GameState): AIAction => {
         }
     }
 
-    // Evaluate filling hand - only draw when hand is very low (0-1 cards)
-    if (state.opponent.hand.length <= 1) {
-        let fillHandScore = 8;
+    // Evaluate filling hand - ONLY draw when absolutely necessary
+    // 1. Hand is empty (must draw)
+    // 2. Emergency: Player can compile and we have control + player has 1+ compiled (can block with swap)
+    if (state.opponent.hand.length === 0) {
+        // Must draw - no cards at all
+        possibleMoves.push({ move: { type: 'fillHand' }, score: 500, reason: "Must refill - no cards" });
+    } else {
+        // Check for emergency block scenario:
+        // - Player can compile a lane
+        // - We have control
+        // - Player already has at least 1 compiled lane (swap is valuable)
+        const playerCanCompile = state.player.laneValues.some((val, idx) =>
+            val >= 10 && val > state.opponent.laneValues[idx] && !state.player.compiled[idx]
+        );
+        const weHaveControl = state.controlCardHolder === 'opponent';
+        const playerHasCompiledLane = state.player.compiled.some(c => c);
 
-        if (state.opponent.hand.length === 0) {
-            fillHandScore = 500; // Must draw - no cards
-        } else {
-            // 1 card left - prefer drawing but not as urgently
-            fillHandScore = 80;
+        if (playerCanCompile && weHaveControl && playerHasCompiledLane) {
+            // Emergency draw to trigger control swap and block compile
+            possibleMoves.push({ move: { type: 'fillHand' }, score: 200, reason: "Emergency draw to block compile with control swap" });
         }
-
-        possibleMoves.push({ move: { type: 'fillHand' }, score: addNoise(fillHandScore), reason: "Refill hand" });
+        // Otherwise: Don't draw, play the cards we have
     }
 
     if (possibleMoves.length === 0) {
@@ -425,7 +578,13 @@ const getBestMove = (state: GameState): AIAction => {
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // CRITICAL FIX: Check if rearrange would ACTUALLY be beneficial BEFORE deciding
+            // Control swap only makes sense if player has at least 1 compiled lane
+            // Otherwise there's nothing valuable to disrupt
+            const playerCompiledCount = state.player.compiled.filter(c => c).length;
+            if (playerCompiledCount === 0) {
+                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
+            }
+
             // Get the compiling lane index if this is during a compile
             const compilingLaneIndex = state.compilableLanes.length > 0 ? state.compilableLanes[0] : null;
 
@@ -487,7 +646,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete': {
             const disallowedIds = action.disallowedIds || [];
-            const targetFilter = ('targetFilter' in action ? action.targetFilter : {}) as TargetFilter;
+            const targetFilter = ((action as any).targetFilter ?? {}) as TargetFilter;
             const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
             const sourceCardId = action.sourceCardId;
 
@@ -836,11 +995,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return handleControlRearrange(state, action);
 
         case 'prompt_swap_protocols': {
-            // Spirit-4: Swap own protocols (target = 'opponent')
+            // Spirit-4: Swap own protocols (target = 'opponent' = AI's own)
             // Anarchy-3: Swap opponent's protocols (target = 'player')
             const { target } = action;
             const targetProtocols = state[target].protocols;
             const targetHand = state[target].hand;
+            const targetCompiled = state[target].compiled;
+            const targetLaneValues = state[target].laneValues;
 
             const possibleSwaps: [number, number][] = [[0, 1], [0, 2], [1, 2]];
             let bestSwap: [number, number] = [0, 1];
@@ -852,33 +1013,93 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 [newProtocols[i], newProtocols[j]] = [newProtocols[j], newProtocols[i]];
                 let score = 0;
 
+                const compiledI = targetCompiled[i];
+                const compiledJ = targetCompiled[j];
+                const valueI = targetLaneValues[i];
+                const valueJ = targetLaneValues[j];
+
                 // Evaluate based on whose protocols we're swapping
                 if (target === 'opponent') {
-                    // Spirit-4: We're swapping our own protocols - maximize playability
+                    // Spirit-4: We're swapping our own protocols
+
+                    // STRATEGIC PRIORITY: Move high values to uncompiled lanes, low values to compiled
+                    // Compiled lanes are "done" - we don't need more value there
+                    // Uncompiled lanes need high values to reach 10 and win
+                    if (compiledI && !compiledJ) {
+                        // Lane i compiled, lane j not - we want HIGH value in lane j
+                        // Swapping moves value from lane i to j conceptually (protocols swap)
+                        // If lane i has more value than j, swapping is BAD (we'd lose value in uncompiled lane)
+                        // If lane j has more value than i, swapping is GOOD (more value stays in uncompiled)
+                        // Actually: swap exchanges protocols, not values. Values stay in their lanes.
+                        // But by swapping protocols, we affect FUTURE plays.
+                        // Key insight: We want to be able to play cards in uncompiled lanes
+                        // So bonus if lane j (uncompiled) has lower value and needs help
+                        if (valueJ < valueI) {
+                            score += 30; // Swap to focus on weak uncompiled lane
+                        }
+                    } else if (compiledJ && !compiledI) {
+                        // Lane j compiled, lane i not - mirror logic
+                        if (valueI < valueJ) {
+                            score += 30;
+                        }
+                    } else if (!compiledI && !compiledJ) {
+                        // Neither compiled - prefer swap if it helps the weaker lane
+                        // Slight preference for keeping options open
+                    }
+
+                    // Secondary: Hand playability
                     for (const card of targetHand) {
                         const couldPlayBeforeI = card.protocol === targetProtocols[i];
                         const couldPlayBeforeJ = card.protocol === targetProtocols[j];
                         const canPlayNowI = card.protocol === newProtocols[i];
                         const canPlayNowJ = card.protocol === newProtocols[j];
 
-                        if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card);
-                        if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card);
-                        if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card);
-                        if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card);
+                        // IMPROVED: Weight playability by whether the lane is compiled
+                        // Playing in uncompiled lanes is MORE valuable
+                        const weightI = compiledI ? 0.5 : 1.5;
+                        const weightJ = compiledJ ? 0.5 : 1.5;
+
+                        if (canPlayNowI && !couldPlayBeforeI) score += getCardPower(card) * weightI;
+                        if (canPlayNowJ && !couldPlayBeforeJ) score += getCardPower(card) * weightJ;
+                        if (!canPlayNowI && couldPlayBeforeI) score -= getCardPower(card) * weightI;
+                        if (!canPlayNowJ && couldPlayBeforeJ) score -= getCardPower(card) * weightJ;
                     }
                 } else {
-                    // Anarchy-3: We're swapping opponent's protocols - minimize their playability
+                    // Anarchy-3: We're swapping opponent's protocols - minimize their advantage
+
+                    // STRATEGIC: Move their high-value uncompiled lanes to compiled positions
+                    // This "wastes" their advantage since compiled lanes are already won
+                    if (compiledI && !compiledJ) {
+                        // Lane i compiled (done), lane j has potential
+                        // If j has HIGH value, swapping would keep that high value useful to them
+                        // We want their HIGH values in COMPILED lanes (wasted)
+                        // So if j > i, we'd be moving high value j INTO the uncompiled slot - BAD for us
+                        // If i > j, we'd be moving lower value into uncompiled - GOOD for us (less threat)
+                        if (valueI > valueJ) {
+                            score += 25; // Their strong position moves to compiled (wasted)
+                        }
+                    } else if (compiledJ && !compiledI) {
+                        if (valueJ > valueI) {
+                            score += 25;
+                        }
+                    }
+
+                    // Secondary: Disrupt their hand playability
                     for (const card of targetHand) {
                         const couldPlayBeforeI = card.protocol === targetProtocols[i];
                         const couldPlayBeforeJ = card.protocol === targetProtocols[j];
                         const canPlayNowI = card.protocol === newProtocols[i];
                         const canPlayNowJ = card.protocol === newProtocols[j];
 
+                        // Weight by compiled status - disrupting uncompiled lane plays hurts them more
+                        const weightI = compiledI ? 0.5 : 1.5;
+                        const weightJ = compiledJ ? 0.5 : 1.5;
+
                         // Inverted logic: we WANT to make their cards less playable
-                        if (canPlayNowI && !couldPlayBeforeI) score -= getCardPower(card);
-                        if (canPlayNowJ && !couldPlayBeforeJ) score -= getCardPower(card);
-                        if (!canPlayNowI && couldPlayBeforeI) score += getCardPower(card);
-                        if (!canPlayNowJ && couldPlayBeforeJ) score += getCardPower(card);
+                        if (canPlayNowI && !couldPlayBeforeI) score -= getCardPower(card) * weightI;
+                        if (canPlayNowJ && !couldPlayBeforeJ) score -= getCardPower(card) * weightJ;
+                        if (!canPlayNowI && couldPlayBeforeI) score += getCardPower(card) * weightI;
+                        if (!canPlayNowJ && couldPlayBeforeJ) score += getCardPower(card) * weightJ;
                     }
                 }
 
@@ -1019,8 +1240,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // Generic optional effect prompt for custom protocols
         case 'prompt_optional_effect': {
             // Intelligent decision based on the effect type and context
-            const { effectDef, sourceCardId } = action as any;
+            const { effectDef } = action as any;
             const effectAction = effectDef?.params?.action;
+            const targetFilter = effectDef?.params?.targetFilter;
 
             // For 'give' actions (Love-1 End): ALWAYS skip
             // Giving a card to opponent is terrible - never do it
@@ -1028,25 +1250,58 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'resolveOptionalEffectPrompt', accept: false };
             }
 
-            // For 'flip' actions on own cards: check if flipping improves or maintains value
-            if (effectAction === 'flip' && sourceCardId) {
-                const cardInfo = findCardOnBoard(state, sourceCardId);
-                if (cardInfo && cardInfo.owner === 'opponent') {
-                    const laneIndex = state.opponent.lanes.findIndex(lane =>
-                        lane.some(c => c.id === sourceCardId)
-                    );
-                    if (laneIndex !== -1) {
-                        const lane = state.opponent.lanes[laneIndex];
-                        const faceUpValue = cardInfo.card.value;
-                        const faceDownValue = getEffectiveCardValue(cardInfo.card, lane, state, laneIndex, 'opponent');
+            // For 'flip' actions: check if there's a beneficial flip target
+            if (effectAction === 'flip') {
+                // Look for beneficial flip targets
+                let hasBeneficialTarget = false;
 
-                        // Only flip if it strictly improves lane value
-                        // Don't flip just to reveal information when values are equal
-                        if (faceUpValue <= faceDownValue) {
-                            return { type: 'resolveOptionalEffectPrompt', accept: false };
+                for (const player of ['player', 'opponent'] as const) {
+                    // Check owner filter
+                    if (targetFilter?.owner === 'own' && player !== 'opponent') continue;
+                    if (targetFilter?.owner === 'opponent' && player === 'opponent') continue;
+
+                    for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
+                        const lane = state[player].lanes[laneIdx];
+                        if (lane.length === 0) continue;
+
+                        const topCard = lane[lane.length - 1];
+
+                        // Check faceState filter
+                        if (targetFilter?.faceState === 'face_up' && !topCard.isFaceUp) continue;
+                        if (targetFilter?.faceState === 'face_down' && topCard.isFaceUp) continue;
+
+                        // Calculate value change from flipping
+                        const currentValue = topCard.isFaceUp ? topCard.value : getEffectiveCardValue(topCard, lane, state, laneIdx, player);
+                        const flippedValue = topCard.isFaceUp ? getEffectiveCardValue({ ...topCard, isFaceUp: false }, lane, state, laneIdx, player) : topCard.value;
+
+                        if (player === 'player') {
+                            // Flip PLAYER cards if it HURTS them (reduces their value)
+                            // e.g., flip their face-up 5 to face-down 2 = -3 for them = good for us
+                            if (topCard.isFaceUp && currentValue > flippedValue) {
+                                hasBeneficialTarget = true;
+                                break;
+                            }
+                        } else {
+                            // Flip OWN cards only if it HELPS us (increases our value)
+                            // e.g., flip our face-down 0 or 1 to face-up = better
+                            // Or flip face-up low value (0, 1) to face-down 2 = maybe better
+                            if (!topCard.isFaceUp && topCard.value > 2) {
+                                // Face-down with high actual value - flip it up!
+                                hasBeneficialTarget = true;
+                                break;
+                            }
+                            if (topCard.isFaceUp && topCard.value <= 1 && flippedValue > currentValue) {
+                                // Face-up 0 or 1 - flip down to get 2
+                                hasBeneficialTarget = true;
+                                break;
+                            }
                         }
                     }
+                    if (hasBeneficialTarget) break;
                 }
+
+                // Only accept if there's a beneficial target
+                return { type: 'resolveOptionalEffectPrompt', accept: hasBeneficialTarget };
             }
 
             // For most other optional effects (shift, delete, draw, etc.): usually beneficial
@@ -1374,17 +1629,20 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'shift_flipped_card_optional': {
             // Darkness-1, Spirit-3: Shift the flipped card to another lane
             const cardId = (action as any).cardId;
-            console.log('[AI shift_flipped_card_optional] cardId:', cardId);
+            const isOptional = (action as any).optional;
             const cardInfo = findCardOnBoard(state, cardId);
             if (!cardInfo) {
-                console.log('[AI shift_flipped_card_optional] Card not found, skipping');
                 return { type: 'skip' };
             }
+
+            const shiftingCard = cardInfo.card;
+            const cardOwner = cardInfo.owner;
+            const cardValue = shiftingCard.isFaceUp ? shiftingCard.value : 2;
 
             // Use laneIndex from findCardOnBoard if available
             let originalLaneIndex = cardInfo.laneIndex ?? -1;
             if (originalLaneIndex === -1) {
-                const ownerState = state[cardInfo.owner];
+                const ownerState = state[cardOwner];
                 for (let i = 0; i < ownerState.lanes.length; i++) {
                     if (ownerState.lanes[i].some(c => c.id === cardId)) {
                         originalLaneIndex = i;
@@ -1393,18 +1651,89 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 }
             }
 
-            console.log('[AI shift_flipped_card_optional] originalLaneIndex:', originalLaneIndex);
             if (originalLaneIndex === -1) return { type: 'skip' };
 
             const possibleLanes = [0, 1, 2].filter(l => l !== originalLaneIndex);
-            console.log('[AI shift_flipped_card_optional] possibleLanes:', possibleLanes);
-            if (possibleLanes.length > 0) {
-                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-                console.log('[AI shift_flipped_card_optional] Selected lane:', randomLane);
-                return { type: 'selectLane', laneIndex: randomLane };
+            if (possibleLanes.length === 0) return { type: 'skip' };
+
+            // STRATEGIC: Evaluate whether shifting is beneficial
+            const aiState = state.opponent;
+            const playerState = state.player;
+            const currentLaneValue = aiState.laneValues[originalLaneIndex];
+            const currentLaneCompiled = aiState.compiled[originalLaneIndex];
+            const playerCurrentLaneValue = playerState.laneValues[originalLaneIndex];
+
+            // Calculate value AFTER removing this card from current lane
+            const valueAfterLeaving = currentLaneValue - cardValue;
+
+            // Score each possible destination
+            let bestLane = -1;
+            let bestScore = -Infinity;
+            const stayScore = 0; // Baseline: staying is neutral
+
+            for (const targetLane of possibleLanes) {
+                const targetLaneValue = aiState.laneValues[targetLane];
+                const targetLaneCompiled = aiState.compiled[targetLane];
+                const playerTargetValue = playerState.laneValues[targetLane];
+                const valueAfterArriving = targetLaneValue + cardValue;
+
+                let score = 0;
+
+                // CRITICAL: Don't shift away from a lane that's close to compiling!
+                // If current lane is >=8 and not compiled, we're close to 10 - DON'T LEAVE
+                if (!currentLaneCompiled && currentLaneValue >= 8 && currentLaneValue > playerCurrentLaneValue) {
+                    score -= 100; // Heavy penalty for leaving a near-compilable lane
+                }
+
+                // Bonus for moving TO a lane that becomes compilable (>=10 and beating opponent)
+                if (!targetLaneCompiled && valueAfterArriving >= 10 && valueAfterArriving > playerTargetValue) {
+                    score += 80;
+                }
+
+                // Bonus for moving to uncompiled lanes that need help
+                if (!targetLaneCompiled && targetLaneValue < currentLaneValue) {
+                    // Only if we're not sabotaging our current strong position
+                    if (currentLaneCompiled || currentLaneValue < 6) {
+                        score += 20;
+                    }
+                }
+
+                // Penalty for moving to already-compiled lanes (wasted value)
+                if (targetLaneCompiled) {
+                    score -= 30;
+                }
+
+                // Bonus if target lane is contested and we'd take the lead
+                if (!targetLaneCompiled && targetLaneValue <= playerTargetValue && valueAfterArriving > playerTargetValue) {
+                    score += 25;
+                }
+
+                // Penalty if leaving makes us lose a contested lane
+                if (!currentLaneCompiled && currentLaneValue > playerCurrentLaneValue && valueAfterLeaving <= playerCurrentLaneValue) {
+                    score -= 40;
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestLane = targetLane;
+                }
             }
 
-            return { type: 'skip' };
+            // If optional and no good move, skip
+            if (isOptional && bestScore < stayScore) {
+                return { type: 'skip' };
+            }
+
+            // If we found a lane (even if score is bad, we might be forced)
+            if (bestLane !== -1) {
+                return { type: 'selectLane', laneIndex: bestLane };
+            }
+
+            // Fallback: skip if optional, otherwise pick first available
+            if (isOptional) {
+                return { type: 'skip' };
+            }
+            return { type: 'selectLane', laneIndex: possibleLanes[0] };
         }
 
         // LEGACY REMOVED: select_lane_to_shift_revealed_card_for_light_2 - now uses generic select_lane_for_shift

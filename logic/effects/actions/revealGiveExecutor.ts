@@ -1,0 +1,131 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Reveal/Give Effect Executor
+ *
+ * Handles reveal and give card effects.
+ * Extracted 1:1 from effectInterpreter.ts for modularity.
+ */
+
+import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
+import { log } from '../../utils/log';
+
+/**
+ * Execute REVEAL/GIVE effect
+ */
+export function executeRevealGiveEffect(
+    card: PlayedCard,
+    laneIndex: number,
+    state: GameState,
+    context: EffectContext,
+    params: any
+): EffectResult {
+    const { cardOwner, opponent } = context;
+    const count = params.count || 1;
+    const action = params.action;
+    const source = params.source || 'own_hand';
+
+    // NEW: Handle board card reveal (Light-2: "Reveal 1 face-down card. You may shift or flip that card.")
+    if (action === 'reveal' && source === 'board') {
+        const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'face_down' };
+        const followUpAction = params.followUpAction;  // 'flip' | 'shift' | undefined
+        const optional = params.optional !== false;  // Default true
+
+        // Find all valid target cards
+        const validTargets: PlayedCard[] = [];
+        const players = targetFilter.owner === 'own' ? [cardOwner]
+                      : targetFilter.owner === 'opponent' ? [opponent]
+                      : [cardOwner, opponent];
+
+        for (const p of players) {
+            for (let li = 0; li < state[p].lanes.length; li++) {
+                const lane = state[p].lanes[li];
+                if (lane.length > 0) {
+                    // Filter by position
+                    let cardsToCheck: PlayedCard[] = [];
+                    if (targetFilter.position === 'uncovered') {
+                        cardsToCheck = [lane[lane.length - 1]];
+                    } else if (targetFilter.position === 'covered') {
+                        cardsToCheck = lane.slice(0, -1);
+                    } else {
+                        cardsToCheck = [...lane];
+                    }
+
+                    // Filter by faceState
+                    const filtered = cardsToCheck.filter(c => {
+                        if (targetFilter.faceState === 'face_up') return c.isFaceUp;
+                        if (targetFilter.faceState === 'face_down') return !c.isFaceUp;
+                        return true;  // 'any'
+                    });
+
+                    validTargets.push(...filtered);
+                }
+            }
+        }
+
+        if (validTargets.length === 0) {
+            let newState = log(state, cardOwner, `No valid cards to reveal. Effect skipped.`);
+            return { newState };
+        }
+
+        let newState = { ...state };
+        newState.actionRequired = {
+            type: 'select_board_card_to_reveal_custom',
+            sourceCardId: card.id,
+            actor: cardOwner,
+            targetFilter,  // CRITICAL: Pass targetFilter to UI for card highlighting
+            followUpAction,
+            optional,
+        } as any;
+
+        return { newState };
+    }
+
+    // NEW: Handle opponent_hand reveal (Light-4: "Your opponent reveals their hand")
+    if (action === 'reveal' && source === 'opponent_hand') {
+        let newState = { ...state };
+        const opponentState = { ...newState[opponent] };
+
+        if (opponentState.hand.length > 0) {
+            // Mark all opponent's cards as revealed (count -1 = all cards)
+            opponentState.hand = opponentState.hand.map(c => ({ ...c, isRevealed: true }));
+            newState[opponent] = opponentState;
+
+            const cardName = `${card.protocol}-${card.value}`;
+            newState = log(newState, cardOwner, `${cardName}: Your opponent reveals their hand.`);
+        } else {
+            const cardName = `${card.protocol}-${card.value}`;
+            newState = log(newState, cardOwner, `${cardName}: Opponent has no cards to reveal.`);
+        }
+
+        // This effect resolves immediately
+        return { newState };
+    }
+
+    // CRITICAL: Check if player has any cards in hand (for own_hand reveal/give)
+    if (state[cardOwner].hand.length === 0) {
+        let newState = log(state, cardOwner, `No cards in hand to ${action}. Effect skipped.`);
+        return { newState };
+    }
+
+    let newState = { ...state };
+
+    if (action === 'reveal') {
+        newState.actionRequired = {
+            type: 'select_card_from_hand_to_reveal',
+            count,
+            sourceCardId: card.id,
+            actor: cardOwner,
+        } as any;
+    } else if (action === 'give') {
+        newState.actionRequired = {
+            type: 'select_card_from_hand_to_give',
+            count,
+            sourceCardId: card.id,
+            actor: cardOwner,
+        } as any;
+    }
+
+    return { newState };
+}

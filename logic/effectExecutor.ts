@@ -189,9 +189,18 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     }
 
     // Check if this is a custom protocol card with custom on-cover effects
+    // CRITICAL: Check ALL effect positions (top, middle, bottom) for on_cover or on_cover_or_flip triggers
+    // Metal-6 has on_cover_or_flip in topEffects!
     const customCard = coveredCard as any;
-    if (customCard.customEffects && customCard.customEffects.bottomEffects) {
-        const onCoverEffects = customCard.customEffects.bottomEffects.filter((e: any) => e.trigger === 'on_cover');
+    if (customCard.customEffects) {
+        const allEffects = [
+            ...(customCard.customEffects.topEffects || []),
+            ...(customCard.customEffects.middleEffects || []),
+            ...(customCard.customEffects.bottomEffects || [])
+        ];
+        const onCoverEffects = allEffects.filter((e: any) =>
+            e.trigger === 'on_cover' || e.trigger === 'on_cover_or_flip'
+        );
 
         if (onCoverEffects.length > 0) {
             console.log('[DEBUG executeOnCoverEffect] Found', onCoverEffects.length, 'on-cover effects for', `${coveredCard.protocol}-${coveredCard.value}`);
