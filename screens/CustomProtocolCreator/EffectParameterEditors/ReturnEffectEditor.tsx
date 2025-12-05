@@ -12,6 +12,7 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
     onChange,
 }) => {
     const owner = params.targetFilter?.owner || 'any';
+    const position = params.targetFilter?.position || 'uncovered';
     const valueEquals = params.targetFilter?.valueEquals;
     const selectLane = (params as any).selectLane || false;
 
@@ -45,6 +46,24 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                     <option value="any">Any card (own or opponent)</option>
                     <option value="own">Only own cards</option>
                     <option value="opponent">Only opponent cards</option>
+                </select>
+            </label>
+
+            <label>
+                Position
+                <select
+                    value={position}
+                    onChange={e => onChange({
+                        ...params,
+                        targetFilter: {
+                            ...params.targetFilter,
+                            position: e.target.value as 'uncovered' | 'covered' | 'any'
+                        }
+                    })}
+                >
+                    <option value="uncovered">Uncovered (default)</option>
+                    <option value="covered">Covered</option>
+                    <option value="any">Any (covered or uncovered)</option>
                 </select>
             </label>
 

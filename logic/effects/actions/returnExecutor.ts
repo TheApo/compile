@@ -24,6 +24,7 @@ export function executeReturnEffect(
     const { cardOwner, opponent } = context;
     const count = params.count === 'all' ? 99 : (params.count || 1);
     const owner = params.targetFilter?.owner || 'any';
+    const position = params.targetFilter?.position || 'uncovered';
 
     // NEW: Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
     // User first selects a lane, then all matching cards in that lane are returned
@@ -40,14 +41,28 @@ export function executeReturnEffect(
         return { newState };
     }
 
-    // CRITICAL: Check if there are cards on board matching the owner filter
-    let availableCards: PlayedCard[] = [];
+    // CRITICAL: Check if there are cards on board matching the owner and position filter
+    let availableCards: { card: PlayedCard; isUncovered: boolean }[] = [];
+    const checkPlayer = (player: Player) => {
+        for (const lane of state[player].lanes) {
+            for (let i = 0; i < lane.length; i++) {
+                const isUncovered = i === lane.length - 1;
+                // Check position filter
+                if (position === 'uncovered' && !isUncovered) continue;
+                if (position === 'covered' && isUncovered) continue;
+                // position === 'any' allows both
+                availableCards.push({ card: lane[i], isUncovered });
+            }
+        }
+    };
+
     if (owner === 'own') {
-        availableCards = state[cardOwner].lanes.flat();
+        checkPlayer(cardOwner);
     } else if (owner === 'opponent') {
-        availableCards = state[opponent].lanes.flat();
+        checkPlayer(opponent);
     } else { // 'any'
-        availableCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
+        checkPlayer('player');
+        checkPlayer('opponent');
     }
 
     if (availableCards.length === 0) {
@@ -58,12 +73,13 @@ export function executeReturnEffect(
     let newState = { ...state };
 
     // FIX: Use 'select_card_to_return' (same as Fire-2)
-    // Pass owner filter so UI can restrict clickable cards
+    // Pass owner and position filter so UI can restrict clickable cards
     newState.actionRequired = {
         type: 'select_card_to_return',
         sourceCardId: card.id,
         actor: cardOwner,
-        targetOwner: owner, // NEW: Pass owner filter to UI
+        targetOwner: owner, // Pass owner filter to UI
+        targetFilter: params.targetFilter, // Pass full targetFilter including position
     } as any;
 
     return { newState };

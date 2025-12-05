@@ -439,10 +439,9 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     const laneIndex = state[owner].lanes.findIndex(l => l.some(c => c.id === card.id));
     if (laneIndex === -1) return { newState: state };
 
-    // Snapshot before removal
+    // Snapshot before removal to determine if uncover should trigger
     const laneBeforeRemoval = state[owner].lanes[laneIndex];
     const wasTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === targetCardId;
-    const hadCardsBelow = laneBeforeRemoval.length > 1 && !wasTopCard;
 
     let newState = { ...state };
     const ownerState = { ...newState[owner] };
@@ -470,13 +469,13 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     newState.actionRequired = null;
     const stateAfterRecalc = recalculateAllLaneValues(newState);
 
-    // CRITICAL: Uncover happens when:
-    // 1. The top card was removed (reveals the card below), OR
-    // 2. A card below was removed AND there are still cards in the lane (the top card becomes uncovered)
-    if (wasTopCard || hadCardsBelow) {
+    // CRITICAL: Uncover effect only triggers when a card becomes NEWLY uncovered.
+    // This happens ONLY when the TOP card was removed (reveals the card below).
+    // It does NOT trigger when a covered card is removed - the top card was already uncovered!
+    if (wasTopCard) {
         const laneAfterRemoval = stateAfterRecalc[owner].lanes[laneIndex];
         if (laneAfterRemoval.length > 0) {
-            // There's still a card in the lane - it's now uncovered
+            // There's still a card in the lane - it's now NEWLY uncovered
             return handleUncoverEffect(stateAfterRecalc, owner, laneIndex);
         }
     }

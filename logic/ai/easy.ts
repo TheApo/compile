@@ -47,6 +47,8 @@ function getValidTargets(
 ): PlayedCard[] {
     const validTargets: PlayedCard[] = [];
     const filter = targetFilter || {};
+    // CRITICAL: Default position to 'uncovered' if not specified
+    const position = filter.position || 'uncovered';
 
     for (const playerKey of ['player', 'opponent'] as const) {
         // Owner filter
@@ -64,9 +66,10 @@ function getValidTargets(
                 const card = lane[cardIdx];
                 const isUncovered = cardIdx === lane.length - 1;
 
-                // Position filter
-                if (filter.position === 'uncovered' && !isUncovered) continue;
-                if (filter.position === 'covered' && isUncovered) continue;
+                // Position filter (default: uncovered)
+                if (position === 'uncovered' && !isUncovered) continue;
+                if (position === 'covered' && isUncovered) continue;
+                // position === 'any' allows both covered and uncovered
 
                 // Face state filter
                 if (filter.faceState === 'face_up' && !card.isFaceUp) continue;

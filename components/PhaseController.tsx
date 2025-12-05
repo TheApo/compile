@@ -369,8 +369,23 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: You may flip Plague-4';
                 case 'select_any_other_card_to_flip':
                     return 'Action: Select any other card to flip';
-                case 'select_card_to_return':
-                    return 'Action: Select a card to return to its owner\'s hand';
+                case 'select_card_to_return': {
+                    // Generic return handler - generate descriptive text from targetFilter
+                    const targetFilter = (actionRequired as any).targetFilter || {};
+                    const owner = (actionRequired as any).targetOwner || targetFilter.owner || 'any';
+                    const position = targetFilter.position || 'uncovered';
+
+                    let description = 'Action: Select ';
+                    if (owner === 'own') description += 'one of your ';
+                    else if (owner === 'opponent') description += "an opponent's ";
+                    else description += 'a ';
+
+                    if (position === 'any') description += 'covered or uncovered ';
+                    else if (position === 'covered') description += 'covered ';
+
+                    description += 'card to return';
+                    return description;
+                }
                 case 'select_covered_card_to_flip_for_chaos_0':
                     return 'Action: Select a covered card to flip in this lane';
                 case 'prompt_fire_3_discard':

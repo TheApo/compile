@@ -18,7 +18,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
     switch (params.action) {
         case 'refresh': {
             // Spirit-0: Refresh (fill hand to 5 cards)
-            mainText = 'Refresh.';
+            if (params.target === 'opponent') {
+                mainText = 'Your opponent refreshes their hand.';
+            } else {
+                mainText = 'Refresh.';
+            }
             break;
         }
 
@@ -129,14 +133,17 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const isOwn = params.targetFilter?.owner === 'own';
             const isOpponent = params.targetFilter?.owner === 'opponent';
 
+            // Build target description in correct grammatical order:
+            // [owner] [other] [covered/uncovered] [face-state] card(s)
             let targetDesc = '';
-            if (isOwn) targetDesc = 'your ';
-            if (isOpponent) targetDesc = "opponent's ";
-            // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
-            if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
+            if (isOwn) targetDesc += 'your ';
+            if (isOpponent) targetDesc += "opponent's ";
+            if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
+            // Handle position filter: 'any' = "covered or uncovered", 'covered' = "covered", default (uncovered) = nothing
+            if (params.targetFilter?.position === 'any') targetDesc += 'covered or uncovered ';
+            else if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
-            if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
 
             let countText = '';
             if (params.count === 'all') {
@@ -268,6 +275,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             let targetDesc = '';
             const isOpponent = params.targetFilter?.owner === 'opponent';
             const excludeSelf = params.targetFilter?.excludeSelf;
+            const positionAny = params.targetFilter?.position === 'any';
 
             // CRITICAL: Handle "of your" phrasing for own/opponent
             // Speed-3: "Shift 1 of your other cards"
@@ -280,8 +288,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 targetDesc += 'other ';
             }
 
-            // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
-            if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
+            // Handle position filter: 'any' = "covered or uncovered", 'covered' = "covered", default (uncovered) = nothing
+            if (positionAny) targetDesc += 'covered or uncovered ';
+            else if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
             if (params.targetFilter?.faceState === 'face_down') targetDesc += 'face-down ';
             if (params.targetFilter?.faceState === 'face_up') targetDesc += 'face-up ';
 
@@ -376,7 +385,12 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 }
             }
 
-            // NEW: Handle "covered or uncovered" case (Anarchy-2)
+            // Handle excludeSelf BEFORE position (correct order: "other covered or uncovered")
+            if (params.excludeSelf) {
+                text += 'other ';
+            }
+
+            // Handle "covered or uncovered" case (Anarchy-2)
             if (isCoveredOrUncovered) {
                 text += 'covered or uncovered ';
             } else {
@@ -392,10 +406,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += 'face-up ';
             }
 
-            // NEW: Handle excludeSelf (Death-1: "delete 1 other card")
-            const otherPrefix = params.excludeSelf ? 'other ' : '';
             const cardWord = params.count === 1 ? 'card' : 'cards';
-            text += otherPrefix + cardWord;
+            text += cardWord;
 
             // NEW: Handle selectLane (Death-2: "in 1 line")
             if (params.selectLane) {
@@ -501,8 +513,19 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            const countText = params.count === 'all' ? 'all cards' : params.count === 1 ? '1 card' : `${params.count} cards`;
             const owner = params.targetFilter?.owner || 'any';
+            const position = params.targetFilter?.position || 'uncovered';
+
+            // Build position text: 'any' = "covered or uncovered ", 'covered' = "covered ", default (uncovered) = ""
+            let positionText = '';
+            if (position === 'any') {
+                positionText = 'covered or uncovered ';
+            } else if (position === 'covered') {
+                positionText = 'covered ';
+            }
+
+            // Build count text with position included
+            const countText = params.count === 'all' ? `all ${positionText}cards` : params.count === 1 ? `1 ${positionText}card` : `${params.count} ${positionText}cards`;
 
             let ownerText = '';
             if (owner === 'own') {

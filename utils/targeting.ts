@@ -274,16 +274,26 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_card_to_return': {
             // Check if owner filter is specified (for custom protocols)
             const targetOwner = (actionRequired as any).targetOwner || 'any';
+            const targetFilter = (actionRequired as any).targetFilter;
             const actor = actionRequired.actor;
+
+            // Check position filter (default: uncovered)
+            const position = targetFilter?.position || 'uncovered';
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            const isCovered = cardIndex < lane.length - 1;
+
+            if (position === 'uncovered' && !isUncovered) return false;
+            if (position === 'covered' && !isCovered) return false;
+            // position === 'any' allows both
 
             // Filter by owner if specified
             if (targetOwner === 'own') {
-                return owner === actor && isUncovered;
+                return owner === actor;
             } else if (targetOwner === 'opponent') {
-                return owner !== actor && isUncovered;
+                return owner !== actor;
             }
             // Default: any card (own or opponent)
-            return isUncovered;
+            return true;
         }
         // REMOVED: select_card_to_flip_for_fire_3 - Fire-3 now uses generic select_card_to_flip
         case 'select_card_to_shift_for_gravity_1':
