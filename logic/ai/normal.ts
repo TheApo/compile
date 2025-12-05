@@ -175,8 +175,10 @@ const getBestMove = (state: GameState): AIAction => {
 
             // Check if player has 10+ and we CAN'T catch up with our cards
             if (playerValue >= 10 && !state.player.compiled[laneIdx]) {
-                // Calculate max value we could add with our matching cards
-                const maxCardValue = Math.max(...matchingCards.map(c => c.value), 0);
+                // Calculate max value we could add - include face-down option (+2 always possible!)
+                const maxFaceUpValue = Math.max(...matchingCards.map(c => c.value), 0);
+                const faceDownValue = 2; // Face-down is ALWAYS an option and adds 2!
+                const maxCardValue = Math.max(maxFaceUpValue, faceDownValue);
                 const ourPotentialMax = ourValue + maxCardValue;
 
                 if (ourPotentialMax <= playerValue) {
@@ -515,7 +517,14 @@ const getBestMove = (state: GameState): AIAction => {
                     score = -200;
                     reason += ` [WASTED: ${resultingValue} vs player ${state.player.laneValues[i]} - player still compiles!]`;
                 }
-                // EMERGENCY 3: No face-up option available and we have a low-value card (0-1)
+                // PRIORITY 4: Face-down in FOCUS LANE to build toward compile - this is GOOD!
+                // If this is our focus lane and we're building toward 10, face-down is smart
+                else if (focusLaneIndex === i && !state.opponent.compiled[i] && currentLaneValue >= 4) {
+                    // Building in focus lane - the closer to 10, the better!
+                    score = 50 + (currentLaneValue * 10); // 7 -> 120, 8 -> 130, 9 -> 140
+                    reason += ` [BUILD FOCUS: ${currentLaneValue} -> ${resultingValue}]`;
+                }
+                // EMERGENCY: No face-up option available and we have a low-value card (0-1)
                 else if (!playCheckFaceUp.allowed && card.value <= 1) {
                     score = -20; // Slightly less bad - we have no choice
                     reason += ` [No face-up option, low value]`;
@@ -526,8 +535,8 @@ const getBestMove = (state: GameState): AIAction => {
                     reason += ` [Avoid: Face-up is better]`;
                 }
 
-                // Focus lane bonus/penalty still applies (but face-down is still bad)
-                if (focusLaneIndex !== -1) {
+                // Focus lane bonus/penalty for cases not already handled above
+                if (focusLaneIndex !== -1 && score < 50) { // Only apply if not already a good score
                     if (i === focusLaneIndex) {
                         score += 50; // Some bonus for focus lane
                         reason += ` [Focus lane]`;
