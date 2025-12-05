@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { RulesModal } from '../components/RulesModal';
 import { CardComponent } from '../components/Card';
 import { cards, Card as CardData } from '../data/cards';
 import { shuffleDeck } from '../utils/gameLogic';
@@ -12,7 +11,7 @@ import { Difficulty } from '../types';
 import { isCustomProtocolEnabled, setCustomProtocolEnabled } from '../utils/customProtocolSettings';
 
 interface MainMenuProps {
-  onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary' | 'Statistics' | 'CustomProtocols') => void;
+  onNavigate: (screen: 'ProtocolSelection' | 'CardLibrary' | 'Statistics' | 'CustomProtocols' | 'Rules') => void;
   difficulty: Difficulty;
   setDifficulty: (difficulty: Difficulty) => void;
   useControl: boolean;
@@ -20,7 +19,6 @@ interface MainMenuProps {
 }
 
 export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, onUseControlChange }: MainMenuProps) {
-  const [showRules, setShowRules] = useState(false);
   const [decorativeCardRight, setDecorativeCardRight] = useState<CardData | null>(null);
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
   const [initialPreviewCard, setInitialPreviewCard] = useState<CardData | null>(null);
@@ -63,8 +61,6 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
 
   return (
     <div className="screen main-menu">
-      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
-      
       <h1>COMPILE: MAIN 1</h1>
       <div className="main-menu-attribution">
         <p>
@@ -120,10 +116,10 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
                 Custom Protocols
               </button>
             )}
-            <button className="btn" onClick={() => setShowRules(true)}>
+            <button className="btn" onClick={() => onNavigate('Rules')}>
               Rules
             </button>
-            <p className="version-info">Version 0.25</p>
+            <p className="version-info">Version 0.26</p>
           </div>
         </div>
         

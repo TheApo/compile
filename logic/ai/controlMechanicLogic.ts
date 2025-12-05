@@ -179,7 +179,8 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
                     return { type: 'rearrangeProtocols', newOrder };
                 }
             }
-            return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
+            // Current order might be invalid, find a valid fallback
+            return findValidFallbackArrangement(playerState.protocols, isValidArrangement);
         }
 
         // If AI is closer or equal, prioritize advancing ourselves
@@ -202,7 +203,8 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
                     return { type: 'rearrangeProtocols', newOrder };
                 }
             }
-            return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
+            // Current order might be invalid, find a valid fallback
+            return findValidFallbackArrangement(aiState.protocols, isValidArrangement);
         }
     }
 
@@ -223,14 +225,19 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             // No compiled/uncompiled distinction, but forced rearrange still requires a swap
             const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
             if (isForcedRearrange) {
-                // Must swap SOMETHING - just swap first two
-                const newOrder = [...playerState.protocols];
-                [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-                if (isValidArrangement(newOrder)) {
-                    return { type: 'rearrangeProtocols', newOrder };
+                // Must swap SOMETHING - find any valid swap
+                for (let i = 0; i < 3; i++) {
+                    for (let j = i + 1; j < 3; j++) {
+                        const newOrder = [...playerState.protocols];
+                        [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+                        if (isValidArrangement(newOrder)) {
+                            return { type: 'rearrangeProtocols', newOrder };
+                        }
+                    }
                 }
             }
-            return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
+            // Current order might be invalid, find a valid fallback
+            return findValidFallbackArrangement(playerState.protocols, isValidArrangement);
         }
 
         // Evaluate ALL combinations using EFFECTIVE values
@@ -277,7 +284,8 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         // Control Mechanic - no good disruption found, SKIP (only for voluntary rearrange)
-        return { type: 'rearrangeProtocols', newOrder: [...playerState.protocols] };
+        // Current order might be invalid, find a valid fallback
+        return findValidFallbackArrangement(playerState.protocols, isValidArrangement);
     }
 
     // PRIORITY 2: If AI must rearrange its own protocols
@@ -297,14 +305,19 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             // No compiled/uncompiled distinction, but forced rearrange still requires a swap
             const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
             if (isForcedRearrange) {
-                // Must swap SOMETHING - just swap first two
-                const newOrder = [...aiState.protocols];
-                [newOrder[0], newOrder[1]] = [newOrder[1], newOrder[0]];
-                if (isValidArrangement(newOrder)) {
-                    return { type: 'rearrangeProtocols', newOrder };
+                // Must swap SOMETHING - find any valid swap
+                for (let i = 0; i < 3; i++) {
+                    for (let j = i + 1; j < 3; j++) {
+                        const newOrder = [...aiState.protocols];
+                        [newOrder[i], newOrder[j]] = [newOrder[j], newOrder[i]];
+                        if (isValidArrangement(newOrder)) {
+                            return { type: 'rearrangeProtocols', newOrder };
+                        }
+                    }
                 }
             }
-            return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
+            // Current order might be invalid, find a valid fallback
+            return findValidFallbackArrangement(aiState.protocols, isValidArrangement);
         }
 
         // CRITICAL FIX: Find the best swap by moving uncompiled protocols to HIGH value lanes
@@ -371,26 +384,42 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         // Control Mechanic - no good swap found, SKIP (only for voluntary rearrange)
-        return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
+        // Current order might be invalid, find a valid fallback
+        return findValidFallbackArrangement(aiState.protocols, isValidArrangement);
     }
 
     // FALLBACK
     const fallbackOrder = targetPlayerKey === 'player' ? [...playerState.protocols] : [...aiState.protocols];
+    return findValidFallbackArrangement(fallbackOrder, isValidArrangement);
+}
 
-    if (isValidArrangement(fallbackOrder)) {
-        return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
+/**
+ * Helper function to find a valid protocol arrangement.
+ * If the current order is valid, returns it. Otherwise, tries all possible swaps.
+ */
+function findValidFallbackArrangement(
+    currentOrder: string[],
+    isValidArrangement: (protocols: string[]) => boolean
+): AIAction {
+    // First, check if current order is valid
+    if (isValidArrangement(currentOrder)) {
+        return { type: 'rearrangeProtocols', newOrder: [...currentOrder] };
     }
 
-    // If even the current order is invalid, find ANY valid arrangement
+    // Current order is invalid - find ANY valid arrangement by trying swaps
     for (let i = 0; i < 3; i++) {
         for (let j = i + 1; j < 3; j++) {
-            const testOrder = [...fallbackOrder];
+            const testOrder = [...currentOrder];
             [testOrder[i], testOrder[j]] = [testOrder[j], testOrder[i]];
             if (isValidArrangement(testOrder)) {
+                console.log(`[AI Rearrange] Current order invalid, swapping indices ${i} and ${j} to satisfy Anarchy-3 restriction`);
                 return { type: 'rearrangeProtocols', newOrder: testOrder };
             }
         }
     }
 
-    return { type: 'rearrangeProtocols', newOrder: fallbackOrder };
+    // This should never happen if the restriction is properly set up
+    // (there should always be a valid arrangement possible)
+    console.error('[AI Rearrange] Could not find any valid arrangement - returning current order');
+    return { type: 'rearrangeProtocols', newOrder: [...currentOrder] };
 }

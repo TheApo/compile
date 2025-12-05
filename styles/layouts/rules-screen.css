@@ -1,0 +1,950 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Rules Screen Styles
+ */
+
+.rules-screen {
+    width: 100%;
+    max-width: 1400px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem;
+    padding-top: 6rem;
+    background-color: rgba(0, 0, 0, 0.2);
+    animation: fadeIn 0.5s ease-in-out;
+    overflow-y: auto;
+}
+
+.rules-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+/* Section Styling */
+.rules-section {
+    background-color: var(--surface-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+}
+
+.rules-section .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.4rem;
+    color: var(--primary-color);
+    text-transform: uppercase;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--primary-color);
+    letter-spacing: 1px;
+}
+
+/* Text Styling */
+.rules-text p {
+    text-align: left;
+    color: var(--text-color);
+    line-height: 1.7;
+    margin-bottom: 0.75rem;
+    max-width: none;
+}
+
+.rules-text .emphasis,
+.rules-content .emphasis {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.rules-highlight {
+    background: rgba(97, 239, 255, 0.1);
+    border-left: 3px solid var(--primary-color);
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--primary-color) !important;
+}
+
+/* =====================
+   Card Anatomy Section
+   ===================== */
+.card-anatomy-section {
+    overflow: visible;
+}
+
+.card-anatomy-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 3rem;
+    align-items: start;
+    margin-top: 1rem;
+}
+
+.card-anatomy-display {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+}
+
+.anatomy-card-wrapper {
+    position: relative;
+    width: 200px;
+    height: 280px;
+}
+
+.anatomy-card-wrapper .card-component {
+    width: 200px;
+    height: 280px;
+    font-size: 0.8rem;
+}
+
+/* Annotation Styles */
+.anatomy-annotation {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.annotation-line {
+    width: 40px;
+    height: 2px;
+    background: var(--primary-color);
+    position: relative;
+}
+
+.annotation-line::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--primary-color);
+    border-radius: 50%;
+}
+
+.annotation-line-left::after {
+    left: 0;
+    top: -3px;
+}
+
+.annotation-line-right::after {
+    right: 0;
+    top: -3px;
+}
+
+.annotation-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--surface-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.annotation-letter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: var(--primary-color);
+    color: var(--background-color);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.75rem;
+    border-radius: 50%;
+}
+
+.annotation-text {
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.75rem;
+    color: var(--text-color);
+}
+
+/* Annotation Positions */
+.annotation-protocol {
+    top: 8px;
+    left: -120px;
+    flex-direction: row-reverse;
+}
+
+.annotation-value {
+    top: 8px;
+    right: -115px;
+}
+
+.annotation-top {
+    top: 55px;
+    right: -125px;
+}
+
+.annotation-middle {
+    top: 140px;
+    right: -140px;
+}
+
+.annotation-bottom {
+    top: 215px;
+    right: -145px;
+}
+
+/* Anatomy Descriptions */
+.card-anatomy-descriptions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.anatomy-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    border-left: 3px solid var(--secondary-color);
+    transition: all 0.2s ease;
+}
+
+.anatomy-item:hover {
+    background: rgba(0, 0, 0, 0.4);
+    border-left-color: var(--primary-color);
+}
+
+.anatomy-item-highlight {
+    border-left-color: var(--primary-color);
+    background: rgba(97, 239, 255, 0.05);
+}
+
+.anatomy-item .anatomy-letter {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
+}
+
+.anatomy-desc {
+    flex: 1;
+}
+
+.anatomy-desc strong {
+    display: block;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+}
+
+.anatomy-desc p {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+    text-align: left;
+    max-width: none;
+}
+
+/* =====================
+   Face-Down Section
+   ===================== */
+.face-down-section {
+    background: linear-gradient(135deg, var(--surface-color) 0%, rgba(26, 17, 59, 0.8) 100%);
+}
+
+.face-down-layout {
+    display: flex;
+    gap: 3rem;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+.face-down-card-wrapper {
+    flex-shrink: 0;
+}
+
+.face-down-card-wrapper .card-component {
+    width: 160px;
+    height: 224px;
+    font-size: 0.65rem;
+}
+
+.face-down-description {
+    flex: 1;
+}
+
+.face-down-description p {
+    color: var(--text-color);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+    text-align: left;
+    max-width: none;
+}
+
+.face-down-description ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.face-down-description li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--secondary-color);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.face-down-description li::before {
+    content: '>';
+    position: absolute;
+    left: 0;
+    color: var(--primary-color);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+}
+
+/* =====================
+   Turn Order Section
+   ===================== */
+.turn-order-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.turn-phase {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    border: 1px solid var(--surface-hover);
+    transition: all 0.2s ease;
+}
+
+.turn-phase:hover {
+    border-color: var(--primary-color);
+    background: rgba(97, 239, 255, 0.05);
+}
+
+.phase-number {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--primary-color);
+    color: var(--background-color);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    border-radius: 50%;
+}
+
+.phase-content strong {
+    display: block;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+}
+
+.phase-content p {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 0;
+    text-align: left;
+    max-width: none;
+}
+
+/* =====================
+   Glossary Section
+   ===================== */
+.glossary-section {
+    border-color: var(--secondary-color);
+}
+
+.glossary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.glossary-item {
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    border-left: 2px solid var(--primary-color);
+}
+
+.glossary-item strong {
+    display: block;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.glossary-item p {
+    color: var(--secondary-color);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin: 0;
+    text-align: left;
+    max-width: none;
+}
+
+/* =====================
+   Scrollbar Styling
+   ===================== */
+.rules-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.rules-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.rules-content::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.rules-content::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+/* =====================
+   Responsive Design
+   ===================== */
+@media (max-width: 1200px) {
+    .card-anatomy-layout {
+        grid-template-columns: 280px 1fr;
+        gap: 2rem;
+    }
+
+    .glossary-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .turn-order-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .rules-screen {
+        padding: 1.5rem;
+        padding-top: 5rem;
+    }
+
+    .card-anatomy-layout {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    .card-anatomy-display {
+        justify-content: flex-start;
+        padding-left: 140px;
+    }
+
+    .glossary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .turn-order-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .face-down-layout {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .rules-section {
+        padding: 1rem 1.25rem;
+    }
+
+    .card-anatomy-display {
+        padding-left: 0;
+    }
+
+    .anatomy-annotation {
+        display: none;
+    }
+
+    .glossary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =====================================================
+   THE FIELD - Demo Game Board Section
+   ===================================================== */
+
+.field-overview-section {
+    background: linear-gradient(180deg, var(--surface-color) 0%, rgba(10, 5, 26, 0.95) 100%);
+    overflow: visible;
+}
+
+.field-intro {
+    margin-bottom: 1.5rem;
+}
+
+.field-intro p {
+    color: var(--text-color);
+    line-height: 1.7;
+    text-align: left;
+    max-width: none;
+    margin: 0;
+}
+
+/* Demo Board Container */
+.demo-board-container {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 2rem;
+    align-items: start;
+    margin-top: 1rem;
+}
+
+.demo-board {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--surface-hover);
+    border-radius: 8px;
+    padding: 1rem;
+    position: relative;
+}
+
+/* Side Labels */
+.demo-side-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+}
+
+.demo-side-label.opponent-label {
+    color: var(--danger-color);
+    border-bottom: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.demo-side-label.player-label {
+    color: var(--primary-color);
+    border-top: 1px solid rgba(97, 239, 255, 0.3);
+}
+
+/* Demo Player Sides */
+.demo-player-side {
+    padding: 0.5rem 0;
+}
+
+.demo-opponent-side {
+    transform: rotate(180deg);
+}
+
+.demo-opponent-side .demo-lanes {
+    flex-direction: row-reverse;
+}
+
+.demo-lanes {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.75rem;
+}
+
+/* Demo Lane */
+.demo-lane {
+    width: 110px;
+    min-height: 260px;
+    border: 1px solid var(--surface-hover);
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.demo-lane-compiled {
+    border-color: rgba(97, 239, 255, 0.3);
+    background: rgba(97, 239, 255, 0.05);
+}
+
+.demo-lane-compilable {
+    border: 2px solid var(--success-color);
+    box-shadow: 0 0 15px rgba(97, 239, 255, 0.4);
+    background: rgba(97, 239, 255, 0.1);
+    animation: compilable-pulse 2s ease-in-out infinite;
+}
+
+@keyframes compilable-pulse {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(97, 239, 255, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(97, 239, 255, 0.6);
+    }
+}
+
+/* Demo Lane Stack - Card positioning */
+.demo-lane-stack {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 8px;
+}
+
+/* Cards in demo - use larger offset so TopBox stays visible when covered */
+.demo-lane-stack .card-component {
+    position: absolute;
+    top: calc(8px + var(--i) * 58px);
+    width: 90px;
+    height: 126px;
+    font-size: 0.5rem;
+    pointer-events: none;
+}
+
+/* Compact header for demo cards */
+.demo-lane-stack .card-component .card-header {
+    height: 16px;
+    min-height: 16px;
+    margin-bottom: 4px;
+}
+
+.demo-lane-stack .card-component .card-protocol {
+    font-size: 0.55em;
+    padding: 1px 3px;
+}
+
+.demo-lane-stack .card-component .card-value {
+    font-size: 0.85em;
+    flex: 0 0 20px !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    padding: 1px 3px;
+}
+
+/* Make rule boxes more visible and properly sized */
+.demo-lane-stack .card-component .card-body {
+    gap: 2px;
+}
+
+.demo-lane-stack .card-component .card-rule-box {
+    font-size: 0.7em;
+    line-height: 1.15;
+    padding: 2px 3px;
+    min-height: 22px;
+}
+
+/* Hide the decorative corners on small cards */
+.demo-lane-stack .card-component .card-rule-box::before,
+.demo-lane-stack .card-component .card-rule-box::after {
+    display: none;
+}
+
+/* Ensure card front has proper padding */
+.demo-lane-stack .card-component .card-front {
+    padding: 4px;
+}
+
+/* Demo Protocol Bars */
+.demo-protocol-bars-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--surface-hover);
+    border-bottom: 1px solid var(--surface-hover);
+    margin: 0.25rem 0;
+}
+
+.demo-protocol-bar {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.5rem;
+}
+
+.demo-protocol-display {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.demo-protocol-display.compiled {
+    background: rgba(97, 239, 255, 0.15);
+    box-shadow: 0 0 8px rgba(97, 239, 255, 0.4) inset;
+}
+
+.demo-protocol-display.compiled .demo-protocol-name,
+.demo-protocol-display.compiled .demo-protocol-value {
+    color: var(--primary-color);
+    text-shadow: 0 0 5px var(--primary-color);
+}
+
+.demo-protocol-display.compilable {
+    background: rgba(80, 200, 120, 0.15);
+    border: 1px solid #50C878;
+    box-shadow: 0 0 10px rgba(80, 200, 120, 0.5);
+    animation: compilable-bar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes compilable-bar-pulse {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(80, 200, 120, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(80, 200, 120, 0.7);
+    }
+}
+
+.demo-protocol-display.compilable .demo-protocol-name,
+.demo-protocol-display.compilable .demo-protocol-value {
+    color: #50C878;
+    text-shadow: 0 0 5px #50C878;
+}
+
+.demo-protocol-name {
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-shadow: none;
+}
+
+.demo-protocol-value {
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--text-color);
+}
+
+.demo-player-bar .demo-protocol-name {
+    color: var(--primary-color);
+}
+
+.demo-opponent-bar .demo-protocol-name {
+    color: var(--danger-color);
+}
+
+/* Demo Board Annotations */
+.demo-board-annotations {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.demo-annotation {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    border-left: 3px solid var(--secondary-color);
+}
+
+.compiled-annotation {
+    border-left-color: var(--primary-color);
+    background: rgba(97, 239, 255, 0.05);
+}
+
+.compilable-annotation {
+    border-left-color: var(--success-color);
+    background: rgba(97, 239, 255, 0.08);
+}
+
+.inprogress-annotation {
+    border-left-color: var(--secondary-color);
+}
+
+.topbox-annotation {
+    border-left-color: #FFD700;
+    background: rgba(255, 215, 0, 0.08);
+}
+
+.demo-annotation-marker {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border-radius: 50%;
+    color: var(--background-color);
+}
+
+.compiled-marker {
+    background: var(--primary-color);
+}
+
+.compilable-marker {
+    background: var(--success-color);
+}
+
+.inprogress-marker {
+    background: var(--secondary-color);
+}
+
+.topbox-marker {
+    background: #FFD700;
+}
+
+.demo-annotation-content {
+    flex: 1;
+}
+
+.demo-annotation-content strong {
+    display: block;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.compiled-annotation .demo-annotation-content strong {
+    color: var(--primary-color);
+}
+
+.compilable-annotation .demo-annotation-content strong {
+    color: var(--success-color);
+}
+
+.inprogress-annotation .demo-annotation-content strong {
+    color: var(--secondary-color);
+}
+
+.topbox-annotation .demo-annotation-content strong {
+    color: #FFD700;
+}
+
+.demo-annotation-content p {
+    color: var(--text-color);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+    text-align: left;
+    max-width: none;
+}
+
+/* Field Legend */
+.field-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--surface-hover);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.legend-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid;
+}
+
+.legend-compiled {
+    background: rgba(97, 239, 255, 0.2);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 8px rgba(97, 239, 255, 0.4);
+}
+
+.legend-compilable {
+    background: rgba(97, 239, 255, 0.15);
+    border-color: var(--success-color);
+    box-shadow: 0 0 10px rgba(97, 239, 255, 0.5);
+}
+
+.legend-facedown {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-color: var(--secondary-color);
+}
+
+/* Responsive: Demo Board */
+@media (max-width: 1100px) {
+    .demo-board-container {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .demo-board-annotations {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .demo-annotation {
+        flex: 1;
+        min-width: 250px;
+    }
+}
+
+@media (max-width: 700px) {
+    .demo-lanes {
+        gap: 0.5rem;
+    }
+
+    .demo-lane {
+        width: 95px;
+        min-height: 220px;
+    }
+
+    .demo-lane-stack .card-component {
+        width: 75px;
+        height: 105px;
+        top: calc(6px + var(--i) * 48px);
+    }
+
+    .demo-board-annotations {
+        flex-direction: column;
+    }
+
+    .demo-annotation {
+        min-width: auto;
+    }
+
+    .field-legend {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+}

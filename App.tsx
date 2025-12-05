@@ -11,11 +11,12 @@ import { ResultsScreen } from './screens/ResultsScreen';
 import { CardLibraryScreen } from './screens/CardLibraryScreen';
 import { StatisticsScreen } from './screens/StatisticsScreen';
 import { CustomProtocolCreator } from './screens/CustomProtocolCreator';
+import { RulesScreen } from './screens/RulesScreen';
 import { CoinFlipModal } from './components/CoinFlipModal';
 import { Difficulty, GameState } from './types';
 import { loadDefaultCustomProtocols } from './logic/customProtocols/loadDefaultProtocols';
 
-type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics' | 'CustomProtocols';
+type Screen = 'MainMenu' | 'ProtocolSelection' | 'GameScreen' | 'ResultsScreen' | 'CardLibrary' | 'Statistics' | 'CustomProtocols' | 'Rules';
 export type Player = 'player' | 'opponent';
 
 export function App() {
@@ -108,6 +109,8 @@ export function App() {
         return <StatisticsScreen onBack={handleBackToMenu} />;
       case 'CustomProtocols':
         return <CustomProtocolCreator onBack={handleBackToMenu} />;
+      case 'Rules':
+        return <RulesScreen onBack={handleBackToMenu} />;
       default:
         return <MainMenu onNavigate={(target) => setScreen(target)} difficulty={difficulty} setDifficulty={setDifficulty} useControl={useControl} onUseControlChange={setUseControl} />;
     }

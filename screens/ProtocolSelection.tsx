@@ -82,13 +82,22 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
     return Array.from(categorySet).sort();
   }, [cards]);
 
-  // Filter state - by default all categories are enabled
-  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(() => new Set(allCategories));
+  // Categories that should be disabled by default
+  const defaultDisabledCategories = ['Fan-Content', 'Main 2'];
 
-  // Update enabled categories when allCategories changes (shouldn't happen but for safety)
+  // Filter state - by default Fan-Content and Main 2 are disabled
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set());
+  const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Initialize enabled categories once when allCategories is populated
   useEffect(() => {
-    setEnabledCategories(new Set(allCategories));
-  }, [allCategories]);
+    if (allCategories.length > 0 && !hasInitialized) {
+      const enabled = new Set(allCategories);
+      defaultDisabledCategories.forEach(cat => enabled.delete(cat));
+      setEnabledCategories(enabled);
+      setHasInitialized(true);
+    }
+  }, [allCategories, hasInitialized]);
 
   // Get category for a protocol
   const getProtocolCategory = (protocol: string): string => {
