@@ -106,7 +106,10 @@
               "id": "fire-2-return",
               "params": {
                 "action": "return",
-                "count": 1
+                "count": 1,
+                "targetFilter": {
+                  "position": "uncovered"
+                }
               },
               "position": "middle",
               "trigger": "on_play"

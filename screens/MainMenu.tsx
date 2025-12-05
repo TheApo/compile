@@ -23,7 +23,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
   const [previewCard, setPreviewCard] = useState<CardData | null>(null);
   const [initialPreviewCard, setInitialPreviewCard] = useState<CardData | null>(null);
   const [shuffledTickerCards, setShuffledTickerCards] = useState<CardData[]>([]);
-  const [customProtocolsVisible, setCustomProtocolsVisible] = useState(isCustomProtocolEnabled());
+  const [customProtocolsVisible, setCustomProtocolsVisible] = useState(true);
   const [developedClickCount, setDevelopedClickCount] = useState(0);
 
   useEffect(() => {

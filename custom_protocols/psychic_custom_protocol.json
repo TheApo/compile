@@ -155,7 +155,7 @@
             "optional": true,
             "targetFilter": {
               "owner": "opponent",
-              "position": "any",
+              "position": "uncovered",
               "faceState": "any",
               "excludeSelf": false
             }

@@ -95,6 +95,7 @@
             "count": "all",
             "targetFilter": {
               "owner": "any",
+              "position": "uncovered",
               "valueEquals": 2
             },
             "selectLane": true
@@ -115,7 +116,8 @@
             "action": "return",
             "count": 1,
             "targetFilter": {
-              "owner": "own"
+              "owner": "own",
+              "position": "uncovered"
             }
           },
           "position": "middle"
