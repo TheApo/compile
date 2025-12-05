@@ -307,41 +307,52 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             return { type: 'rearrangeProtocols', newOrder: [...aiState.protocols] };
         }
 
-        // Find swap that minimizes distance to 10 using EFFECTIVE values
-        let bestSwap: { compiledIdx: number; uncompiledIdx: number; distanceToWin: number } | null = null;
+        // CRITICAL FIX: Find the best swap by moving uncompiled protocols to HIGH value lanes
+        // and compiled protocols to LOW value lanes.
+        //
+        // Goal: After swap, the uncompiled protocol should be in the lane with the highest value
+        // (closest to 10), and compiled protocols should be in lanes with low values (wasted anyway).
+        //
+        // Score = value of compiled lane - value of uncompiled lane
+        // Higher score = better swap (uncompiled goes to high value lane)
+        let bestSwap: { compiledIdx: number; uncompiledIdx: number; score: number; newUncompiledValue: number } | null = null;
 
         for (const compiledIdx of compiledIndices) {
             for (const uncompiledIdx of uncompiledIndices) {
-                // CRITICAL: Use effective values (compiling lane = 0)
-                const valueAfterSwap = aiEffectiveValues[compiledIdx];
-                const distanceToWin = 10 - valueAfterSwap;
+                // After swap: uncompiled protocol moves to compiledIdx lane (gets that lane's value)
+                //             compiled protocol moves to uncompiledIdx lane (doesn't matter, already won)
+                const newUncompiledValue = aiEffectiveValues[compiledIdx];
+                const currentUncompiledValue = aiEffectiveValues[uncompiledIdx];
 
-                if (distanceToWin >= 0) {
-                    if (!bestSwap || distanceToWin < bestSwap.distanceToWin) {
-                        bestSwap = { compiledIdx, uncompiledIdx, distanceToWin };
-                    }
+                // Score: How much better is the new position for our uncompiled protocol?
+                const score = newUncompiledValue - currentUncompiledValue;
+
+                // Also consider: Can we compile immediately after the swap?
+                // newUncompiledValue >= 10 means we can compile that lane right away!
+                const canCompileImmediately = newUncompiledValue >= 10 &&
+                    newUncompiledValue > playerEffectiveValues[compiledIdx];
+
+                // Prioritize swaps that let us compile immediately, then by score
+                const adjustedScore = canCompileImmediately ? score + 100 : score;
+
+                if (!bestSwap || adjustedScore > bestSwap.score) {
+                    bestSwap = { compiledIdx, uncompiledIdx, score: adjustedScore, newUncompiledValue };
                 }
             }
         }
 
         // Check if source is forced effect (not Control Mechanic)
-        // CRITICAL: Must check this BEFORE returning unchanged order!
         const isForcedRearrange = action.sourceCardId !== 'CONTROL_MECHANIC';
 
-        // Only swap if it brings us significantly closer to victory (distance <= 3)
-        // AND it's better than current state
-        if (bestSwap && bestSwap.distanceToWin <= 3) {
-            const currentUncompiledValue = aiEffectiveValues[bestSwap.uncompiledIdx];
-            const currentDistance = 10 - currentUncompiledValue;
+        // Execute swap if it improves our position (score > 0)
+        if (bestSwap && bestSwap.score > 0) {
+            console.log(`[AI Control Rearrange] Swapping own protocols: compiled lane ${bestSwap.compiledIdx} (value ${aiEffectiveValues[bestSwap.compiledIdx]}) <-> uncompiled lane ${bestSwap.uncompiledIdx} (value ${aiEffectiveValues[bestSwap.uncompiledIdx]}). New uncompiled value: ${bestSwap.newUncompiledValue}`);
+            const newOrder = [...aiState.protocols];
+            [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
+                [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
 
-            if (bestSwap.distanceToWin < currentDistance) {
-                const newOrder = [...aiState.protocols];
-                [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
-                    [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
-
-                if (isValidArrangement(newOrder)) {
-                    return { type: 'rearrangeProtocols', newOrder };
-                }
+            if (isValidArrangement(newOrder)) {
+                return { type: 'rearrangeProtocols', newOrder };
             }
         }
 

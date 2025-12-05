@@ -92,7 +92,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
               <div className="difficulty-options">
                 <button className={`btn ${difficulty === 'easy' ? 'active' : ''}`} onClick={() => setDifficulty('easy')}>Easy</button>
                 <button className={`btn ${difficulty === 'normal' ? 'active' : ''}`} onClick={() => setDifficulty('normal')}>Normal</button>
-                <button className={`btn ${difficulty === 'hard' ? 'active' : ''}`} onClick={() => setDifficulty('hard')}>Hard</button>
+                <button className={`btn btn-wip ${difficulty === 'hard' ? 'active' : ''}`} disabled>Hard</button>
               </div>
             </div>
             <div className="control-mechanic-selector">
