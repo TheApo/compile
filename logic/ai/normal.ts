@@ -293,17 +293,32 @@ const getBestMove = (state: GameState): AIAction => {
                 }
             }
 
-            // GENERIC: Check if card has "return own card" effect (like Water-4)
-            // Only play face-up if we have OTHER uncovered cards we want to return.
+            // GENERIC: Check if card has "return own card" effect (like Water-4, Fire-2)
+            // Only play face-up if we have OTHER uncovered cards to return.
+            // Face-down is still OK (effect won't trigger).
+            let blockFaceUpDueToReturn = false;
             if (hasReturnOwnCardEffect(card as PlayedCard)) {
-                let hasOtherUncoveredCards = false;
+                // Count all OTHER uncovered cards (excluding the card we're about to play)
+                let otherUncoveredCardCount = 0;
                 for (let laneIdx = 0; laneIdx < 3; laneIdx++) {
-                    if (laneIdx !== i && state.opponent.lanes[laneIdx].length > 0) {
-                        hasOtherUncoveredCards = true;
-                        break;
+                    const lane = state.opponent.lanes[laneIdx];
+                    if (lane.length > 0) {
+                        // If this is the target lane, there will be 1 card after we play (ourselves)
+                        // We can't count that as a valid return target
+                        if (laneIdx === i) {
+                            // Only count existing cards in the lane (not the card we're playing)
+                            // These would become covered after we play
+                            continue;
+                        }
+                        // Other lanes: the top card is a valid return target
+                        otherUncoveredCardCount++;
                     }
                 }
-                if (!hasOtherUncoveredCards) continue;
+                // If no other uncovered cards exist, playing face-up would force us to return itself
+                if (otherUncoveredCardCount === 0) {
+                    // Block face-up play, but face-down is still allowed
+                    blockFaceUpDueToReturn = true;
+                }
             }
 
             // GENERIC: Check if card has "delete self on cover" effect (like Metal-6)
@@ -362,7 +377,7 @@ const getBestMove = (state: GameState): AIAction => {
             }
 
             // FACE-UP PLAY - use generic canPlayCard result
-            let canPlayFaceUp = playCheckFaceUp.allowed && !playerHasRequireFaceDownRule && !deleteHighestWouldSuicide;
+            let canPlayFaceUp = playCheckFaceUp.allowed && !playerHasRequireFaceDownRule && !deleteHighestWouldSuicide && !blockFaceUpDueToReturn;
 
             if (canPlayFaceUp) {
                 let score = 0;
@@ -384,13 +399,25 @@ const getBestMove = (state: GameState): AIAction => {
                     // Higher value cards are MUCH better for this
                     score += valueToAdd * 10; // Value is king!
 
-                    // Setup own compile
+                    // Setup own compile - COMPLETING a compile is the highest priority
                     if (resultingValue >= 10 && resultingValue > state.player.laneValues[i] && !state.opponent.compiled[i]) {
-                        score += 120;
-                        reason += ` [Compile setup]`;
-                    } else if (resultingValue >= 8 && !state.opponent.compiled[i]) {
-                        score += 40;
-                        reason += ` [Near compile]`;
+                        score += 200; // HIGH - Actually completing a compile!
+                        reason += ` [COMPILE: ${resultingValue}]`;
+                    } else if (resultingValue >= 8 && resultingValue < 10 && !state.opponent.compiled[i]) {
+                        // Near compile but not there yet - check if face-down could complete it
+                        const faceDownValueInLane = state.opponent.lanes[i].some(
+                            c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2
+                        ) ? 4 : 2;
+                        const couldCompileWithFaceDown = state.opponent.laneValues[i] + faceDownValueInLane >= 10;
+
+                        if (couldCompileWithFaceDown && resultingValue < 10) {
+                            // PENALTY: Playing face-up that doesn't compile when face-down COULD compile
+                            score -= 50;
+                            reason += ` [Near ${resultingValue} but face-down could compile!]`;
+                        } else {
+                            score += 40;
+                            reason += ` [Near compile: ${resultingValue}]`;
+                        }
                     }
 
                     // PENALTY: Low-value cards (0-2) in early game are BAD
@@ -470,15 +497,23 @@ const getBestMove = (state: GameState): AIAction => {
                         reason += ` [Fails to block]`;
                     }
                 }
-                // EMERGENCY 2: Lane is at 8-9 and face-down would reach compile
-                else if (currentLaneValue >= 8 && currentLaneValue < 10 && resultingValue >= 10 && !state.opponent.compiled[i]) {
-                    if (resultingValue > state.player.laneValues[i]) {
-                        score = 100; // Good - finish the compile!
-                        reason += ` [EMERGENCY: Finish compile at ${currentLaneValue}]`;
-                    } else {
-                        score = -50; // Would compile but player is ahead
-                        reason += ` [Compile but player ahead]`;
-                    }
+                // PRIORITY 2: Face-down would allow us to COMPILE - THIS IS VERY GOOD!
+                // Compile requires: 10+ value AND more than opponent (not equal!)
+                else if (!state.opponent.compiled[i] && resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                    score = 300; // VERY HIGH - Completing a compile is the most important thing!
+                    reason += ` [COMPILE: Face-down finishes at ${currentLaneValue} -> ${resultingValue} beats player ${state.player.laneValues[i]}]`;
+                }
+                // PRIORITY 3: BLOCK opponent from compiling by reaching equal value or getting ahead
+                // If player has 10+ and could compile, we MUST catch up to block them!
+                // Equal value = neither can compile = we blocked them!
+                else if (!state.opponent.compiled[i] && state.player.laneValues[i] >= 10 && resultingValue >= state.player.laneValues[i]) {
+                    score = 250; // Very high - blocking opponent compile is critical!
+                    reason += ` [BLOCK COMPILE: Face-down reaches ${resultingValue} vs player ${state.player.laneValues[i]}]`;
+                }
+                else if (!state.opponent.compiled[i] && state.player.laneValues[i] >= 10 && resultingValue < state.player.laneValues[i]) {
+                    // Player has 10+ and we CAN'T catch up - WASTED CARD! Player will still compile!
+                    score = -200;
+                    reason += ` [WASTED: ${resultingValue} vs player ${state.player.laneValues[i]} - player still compiles!]`;
                 }
                 // EMERGENCY 3: No face-up option available and we have a low-value card (0-1)
                 else if (!playCheckFaceUp.allowed && card.value <= 1) {
@@ -1163,9 +1198,80 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
 
             if (possibleLanes.length > 0) {
-                // Pick random lane (human-like)
-                const randomLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-                return { type: 'selectLane', laneIndex: randomLane };
+                // SMART SHIFT: Choose lane strategically based on whose card is being shifted
+                // Get the card being shifted to determine owner
+                const cardToShiftId = 'cardToShiftId' in action ? action.cardToShiftId : null;
+                let cardOwner: Player | null = null;
+                let cardValue = 0;
+
+                if (cardToShiftId) {
+                    for (const playerKey of ['player', 'opponent'] as const) {
+                        for (const lane of state[playerKey].lanes) {
+                            const card = lane.find(c => c.id === cardToShiftId);
+                            if (card) {
+                                cardOwner = playerKey;
+                                cardValue = card.isFaceUp ? card.value : 2;
+                                break;
+                            }
+                        }
+                        if (cardOwner) break;
+                    }
+                }
+
+                // Score each lane
+                const lanePriorities = possibleLanes.map(laneIdx => {
+                    let score = 0;
+                    const playerValue = state.player.laneValues[laneIdx];
+                    const opponentValue = state.opponent.laneValues[laneIdx];
+                    const playerCompiled = state.player.compiled[laneIdx];
+                    const opponentCompiled = state.opponent.compiled[laneIdx];
+
+                    if (cardOwner === 'player') {
+                        // Shifting PLAYER's card (enemy card) - we want to HURT them
+                        // BEST: Shift to lane where player already compiled (wastes their value)
+                        if (playerCompiled) {
+                            score += 100; // Excellent - their compiled lane, value is wasted there
+                        }
+                        // GOOD: Shift to lane where we (opponent) are ahead
+                        else if (opponentValue > playerValue) {
+                            score += 50; // We're winning this lane, their card won't help much
+                        }
+                        // AVOID: Shift to lane where player needs value to compile
+                        else if (playerValue >= 6 && playerValue < 10 && !playerCompiled) {
+                            score -= 50; // Don't help them reach compile!
+                        }
+                    } else if (cardOwner === 'opponent') {
+                        // Shifting our own card - we want to HELP ourselves
+                        // BEST: Shift to uncompiled lane where we need more value
+                        if (!opponentCompiled && opponentValue < 10) {
+                            // Closer to compile = better destination
+                            if (opponentValue + cardValue >= 10) {
+                                score += 100; // This could complete a compile!
+                            } else if (opponentValue >= 6) {
+                                score += 60; // Near compile, good destination
+                            } else {
+                                score += 30; // Building value
+                            }
+                        }
+                        // AVOID: Our already compiled lanes (wasted)
+                        else if (opponentCompiled) {
+                            score -= 50;
+                        }
+                    }
+
+                    return { laneIdx, score };
+                });
+
+                // Sort by score descending and pick best
+                lanePriorities.sort((a, b) => b.score - a.score);
+
+                // Add some randomness - 20% chance to pick suboptimally
+                if (shouldMakeMistake() && lanePriorities.length > 1) {
+                    const randomIdx = Math.floor(Math.random() * lanePriorities.length);
+                    return { type: 'selectLane', laneIndex: lanePriorities[randomIdx].laneIdx };
+                }
+
+                return { type: 'selectLane', laneIndex: lanePriorities[0].laneIdx };
             }
             return { type: 'selectLane', laneIndex: 0 };
         }

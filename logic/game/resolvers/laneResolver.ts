@@ -789,8 +789,16 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             newState = log(newState, actor, `${sourceCardName}: ${actorName} targets Protocol ${targetProtocolName}.`);
 
+            // CRITICAL: Track top cards BEFORE deletion for uncover detection
+            const topCardsBefore: Map<Player, string | null> = new Map();
+            for (const p of ['player', 'opponent'] as Player[]) {
+                const lane = prev[p].lanes[targetLaneIndex];
+                topCardsBefore.set(p, lane.length > 0 ? lane[lane.length - 1].id : null);
+            }
+
             const cardsToDelete: AnimationRequest[] = [];
             const deletedCardNames: string[] = [];
+            const deletedCardIds = new Set<string>();
 
             for (const p of ['player', 'opponent'] as Player[]) {
                 const playerState = prev[p];
@@ -816,6 +824,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.owner === 'opponent' && p === actor) continue;
 
                     cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                    deletedCardIds.add(card.id);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
                     deletedCardNames.push(`${ownerName} ${cardName}`);
@@ -846,6 +855,44 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NOTE: Hate-3 trigger is now handled via processReactiveEffects (custom protocol)
                         const reactiveResult = processReactiveEffects(stateAfterDelete, 'after_delete', { player: actor });
                         stateAfterDelete = reactiveResult.newState;
+
+                        // CRITICAL FIX: Check for uncover effects after bulk delete
+                        // For each player, check if the old top card was deleted and a new card is now uncovered
+                        // IMPORTANT: Collect ALL players that need uncover, then process them
+                        const playersNeedingUncover: Player[] = [];
+                        for (const p of ['player', 'opponent'] as Player[]) {
+                            const oldTopCardId = topCardsBefore.get(p);
+                            const laneAfter = stateAfterDelete[p].lanes[targetLaneIndex];
+
+                            // If the old top card was deleted and there are still cards in the lane
+                            if (oldTopCardId && deletedCardIds.has(oldTopCardId) && laneAfter.length > 0) {
+                                playersNeedingUncover.push(p);
+                            }
+                        }
+
+                        // Process uncover effects - if first creates actionRequired, queue remaining
+                        for (let i = 0; i < playersNeedingUncover.length; i++) {
+                            const p = playersNeedingUncover[i];
+                            const uncoverResult = handleUncoverEffect(stateAfterDelete, p, targetLaneIndex);
+                            stateAfterDelete = uncoverResult.newState;
+
+                            // If uncover created an actionRequired and there are more players to process
+                            if (stateAfterDelete.actionRequired && i < playersNeedingUncover.length - 1) {
+                                // Queue remaining uncover effects
+                                const remainingPlayers = playersNeedingUncover.slice(i + 1);
+                                for (const remainingPlayer of remainingPlayers) {
+                                    stateAfterDelete.queuedActions = [
+                                        ...(stateAfterDelete.queuedActions || []),
+                                        {
+                                            type: 'pending_uncover_effect',
+                                            owner: remainingPlayer,
+                                            laneIndex: targetLaneIndex,
+                                        } as any
+                                    ];
+                                }
+                                return stateAfterDelete;
+                            }
+                        }
 
                         // NEW: Handle generic followUpEffect for custom protocols
                         if (followUpEffect && sourceCardId) {

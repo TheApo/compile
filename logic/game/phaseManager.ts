@@ -6,7 +6,7 @@
 import { GameState, Player, GamePhase, PlayedCard, ActionRequired, EffectContext } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
-import { findCardOnBoard, isCardUncovered, internalShiftCard } from './helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, internalShiftCard, handleUncoverEffect } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../utils/log';
 // NOTE: handleAnarchyConditionalDraw removed - old Anarchy-0 code is no longer used, custom protocol handles this
@@ -487,6 +487,22 @@ export const processQueuedActions = (state: GameState): GameState => {
                 const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
                 const sourceName = sourceCard ? `${sourceCard.card.protocol}-${sourceCard.card.value}` : 'A card effect';
                 mutableState = log(mutableState, mutableState.turn, `${sourceName}: Opponent has no cards to reveal.`);
+            }
+            continue; // Action resolved, move to next in queue
+        }
+
+        // GENERIC: Auto-resolve pending_uncover_effect actions (bulk delete uncovered multiple cards)
+        if (nextAction.type === 'pending_uncover_effect') {
+            const { owner, laneIndex } = nextAction as any;
+            console.log(`[pending_uncover_effect] Processing uncover for ${owner} in lane ${laneIndex}`);
+
+            const uncoverResult = handleUncoverEffect(mutableState, owner, laneIndex);
+            mutableState = uncoverResult.newState;
+
+            // If uncover created an actionRequired, pause and save remaining queue
+            if (mutableState.actionRequired) {
+                mutableState.queuedActions = queuedActions;
+                return mutableState;
             }
             continue; // Action resolved, move to next in queue
         }

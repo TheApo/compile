@@ -22,7 +22,7 @@
     border-color: var(--secondary-color);
     color: var(--secondary-color);
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: 0.7;
     background-color: transparent;
 }
 
@@ -182,6 +182,20 @@
     width: 160px;
     height: 224px;
     font-size: 0.65rem;
+}
+
+/* Larger log preview for big screens */
+@media (min-width: 1441px) {
+    .log-preview-area {
+        flex: 0 0 240px;
+        min-height: 380px;
+    }
+
+    .log-preview-area .card-component {
+        width: 220px;
+        height: 308px;
+        font-size: 0.85rem;
+    }
 }
 
 .log-preview-card {
@@ -837,108 +851,6 @@
     background-image:
         radial-gradient(circle at 20% 30%, hsla(210, 80%, 65%, 0.15), transparent 40%),
         radial-gradient(circle at 80% 70%, hsla(190, 70%, 60%, 0.2), transparent 50%);
-}
-
-/* --- In-Game Card Overrides --- */
-.lane-stack .card-component,
-.player-hand-area .card-component.in-hand,
-.card-ticker-track .card-component.in-hand,
-.protocol-card-grid .card-component.in-hand,
-.selected-protocol-cards-container .card-component.in-hand,
-.debug-card-grid .card-component.in-hand {
-    font-size: 0.6rem;
-}
-.lane-stack .card-front,
-.player-hand-area .card-front,
-.card-ticker-track .card-front,
-.protocol-card-grid .card-front,
-.selected-protocol-cards-container .card-front,
-.debug-card-grid .card-front {
-    padding: 2px;
-}
-
-.lane-stack .card-component .card-header,
-.player-hand-area .card-component.in-hand .card-header,
-.card-ticker-track .card-component.in-hand .card-header,
-.protocol-card-grid .card-component.in-hand .card-header,
-.selected-protocol-cards-container .card-component.in-hand .card-header,
-.debug-card-grid .card-component.in-hand .card-header {
-    margin-bottom: 4px;
-    gap: 0 !important; /* CRITICAL: No gap to prevent overflow */
-}
-
-/* REMOVED: This rule was hiding the protocol name text */
-
-/* Larger font for short protocol names (≤ 8 characters) */
-.lane-stack .card-component .card-protocol.short-protocol,
-.player-hand-area .card-component.in-hand .card-protocol.short-protocol,
-.card-ticker-track .card-component.in-hand .card-protocol.short-protocol,
-.protocol-card-grid .card-component.in-hand .card-protocol.short-protocol,
-.selected-protocol-cards-container .card-component.in-hand .card-protocol.short-protocol,
-.debug-card-grid .card-component.in-hand .card-protocol.short-protocol {
-    font-size: 1.15em;
-}
-
-.lane-stack .card-component .card-value,
-.player-hand-area .card-component.in-hand .card-value,
-.card-ticker-track .card-component.in-hand .card-value,
-.protocol-card-grid .card-component.in-hand .card-value,
-.selected-protocol-cards-container .card-component.in-hand .card-value,
-.debug-card-grid .card-component.in-hand .card-value {
-    padding: 1px 4px;
-    clip-path: polygon(4px 0, 100% 0, 100% 100%, 0% 100%);
-    font-size: 1.8em;
-    /* CRITICAL: ALWAYS visible, NEVER shrinks */
-    min-width: 28px !important;
-    width: 28px !important;
-    max-width: 28px !important;
-    flex: 0 0 28px !important;
-    flex-shrink: 0 !important;
-    z-index: 100 !important;
-    position: relative !important;
-    background: rgba(10, 5, 26, 0.98) !important;
-}
-
-.lane-stack .card-component .card-body,
-.player-hand-area .card-component.in-hand .card-body,
-.card-ticker-track .card-component.in-hand .card-body,
-.protocol-card-grid .card-component.in-hand .card-body,
-.selected-protocol-cards-container .card-component.in-hand .card-body,
-.debug-card-grid .card-component.in-hand .card-body {
-    gap: 2px;
-}
-
-.lane-stack .card-component .card-rule-box,
-.player-hand-area .card-component.in-hand .card-rule-box,
-.card-ticker-track .card-component.in-hand .card-rule-box,
-.protocol-card-grid .card-component.in-hand .card-rule-box,
-.selected-protocol-cards-container .card-component.in-hand .card-rule-box,
-.debug-card-grid .card-component.in-hand .card-rule-box {
-    padding: 1px 3px;
-    font-size: 0.9em;
-    line-height: 1.25;
-}
-
-.lane-stack .card-component .card-rule-box::before,
-.lane-stack .card-component .card-rule-box::after,
-.player-hand-area .card-component.in-hand .card-rule-box::before,
-.player-hand-area .card-component.in-hand .card-rule-box::after,
-.card-ticker-track .card-component.in-hand .card-rule-box::before,
-.card-ticker-track .card-component.in-hand .card-rule-box::after,
-.protocol-card-grid .card-component.in-hand .card-rule-box::before,
-.protocol-card-grid .card-component.in-hand .card-rule-box::after,
-.selected-protocol-cards-container .card-component.in-hand .card-rule-box::before,
-.selected-protocol-cards-container .card-component.in-hand .card-rule-box::after,
-.debug-card-grid .card-component.in-hand .card-rule-box::before,
-.debug-card-grid .card-component.in-hand .card-rule-box::after {
-    width: 6px;
-    height: 6px;
-}
-
-.opponent-hand-area .card-component.in-hand {
-    font-size: 0.5rem;
-    
-    margin-bottom: -3.5rem;
 }
 
 /* --- Phase Controller --- */

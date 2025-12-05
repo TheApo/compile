@@ -2748,6 +2748,117 @@ export const scenario51_Speed3EndEffectSoftlock: TestScenario = {
     }
 };
 
+/**
+ * Szenario 52: Uncover nach "Delete All" in Lane Test
+ *
+ * Setup:
+ * - Player's Turn, Action Phase
+ * - Player hat Death-2 in Hand (Middle: "Delete all cards in 1 line with values of 1 or 2")
+ * - Opponent hat auf Lane 0:
+ *   - Unten: Fire-5 (face-up) - diese sollte uncovered werden!
+ *   - Oben: Fire-2 (face-up) - diese wird gelöscht
+ *
+ * Test:
+ * 1. Player spielt Death-2 auf Lane 0
+ * 2. Death-2 Effekt triggert: "Wähle eine Lane"
+ * 3. Player wählt Lane 0
+ * 4. Fire-2 wird gelöscht (Wert 2 im Bereich 1-2)
+ * 5. Fire-5 sollte jetzt uncovered werden und dessen Effekt triggern!
+ *
+ * Bug vorher: Nach dem Löschen von Fire-2 wurde Fire-5 nicht uncovered
+ * Erwartet: Fire-5 wird uncovered und dessen Middle-Effekt triggert
+ */
+export const scenario52_UncoverAfterBulkDelete: TestScenario = {
+    name: "Uncover nach Delete All in Lane Test",
+    description: "Death-2 löscht alle 1/2er → Karte darunter wird uncovered → Effekt triggert",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Death', 'Fire', 'Water'],      // Player protocols
+            ['Fire', 'Spirit', 'Light'],     // Opponent protocols
+            'player',
+            'action'
+        );
+
+        // Player: Death-2 in Hand zum Spielen
+        newState.player.hand = [
+            createCard('Death', 2, true),
+            createCard('Fire', 3, true),
+            createCard('Water', 4, true),
+        ];
+
+        // Opponent Lane 0: Fire-5 unten (wird uncovered), Fire-2 oben (wird gelöscht)
+        // WICHTIG: Fire-5 hat Middle-Effekt "Draw 2" - einfacher zu testen
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 5, true));  // Unten - bleibt
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 2, true));  // Oben - wird gelöscht
+
+        // Player Lane 0: Auch eine Karte die gelöscht werden könnte
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 4, true));  // Wert 4 - bleibt
+
+        // Mehr Kontext für realistisches Spiel
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Spirit', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 53: Mehrfach-Uncover nach "Delete All" in Lane Test
+ *
+ * Setup:
+ * - Player's Turn, Action Phase
+ * - Player hat Death-2 in Hand
+ * - Lane 0 hat bei BEIDEN Spielern Karten die gelöscht werden:
+ *   - Player Lane 0: Water-5 unten (bleibt), Water-1 oben (wird gelöscht)
+ *   - Opponent Lane 0: Fire-5 unten (bleibt), Fire-2 oben (wird gelöscht)
+ *
+ * Test:
+ * 1. Player spielt Death-2
+ * 2. Beide 1/2er werden gelöscht
+ * 3. BEIDE 5er sollten uncovered werden!
+ *
+ * Bug vorher: Nur eine der Karten wurde uncovered
+ * Erwartet: Beide Karten werden uncovered und deren Effekte triggern
+ */
+export const scenario53_MultiUncoverAfterBulkDelete: TestScenario = {
+    name: "Mehrfach-Uncover nach Delete All Test",
+    description: "Death-2 löscht bei beiden Spielern → beide Karten darunter werden uncovered",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Death', 'Water', 'Spirit'],    // Player protocols
+            ['Fire', 'Light', 'Gravity'],    // Opponent protocols
+            'player',
+            'action'
+        );
+
+        // Player: Death-2 in Hand
+        newState.player.hand = [
+            createCard('Death', 2, true),
+            createCard('Spirit', 3, true),
+        ];
+		
+
+        newState.opponent.hand = [
+            createCard('Fire', 3, true),
+            createCard('Light', 5, true),
+        ];
+
+        // Player Lane 0: Water-5 unten (wird uncovered), Water-1 oben (wird gelöscht)
+        newState = placeCard(newState, 'player', 0, createCard('Water', 5, true));   // Unten - bleibt
+        newState = placeCard(newState, 'player', 0, createCard('Water', 1, true));   // Oben - wird gelöscht
+
+        // Opponent Lane 0: Fire-5 unten (wird uncovered), Fire-2 oben (wird gelöscht)
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 5, true));  // Unten - bleibt
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 2, true));  // Oben - wird gelöscht
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2800,4 +2911,6 @@ export const allScenarios: TestScenario[] = [
     scenario49_PsychicCustomPlayground,
     scenario50_Gravity2SingleCardBug,
     scenario51_Speed3EndEffectSoftlock,
+    scenario52_UncoverAfterBulkDelete,
+    scenario53_MultiUncoverAfterBulkDelete,
 ];

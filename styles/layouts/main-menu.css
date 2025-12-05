@@ -9,7 +9,7 @@
   padding-top: 2rem;
   gap: 1rem;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1600px;
   position: relative;
 }
 
@@ -150,7 +150,7 @@
   font-weight: 700;
   padding: 3px 6px;
   border-radius: 4px;
-  transform: rotate(-20deg);
+  transform: rotate(15deg);
   box-shadow: 0 2px 8px rgba(255, 107, 53, 0.7), 0 0 12px rgba(255, 107, 53, 0.4);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -170,9 +170,9 @@
 }
 
 .difficulty-selector .btn:disabled {
-  opacity: 0.7;
-  border-color: var(--secondary-color);
-  color: var(--secondary-color);
+  opacity: 1;
+  border-color: #6a5acd;
+  color: #6a5acd;
   background-color: transparent;
 }
 
@@ -261,4 +261,3 @@
     transform: translateX(-50%);
   }
 }
-
