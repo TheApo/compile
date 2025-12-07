@@ -373,7 +373,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // =========================================================================
         // SELECT CARD TO FLIP - GENERIC (uses targetFilter, scope, optional)
         // =========================================================================
-        case 'select_card_to_flip': {
+        case 'select_card_to_flip':
+        case 'select_any_card_to_flip':
+        case 'select_any_card_to_flip_optional': {
             const frost1Active = isFrost1Active(state);
             const validTargets = getValidTargets(
                 state,

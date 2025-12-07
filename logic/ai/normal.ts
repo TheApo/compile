@@ -787,38 +787,74 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_face_down_card_to_flip_optional':
         case 'select_any_card_to_flip_optional': {
             const frost1Active = isFrost1Active(state);
-            const getUncovered = (p: Player) => state[p].lanes
-                .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
-                .filter((c): c is PlayedCard => c !== null);
+            const targetFilter = action.targetFilter;
+            const sourceCardId = action.sourceCardId;
+            const cardOwner = action.actor; // The card owner (who is executing this effect)
 
-            const playerUncovered = getUncovered('player');
-            const opponentUncovered = getUncovered('opponent');
+            // Build valid targets respecting targetFilter
+            const validTargets: { card: PlayedCard; owner: Player }[] = [];
 
-            const targets: { cardId: string; score: number }[] = [];
-
-            // Player face-up cards (flip to face-down)
-            playerUncovered.forEach(c => {
-                if (c.isFaceUp) {
-                    targets.push({ cardId: c.id, score: getCardThreat(c, 'player', state) + 10 });
-                } else if (!frost1Active) {
-                    // Face-down: only flip if we're curious (low score) and Frost-1 is NOT active
-                    targets.push({ cardId: c.id, score: 3 });
+            for (const playerKey of ['player', 'opponent'] as const) {
+                // Owner filter is relative to cardOwner
+                if (targetFilter) {
+                    if (targetFilter.owner === 'own' && playerKey !== cardOwner) continue;
+                    if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
                 }
-            });
 
-            // Own face-down cards (flip to activate) - Only if Frost-1 is NOT active
-            if (!frost1Active) {
-                opponentUncovered.forEach(c => {
-                    if (!c.isFaceUp) {
-                        targets.push({ cardId: c.id, score: c.value + 8 });
+                for (const lane of state[playerKey].lanes) {
+                    if (lane.length === 0) continue;
+
+                    for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
+                        const card = lane[cardIndex];
+                        const isTopCard = cardIndex === lane.length - 1;
+
+                        // Use centralized filter matching if targetFilter exists
+                        if (targetFilter) {
+                            if (!matchesTargetFilter(card, isTopCard, targetFilter, sourceCardId)) continue;
+                        } else {
+                            // Default: only uncovered cards
+                            if (!isTopCard) continue;
+                        }
+
+                        // Frost-1 restriction: can't flip face-down cards to face-up
+                        if (frost1Active && !card.isFaceUp) continue;
+
+                        validTargets.push({ card, owner: playerKey });
                     }
-                });
+                }
             }
 
-            if (targets.length === 0) return { type: 'skip' };
+            if (validTargets.length === 0) return { type: 'skip' };
 
-            targets.sort((a, b) => b.score - a.score);
-            return { type: 'flipCard', cardId: targets[0].cardId };
+            // Score targets strategically
+            const scored = validTargets.map(({ card, owner }) => {
+                let score = 0;
+
+                if (owner === 'player') {
+                    // Flipping player's cards
+                    if (card.isFaceUp) {
+                        // Face-up -> Face-down: Good if high value
+                        score = card.value * 10 + getCardThreat(card, 'player', state);
+                    } else {
+                        // Face-down -> Face-up: Risky, might help them
+                        score = 3;
+                    }
+                } else {
+                    // Flipping own cards
+                    if (card.isFaceUp) {
+                        // Face-up -> Face-down: Bad, lose value
+                        score = -card.value * 10 - 50;
+                    } else {
+                        // Face-down -> Face-up: Good, gain value
+                        score = card.value + 8;
+                    }
+                }
+
+                return { cardId: card.id, score };
+            });
+
+            scored.sort((a, b) => b.score - a.score);
+            return { type: 'flipCard', cardId: scored[0].cardId };
         }
 
         case 'plague_2_opponent_discard': {

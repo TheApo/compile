@@ -259,7 +259,29 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
 
             // Effect completed immediately (no actionRequired), execute followUp now
             console.log('[DEBUG resolveOptionalEffectPrompt] Executing if_executed followUp immediately:', effectDef.conditional.thenEffect.id);
-            const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, effectDef.conditional.thenEffect);
+            const followUpEffect = effectDef.conditional.thenEffect;
+            console.log('[DEBUG resolveOptionalEffectPrompt] followUpEffect:', followUpEffect.id, 'params:', JSON.stringify(followUpEffect.params), 'has conditional?', !!followUpEffect.conditional, 'actor:', actor);
+            const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, followUpEffect);
+            console.log('[DEBUG resolveOptionalEffectPrompt] After followUp executeCustomEffect, actionRequired:', followUpResult.newState.actionRequired?.type || 'null');
+
+            // CRITICAL: If the followUp created an actionRequired AND the followUp has its own conditional,
+            // attach the nested conditional as a followUpEffect so it executes after the action completes
+            // Example: Death-1's "draw -> if you do, delete other -> then delete self"
+            if (followUpResult.newState.actionRequired && followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
+                console.log('[DEBUG resolveOptionalEffectPrompt] followUp has actionRequired AND nested conditional, attaching:', followUpEffect.conditional.thenEffect.id);
+                const stateWithNestedFollowUp = {
+                    ...followUpResult.newState,
+                    actionRequired: {
+                        ...followUpResult.newState.actionRequired,
+                        followUpEffect: followUpEffect.conditional.thenEffect,
+                        conditionalType: followUpEffect.conditional.type,
+                    } as any
+                };
+                console.log('[DEBUG resolveOptionalEffectPrompt] Returning state with nested followUp, actionRequired:', stateWithNestedFollowUp.actionRequired?.type);
+                return stateWithNestedFollowUp;
+            }
+
+            console.log('[DEBUG resolveOptionalEffectPrompt] No nested conditional, returning followUpResult.newState, actionRequired:', followUpResult.newState.actionRequired?.type || 'null');
             return followUpResult.newState;
         }
 

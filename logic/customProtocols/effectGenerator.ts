@@ -200,6 +200,8 @@ const executeFlipEffect = (
         count: params.count,
         sourceCardId: card.id,
         actor: cardOwner,
+        targetFilter: params.targetFilter,  // Pass targetFilter so AI can use it
+        optional: params.optional,
     };
 
     // Handle self-flip after
@@ -234,7 +236,9 @@ const executeShiftEffect = (
         type: 'select_card_to_shift' as any,
         sourceCardId: card.id,
         actor: cardOwner,
+        targetFilter: params.targetFilter,  // Pass targetFilter so AI can use it
         destinationRestriction: params.destinationRestriction,
+        optional: params.optional,
     };
 
     return { newState };
