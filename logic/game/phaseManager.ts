@@ -834,6 +834,20 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     // The previous action has been resolved, clear it.
     let stateAfterAction = { ...state, actionRequired: null };
 
+    // CRITICAL FIX: Process queuedActions FIRST before continuing the turn.
+    // This handles cases like Life-1's "Flip 1 card. Flip 1 card." where the second flip
+    // is queued in queuedActions after the first flip completes during start phase.
+    // Without this, the queued actions would be lost and cause a softlock.
+    if (stateAfterAction.queuedActions && stateAfterAction.queuedActions.length > 0) {
+        console.log('[continueTurnAfterStartPhaseAction] Processing queuedActions:', stateAfterAction.queuedActions.length);
+        const stateAfterQueue = processQueuedActions(stateAfterAction);
+        if (stateAfterQueue.actionRequired) {
+            console.log('[continueTurnAfterStartPhaseAction] queuedActions created actionRequired:', stateAfterQueue.actionRequired.type);
+            return stateAfterQueue;
+        }
+        stateAfterAction = stateAfterQueue;
+    }
+
     // Now, re-evaluate the start phase to see if there are other start effects to process.
     // The `processedStartEffectIds` will prevent the same effect from running again.
     const stateAfterRecheck = executeStartPhaseEffects(stateAfterAction).newState;

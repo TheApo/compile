@@ -1041,7 +1041,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     }
                 }
             }
-            requiresTurnEnd = !newState.actionRequired;
+            // Queue any pending custom effects from multi-effect cards
+            newState = phaseManager.queuePendingCustomEffects(newState);
+            requiresTurnEnd = !newState.actionRequired && (!newState.queuedActions || newState.queuedActions.length === 0);
             break;
         }
         case 'select_opponent_card_to_return': { // Psychic-4
@@ -1088,6 +1090,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     },
                 };
             }
+            // Queue any pending custom effects from multi-effect cards
+            newState = phaseManager.queuePendingCustomEffects(newState);
+            if (!requiresTurnEnd) {
+                requiresTurnEnd = !newState.actionRequired && (!newState.queuedActions || newState.queuedActions.length === 0);
+            }
             break;
         }
         // REMOVED: select_own_card_to_return_for_water_4 - Water-4 now uses custom protocol with select_card_to_return
@@ -1115,13 +1122,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     actor,
                 };
             }
-        
+
             let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, nextActionInChain);
-            
+
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const onFlipResult = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
                 const interruptAction = onFlipResult.newState.actionRequired;
-                
+
                 if (interruptAction && interruptAction !== nextActionInChain) {
                     if (nextActionInChain) {
                         onFlipResult.newState.queuedActions = [
@@ -1130,7 +1137,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         ];
                     }
                 }
-        
+
                 newState = onFlipResult.newState;
                 if (onFlipResult.animationRequests) {
                     requiresAnimation = {
@@ -1144,7 +1151,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             } else {
                 newState = stateAfterFlip;
             }
-            
+
+            // CRITICAL FIX: Queue pending custom effects (e.g., Life-1's second "Flip 1 card" effect)
+            // Life-1 has TWO SEPARATE middleEffects, not ONE effect with count=2.
+            // When the first effect completes, _pendingCustomEffects contains the second effect.
+            // Without this call, the second flip would never execute, causing a softlock.
+            newState = phaseManager.queuePendingCustomEffects(newState);
+
             requiresTurnEnd = !newState.actionRequired && (!newState.queuedActions || newState.queuedActions.length === 0);
             break;
         }

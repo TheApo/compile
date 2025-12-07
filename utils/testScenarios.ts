@@ -2859,6 +2859,66 @@ export const scenario53_MultiUncoverAfterBulkDelete: TestScenario = {
     }
 };
 
+/**
+ * Szenario 54: Life-1 Uncover Double Flip Bug Test
+ *
+ * Setup:
+ * - PLAYER's Turn, START Phase
+ * - Player hat Death-1 bereits auf dem Board (Start-Effekt triggert!)
+ * - Opponent Lane 0: Life-1 (unten, covered) + beliebige Karte (oben - wird gelöscht)
+ * - Beide Spieler haben weitere Karten zum Flippen
+ *
+ * Test:
+ * 1. Death-1 Start-Effekt triggert: "Draw 1. Delete 1 other card. Delete this."
+ * 2. Player wählt Draw (optional)
+ * 3. Player wählt Opponent's obere Karte zum Löschen
+ * 4. Life-1 wird uncovered → Effekt triggert: "Flip 1 card. Flip 1 card."
+ * 5. Opponent muss ZWEIMAL flippen (nicht nur einmal!)
+ *
+ * Bug vorher: Nur der erste Flip wurde ausgeführt, der zweite wurde übersprungen
+ * Erwartet: Beide Flip-Aktionen werden nacheinander ausgeführt
+ */
+export const scenario54_Life1UncoverDoubleFlip: TestScenario = {
+    name: "Life-1 Uncover → Double Flip Bug",
+    description: "Death-1 Start löscht → Life-1 uncovered → BEIDE Flips müssen ausgeführt werden",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Death', 'Fire', 'Water'],    // Player protocols - Death für Death-1!
+            ['Life', 'Metal', 'Spirit'],   // Opponent protocols - Life für Life-1!
+            'player',                       // PLAYER's turn
+            'start'                         // START Phase - Death-1 Effekt triggert!
+        );
+
+        // Player: Leere Hand (nicht relevant für Start-Effekt)
+        newState.player.hand = [
+            createCard('Fire', 2, true),
+        ];
+
+        // Opponent: Einige Karten in Hand (nicht relevant)
+        newState.opponent.hand = [
+            createCard('Metal', 3, true),
+            createCard('Spirit', 2, true),
+        ];
+
+        // Player Lane 0: Death-1 (face-up, Start-Effekt wird triggern!)
+        newState = placeCard(newState, 'player', 0, createCard('Death', 1, true));
+
+        // Opponent Lane 0: Life-1 (unten, covered) + Metal-0 (oben - wird gelöscht)
+        // Life-1 wird uncovered nachdem Metal-0 gelöscht wird
+        newState = placeCard(newState, 'opponent', 0, createCard('Life', 1, true));  // UNTEN - wird uncovered
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 0, true)); // OBEN - wird gelöscht
+
+        // Weitere Karten zum Flippen (Life-1 braucht Ziele für beide Flips!)
+        newState = placeCard(newState, 'player', 1, createCard('Water', 1, true));    // Flip target 1
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 1, true));  // Flip target 2
+        newState = placeCard(newState, 'opponent', 2, createCard('Spirit', 0, true)); // Flip target 3
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2913,4 +2973,5 @@ export const allScenarios: TestScenario[] = [
     scenario51_Speed3EndEffectSoftlock,
     scenario52_UncoverAfterBulkDelete,
     scenario53_MultiUncoverAfterBulkDelete,
+    scenario54_Life1UncoverDoubleFlip,
 ];
