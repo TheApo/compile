@@ -336,13 +336,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // SELECT CARDS TO DELETE - GENERIC (uses targetFilter, scope, count)
         // =========================================================================
         case 'select_cards_to_delete': {
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
                 action.scope,
                 action.sourceCardId,
-                action.laneIndex
+                restrictedLaneIndex
             );
 
             // Filter out disallowed IDs
@@ -377,13 +379,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_card_to_flip':
         case 'select_any_card_to_flip_optional': {
             const frost1Active = isFrost1Active(state);
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (flipExecutor uses laneIndex!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
                 action.scope,
                 action.sourceCardId,
-                action.currentLaneIndex
+                restrictedLaneIndex
             );
 
             if (validTargets.length === 0) {
@@ -422,13 +426,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // SELECT CARD TO SHIFT - GENERIC (uses targetFilter, destinationRestriction)
         // =========================================================================
         case 'select_card_to_shift': {
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
                 action.scope,
                 action.sourceCardId,
-                action.currentLaneIndex
+                restrictedLaneIndex
             );
 
             if (validTargets.length === 0) {
@@ -448,13 +454,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // SELECT CARD TO RETURN - GENERIC (uses targetFilter)
         // =========================================================================
         case 'select_card_to_return': {
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
                 action.scope,
                 action.sourceCardId,
-                action.laneIndex
+                restrictedLaneIndex
             );
 
             if (validTargets.length === 0) {

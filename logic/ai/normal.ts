@@ -145,6 +145,56 @@ const getBestMove = (state: GameState): AIAction => {
     const opponentHasTargets = playerCardsOnBoard > 0;
 
     // =========================================================================
+    // CONTROL HUNTING STRATEGY: When player has compiled protocols, prioritize getting control!
+    // Control allows us to swap opponent's protocols on refresh, preventing their win.
+    // =========================================================================
+    const playerCompiledCount = state.player.compiled.filter(Boolean).length;
+    const weHaveControl = state.controlCardHolder === 'opponent';
+    const playerHasControl = state.controlCardHolder === 'player';
+
+    // Count how many lanes we're leading in (for control calculation)
+    let lanesWeAreLead = 0;
+    let lanesPlayerLeads = 0;
+    for (let i = 0; i < 3; i++) {
+        if (state.opponent.laneValues[i] > state.player.laneValues[i]) {
+            lanesWeAreLead++;
+        } else if (state.player.laneValues[i] > state.opponent.laneValues[i]) {
+            lanesPlayerLeads++;
+        }
+    }
+
+    // CONTROL HUNTING MODE: Activate when:
+    // 1. Control mechanic is enabled (useControlMechanic is true)
+    // 2. Player has 1+ compiled protocols (Control is valuable to block them!)
+    // 3. We DON'T have control yet
+    // Goal: Get control by leading in 2+ lanes, so we can block their win via protocol swap
+    // CRITICAL FIX: Use useControlMechanic, NOT controlCardHolder!
+    // controlCardHolder is null when control is neutral (nobody has it), not when disabled!
+    const controlMechanicEnabled = state.useControlMechanic === true;
+    const controlHuntingMode = controlMechanicEnabled && playerCompiledCount >= 1 && !weHaveControl;
+    const controlDefenseMode = weHaveControl && playerCompiledCount >= 1;
+
+    // Check if player is threatening to win (has 10+ in an uncompiled lane)
+    let playerThreateningWin = false;
+    let playerThreateningLaneIndex = -1;
+    for (let i = 0; i < 3; i++) {
+        if (!state.player.compiled[i] &&
+            state.player.laneValues[i] >= 10 &&
+            state.player.laneValues[i] > state.opponent.laneValues[i]) {
+            playerThreateningWin = true;
+            playerThreateningLaneIndex = i;
+            break;
+        }
+    }
+
+    if (controlHuntingMode) {
+        console.log(`[AI Normal] CONTROL HUNTING MODE: Player has ${playerCompiledCount} compiled, we lead ${lanesWeAreLead} lanes, need 2 for control`);
+    }
+    if (controlDefenseMode && playerThreateningWin) {
+        console.log(`[AI Normal] CONTROL DEFENSE MODE: We have control, player threatening win in lane ${playerThreateningLaneIndex}`);
+    }
+
+    // =========================================================================
     // LANE FOCUS STRATEGY: When 0 protocols compiled, focus on ONE lane
     // Choose the best lane based on hand cards (which protocol can we play most?)
     // =========================================================================
@@ -152,7 +202,8 @@ const getBestMove = (state: GameState): AIAction => {
     let focusLaneIndex = -1; // -1 means no focus (play freely)
 
     // ALWAYS choose a focus lane if we haven't compiled all 3 yet
-    if (ourCompiledCount < 3) {
+    // BUT: In control hunting mode, focus lane is less important - we want to lead in 2 lanes
+    if (ourCompiledCount < 3 && !controlHuntingMode) {
         // Find the best lane to focus on based on:
         // 1. Current lane value (MOST IMPORTANT - higher = closer to compile)
         // 2. Which protocol do we have cards for in hand?
@@ -459,13 +510,72 @@ const getBestMove = (state: GameState): AIAction => {
                     }
 
                     // FOCUS LANE STRATEGY: VERY strong bonus for focus lane, heavy penalty for others
-                    if (focusLaneIndex !== -1) {
+                    // BUT: Disabled in control hunting mode
+                    if (focusLaneIndex !== -1 && !controlHuntingMode) {
                         if (i === focusLaneIndex) {
                             score += 150; // VERY strong bonus for focus lane
                             reason += ` [FOCUS LANE]`;
                         } else {
                             score -= 100; // Heavy penalty for non-focus lanes
                             reason += ` [Not focus lane]`;
+                        }
+                    }
+
+                    // =========================================================================
+                    // CONTROL HUNTING: Prioritize plays that give us lane leads
+                    // Control = leading in 2+ lanes. ANY lane counts!
+                    // These bonuses/penalties MUST override normal scoring!
+                    // =========================================================================
+                    if (controlHuntingMode) {
+                        const currentlyLeading = state.opponent.laneValues[i] > state.player.laneValues[i];
+                        const wouldLeadAfter = resultingValue > state.player.laneValues[i];
+                        const currentlyTied = state.opponent.laneValues[i] === state.player.laneValues[i];
+
+                        // CRITICAL: If we already lead this lane, heavily penalize playing more here!
+                        // We need to build in OTHER lanes to get control!
+                        if (currentlyLeading) {
+                            score -= 200; // HEAVY penalty - don't waste cards in lanes we already lead!
+                            reason += ` [ALREADY LEADING - DON'T WASTE!]`;
+                        }
+                        // HUGE BONUS: This play would give us lead in a lane we don't currently lead
+                        else if (!currentlyLeading && wouldLeadAfter) {
+                            if (lanesWeAreLead === 1) {
+                                // This would give us 2 leads = CONTROL!
+                                score += 500; // MASSIVE bonus - this wins us control!
+                                reason += ` [CONTROL CAPTURE! 1->2 leads]`;
+                            } else if (lanesWeAreLead === 0) {
+                                // First lead - very valuable
+                                score += 300;
+                                reason += ` [First lead! 0->1 leads]`;
+                            } else {
+                                // Already have control, but more leads is still good
+                                score += 100;
+                                reason += ` [Extra lead]`;
+                            }
+                        }
+                        // Bonus for breaking ties - this is often how we get control!
+                        else if (currentlyTied && wouldLeadAfter) {
+                            if (lanesWeAreLead === 1) {
+                                score += 450; // Breaking tie gives us control!
+                                reason += ` [BREAK TIE FOR CONTROL!]`;
+                            } else {
+                                score += 250;
+                                reason += ` [Break tie]`;
+                            }
+                        }
+                        // BUILD UP: If we have 1 lead but can't immediately get 2nd, BUILD in non-leading lanes
+                        else if (!currentlyLeading && !wouldLeadAfter && lanesWeAreLead === 1) {
+                            const gapToLead = state.player.laneValues[i] - resultingValue;
+                            if (gapToLead <= 3) {
+                                score += 200; // Close to getting lead!
+                                reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
+                            } else if (gapToLead <= 6) {
+                                score += 150;
+                                reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
+                            } else {
+                                score += 100;
+                                reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
+                            }
                         }
                     }
                 }
@@ -536,13 +646,62 @@ const getBestMove = (state: GameState): AIAction => {
                 }
 
                 // Focus lane bonus/penalty for cases not already handled above
-                if (focusLaneIndex !== -1 && score < 50) { // Only apply if not already a good score
+                // BUT: Disabled in control hunting mode
+                if (focusLaneIndex !== -1 && score < 50 && !controlHuntingMode) { // Only apply if not already a good score
                     if (i === focusLaneIndex) {
                         score += 50; // Some bonus for focus lane
                         reason += ` [Focus lane]`;
                     } else {
                         score -= 80; // Heavy penalty for non-focus
                         reason += ` [Not focus lane]`;
+                    }
+                }
+
+                // =========================================================================
+                // CONTROL HUNTING: Face-down plays for lane leads
+                // Control = leading in 2+ lanes. ANY lane counts!
+                // These bonuses/penalties MUST override normal scoring!
+                // =========================================================================
+                if (controlHuntingMode) {
+                    const currentlyLeading = state.opponent.laneValues[i] > state.player.laneValues[i];
+                    const wouldLeadAfter = resultingValue > state.player.laneValues[i];
+                    const currentlyTied = state.opponent.laneValues[i] === state.player.laneValues[i];
+
+                    // CRITICAL: If we already lead this lane, heavily penalize!
+                    if (currentlyLeading) {
+                        score -= 200; // HEAVY penalty - don't waste cards!
+                        reason += ` [FD ALREADY LEADING - DON'T WASTE!]`;
+                    }
+                    // Face-down that gains us a new lead
+                    else if (!currentlyLeading && wouldLeadAfter) {
+                        if (lanesWeAreLead === 1) {
+                            score += 400; // Face-down for control capture!
+                            reason += ` [FD CONTROL CAPTURE! 1->2 leads]`;
+                        } else if (lanesWeAreLead === 0) {
+                            score += 250;
+                            reason += ` [FD First lead!]`;
+                        }
+                    }
+                    // Breaking ties with face-down
+                    else if (currentlyTied && wouldLeadAfter) {
+                        if (lanesWeAreLead === 1) {
+                            score += 350; // Breaking tie gives us control!
+                            reason += ` [FD BREAK TIE FOR CONTROL!]`;
+                        } else {
+                            score += 200;
+                            reason += ` [FD Break tie]`;
+                        }
+                    }
+                    // BUILD UP: Face-down to build toward 2nd lead
+                    else if (!currentlyLeading && !wouldLeadAfter && lanesWeAreLead === 1) {
+                        const gapToLead = state.player.laneValues[i] - resultingValue;
+                        if (gapToLead <= 3) {
+                            score += 150;
+                            reason += ` [FD BUILD toward 2nd lead, gap=${gapToLead}]`;
+                        } else if (gapToLead <= 6) {
+                            score += 100;
+                            reason += ` [FD BUILD toward 2nd lead, gap=${gapToLead}]`;
+                        }
                     }
                 }
 
@@ -622,23 +781,57 @@ const getBestMove = (state: GameState): AIAction => {
 const handleRequiredAction = (state: GameState, action: ActionRequired): AIAction => {
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            // Control swap only makes sense if player has at least 1 compiled lane
-            // Otherwise there's nothing valuable to disrupt
             const playerCompiledCount = state.player.compiled.filter(c => c).length;
-            if (playerCompiledCount === 0) {
-                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
-            }
 
             // Get the compiling lane index if this is during a compile
             const compilingLaneIndex = state.compilableLanes.length > 0 ? state.compilableLanes[0] : null;
 
-            // Priority 1: Try to disrupt player if it actually hurts them
+            // =========================================================================
+            // CRITICAL STRATEGY: Use control to prevent player from winning!
+            // If player has compiled lanes AND a threatening uncompiled lane (10+),
+            // we can swap their protocols to make them recompile instead of winning.
+            // =========================================================================
+
+            // Find player's threatening lane (uncompiled with 10+ and leading)
+            let playerThreateningLane = -1;
+            for (let i = 0; i < 3; i++) {
+                if (!state.player.compiled[i] &&
+                    state.player.laneValues[i] >= 10 &&
+                    state.player.laneValues[i] > state.opponent.laneValues[i]) {
+                    playerThreateningLane = i;
+                    break;
+                }
+            }
+
+            // Find player's compiled lanes
+            const playerCompiledLanes = state.player.compiled
+                .map((c, i) => c ? i : -1)
+                .filter(i => i !== -1);
+
+            // PRIORITY 1: Can we force a recompile instead of a winning compile?
+            // Player has 10+ in uncompiled lane AND has compiled lanes to swap with
+            if (playerThreateningLane !== -1 && playerCompiledLanes.length > 0) {
+                console.log(`[AI Control] BLOCKING WIN: Player threatening in lane ${playerThreateningLane}, swapping with compiled lane`);
+                return { type: 'resolveControlMechanicPrompt', choice: 'player' };
+            }
+
+            // If player has no compiled lanes, control swap is less valuable
+            // But still check if it can help us
+            if (playerCompiledCount === 0) {
+                // Only use control if we can benefit from own rearrange
+                if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
+                    return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
+                }
+                return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
+            }
+
+            // PRIORITY 2: Try to disrupt player if it actually hurts them
             // Pass compilingLaneIndex so that compiling lanes are treated as value 0
             if (canBenefitFromPlayerRearrange(state, compilingLaneIndex)) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
-            // Priority 2: Rearrange own protocols ONLY if it actually helps
+            // PRIORITY 3: Rearrange own protocols ONLY if it actually helps
             if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
@@ -790,6 +983,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const targetFilter = action.targetFilter;
             const sourceCardId = action.sourceCardId;
             const cardOwner = action.actor; // The card owner (who is executing this effect)
+            // CRITICAL: Check for lane restriction (this_lane scope)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            const scope = (action as any).scope;
 
             // Build valid targets respecting targetFilter
             const validTargets: { card: PlayedCard; owner: Player }[] = [];
@@ -801,7 +997,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
                 }
 
-                for (const lane of state[playerKey].lanes) {
+                for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
+                    // CRITICAL: If lane is restricted (this_lane scope), only check that lane!
+                    if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+                    if (scope === 'this_lane' && restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+
+                    const lane = state[playerKey].lanes[laneIdx];
                     if (lane.length === 0) continue;
 
                     for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
@@ -826,27 +1027,65 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (validTargets.length === 0) return { type: 'skip' };
 
-            // Score targets strategically
+            // Score targets strategically - calculate ACTUAL value change!
             const scored = validTargets.map(({ card, owner }) => {
                 let score = 0;
 
+                // Find lane index for this card
+                let laneIndex = -1;
+                for (let i = 0; i < state[owner].lanes.length; i++) {
+                    if (state[owner].lanes[i].some(c => c.id === card.id)) {
+                        laneIndex = i;
+                        break;
+                    }
+                }
+                const laneValue = laneIndex >= 0 ? state[owner].laneValues[laneIndex] : 0;
+                const isCompiled = laneIndex >= 0 ? state[owner].compiled[laneIndex] : false;
+
+                // Calculate actual value change from flipping
+                const currentValue = card.isFaceUp ? card.value : 2; // face-down = 2
+                const flippedValue = card.isFaceUp ? 2 : card.value; // face-up shows real value
+                const valueChange = flippedValue - currentValue;
+
                 if (owner === 'player') {
-                    // Flipping player's cards
+                    // Flipping PLAYER's cards - we want to HURT them
                     if (card.isFaceUp) {
-                        // Face-up -> Face-down: Good if high value
-                        score = card.value * 10 + getCardThreat(card, 'player', state);
+                        // Face-up -> Face-down: Good if they LOSE value
+                        score = -valueChange * 15;
+                        score += getCardThreat(card, 'player', state);
                     } else {
-                        // Face-down -> Face-up: Risky, might help them
-                        score = 3;
+                        // Face-down -> Face-up: Only good if card.value <= 1
+                        if (card.value <= 1) {
+                            score = 20;
+                        } else {
+                            score = -30;
+                        }
                     }
                 } else {
-                    // Flipping own cards
+                    // Flipping OWN cards - we want to HELP ourselves
                     if (card.isFaceUp) {
-                        // Face-up -> Face-down: Bad, lose value
-                        score = -card.value * 10 - 50;
+                        // Face-up -> Face-down: GOOD if we GAIN value!
+                        if (valueChange > 0) {
+                            score = valueChange * 20 + 50;
+                            // Check if enables compile
+                            if (!isCompiled && laneValue + valueChange >= 10) {
+                                score += 200;
+                                console.log(`[AI Flip] Own ${card.protocol}-${card.value} flip enables COMPILE!`);
+                            }
+                        } else {
+                            score = valueChange * 15 - 30;
+                        }
                     } else {
-                        // Face-down -> Face-up: Good, gain value
-                        score = card.value + 8;
+                        // Face-down -> Face-up: GOOD if card.value > 2
+                        if (valueChange > 0) {
+                            score = valueChange * 20 + 40;
+                            if (!isCompiled && laneValue + valueChange >= 10) {
+                                score += 200;
+                                console.log(`[AI Flip] Own ${card.protocol}-${card.value} flip enables COMPILE!`);
+                            }
+                        } else {
+                            score = -10;
+                        }
                     }
                 }
 
@@ -1335,19 +1574,23 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_lane_for_return': {
             // Generic lane selection for return effects (e.g., "Return all cards with value X in 1 line")
+            // CRITICAL: Calculate actual VALUE loss, not just card count!
             const targetFilter = (action as any).targetFilter || {};
-            const valueFilter = (action as any).valueFilter;
+            const cardOwner = action.actor; // AI = opponent
 
-            // Find lanes with matching cards and score them
-            const scoredLanes: { laneIndex: number; score: number }[] = [];
+            // Extract value filter from targetFilter (valueEquals or valueRange)
+            const valueEquals = targetFilter.valueEquals;
+            const valueRange = targetFilter.valueRange;
+
+            // Find lanes with matching cards and score them by NET VALUE CHANGE
+            const scoredLanes: { laneIndex: number; score: number; reason: string }[] = [];
             for (let i = 0; i < 3; i++) {
-                let playerCardsReturned = 0;
-                let ownCardsReturned = 0;
+                let playerValueLost = 0;
+                let ownValueLost = 0;
                 const faceDownBoost = getLaneFaceDownValueBoost(state, i);
-                const cardOwner = action.actor; // AI = opponent
 
                 for (const p of ['player', 'opponent'] as Player[]) {
-                    // Check owner filter
+                    // Check owner filter (relative to cardOwner)
                     if (targetFilter.owner === 'own' && p !== cardOwner) continue;
                     if (targetFilter.owner === 'opponent' && p === cardOwner) continue;
 
@@ -1360,26 +1603,44 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         if (targetFilter.position === 'uncovered' && !isUncovered) continue;
                         if (targetFilter.position === 'covered' && isUncovered) continue;
 
-                        // Check value filter
-                        if (valueFilter !== undefined) {
-                            const cardValue = card.isFaceUp ? card.value : (2 + faceDownBoost);
-                            if (cardValue !== valueFilter) continue;
+                        // Calculate card's effective value
+                        const cardValue = card.isFaceUp ? card.value : (2 + faceDownBoost);
+
+                        // Check value filters
+                        if (valueEquals !== undefined && cardValue !== valueEquals) continue;
+                        if (valueRange) {
+                            if (cardValue < valueRange.min || cardValue > valueRange.max) continue;
                         }
 
-                        if (p === 'player') playerCardsReturned++;
-                        else ownCardsReturned++;
+                        // Track VALUE lost, not just card count!
+                        if (p === 'player') {
+                            playerValueLost += cardValue;
+                        } else {
+                            ownValueLost += cardValue;
+                        }
                     }
                 }
 
-                if (playerCardsReturned > 0 || ownCardsReturned > 0) {
-                    // Score: prefer returning player's cards, avoid returning own
-                    const score = playerCardsReturned * 10 - ownCardsReturned * 5;
-                    scoredLanes.push({ laneIndex: i, score });
-                }
+                // Score = player's loss - our loss (higher = better for us)
+                // We WANT player to lose value, we DON'T want to lose value
+                const netBenefit = playerValueLost - ownValueLost;
+                const reason = `Lane ${i}: Player loses ${playerValueLost}, we lose ${ownValueLost}, net=${netBenefit}`;
+
+                scoredLanes.push({ laneIndex: i, score: netBenefit, reason });
             }
 
+            // Sort by score (highest = best for AI)
+            scoredLanes.sort((a, b) => b.score - a.score);
+
+            // Log decision
+            console.log(`[AI select_lane_for_return] Scoring:`);
+            for (const sl of scoredLanes) {
+                console.log(`  ${sl.reason}`);
+            }
+
+            // Pick best lane (or least bad if all negative)
             if (scoredLanes.length > 0) {
-                scoredLanes.sort((a, b) => b.score - a.score);
+                console.log(`[AI select_lane_for_return] Choosing lane ${scoredLanes[0].laneIndex} with score ${scoredLanes[0].score}`);
                 return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
             }
             return { type: 'selectLane', laneIndex: 0 };
@@ -1405,9 +1666,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (effectAction === 'flip') {
                 // Look for beneficial flip targets
                 let hasBeneficialTarget = false;
+                const positionFilter = targetFilter?.position || 'uncovered';
 
                 for (const player of ['player', 'opponent'] as const) {
-                    // Check owner filter
+                    // Check owner filter (relative to AI = 'opponent')
                     if (targetFilter?.owner === 'own' && player !== 'opponent') continue;
                     if (targetFilter?.owner === 'opponent' && player === 'opponent') continue;
 
@@ -1415,38 +1677,58 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         const lane = state[player].lanes[laneIdx];
                         if (lane.length === 0) continue;
 
-                        const topCard = lane[lane.length - 1];
+                        // CRITICAL FIX: Check ALL cards in lane based on position filter
+                        for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
+                            const card = lane[cardIdx];
+                            const isUncovered = cardIdx === lane.length - 1;
+                            const isCovered = !isUncovered;
 
-                        // Check faceState filter
-                        if (targetFilter?.faceState === 'face_up' && !topCard.isFaceUp) continue;
-                        if (targetFilter?.faceState === 'face_down' && topCard.isFaceUp) continue;
+                            // Check position filter
+                            if (positionFilter === 'uncovered' && !isUncovered) continue;
+                            if (positionFilter === 'covered' && !isCovered) continue;
+                            // 'any' allows both
 
-                        // Calculate value change from flipping
-                        const currentValue = topCard.isFaceUp ? topCard.value : getEffectiveCardValue(topCard, lane, state, laneIdx, player);
-                        const flippedValue = topCard.isFaceUp ? getEffectiveCardValue({ ...topCard, isFaceUp: false }, lane, state, laneIdx, player) : topCard.value;
+                            // Check faceState filter
+                            if (targetFilter?.faceState === 'face_up' && !card.isFaceUp) continue;
+                            if (targetFilter?.faceState === 'face_down' && card.isFaceUp) continue;
 
-                        if (player === 'player') {
-                            // Flip PLAYER cards if it HURTS them (reduces their value)
-                            // e.g., flip their face-up 5 to face-down 2 = -3 for them = good for us
-                            if (topCard.isFaceUp && currentValue > flippedValue) {
-                                hasBeneficialTarget = true;
-                                break;
-                            }
-                        } else {
-                            // Flip OWN cards only if it HELPS us (increases our value)
-                            // e.g., flip our face-down 0 or 1 to face-up = better
-                            // Or flip face-up low value (0, 1) to face-down 2 = maybe better
-                            if (!topCard.isFaceUp && topCard.value > 2) {
-                                // Face-down with high actual value - flip it up!
-                                hasBeneficialTarget = true;
-                                break;
-                            }
-                            if (topCard.isFaceUp && topCard.value <= 1 && flippedValue > currentValue) {
-                                // Face-up 0 or 1 - flip down to get 2
-                                hasBeneficialTarget = true;
-                                break;
+                            // Calculate value change from flipping
+                            const currentValue = card.isFaceUp ? card.value : 2; // face-down = 2
+                            const flippedValue = card.isFaceUp ? 2 : card.value; // face-up shows real value
+
+                            if (player === 'player') {
+                                // Flip PLAYER cards if it HURTS them (reduces their value)
+                                if (card.isFaceUp && currentValue > flippedValue) {
+                                    hasBeneficialTarget = true;
+                                    console.log(`[AI Flip Decision] Found beneficial target: flip player's ${card.protocol}-${card.value} (${currentValue} -> ${flippedValue})`);
+                                    break;
+                                }
+                            } else {
+                                // Flip OWN cards - check if it increases our lane value
+                                const laneValue = state.opponent.laneValues[laneIdx];
+                                const valueGain = flippedValue - currentValue;
+
+                                // SMART: Flip face-up to face-down if it GAINS value (e.g., 0 -> 2)
+                                if (card.isFaceUp && valueGain > 0) {
+                                    hasBeneficialTarget = true;
+                                    console.log(`[AI Flip Decision] Found beneficial target: flip own ${card.protocol}-${card.value} face-up->down (+${valueGain} value)`);
+                                    break;
+                                }
+                                // SMART: Flip face-down to face-up if real value > 2
+                                if (!card.isFaceUp && card.value > 2) {
+                                    hasBeneficialTarget = true;
+                                    console.log(`[AI Flip Decision] Found beneficial target: flip own ${card.protocol}-${card.value} face-down->up (+${valueGain} value)`);
+                                    break;
+                                }
+                                // CRITICAL: Check if flipping would enable COMPILE!
+                                if (valueGain > 0 && laneValue + valueGain >= 10 && !state.opponent.compiled[laneIdx]) {
+                                    hasBeneficialTarget = true;
+                                    console.log(`[AI Flip Decision] COMPILE OPPORTUNITY: flip own ${card.protocol}-${card.value} enables compile! (${laneValue} + ${valueGain} = ${laneValue + valueGain})`);
+                                    break;
+                                }
                             }
                         }
+                        if (hasBeneficialTarget) break;
                     }
                     if (hasBeneficialTarget) break;
                 }
@@ -1562,44 +1844,71 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 const currentAiLaneValue = state.opponent.laneValues[laneIndex];
                 const aiNotCompiled = !state.opponent.compiled[laneIndex];
 
-                // PRIORITY 1: Check if flipping own face-down covered card could lead to compile (value >= 10)
-                // IMPORTANT: Face-down card value depends on passive effects (e.g., Darkness-2 makes them worth 4)
-                // Use getEffectiveCardValue to get the CURRENT face-down value, then compare with face-up value
+                // PRIORITY 1: Check if flipping own covered card could lead to compile (value >= 10)
+                // Check BOTH face-up AND face-down covered cards!
                 if (aiNotCompiled) {
-                    let bestCompileFlip: { card: PlayedCard; newValue: number } | null = null;
+                    let bestCompileFlip: { card: PlayedCard; newValue: number; gain: number } | null = null;
                     let bestGainFlip: { card: PlayedCard; gain: number; newValue: number } | null = null;
 
                     for (const card of aiCovered) {
-                        if (!card.isFaceUp) {
-                            // Get current face-down value (accounts for Darkness-2, custom protocols, etc.)
-                            const currentFaceDownValue = getEffectiveCardValue(card, aiLane, state, laneIndex, 'opponent');
-                            // Face-up value is always the card's actual value
-                            const faceUpValue = card.value;
-                            // Gain from flipping = faceUpValue - currentFaceDownValue
-                            const gain = faceUpValue - currentFaceDownValue;
-                            const potentialValue = currentAiLaneValue + gain;
+                        let currentValue: number;
+                        let flippedValue: number;
 
-                            // Check if this enables compile
-                            if (potentialValue >= 10) {
-                                if (!bestCompileFlip || potentialValue > bestCompileFlip.newValue) {
-                                    bestCompileFlip = { card, newValue: potentialValue };
-                                }
-                            }
+                        if (card.isFaceUp) {
+                            // Face-up -> Face-down: current = card.value, flipped = 2
+                            currentValue = card.value;
+                            flippedValue = 2;
+                        } else {
+                            // Face-down -> Face-up: current = effective face-down value, flipped = card.value
+                            currentValue = getEffectiveCardValue(card, aiLane, state, laneIndex, 'opponent');
+                            flippedValue = card.value;
+                        }
 
-                            // Track best value gain (only if gain > 0)
-                            if (gain > 0 && (!bestGainFlip || gain > bestGainFlip.gain)) {
-                                bestGainFlip = { card, gain, newValue: potentialValue };
+                        const gain = flippedValue - currentValue;
+                        const potentialValue = currentAiLaneValue + gain;
+
+                        // Check if this enables compile
+                        if (gain > 0 && potentialValue >= 10) {
+                            if (!bestCompileFlip || potentialValue > bestCompileFlip.newValue) {
+                                bestCompileFlip = { card, newValue: potentialValue, gain };
+                                console.log(`[AI Covered Flip] Found compile opportunity: ${card.protocol}-${card.value} (${card.isFaceUp ? 'face-up' : 'face-down'}) gain=${gain}, newValue=${potentialValue}`);
                             }
+                        }
+
+                        // Track best value gain (only if gain > 0)
+                        if (gain > 0 && (!bestGainFlip || gain > bestGainFlip.gain)) {
+                            bestGainFlip = { card, gain, newValue: potentialValue };
                         }
                     }
 
                     // If we can compile, do it!
                     if (bestCompileFlip) {
+                        console.log(`[AI Covered Flip] COMPILE: Flipping ${bestCompileFlip.card.protocol}-${bestCompileFlip.card.value} for +${bestCompileFlip.gain} value -> ${bestCompileFlip.newValue}`);
                         return { type: 'flipCard', cardId: bestCompileFlip.card.id };
                     }
 
-                    // If we can gain significant value (2+) and get close to compile (7+), do it
-                    if (bestGainFlip && bestGainFlip.gain >= 2 && bestGainFlip.newValue >= 7) {
+                    // If we can gain value and get closer to compile, do it
+                    if (bestGainFlip && bestGainFlip.gain > 0) {
+                        console.log(`[AI Covered Flip] VALUE GAIN: Flipping ${bestGainFlip.card.protocol}-${bestGainFlip.card.value} for +${bestGainFlip.gain} value -> ${bestGainFlip.newValue}`);
+                        return { type: 'flipCard', cardId: bestGainFlip.card.id };
+                    }
+                }
+
+                // Also check even if compiled - we might still want to gain value for control
+                if (state.opponent.compiled[laneIndex]) {
+                    let bestGainFlip: { card: PlayedCard; gain: number } | null = null;
+
+                    for (const card of aiCovered) {
+                        const currentValue = card.isFaceUp ? card.value : getEffectiveCardValue(card, aiLane, state, laneIndex, 'opponent');
+                        const flippedValue = card.isFaceUp ? 2 : card.value;
+                        const gain = flippedValue - currentValue;
+
+                        if (gain > 0 && (!bestGainFlip || gain > bestGainFlip.gain)) {
+                            bestGainFlip = { card, gain };
+                        }
+                    }
+
+                    if (bestGainFlip) {
                         return { type: 'flipCard', cardId: bestGainFlip.card.id };
                     }
                 }
@@ -1946,10 +2255,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Generic flip handler for custom protocols
             // Uses targetFilter from action to determine valid targets
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            const currentLaneIndex = (action as any).currentLaneIndex; // Optional: restricts to specific lane
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (flipExecutor uses laneIndex!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            const scope = (action as any).scope;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;
             const validTargets: { card: PlayedCard; owner: Player; laneIndex: number }[] = [];
+
+            // Log for debugging
+            if (restrictedLaneIndex !== undefined || scope === 'this_lane') {
+                console.log(`[AI select_card_to_flip] Lane restriction: ${restrictedLaneIndex}, scope: ${scope}`);
+            }
 
             for (const playerKey of ['player', 'opponent'] as const) {
                 // CRITICAL: owner filter is relative to cardOwner, NOT hardcoded to 'opponent'
@@ -1959,8 +2275,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
 
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
-                    // If currentLaneIndex is set, only check that lane
-                    if (currentLaneIndex !== undefined && laneIdx !== currentLaneIndex) continue;
+                    // CRITICAL: If lane is restricted (this_lane scope), only check that lane!
+                    if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+                    if (scope === 'this_lane' && restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
 
                     const lane = state[playerKey].lanes[laneIdx];
                     for (let i = 0; i < lane.length; i++) {
@@ -1983,24 +2300,61 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Normal AI: Score targets strategically
             const scored = validTargets.map(({ card, owner, laneIndex }) => {
                 let score = 0;
+                const laneValue = state[owner].laneValues[laneIndex];
+                const isCompiled = state[owner].compiled[laneIndex];
+
+                // Calculate actual value change from flipping
+                const currentValue = card.isFaceUp ? card.value : 2; // face-down = 2
+                const flippedValue = card.isFaceUp ? 2 : card.value; // face-up shows real value
+                const valueChange = flippedValue - currentValue;
 
                 if (owner === 'player') {
-                    // Flipping opponent's cards
+                    // Flipping PLAYER's cards - we want to HURT them
                     if (card.isFaceUp) {
-                        // Face-up -> Face-down: Good if high value
-                        score = card.value * 10 + getCardThreat(card, 'player', state);
+                        // Face-up -> Face-down: Good if they LOSE value (high value card)
+                        // valueChange is negative for high value cards (e.g., 5 -> 2 = -3)
+                        score = -valueChange * 15; // Higher score when valueChange is more negative
+                        score += getCardThreat(card, 'player', state);
                     } else {
                         // Face-down -> Face-up: Risky, might help them
-                        score = -20 + Math.random() * 10;
+                        // Only good if their card has value 0 or 1 (we'd increase their value!)
+                        if (card.value <= 1) {
+                            score = 20; // Good - their face-down 2 becomes face-up 0/1
+                        } else {
+                            score = -30; // Bad - helps them gain value
+                        }
                     }
                 } else {
-                    // Flipping own cards
+                    // Flipping OWN cards - we want to HELP ourselves
                     if (card.isFaceUp) {
-                        // Face-up -> Face-down: Bad, lose value
-                        score = -card.value * 10 - 50;
+                        // Face-up -> Face-down: GOOD if we GAIN value!
+                        // e.g., face-up 0 -> face-down 2 = +2 value! GREAT!
+                        // e.g., face-up 5 -> face-down 2 = -3 value. BAD!
+                        if (valueChange > 0) {
+                            // We GAIN value by flipping to face-down!
+                            score = valueChange * 20 + 50;
+                            // BONUS: Check if this enables compile
+                            if (!isCompiled && laneValue + valueChange >= 10) {
+                                score += 200; // Huge bonus for enabling compile!
+                                console.log(`[AI Flip Score] Flip own ${card.protocol}-${card.value} face-up->down ENABLES COMPILE! (${laneValue} + ${valueChange} = ${laneValue + valueChange})`);
+                            }
+                        } else {
+                            // We LOSE value - bad choice
+                            score = valueChange * 15 - 30;
+                        }
                     } else {
-                        // Face-down -> Face-up: Good, gain value + effects
-                        score = card.value * 8 + 30;
+                        // Face-down -> Face-up: GOOD if we gain value (card.value > 2)
+                        if (valueChange > 0) {
+                            score = valueChange * 20 + 40;
+                            // BONUS: Check if this enables compile
+                            if (!isCompiled && laneValue + valueChange >= 10) {
+                                score += 200;
+                                console.log(`[AI Flip Score] Flip own ${card.protocol}-${card.value} face-down->up ENABLES COMPILE! (${laneValue} + ${valueChange} = ${laneValue + valueChange})`);
+                            }
+                        } else {
+                            // card.value <= 2, no gain or loss
+                            score = -10;
+                        }
                     }
                 }
 
@@ -2021,7 +2375,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_shift': {
             // Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            const currentLaneIndex = (action as any).currentLaneIndex; // Optional: restricts to specific lane
+            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
+            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            const scope = (action as any).scope;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;
             const validTargets: PlayedCard[] = [];
@@ -2034,8 +2390,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
 
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
-                    // If currentLaneIndex is set, only check that lane
-                    if (currentLaneIndex !== undefined && laneIdx !== currentLaneIndex) continue;
+                    // CRITICAL: If lane is restricted (this_lane scope), only check that lane!
+                    if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+                    if (scope === 'this_lane' && restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
 
                     const lane = state[playerKey].lanes[laneIdx];
                     for (let i = 0; i < lane.length; i++) {

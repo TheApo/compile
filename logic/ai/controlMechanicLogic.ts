@@ -240,6 +240,39 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             return findValidFallbackArrangement(playerState.protocols, isValidArrangement);
         }
 
+        // =========================================================================
+        // CRITICAL: "BLOCK WIN" Strategy
+        // If player has an uncompiled lane with 10+ (threatening to compile),
+        // ALWAYS swap it with a compiled lane to force a recompile instead of a new compile!
+        // =========================================================================
+        let blockWinSwap: { compiledIdx: number; uncompiledIdx: number } | null = null;
+
+        for (const uncompiledIdx of uncompiledIndices) {
+            // Check if this uncompiled lane is threatening (10+ and leading)
+            const isThreateningLane = playerEffectiveValues[uncompiledIdx] >= 10 &&
+                playerEffectiveValues[uncompiledIdx] > aiEffectiveValues[uncompiledIdx];
+
+            if (isThreateningLane) {
+                // Find ANY compiled lane to swap with (forces recompile)
+                for (const compiledIdx of compiledIndices) {
+                    blockWinSwap = { compiledIdx, uncompiledIdx };
+                    break; // Found a valid swap
+                }
+                if (blockWinSwap) break;
+            }
+        }
+
+        if (blockWinSwap) {
+            console.log(`[AI Control Rearrange] BLOCKING WIN: Player has ${playerEffectiveValues[blockWinSwap.uncompiledIdx]} in uncompiled lane ${blockWinSwap.uncompiledIdx}, swapping with compiled lane ${blockWinSwap.compiledIdx}`);
+            const newOrder = [...playerState.protocols];
+            [newOrder[blockWinSwap.compiledIdx], newOrder[blockWinSwap.uncompiledIdx]] =
+                [newOrder[blockWinSwap.uncompiledIdx], newOrder[blockWinSwap.compiledIdx]];
+
+            if (isValidArrangement(newOrder)) {
+                return { type: 'rearrangeProtocols', newOrder };
+            }
+        }
+
         // Evaluate ALL combinations using EFFECTIVE values
         let bestSwap: { compiledIdx: number; uncompiledIdx: number; score: number } | null = null;
 
