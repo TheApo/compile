@@ -575,6 +575,9 @@ export const processEndOfAction = (state: GameState): GameState => {
                 restoredState = setLogPhase(restoredState, undefined);
                 restoredState = { ...restoredState, _logIndentLevel: 0 };
 
+                // CRITICAL: Recalculate ALL lane values at the start of a new turn
+                restoredState = recalculateAllLaneValues(restoredState);
+
                 return {
                     ...restoredState,
                     [restoredState.turn]: endingPlayerState,
@@ -583,7 +586,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     processedStartEffectIds: [],
                     processedEndEffectIds: [],
                     processedSpeed1TriggerThisTurn: false,
-                        processedUncoverEventIds: [],
+                    processedUncoverEventIds: [],
                     // CRITICAL: Clear interrupt state when starting a new turn
                     _interruptedTurn: undefined,
                     _interruptedPhase: undefined,
@@ -881,6 +884,10 @@ export const processStartOfTurn = (state: GameState): GameState => {
     if (state.winner) return state;
 
     let stateAfterStartEffects = { ...state, phase: 'start' as GamePhase };
+
+    // CRITICAL: Recalculate ALL lane values for BOTH players at the start of EVERY turn
+    // This ensures passive value modifiers (like Clarity-0's +1 per card in hand) are always current
+    stateAfterStartEffects = recalculateAllLaneValues(stateAfterStartEffects);
 
     stateAfterStartEffects = advancePhase(stateAfterStartEffects);
 

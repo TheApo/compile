@@ -11,6 +11,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'anarchy-custom-001',
     'apathy_custom',
     'chaos_custom_1',
+    'clarity-custom-001',
     'darkness_custom_v1',
     'death_custom_v1',
     'fire-custom-001',

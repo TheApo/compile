@@ -103,6 +103,58 @@ export function executeRevealGiveEffect(
         return { newState };
     }
 
+    // NEW: Handle own_deck_top reveal (Clarity-1: "Reveal the top card of your deck.")
+    if (action === 'reveal' && source === 'own_deck_top') {
+        let newState = { ...state };
+        const ownerState = { ...newState[cardOwner] };
+        const cardName = `${card.protocol}-${card.value}`;
+
+        if (ownerState.deck.length === 0) {
+            newState = log(newState, cardOwner, `${cardName}: No cards in deck to reveal.`);
+            return { newState };
+        }
+
+        // CRITICAL: Create a new deck array to avoid mutation issues
+        const newDeck = [...ownerState.deck];
+        const topCard = newDeck[0];
+        newState = log(newState, cardOwner, `${cardName}: Revealed ${topCard.protocol}-${topCard.value} from top of deck.`);
+
+        // Store the revealed card ID for useCardFromPreviousEffect (used by conditional discard)
+        // ALWAYS generate a fresh ID to ensure uniqueness across multiple triggers
+        const topCardId = `deck-top-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        newDeck[0] = { ...topCard, id: topCardId };
+        ownerState.deck = newDeck;
+        newState[cardOwner] = ownerState;
+        newState.lastCustomEffectTargetCardId = topCardId;
+
+        console.log(`[RevealGiveExecutor] Revealed top card ${topCard.protocol}-${topCard.value} with ID: ${topCardId}`);
+
+        return { newState };
+    }
+
+    // NEW: Handle own_deck reveal (Clarity-2/3: "Reveal your deck.")
+    if (action === 'reveal' && source === 'own_deck') {
+        let newState = { ...state };
+        const ownerState = { ...newState[cardOwner] };
+        const cardName = `${card.protocol}-${card.value}`;
+
+        if (ownerState.deck.length === 0) {
+            newState = log(newState, cardOwner, `${cardName}: No cards in deck to reveal.`);
+            return { newState };
+        }
+
+        // Mark deck as revealed (for UI display)
+        ownerState.deckRevealed = true;
+        newState[cardOwner] = ownerState;
+
+        // Log the reveal
+        const deckContents = ownerState.deck.map(c => `${c.protocol}-${c.value}`).join(', ');
+        newState = log(newState, cardOwner, `${cardName}: Revealed deck: ${deckContents}`);
+
+        // This effect resolves immediately - chained effects (draw by value) will follow
+        return { newState };
+    }
+
     // CRITICAL: Check if player has any cards in hand (for own_hand reveal/give)
     if (state[cardOwner].hand.length === 0) {
         let newState = log(state, cardOwner, `No cards in hand to ${action}. Effect skipped.`);

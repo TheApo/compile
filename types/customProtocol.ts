@@ -29,7 +29,9 @@ export type EffectActionType =
     | 'passive_rule'
     | 'value_modifier'
     | 'block_compile'
-    | 'delete_all_in_lane';
+    | 'delete_all_in_lane'
+    | 'shuffle_trash'  // Clarity-4: Shuffle trash into deck
+    | 'shuffle_deck';  // Clarity-2/3: Shuffle deck after reveal
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 
@@ -68,7 +70,7 @@ export interface DrawEffectParams {
     target: 'self' | 'opponent';
     source: 'own_deck' | 'opponent_deck';
     // NEW: Dynamic draw count types
-    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size';
+    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size' | 'all_matching';  // 'all_matching' for Clarity-2/3
     countOffset?: number;  // For Fire-4: "discard count + 1" → offset = 1
     conditional?: {
         type: 'count_face_down' | 'is_covering' | 'non_matching_protocols';
@@ -80,6 +82,13 @@ export interface DrawEffectParams {
         protocol?: string;  // For 'protocol_match'
         turnDuration?: number;  // For 'compile_block'
     };
+    // NEW: Value filter for drawing specific cards (Clarity-2: "Draw all cards with a value of 1")
+    valueFilter?: {
+        equals: number;  // Draw only cards with this value
+    };
+    // NEW: If true, player must SELECT from revealed deck (Clarity-2/3: "revealed this way")
+    fromRevealed?: boolean;
+    optional?: boolean;  // "You may draw..."
 }
 
 /**
@@ -208,6 +217,10 @@ export interface PlayEffectParams {
         cardCount?: number;  // For 'per_x_cards_in_line' and 'per_x_face_down_cards' (e.g., 2 for "every 2 cards")
     };
     actor?: 'self' | 'opponent';  // Who plays (default: self)
+    // NEW: Value filter for playing specific cards (Clarity-2: "Play 1 card with a value of 1")
+    valueFilter?: {
+        equals: number;  // Play only cards with this value
+    };
 }
 
 /**
@@ -227,9 +240,9 @@ export interface ProtocolEffectParams {
  */
 export interface RevealEffectParams {
     action: 'reveal' | 'give';
-    source: 'own_hand' | 'opponent_hand' | 'board';  // NEW: 'board' for Light-2
-    count: number;  // 1-6 (or -1 for "entire hand")
-    followUpAction?: 'flip' | 'shift';
+    source: 'own_hand' | 'opponent_hand' | 'board' | 'own_deck_top' | 'own_deck';  // NEW: 'own_deck_top' for Clarity-1, 'own_deck' for Clarity-2/3
+    count: number;  // 1-6 (or -1 for "entire hand" or "entire deck")
+    followUpAction?: 'flip' | 'shift' | 'may_discard';  // NEW: 'may_discard' for Clarity-1 deck top reveal
     // NEW: For board card reveal (Light-2: "Reveal 1 face-down card. You may shift or flip that card.")
     targetFilter?: {
         owner?: TargetOwner;
@@ -295,7 +308,8 @@ export interface ValueModifierParams {
         value: number;                    // The modifier value (+1, 4, -2, etc.)
         condition?: 'per_face_down_card'  // For add_per_condition type
                   | 'per_face_up_card'
-                  | 'per_card';
+                  | 'per_card'
+                  | 'per_card_in_hand';  // Clarity-0: +1 per card in your hand
         target: 'own_cards'               // Which cards/totals to modify
               | 'opponent_cards'
               | 'all_cards'
@@ -307,6 +321,21 @@ export interface ValueModifierParams {
             position?: 'covered' | 'uncovered' | 'any';
         };
     };
+}
+
+/**
+ * Shuffle Trash Effect Parameters (Clarity-4)
+ */
+export interface ShuffleTrashEffectParams {
+    action: 'shuffle_trash';
+    optional: boolean;  // "You may shuffle" vs "Shuffle"
+}
+
+/**
+ * Shuffle Deck Effect Parameters (Clarity-2/3)
+ */
+export interface ShuffleDeckEffectParams {
+    action: 'shuffle_deck';
 }
 
 /**
@@ -325,7 +354,9 @@ export type EffectParams =
     | TakeEffectParams
     | ChoiceEffectParams
     | PassiveRuleParams
-    | ValueModifierParams;
+    | ValueModifierParams
+    | ShuffleTrashEffectParams
+    | ShuffleDeckEffectParams;
 
 /**
  * Effect Definition - Single effect with parameters

@@ -645,6 +645,24 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_optional_discard_custom':
             return { type: 'resolveOptionalDiscardCustomPrompt', accept: false };
 
+        // Clarity-4: "You may shuffle your trash into your deck"
+        // Simple strategy: Always shuffle if there are cards in trash
+        case 'prompt_optional_shuffle_trash': {
+            const trashCount = (action as any).trashCount || 0;
+            return { type: 'resolvePrompt', accept: trashCount > 0 };
+        }
+
+        // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+        // Simple strategy: Pick the first selectable card
+        case 'select_card_from_revealed_deck': {
+            const selectableCardIds = (action as any).selectableCardIds || [];
+            if (selectableCardIds.length > 0) {
+                return { type: 'selectRevealedDeckCard', cardId: selectableCardIds[0] };
+            }
+            // No valid selection - skip
+            return { type: 'resolvePrompt', accept: false };
+        }
+
         case 'custom_choice':
             return { type: 'resolveCustomChoice', optionIndex: 0 };
 
@@ -671,8 +689,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // HAND CARD SELECTION
         // =========================================================================
         case 'select_card_from_hand_to_play': {
-            if (state.opponent.hand.length > 0) {
-                const cardToPlay = state.opponent.hand[0];
+            // NEW: Respect selectableCardIds filter (Clarity-2: only cards with specific value)
+            const selectableCardIds = (action as any).selectableCardIds;
+            const playableHand = selectableCardIds
+                ? state.opponent.hand.filter(c => selectableCardIds.includes(c.id))
+                : state.opponent.hand;
+
+            if (playableHand.length > 0) {
+                const cardToPlay = playableHand[0];
                 // NEW: Smoke-3 - use validLanes if provided, otherwise all lanes except disallowed
                 let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
 

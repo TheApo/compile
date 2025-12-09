@@ -176,10 +176,17 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
     console.log('[DEBUG resolveOptionalEffectPrompt] Called with accept:', accept, 'actionRequired type:', prevState.actionRequired?.type);
     if (prevState.actionRequired?.type !== 'prompt_optional_effect') return prevState;
 
-    const { actor, sourceCardId, effectDef, laneIndex } = prevState.actionRequired as any;
+    const { actor, sourceCardId, effectDef, laneIndex, savedTargetCardId } = prevState.actionRequired as any;
     console.log('[DEBUG resolveOptionalEffectPrompt] effectDef:', effectDef.id, 'has conditional?', !!effectDef.conditional);
+    console.log('[DEBUG resolveOptionalEffectPrompt] savedTargetCardId:', savedTargetCardId, 'current lastCustomEffectTargetCardId:', prevState.lastCustomEffectTargetCardId);
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
+
+    // CRITICAL: Restore the target card ID if it was saved (for useCardFromPreviousEffect)
+    if (savedTargetCardId) {
+        newState.lastCustomEffectTargetCardId = savedTargetCardId;
+        console.log('[DEBUG resolveOptionalEffectPrompt] Restored lastCustomEffectTargetCardId to:', savedTargetCardId);
+    }
 
     if (accept) {
         // User accepts the optional effect - execute it now
@@ -215,6 +222,8 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             conditional: undefined  // Remove conditional - we handle it here
         };
 
+        console.log('[DEBUG resolveOptionalEffectPrompt] BEFORE executeCustomEffect, newState.lastCustomEffectTargetCardId:', newState.lastCustomEffectTargetCardId);
+        console.log('[DEBUG resolveOptionalEffectPrompt] effectToExecute:', effectToExecute.id, 'params:', JSON.stringify(effectToExecute.params));
         const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
         const hasActionRequired = !!result.newState.actionRequired;
         const hasSkipMarker = !!(result.newState as any)._effectSkippedNoTargets;
@@ -388,6 +397,7 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
 
 // REMOVED: resolveSpeed3Prompt - Speed-3 now uses custom protocol system with generic select_card_to_shift
 // REMOVED: resolveLight2Prompt - Light-2 now uses custom protocol system with prompt_shift_or_flip_board_card_custom
+// REMOVED: resolveOptionalDiscardDeckTopPrompt - Clarity-1 now uses conditional.thenEffect with useCardFromPreviousEffect
 
 export const resolveRearrangeProtocols = (
     prevState: GameState,

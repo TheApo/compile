@@ -99,6 +99,143 @@
     overflow-y: auto;
 }
 
+/* Revealed Deck Modal (Clarity-2/3) */
+.revealed-deck-modal {
+    max-width: 95vw;
+    width: auto;
+    min-width: 700px;
+}
+
+/* Layout with preview on left, cards on right */
+.revealed-deck-layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    padding: 1rem 0;
+}
+
+/* Preview card area */
+.revealed-deck-preview {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    min-width: 140px;
+}
+
+.revealed-deck-preview .card {
+    font-size: 1rem;
+}
+
+.preview-placeholder {
+    width: 120px;
+    height: 168px;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    padding: 1rem;
+}
+
+.preview-confirm-btn {
+    min-width: 120px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    touch-action: manipulation;
+}
+
+/* Compact card grid */
+.revealed-deck-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: flex-start;
+    padding: 0;
+    max-height: 55vh;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.revealed-deck-cards.compact {
+    gap: 0.15rem;
+}
+
+.revealed-deck-card-wrapper {
+    position: relative;
+    transition: transform 0.15s ease;
+    touch-action: manipulation;
+}
+
+/* Mini cards for deck reveal - scale down to 40% */
+.revealed-deck-card-wrapper.mini {
+    transform: scale(0.4);
+    transform-origin: top left;
+    margin-right: -72px;  /* Compensate for scaled width */
+    margin-bottom: -96px; /* Compensate for scaled height */
+}
+
+.revealed-deck-card-wrapper.mini.selectable:hover,
+.revealed-deck-card-wrapper.mini.selectable:active {
+    transform: scale(0.45);
+    z-index: 10;
+}
+
+/* Highlighted when previewing */
+.revealed-deck-card-wrapper.mini.previewing {
+    transform: scale(0.45);
+    z-index: 10;
+}
+
+.revealed-deck-card-wrapper.selectable {
+    cursor: pointer;
+}
+
+.revealed-deck-card-wrapper .highlight-selectable {
+    box-shadow: 0 0 15px var(--primary-color), 0 0 30px var(--primary-color);
+}
+
+.revealed-deck-card-wrapper .dimmed {
+    filter: grayscale(70%) brightness(0.5);
+    opacity: 0.5;
+}
+
+/* Revealed Deck Top Modal (Clarity-1 Start Effect) */
+.revealed-deck-top-modal {
+    min-width: 700px;
+    text-align: center;
+}
+
+.revealed-card-display {
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 0;
+}
+
+/* Larger font size for cards in the revealed deck top modal */
+.revealed-card-display .card {
+    font-size: 1.1rem;
+}
+
+.revealed-card-display .card .effect-text {
+    font-size: 0.85rem;
+}
+
+.revealed-deck-top-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.revealed-deck-top-actions .btn {
+    min-width: 140px;
+}
+
 .log-list {
     list-style: none;
     padding-left: 0;

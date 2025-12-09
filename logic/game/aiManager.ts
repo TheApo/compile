@@ -12,6 +12,7 @@ import { Dispatch, SetStateAction } from 'react';
 import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
 import { findCardOnBoard } from './helpers/actionUtils';
+import { performShuffleTrash } from '../effects/actions/shuffleExecutor';
 import { CardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
@@ -445,6 +446,19 @@ const handleRequiredAction = (
         return endActionForPhase(nextState, phaseManager);
     }
 
+    // Clarity-4: "You may shuffle your trash into your deck."
+    if (aiDecision.type === 'resolvePrompt' && action.type === 'prompt_optional_shuffle_trash') {
+        if (!aiDecision.accept) {
+            // AI declined - skip the shuffle
+            let skippedState = { ...state };
+            skippedState.actionRequired = null;
+            skippedState = log(skippedState, action.actor, `${action.actor === 'player' ? 'Player' : 'Opponent'} skips shuffling trash into deck.`);
+            return endActionForPhase(skippedState, phaseManager);
+        }
+        const nextState = performShuffleTrash(state, action.actor, `Clarity-4`);
+        return endActionForPhase(nextState.newState, phaseManager);
+    }
+
     // NOTE: Legacy Speed-3, Psychic-4, Spirit-1, Spirit-3 prompt handlers removed
     // These now use generic prompt_optional_effect and resolveOptionalEffectPrompt
 
@@ -593,6 +607,12 @@ const handleRequiredAction = (
     if (aiDecision.type === 'revealCard' && action.type === 'select_card_from_hand_to_reveal') {
         const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
         return newState; // Should create a new action to flip
+    }
+
+    // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+    if (aiDecision.type === 'selectRevealedDeckCard' && action.type === 'select_card_from_revealed_deck') {
+        const newState = resolvers.resolveSelectRevealedDeckCard(state, aiDecision.cardId);
+        return endActionForPhase(newState, phaseManager);
     }
 
     console.warn(`AI has no logic for mandatory action, clearing it: ${action.type}`);

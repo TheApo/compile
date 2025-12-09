@@ -555,7 +555,9 @@ export const useGameState = (
     const resolveOptionalEffectPrompt = useCallback((accept: boolean) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+
             const nextState = resolvers.resolveOptionalEffectPrompt(prev, accept);
+
             // CRITICAL: Call turnProgressionCb if:
             // 1. User declined (!accept), OR
             // 2. User accepted but effect was skipped (no actionRequired)
@@ -648,7 +650,7 @@ export const useGameState = (
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveSwapProtocols(prev, indices, onEndGame);
-            
+
             if (nextState.winner) {
                 return nextState;
             }
@@ -656,6 +658,20 @@ export const useGameState = (
             return turnProgressionCb(nextState);
         });
     }, [getTurnProgressionCallback, onEndGame]);
+
+    // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+    const resolveSelectRevealedDeckCard = useCallback((cardId: string) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveSelectRevealedDeckCard(prev, cardId);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
 
     const setupTestScenario = useCallback((scenarioOrFunction: string | ((state: GameState) => GameState)) => {
         // CRITICAL: Clear the processing lock when switching scenarios
@@ -1060,10 +1076,14 @@ export const useGameState = (
 
     useEffect(() => {
         setGameState(currentState => {
-            if (currentState.turn === 'player' && currentState.phase === 'start' && !currentState.actionRequired) {
-                return phaseManager.processStartOfTurn(currentState);
+            // CRITICAL: Recalculate ALL lane values at the start of EVERY turn for BOTH players
+            // This ensures passive value modifiers (like Clarity-0's +1 per card in hand) are always current
+            let updatedState = stateManager.recalculateAllLaneValues(currentState);
+
+            if (updatedState.turn === 'player' && updatedState.phase === 'start' && !updatedState.actionRequired) {
+                return phaseManager.processStartOfTurn(updatedState);
             }
-            return currentState;
+            return updatedState;
         });
     }, [gameState.turn, gameState.phase]);
 
@@ -1073,7 +1093,7 @@ export const useGameState = (
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
         resolvePlague4Flip, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveRevealBoardCardPrompt,
         resolveRearrangeProtocols, resolveOptionalDrawPrompt, resolveSwapProtocols,
-        resolveControlMechanicPrompt, resolveCustomChoice,
+        resolveControlMechanicPrompt, resolveCustomChoice, resolveSelectRevealedDeckCard,
         setupTestScenario,
         // REMOVED: resolveFire3Prompt, resolveDeath1Prompt, resolveLove1Prompt, resolvePsychic4Prompt, resolveSpirit1Prompt
     };

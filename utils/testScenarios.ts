@@ -3026,6 +3026,138 @@ export const scenario56_SmokeAITest: TestScenario = {
     }
 };
 
+/**
+ * Szenario 57: Clarity Playground
+ *
+ * Test all Clarity cards (values 0-5)
+ * - Clarity-0: [Top] Value +1 for each card in your hand.
+ * - Clarity-1: [Start] Reveal top card of deck. You may discard it.
+ *              [Middle] Your opponent reveals their hand.
+ *              [Bottom] Draw 3 cards.
+ * - Clarity-2: [Middle] Reveal your deck. Draw all cards with value 1. Shuffle. Play 1 card with value 1 in each other line.
+ * - Clarity-3: [Middle] Reveal your deck. Draw all cards with value 5. Shuffle.
+ * - Clarity-4: [Middle] You may shuffle your trash into your deck.
+ * - Clarity-5: [Middle] Discard 1 card.
+ */
+export const scenario57_ClarityCustomPlayground: TestScenario = {
+    name: "Clarity Test Playground",
+    description: "All Clarity cards on hand - see through the fog of war",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Clarity', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Clarity cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Clarity', 0, true),
+            createCard('Clarity', 1, true),
+            createCard('Clarity', 2, true),
+            createCard('Clarity', 3, true),
+            createCard('Clarity', 4, true),
+            createCard('Clarity', 5, true),
+        ];
+
+        // Add some value-1 and value-5 cards to deck for Clarity-2/3 testing
+        newState.player.deck = [
+            createCard('Clarity', 1, true),  // Value 1 for draw/play
+            createCard('Water', 1, true),    // Value 1 for draw/play
+            createCard('Spirit', 5, true),   // Value 5 for Clarity-3
+            createCard('Spirit', 3, true),   // Regular card
+            createCard('Water', 2, true),    // Regular card
+            createCard('Fire', 4, true),     // Regular card
+        ];
+
+        // Put some cards in discard for Clarity-4 testing
+        newState.player.discard = [
+            createCard('Water', 4, true),
+            createCard('Spirit', 1, true),
+        ];
+
+        // Board setup for covering Clarity-1 (trigger bottom effect)
+        newState = placeCard(newState, 'player', 0, createCard('Water', 2, true));  // Can cover with Clarity-1
+
+        // Opponent's hand for reveal testing
+        newState.opponent.hand = [
+            createCard('Metal', 3, true),
+            createCard('Death', 2, true),
+            createCard('Fire', 4, true),
+        ];
+
+        // Board setup
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 58: Clarity AI Test
+ *
+ * Test AI playing Clarity cards
+ * Setup: AI has all Clarity cards in hand and Clarity protocol
+ * - Opponent's Turn (AI plays)
+ */
+export const scenario58_ClarityAITest: TestScenario = {
+    name: "Clarity AI Test",
+    description: "AI spielt Clarity Karten - test all Clarity card effects with AI",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Spirit', 'Light'],
+            ['Clarity', 'Metal', 'Death'],
+            'opponent',  // AI's turn
+            'action'
+        );
+
+        // Opponent (AI): All Clarity cards in hand (0-5)
+        newState.opponent.hand = [
+            createCard('Clarity', 0, true),
+            createCard('Clarity', 1, true),
+            createCard('Clarity', 2, true),
+            createCard('Clarity', 3, true),
+            createCard('Clarity', 4, true),
+            createCard('Clarity', 5, true),
+        ];
+
+        // AI deck with value-1 and value-5 cards for testing
+        newState.opponent.deck = [
+            createCard('Clarity', 1, true),  // Value 1
+            createCard('Metal', 1, true),    // Value 1
+            createCard('Death', 5, true),    // Value 5
+            createCard('Death', 3, true),    // Regular
+            createCard('Metal', 2, true),    // Regular
+        ];
+
+        // AI discard for Clarity-4 testing
+        newState.opponent.discard = [
+            createCard('Metal', 4, true),
+            createCard('Death', 2, true),
+        ];
+
+        // Player's hand for reveal testing
+        newState.player.hand = [
+            createCard('Water', 3, true),
+            createCard('Spirit', 2, true),
+            createCard('Light', 4, true),
+        ];
+
+        // Board setup
+        newState = placeCard(newState, 'player', 0, createCard('Water', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, true));
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 3, true));
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3083,4 +3215,6 @@ export const allScenarios: TestScenario[] = [
     scenario54_Life1UncoverDoubleFlip,
     scenario55_SmokeCustomPlayground,
     scenario56_SmokeAITest,
+    scenario57_ClarityCustomPlayground,
+    scenario58_ClarityAITest,
 ];

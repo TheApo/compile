@@ -23,6 +23,7 @@ import { PassiveRuleEditor } from './EffectParameterEditors/PassiveRuleEditor';
 import { ValueModifierEditor } from './EffectParameterEditors/ValueModifierEditor';
 import { BlockCompileEffectEditor } from './EffectParameterEditors/BlockCompileEffectEditor';
 import { DeleteAllInLaneEffectEditor } from './EffectParameterEditors/DeleteAllInLaneEffectEditor';
+import { ShuffleTrashEffectEditor, ShuffleDeckEffectEditor } from './EffectParameterEditors/ShuffleEffectEditor';
 
 interface EffectEditorProps {
     effect: EffectDefinition;
@@ -90,6 +91,10 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'block_compile', target: 'opponent' };
         case 'delete_all_in_lane':
             return { action: 'delete_all_in_lane', laneCondition: { type: 'min_cards', count: 8 }, excludeCurrentLane: true };
+        case 'shuffle_trash':
+            return { action: 'shuffle_trash', optional: true };
+        case 'shuffle_deck':
+            return { action: 'shuffle_deck' };
         default:
             return {};
     }
@@ -290,6 +295,10 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 return <BlockCompileEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'delete_all_in_lane':
                 return <DeleteAllInLaneEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'shuffle_trash':
+                return <ShuffleTrashEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'shuffle_deck':
+                return <ShuffleDeckEffectEditor params={effectToRender.params} onChange={onChange} />;
             default:
                 return <div>Unknown effect type: {effectToRender.params.action}</div>;
         }
@@ -496,6 +505,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="take">Take from Hand</option>
                                 <option value="choice">Either/Or Choice</option>
                                 <option value="block_compile">Block Compile</option>
+                                <option value="shuffle_trash">Shuffle Trash into Deck</option>
+                                <option value="shuffle_deck">Shuffle Deck</option>
                             </select>
                         </label>
 
@@ -578,6 +589,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                             <option value="take">Take from Hand</option>
                                             <option value="choice">Either/Or Choice</option>
                                             <option value="block_compile">Block Compile</option>
+                                            <option value="shuffle_trash">Shuffle Trash into Deck</option>
+                                            <option value="shuffle_deck">Shuffle Deck</option>
                                         </select>
                                     </label>
 

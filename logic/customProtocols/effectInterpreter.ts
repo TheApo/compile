@@ -23,6 +23,7 @@ import { executeShiftEffect } from '../effects/actions/shiftExecutor';
 import { executeReturnEffect } from '../effects/actions/returnExecutor';
 import { executePlayEffect } from '../effects/actions/playExecutor';
 import { executeRevealGiveEffect } from '../effects/actions/revealGiveExecutor';
+import { executeShuffleTrashEffect, executeShuffleDeckEffect } from '../effects/actions/shuffleExecutor';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -54,10 +55,12 @@ export function executeCustomEffect(
     // Check 3: ONLY top effects can execute when covered
     // Middle and Bottom effects require uncovered status
     // EXCEPTION: on_cover triggers are MEANT to fire when the card is covered!
+    // EXCEPTION: useCardFromPreviousEffect effects target a specific card (e.g., deck top), not the board
     const position = effectDef.position || 'middle';
     const trigger = effectDef.trigger;
     const isOnCoverTrigger = trigger === 'on_cover';
-    const requiresUncovered = position !== 'top' && !isOnCoverTrigger;
+    const usesCardFromPreviousEffect = params.useCardFromPreviousEffect === true;
+    const requiresUncovered = position !== 'top' && !isOnCoverTrigger && !usesCardFromPreviousEffect;
 
     if (requiresUncovered) {
         const sourceIsUncovered = isCardUncovered(state, card.id);
@@ -97,7 +100,9 @@ export function executeCustomEffect(
 
         switch (action) {
             case 'discard':
-                if (state[actor].hand.length === 0) {
+                // CRITICAL: If useCardFromPreviousEffect is set, we're discarding a specific card
+                // (e.g., from deck for Clarity-1), NOT from hand - so skip the hand check
+                if (!params.useCardFromPreviousEffect && state[actor].hand.length === 0) {
                     canExecute = false;
                     skipReason = 'No cards to discard';
                 }
@@ -446,6 +451,14 @@ export function executeCustomEffect(
             result = executeDeleteAllInLaneEffect(card, laneIndex, state, context, params);
             break;
 
+        case 'shuffle_trash':
+            result = executeShuffleTrashEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'shuffle_deck':
+            result = executeShuffleDeckEffect(card, laneIndex, state, context, params);
+            break;
+
         default:
             console.error(`[Custom Effect] Unknown action: ${action}`);
             result = { newState: state };
@@ -493,6 +506,24 @@ export function executeCustomEffect(
                     result = { newState };
                     return result;
                 }
+            }
+
+            // NEW: For 'optional' conditionals, create a prompt instead of executing immediately
+            if (effectDef.conditional.type === 'optional') {
+                console.log('[Custom Effect] Optional conditional - creating prompt for user choice');
+                console.log('[Custom Effect] Preserving lastCustomEffectTargetCardId:', newState.lastCustomEffectTargetCardId);
+                let promptState = { ...newState };
+                promptState.actionRequired = {
+                    type: 'prompt_optional_effect',
+                    actor: context.cardOwner,
+                    sourceCardId: card.id,
+                    effectDef: effectDef.conditional.thenEffect,
+                    laneIndex: laneIndex,
+                    // CRITICAL: Preserve the target card ID for useCardFromPreviousEffect
+                    savedTargetCardId: newState.lastCustomEffectTargetCardId,
+                } as any;
+                result = { newState: promptState };
+                return result;
             }
 
             console.log('[Custom Effect] Executing conditional follow-up effect immediately');

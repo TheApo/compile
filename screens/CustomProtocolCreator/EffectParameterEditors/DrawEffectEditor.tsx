@@ -101,6 +101,52 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             </label>
 
             <label>
+                <input
+                    type="checkbox"
+                    checked={params.valueFilter !== undefined}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, valueFilter: { equals: 1 } });
+                        } else {
+                            const { valueFilter, ...rest } = params;
+                            onChange(rest as DrawEffectParams);
+                        }
+                    }}
+                />
+                Draw specific value only (e.g., "Draw 1 card with a value of X")
+            </label>
+
+            {params.valueFilter !== undefined && (
+                <>
+                    <label>
+                        Card Value to Draw
+                        <input
+                            type="number"
+                            min={0}
+                            max={5}
+                            value={params.valueFilter?.equals ?? 1}
+                            onChange={e => onChange({ ...params, valueFilter: { equals: parseInt(e.target.value) || 0 } })}
+                        />
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Only draws cards with this exact value from the deck
+                        </small>
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={params.fromRevealed || false}
+                            onChange={e => onChange({ ...params, fromRevealed: e.target.checked })}
+                        />
+                        From revealed deck ("revealed this way" - player selects)
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Requires "Reveal your deck" effect before this. Player picks from revealed cards.
+                        </small>
+                    </label>
+                </>
+            )}
+
+            <label>
                 Conditional
                 <select
                     value={params.conditional?.type || 'none'}

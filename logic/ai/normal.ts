@@ -1132,6 +1132,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const isForcedFaceDown = (action as any).faceDown === true;
             console.log('[AI select_card_from_hand_to_play] faceDown:', (action as any).faceDown, 'isForcedFaceDown:', isForcedFaceDown);
 
+            // NEW: Respect selectableCardIds filter (Clarity-2: only cards with specific value)
+            const selectableCardIds = (action as any).selectableCardIds;
+            const playableHand = selectableCardIds
+                ? state.opponent.hand.filter(c => selectableCardIds.includes(c.id))
+                : state.opponent.hand;
+
+            if (playableHand.length === 0) return { type: 'skip' };
+
             // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
             let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
             playableLanes = playableLanes.filter((laneIndex: number) => {
@@ -1146,7 +1154,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             const scoredPlays: { cardId: string; laneIndex: number; isFaceUp: boolean; score: number }[] = [];
 
-            for (const card of state.opponent.hand) {
+            for (const card of playableHand) {
                 for (const laneIndex of playableLanes) {
                     // If forced face-down (Darkness-3), ONLY consider face-down plays
                     if (!isForcedFaceDown) {
@@ -2635,6 +2643,27 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'prompt_optional_discard_custom': {
             // Optional discard - Normal AI accepts if hand is full
             return { type: 'resolveOptionalEffectPrompt', accept: state.opponent.hand.length > 4 };
+        }
+
+        // Clarity-4: "You may shuffle your trash into your deck"
+        // Smarter strategy: Shuffle if we have valuable cards in trash (3+ value)
+        case 'prompt_optional_shuffle_trash': {
+            const trashCount = (action as any).trashCount || 0;
+            // Always shuffle if we have cards in trash - getting more options is good
+            return { type: 'resolvePrompt', accept: trashCount > 0 };
+        }
+
+        // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+        // Smarter strategy: Pick randomly from selectable cards (they're all same value anyway)
+        case 'select_card_from_revealed_deck': {
+            const selectableCardIds = (action as any).selectableCardIds || [];
+            if (selectableCardIds.length > 0) {
+                // Pick a random one since they all have the same value
+                const randomIndex = Math.floor(Math.random() * selectableCardIds.length);
+                return { type: 'selectRevealedDeckCard', cardId: selectableCardIds[randomIndex] };
+            }
+            // No valid selection - skip
+            return { type: 'resolvePrompt', accept: false };
         }
 
         case 'custom_choice': {

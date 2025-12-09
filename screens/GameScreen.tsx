@@ -17,6 +17,8 @@ import { isCardTargetable } from '../utils/targeting';
 import { Toaster } from '../components/Toaster';
 import { RearrangeProtocolsModal } from '../components/RearrangeProtocolsModal';
 import { SwapProtocolsModal } from '../components/SwapProtocolsModal';
+import { RevealedDeckModal } from '../components/RevealedDeckModal';
+import { RevealedDeckTopModal } from '../components/RevealedDeckTopModal';
 import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
@@ -140,6 +142,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolvePsychic4Prompt,
     resolveControlMechanicPrompt,
     resolveCustomChoice,
+    resolveSelectRevealedDeckCard,
     setupTestScenario,
   } = useGameState(
     playerProtocols,
@@ -593,6 +596,21 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
+        {gameState.actionRequired?.type === 'select_card_from_revealed_deck' && gameState.actionRequired.actor === 'player' && (
+            <RevealedDeckModal
+                gameState={gameState}
+                onSelectCard={(cardId) => {
+                    resolveSelectRevealedDeckCard(cardId);
+                }}
+            />
+        )}
+        {gameState.actionRequired?.type === 'prompt_optional_effect' && gameState.actionRequired.actor === 'player' && (
+            <RevealedDeckTopModal
+                gameState={gameState}
+                onAccept={() => resolveOptionalEffectPrompt(true)}
+                onDecline={() => resolveOptionalEffectPrompt(false)}
+            />
+        )}
         <div className="toaster-container">
             {toasts.map((toast) => (
                 <Toaster key={toast.id} message={toast.message} player={toast.player} />
@@ -666,11 +684,23 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     actionRequiredClass={actionRequiredClass}
                   />
                   <div className={`player-hand-area ${handBackgroundClass}`}>
-                    {gameState.player.hand.map((card) => {
+                    {gameState.player.hand
+                      .filter((card) => {
+                        // When there's a selectableCardIds filter (Clarity-2 play effect),
+                        // only show selectable cards - others stay hidden behind the banner
+                        const action = gameState.actionRequired as any;
+                        const hasSelectableFilter = action?.type === 'select_card_from_hand_to_play' && action?.selectableCardIds;
+                        if (hasSelectableFilter) {
+                          return action.selectableCardIds.includes(card.id);
+                        }
+                        return true; // Show all cards normally
+                      })
+                      .map((card) => {
                       // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
                       const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
                         ? card.id === (gameState.actionRequired as any).cardInHandId
                         : card.id === selectedCard;
+
                       return (
                         <CardComponent
                           key={card.id}

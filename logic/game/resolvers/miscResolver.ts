@@ -12,6 +12,7 @@ import { recalculateAllLaneValues } from '../stateManager';
 import { findCardOnBoard, internalReturnCard, internalResolveTargetedFlip } from '../helpers/actionUtils';
 import { performFillHand } from './playResolver';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
+import { queuePendingCustomEffects } from '../phaseManager';
 
 /**
  * CompileResult includes animation requests for deleted cards
@@ -242,7 +243,13 @@ export const compileLane = (prevState: GameState, laneIndex: number): GameState 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
 
-    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown, targetLaneIndex, validLanes } = prevState.actionRequired as any;
+    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown, targetLaneIndex, validLanes, selectableCardIds, valueFilter } = prevState.actionRequired as any;
+
+    // NEW: Validate that selected card is in the selectable list (for valueFilter effects like Clarity-2)
+    if (selectableCardIds && !selectableCardIds.includes(cardId)) {
+        console.log(`[selectHandCardForAction] Card ${cardId} is not in selectableCardIds - ignoring selection`);
+        return prevState;
+    }
 
     // NEW: Smoke-3 - if targetLaneIndex is already set, skip lane selection and go directly to play
     if (targetLaneIndex !== undefined) {
@@ -319,4 +326,54 @@ export const returnCard = (prevState: GameState, targetCardId: string): GameStat
     // This is a simplified return that doesn't handle complex on-cover/uncover effects.
     // Used by AI. The main resolver handles the full logic.
     return internalReturnCard(prevState, targetCardId).newState;
+};
+
+/**
+ * Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+ * Player/AI selects a card from the revealed deck to draw.
+ */
+export const resolveSelectRevealedDeckCard = (prevState: GameState, selectedCardId: string): GameState => {
+    if (prevState.actionRequired?.type !== 'select_card_from_revealed_deck') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
+
+    let newState = { ...prevState };
+    const actorState = { ...newState[actor] };
+    const deck = [...actorState.deck];
+
+    // Find the selected card in the deck
+    const selectedIndex = deck.findIndex((c: any) => {
+        const cardId = c.id || `deck-${deck.indexOf(c)}`;
+        return cardId === selectedCardId;
+    });
+
+    if (selectedIndex === -1) {
+        console.warn(`[resolveSelectRevealedDeckCard] Card ${selectedCardId} not found in deck`);
+        newState.actionRequired = null;
+        return newState;
+    }
+
+    // Remove card from deck and add to hand
+    const selectedCard = deck.splice(selectedIndex, 1)[0];
+    const newCard = {
+        ...selectedCard,
+        id: selectedCard.id || `drawn-${Date.now()}`,
+        isFaceUp: true
+    };
+
+    actorState.deck = deck;
+    actorState.hand = [...actorState.hand, newCard];
+    // Clear deckRevealed flag since we're done with the reveal interaction
+    actorState.deckRevealed = false;
+
+    newState[actor] = actorState;
+    newState = log(newState, actor, `${actorName} draws ${selectedCard.protocol}-${selectedCard.value} from the revealed deck.`);
+    newState.actionRequired = null;
+
+    // CRITICAL: Queue any pending effects from the source card (Clarity-2 has shuffle_deck and play effects after draw)
+    newState = queuePendingCustomEffects(newState);
+
+    return newState;
 };

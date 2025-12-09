@@ -137,7 +137,7 @@ const calculateBaseLaneValue = (lane: PlayedCard[], state?: GameState, laneIndex
 interface ValueModifier {
     type: 'add_per_condition' | 'set_to_fixed' | 'add_to_total';
     value: number;
-    condition?: 'per_face_down_card' | 'per_face_up_card' | 'per_card';
+    condition?: 'per_face_down_card' | 'per_face_up_card' | 'per_card' | 'per_card_in_hand';
     target: 'own_cards' | 'opponent_cards' | 'all_cards' | 'own_total' | 'opponent_total';
     scope: 'this_lane' | 'global';
     filter?: {
@@ -218,6 +218,9 @@ function applyCustomValueModifiers(
                                 opponentLane.filter(c => c.isFaceUp).length;
                     } else if (condition === 'per_card') {
                         count = playerLane.length + opponentLane.length;
+                    } else if (condition === 'per_card_in_hand') {
+                        // Clarity-0: Count cards in the card owner's hand
+                        count = state[cardOwner].hand.length;
                     }
 
                     // Apply to target

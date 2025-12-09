@@ -1,0 +1,213 @@
+{
+  "id": "clarity-custom-001",
+  "name": "Clarity",
+  "description": "See through the fog of war. Reveal your deck and hand to gain powerful advantages.",
+  "author": "System",
+  "createdAt": "2025-12-09T00:00:00.000Z",
+  "color": "#87CEEB",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "clarity-0-value-per-hand",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_per_condition",
+              "value": 1,
+              "condition": "per_card_in_hand",
+              "target": "own_total",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "clarity-1-start-reveal-deck-top",
+          "params": {
+            "action": "reveal",
+            "source": "own_deck_top",
+            "count": 1
+          },
+          "position": "top",
+          "trigger": "start",
+          "conditional": {
+            "type": "optional",
+            "thenEffect": {
+              "id": "clarity-1-discard-revealed",
+              "params": {
+                "action": "discard",
+                "count": 1,
+                "actor": "self",
+                "useCardFromPreviousEffect": true
+              }
+            }
+          }
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "clarity-1-middle-reveal-opponent-hand",
+          "params": {
+            "action": "reveal",
+            "source": "opponent_hand",
+            "count": -1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "clarity-1-bottom-draw-3",
+          "params": {
+            "action": "draw",
+            "count": 3,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "bottom",
+          "trigger": "on_cover"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "clarity-2-reveal-deck",
+          "params": {
+            "action": "reveal",
+            "source": "own_deck",
+            "count": -1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "clarity-2-draw-value-1",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "valueFilter": {
+              "equals": 1
+            },
+            "fromRevealed": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "clarity-2-shuffle-deck",
+          "params": {
+            "action": "shuffle_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "clarity-2-play-value-1",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "faceDown": false,
+            "valueFilter": {
+              "equals": 1
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "clarity-3-reveal-deck",
+          "params": {
+            "action": "reveal",
+            "source": "own_deck",
+            "count": -1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "clarity-3-draw-value-5",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "valueFilter": {
+              "equals": 5
+            },
+            "fromRevealed": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "clarity-3-shuffle-deck",
+          "params": {
+            "action": "shuffle_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "clarity-4-shuffle-trash",
+          "params": {
+            "action": "shuffle_trash",
+            "optional": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "clarity-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

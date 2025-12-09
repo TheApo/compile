@@ -109,6 +109,7 @@ export const ValueModifierEditor: React.FC<ValueModifierEditorProps> = ({ params
                         <option value="per_face_down_card">Per Face-Down Card</option>
                         <option value="per_face_up_card">Per Face-Up Card</option>
                         <option value="per_card">Per Card (any)</option>
+                        <option value="per_card_in_hand">Per Card in Your Hand</option>
                     </select>
                 </label>
             )}

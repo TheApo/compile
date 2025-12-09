@@ -427,6 +427,37 @@ export function executePlayEffect(
         return { newState };
     }
 
+    // NEW: Clarity-2 logic - Play from hand with valueFilter (user selects card and lane)
+    // "Play 1 card with a value of 1"
+    if (source === 'hand' && params.valueFilter?.equals !== undefined && !params.destinationRule) {
+        const targetValue = params.valueFilter.equals;
+
+        // Find matching cards in hand
+        const matchingCards = state[actor].hand.filter(c => c.value === targetValue);
+
+        if (matchingCards.length === 0) {
+            const sourceCardInfo = findCardOnBoard(state, card.id);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+            let newState = log(state, cardOwner, `${sourceCardName}: No cards with value ${targetValue} in hand. Effect skipped.`);
+            return { newState };
+        }
+
+        // Prompt user to select a card from hand with the matching value, then a lane
+        let newState = log(state, cardOwner, `[Custom Play effect - select a card with value ${targetValue} from hand to play]`);
+        newState.actionRequired = {
+            type: 'select_card_from_hand_to_play',
+            sourceCardId: card.id,
+            actor,
+            count: params.count || 1,
+            faceDown: params.faceDown,
+            source: 'hand',
+            valueFilter: targetValue,  // Pass the value filter to UI/AI
+            selectableCardIds: matchingCards.map(c => c.id),  // Only these cards can be selected
+        } as any;
+
+        return { newState };
+    }
+
     // CRITICAL FIX: Check if actor has any cards in hand to play
     if (source === 'hand' && state[actor].hand.length === 0) {
         console.log(`[Play Effect] ${actor} has no cards in hand to play - skipping effect.`);

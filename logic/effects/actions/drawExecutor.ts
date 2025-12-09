@@ -224,6 +224,21 @@ export function executeDrawEffect(
             break;
         }
 
+        case 'all_matching': {
+            // Clarity-2/3: "Draw all cards with a value of X"
+            // This draws ALL matching cards from deck, not a fixed count
+            if (params.valueFilter?.equals !== undefined) {
+                const targetValue = params.valueFilter.equals;
+                const matchingCardsInDeck = state[drawingPlayer].deck.filter(c => c.value === targetValue);
+                count = matchingCardsInDeck.length;
+                console.log(`[Draw Effect] all_matching: ${count} cards with value ${targetValue} in deck`);
+            } else {
+                console.log(`[Draw Effect] all_matching: No valueFilter specified, defaulting to 0`);
+                count = 0;
+            }
+            break;
+        }
+
         case 'fixed':
         default:
             // Standard fixed count
@@ -285,12 +300,100 @@ export function executeDrawEffect(
     const source = params.source || 'own_deck';
     const sourcePlayer = source === 'opponent_deck' ? context.opponent : drawingPlayer;
 
-    // Simple draw without conditionals for now
-    const { drawnCards, remainingDeck, newCards } = drawCardsUtil(
-        newState[sourcePlayer].deck,
-        newState[drawingPlayer].hand,
-        count
-    );
+    // NEW: Handle all_matching with valueFilter - draw SPECIFIC cards from deck
+    let drawnCards: any[];
+    let remainingDeck: any[];
+    let newCards: any[] = [];
+
+    if (countType === 'all_matching' && params.valueFilter?.equals !== undefined) {
+        // Draw all cards matching the value filter
+        const targetValue = params.valueFilter.equals;
+        const deck = newState[sourcePlayer].deck;
+
+        // Find and extract matching cards
+        const matchingCards = deck.filter(c => c.value === targetValue);
+        const nonMatchingCards = deck.filter(c => c.value !== targetValue);
+
+        // Convert to PlayedCards with IDs
+        newCards = matchingCards.map(c => ({
+            ...c,
+            id: uuidv4(),
+            isFaceUp: true
+        }));
+
+        drawnCards = [...newState[drawingPlayer].hand, ...newCards];
+        remainingDeck = nonMatchingCards;
+
+        console.log(`[Draw Effect] all_matching: Extracted ${newCards.length} cards with value ${targetValue}`);
+    } else if (params.valueFilter?.equals !== undefined && params.fromRevealed) {
+        // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+        // Player must SELECT from the revealed deck - ALWAYS show modal so player can see the deck
+        const targetValue = params.valueFilter.equals;
+        const deck = newState[sourcePlayer].deck;
+
+        // Find all matching cards in deck that player can choose from
+        const matchingCards = deck.filter(c => c.value === targetValue);
+
+        if (matchingCards.length === 0) {
+            // No matching cards - log message but DON'T return, let subsequent effects (shuffle, play) continue
+            const cardName = `${card.protocol}-${card.value}`;
+            newState = log(newState, drawingPlayer, `${cardName}: No cards with value ${targetValue} in deck.`);
+            // Don't return - fall through to let the effect chain continue
+            console.log(`[Draw Effect] fromRevealed: No matching cards, continuing with effect chain`);
+        } else {
+            // 1 or more options - ALWAYS show modal so player can see the revealed deck
+            newState.actionRequired = {
+                type: 'select_card_from_revealed_deck',
+                sourceCardId: card.id,
+                actor: drawingPlayer,
+                count: count,
+                valueFilter: targetValue,
+                revealedCards: deck, // Show all deck cards
+                selectableCardIds: matchingCards.map((c: any) => c.id || `deck-${deck.indexOf(c)}`), // IDs of selectable cards
+            } as any;
+
+            console.log(`[Draw Effect] fromRevealed: Prompting player to select ${count} card(s) with value ${targetValue} from ${matchingCards.length} options`);
+            return { newState };
+        }
+    } else if (params.valueFilter?.equals !== undefined) {
+        // Auto-draw cards with specific value (non-interactive)
+        const targetValue = params.valueFilter.equals;
+        const deck = [...newState[sourcePlayer].deck];
+
+        // Find matching cards in deck
+        const matchingIndices: number[] = [];
+        for (let i = 0; i < deck.length && matchingIndices.length < count; i++) {
+            if (deck[i].value === targetValue) {
+                matchingIndices.push(i);
+            }
+        }
+
+        // Extract the matching cards (take from front to back)
+        const matchingCards = matchingIndices.map(i => deck[i]);
+        const remainingCards = deck.filter((_, i) => !matchingIndices.includes(i));
+
+        // Convert to PlayedCards with IDs
+        newCards = matchingCards.map(c => ({
+            ...c,
+            id: uuidv4(),
+            isFaceUp: true
+        }));
+
+        drawnCards = [...newState[drawingPlayer].hand, ...newCards];
+        remainingDeck = remainingCards;
+
+        console.log(`[Draw Effect] valueFilter: Drew ${newCards.length} of ${count} requested cards with value ${targetValue}`);
+    } else {
+        // Simple draw without conditionals for now
+        const result = drawCardsUtil(
+            newState[sourcePlayer].deck,
+            newState[drawingPlayer].hand,
+            count
+        );
+        drawnCards = result.drawnCards;
+        remainingDeck = result.remainingDeck;
+        newCards = result.newCards;
+    }
 
     // Update the source player's deck (might be opponent's deck!)
     newState[sourcePlayer] = {

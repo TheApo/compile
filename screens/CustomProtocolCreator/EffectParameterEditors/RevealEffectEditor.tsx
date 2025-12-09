@@ -26,36 +26,47 @@ export const RevealEffectEditor: React.FC<{ params: RevealEffectParams; onChange
                 <select value={params.source} onChange={e => onChange({ ...params, source: e.target.value as any })}>
                     <option value="own_hand">Your hand</option>
                     <option value="opponent_hand">Opponent's hand</option>
+                    <option value="own_deck_top">Top of your deck</option>
+                    <option value="own_deck">Your entire deck</option>
+                    <option value="board">Board card</option>
                 </select>
             </label>
-            <label>
-                Anzahl
-                <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    value={params.count}
-                    onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
-                />
-            </label>
-            <label>
-                Follow-up action
-                <select
-                    value={params.followUpAction || 'none'}
-                    onChange={e => {
-                        if (e.target.value === 'none') {
-                            const { followUpAction, ...rest } = params;
-                            onChange(rest as RevealEffectParams);
-                        } else {
-                            onChange({ ...params, followUpAction: e.target.value as any });
-                        }
-                    }}
-                >
-                    <option value="none">None</option>
-                    <option value="flip">Then flip</option>
-                    <option value="shift">Then shift</option>
-                </select>
-            </label>
+
+            {/* Count only for hand-based reveals */}
+            {(params.source === 'own_hand' || params.source === 'opponent_hand' || params.source === 'board') && (
+                <label>
+                    Anzahl
+                    <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        value={params.count}
+                        onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
+                    />
+                </label>
+            )}
+
+            {/* Follow-up action only for board reveals (flip/shift the revealed card) */}
+            {params.source === 'board' && (
+                <label>
+                    Follow-up action
+                    <select
+                        value={params.followUpAction || 'none'}
+                        onChange={e => {
+                            if (e.target.value === 'none') {
+                                const { followUpAction, ...rest } = params;
+                                onChange(rest as RevealEffectParams);
+                            } else {
+                                onChange({ ...params, followUpAction: e.target.value as any });
+                            }
+                        }}
+                    >
+                        <option value="none">None</option>
+                        <option value="flip">Then flip</option>
+                        <option value="shift">Then shift</option>
+                    </select>
+                </label>
+            )}
 
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}

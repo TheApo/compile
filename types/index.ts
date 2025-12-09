@@ -60,11 +60,12 @@ export interface PlayerState {
     deck: Card[];
     hand: PlayedCard[];
     lanes: PlayedCard[][];
-    discard: Card[];
+    discard: Card[];  // Also serves as trash for deleted cards (Clarity-4: "shuffle your trash")
     compiled: boolean[];
     laneValues: number[];
     cannotCompile: boolean;
     stats: PlayerStats;
+    deckRevealed?: boolean;  // Clarity-2/3: Deck is currently revealed
 }
 
 export type GamePhase = 'start' | 'control' | 'compile' | 'action' | 'hand_limit' | 'end';

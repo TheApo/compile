@@ -24,6 +24,67 @@ export function executeDiscardEffect(
     const { cardOwner } = context;
     const actor = params.actor === 'opponent' ? context.opponent : cardOwner;
 
+    // NEW: Handle useCardFromPreviousEffect (Clarity-1: discard the revealed deck top card)
+    if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
+        const targetCardId = state.lastCustomEffectTargetCardId;
+        let newState = { ...state };
+        const actorState = { ...newState[actor] };
+        const cardName = `${card.protocol}-${card.value}`;
+        const actorName = actor === 'player' ? 'Player' : 'Opponent';
+
+        console.log(`[Discard Effect] useCardFromPreviousEffect: Looking for card ${targetCardId}`);
+        console.log(`[Discard Effect] actor: ${actor}, deck length: ${actorState.deck.length}`);
+        console.log(`[Discard Effect] Deck card IDs:`, actorState.deck.map((c: any) => c.id));
+
+        // Find the card - it could be in deck (Clarity-1 revealed top)
+        const deckIndex = actorState.deck.findIndex((c: any) => c.id === targetCardId);
+        if (deckIndex !== -1) {
+            // CRITICAL: Create new array copies to avoid mutation issues
+            const newDeck = [...actorState.deck];
+            const discardedCard = newDeck.splice(deckIndex, 1)[0];
+            actorState.deck = newDeck;
+            actorState.discard = [...actorState.discard, discardedCard];
+            newState[actor] = actorState;
+            newState = log(newState, actor, `${actorName} discards ${discardedCard.protocol}-${discardedCard.value} from their deck.`);
+
+            // Store context for follow-up effects
+            (newState as any)._discardContext = {
+                actor,
+                discardedCount: 1,
+                sourceCardId: card.id,
+            };
+
+            return { newState };
+        }
+
+        // Could also be in hand - check there too
+        const handIndex = actorState.hand.findIndex((c: any) => c.id === targetCardId);
+        if (handIndex !== -1) {
+            // CRITICAL: Create new array copies to avoid mutation issues
+            const newHand = [...actorState.hand];
+            const discardedCard = newHand.splice(handIndex, 1)[0];
+            const { id, isFaceUp, ...cardWithoutExtras } = discardedCard as any;
+            actorState.hand = newHand;
+            actorState.discard = [...actorState.discard, cardWithoutExtras];
+            newState[actor] = actorState;
+            newState = log(newState, actor, `${actorName} discards ${discardedCard.protocol}-${discardedCard.value}.`);
+
+            (newState as any)._discardContext = {
+                actor,
+                discardedCount: 1,
+                sourceCardId: card.id,
+            };
+
+            return { newState };
+        }
+
+        // Card not found - skip effect
+        console.warn(`[Discard Effect] useCardFromPreviousEffect: Card ${targetCardId} not found`);
+        newState = log(newState, actor, `${cardName}: Card to discard not found - effect skipped.`);
+        (newState as any)._discardContext = { discardedCount: 0 };
+        return { newState };
+    }
+
     // NEW: Handle dynamic discard count (Plague-2)
     let count = params.count || 1;
     const countType = params.countType || 'fixed';

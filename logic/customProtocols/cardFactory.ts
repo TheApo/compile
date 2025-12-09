@@ -88,6 +88,20 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += 'Draw the same amount of cards.';
                 mainText = text;
                 break;
+            } else if (params.countType === 'all_matching' && params.valueFilter?.equals !== undefined) {
+                // "Draw all cards with a value of X"
+                const targetValue = params.valueFilter.equals;
+                text += `Draw all cards with a value of ${targetValue}.`;
+                mainText = text;
+                break;
+            } else if (params.valueFilter?.equals !== undefined && params.count) {
+                // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
+                const targetValue = params.valueFilter.equals;
+                const cardWord = params.count === 1 ? 'card' : 'cards';
+                const revealedSuffix = params.fromRevealed ? ' revealed this way' : '';
+                text += `Draw ${params.count} ${cardWord} with a value of ${targetValue}${revealedSuffix}.`;
+                mainText = text;
+                break;
             }
 
             // NEW: Handle optional draw (Death-1: "You may draw...")
@@ -440,11 +454,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
         case 'discard': {
             // If referencing card from previous effect, use "that card"
-            if (effect.useCardFromPreviousEffect) {
+            if (params.useCardFromPreviousEffect) {
                 if (params.actor === 'opponent') {
                     mainText = 'Opponent discards that card.';
                 } else {
-                    mainText = 'Discard that card.';
+                    mainText = 'discard that card.';  // lowercase for "You may discard..."
                 }
                 break;
             }
@@ -561,12 +575,17 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             let actorText = '';
             let cardPart = '';
 
+            // NEW: Handle valueFilter for Clarity-2 ("Play 1 card with a value of 1")
+            const valueFilterText = params.valueFilter?.equals !== undefined
+                ? ` with a value of ${params.valueFilter.equals}`
+                : '';
+
             if (actor === 'opponent') {
                 actorText = 'Your opponent plays';
                 if (params.source === 'deck') {
                     cardPart = count === 1 ? 'the top card of their deck' : `${count} cards from their deck`;
                 } else {
-                    cardPart = count === 1 ? 'a card from their hand' : `${count} cards from their hand`;
+                    cardPart = count === 1 ? `a card${valueFilterText} from their hand` : `${count} cards${valueFilterText} from their hand`;
                 }
             } else {
                 actorText = 'Play';
@@ -574,7 +593,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
                 } else {
                     // Speed-0: Simple "Play 1 card" without "from your hand"
-                    cardPart = count === 1 ? '1 card' : `${count} cards`;
+                    // Clarity-2: "Play 1 card with a value of 1"
+                    cardPart = count === 1 ? `1 card${valueFilterText}` : `${count} cards${valueFilterText}`;
                 }
             }
 
@@ -684,6 +704,22 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 }
 
                 mainText = text + '.';
+                break;
+            }
+
+            // NEW: Handle deck top reveal (Clarity-1 Start)
+            if (params.source === 'own_deck_top') {
+                let text = 'Reveal the top card of your deck';
+                if (params.followUpAction === 'may_discard') {
+                    text += '. You may discard it';
+                }
+                mainText = text + '.';
+                break;
+            }
+
+            // NEW: Handle full deck reveal (Clarity-2/3)
+            if (params.source === 'own_deck') {
+                mainText = 'Reveal your deck.';
                 break;
             }
 
@@ -843,6 +879,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                         conditionText = 'for each face-up card';
                     } else if (mod.condition === 'per_card') {
                         conditionText = 'for each card';
+                    } else if (mod.condition === 'per_card_in_hand') {
+                        // Clarity-0: "Value +1 for each card in your hand"
+                        conditionText = 'for each card in your hand';
                     }
 
                     const sign = mod.value >= 0 ? '+' : '';
@@ -928,6 +967,19 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'shuffle_trash': {
+            // Clarity-4: "You may shuffle your trash into your deck"
+            const optionalText = params.optional !== false ? 'You may shuffle' : 'Shuffle';
+            mainText = `${optionalText} your trash into your deck.`;
+            break;
+        }
+
+        case 'shuffle_deck': {
+            // Clarity-2/3: "Shuffle your deck"
+            mainText = 'Shuffle your deck.';
+            break;
+        }
+
         default:
             mainText = 'Effect';
             break;
@@ -935,15 +987,25 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
     // Handle conditional follow-up effects
     if (effect.conditional && effect.conditional.thenEffect) {
-        const followUpText = getEffectSummary(effect.conditional.thenEffect);
-        // Use "Then" for sequential actions, "If you do" for conditional execution
+        let followUpText = getEffectSummary(effect.conditional.thenEffect);
+
+        // If the follow-up uses useCardFromPreviousEffect, replace "1 card" with "that card"
+        const thenParams = effect.conditional.thenEffect.params as any;
+        if (thenParams?.useCardFromPreviousEffect) {
+            followUpText = followUpText.replace(/\d+ cards?/i, 'that card');
+        }
+
         if (effect.conditional.type === 'then') {
             // Death-1: "delete 1 other card, then delete this card."
             // Remove period from first part and add "then" before follow-up (lowercase)
             const firstPart = mainText.endsWith('.') ? mainText.slice(0, -1) : mainText;
             mainText = `${firstPart}, then ${followUpText.toLowerCase()}`;
+        } else if (effect.conditional.type === 'optional') {
+            // Clarity-1: "Reveal the top card of your deck. You may discard that card."
+            const firstPart = mainText.endsWith('.') ? mainText.slice(0, -1) : mainText;
+            mainText = `${firstPart}. You may ${followUpText.toLowerCase()}`;
         } else {
-            // "If you do" format
+            // "If you do" format (if_executed)
             mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;
         }
     }

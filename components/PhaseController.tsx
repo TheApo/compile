@@ -329,8 +329,13 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: You may shift the card you just flipped. Select a lane or skip.';
                 case 'select_covered_card_in_line_to_flip_optional':
                     return 'Action: You may flip one of your covered cards in this lane. Select a card or skip.';
-                case 'select_card_from_hand_to_play':
+                case 'select_card_from_hand_to_play': {
+                    const valueFilter = (actionRequired as any).valueFilter;
+                    if (valueFilter !== undefined) {
+                        return `Action: Select a card with value ${valueFilter} from your hand to play`;
+                    }
                     return 'Action: Select a card from your hand to play';
+                }
                 case 'select_lane_for_play':
                     return 'Action: Select another lane to play your card in';
                 case 'select_face_down_card_to_shift_for_darkness_4':
@@ -495,6 +500,10 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                         return `Either ${getOptionText(opt1)} or ${getOptionText(opt2)}.`;
                     }
                     return 'Action: Make a choice';
+                }
+                case 'select_card_from_revealed_deck': {
+                    const valueFilter = (actionRequired as any).valueFilter;
+                    return `Action: Select a card with value ${valueFilter} from your revealed deck`;
                 }
                 default:
                     return 'Action Required';
