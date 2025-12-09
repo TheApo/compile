@@ -23,7 +23,7 @@ import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
-import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, hasPlayOnOpponentSideRule } from '../logic/game/passiveRuleChecker';
 
 
 interface GameScreenProps {
@@ -291,14 +291,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     };
   }, [gameState, onEndGame, setupTestScenario]);
 
-  const handleLanePointerDown = (laneIndex: number) => {
+  const handleLanePointerDown = (laneIndex: number, owner: Player) => {
     const currentState = gameStateRef.current;
     if (currentState.animationState) return;
 
     const { actionRequired, turn, phase, compilableLanes, player, opponent } = currentState;
 
-    // Highest priority: Compiling
-    if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
+    // Highest priority: Compiling (only on player's lanes)
+    if (owner === 'player' && turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
         if (actionRequired) {
             console.warn("Compile click blocked by pending action:", actionRequired);
             // Don't proceed, but also don't do anything else that could change state
@@ -317,7 +317,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         resolveActionWithLane(laneIndex);
         return;
     }
-    
+
     // Third priority: Playing a card from hand
     const opponentHasPsychic1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
     const oppLane = opponent.lanes[laneIndex];
@@ -331,6 +331,30 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
     if (isPlayTarget) {
         const cardInHand = player.hand.find(c => c.id === selectedCard)!;
+
+        // Handle playing on opponent's side (cards with allow_play_on_opponent_side)
+        if (owner === 'opponent') {
+            // Check if card can be played on opponent's side
+            if (!hasPlayOnOpponentSideRule(currentState, cardInHand)) {
+                // Card can't be played on opponent's side
+                setSelectedCard(null);
+                setHoveredCard(null);
+                return;
+            }
+            // Cards with allow_play_on_opponent_side can play on ANY opponent lane (face-up only)
+            // Psychic-1 still blocks face-up plays
+            if (opponentHasPsychic1) {
+                setSelectedCard(null);
+                setHoveredCard(null);
+                return;
+            }
+            // Play on opponent's side (always face-up)
+            playSelectedCard(laneIndex, true, 'opponent');
+            setHoveredCard(null);
+            return;
+        }
+
+        // Normal play on player's side
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
         // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
@@ -350,8 +374,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         // NEW: Check for custom cards with allow_any_protocol_play passive rule (Spirit_custom-1)
         const hasCustomAllowAnyProtocol = hasAnyProtocolPlayRule(currentState, 'player', laneIndex);
 
+        // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
+        const canPlayAnywhere = hasPlayOnOpponentSideRule(currentState, cardInHand);
+
         let canPlayFaceUp: boolean;
-        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+        if (canPlayAnywhere) {
+            // Can play face-up on ANY lane (ignores protocol matching)
+            canPlayFaceUp = !opponentHasPsychic1;
+        } else if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = cardInHand.protocol !== player.protocols[laneIndex] && cardInHand.protocol !== opponent.protocols[laneIndex];
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
@@ -369,7 +399,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         setHoveredCard(null);
         return;
     }
-    
+
     // Fallback: Deselect card if clicking an invalid target
     if (selectedCard) {
         setSelectedCard(null);
@@ -450,13 +480,13 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
       // Proxy click to lane if in compile phase
       if (turn === 'player' && phase === 'compile' && compilableLanes.includes(laneIndex)) {
-          handleLanePointerDown(laneIndex);
+          handleLanePointerDown(laneIndex, owner);
           return;
       }
 
       // Proxy click to lane if playing a card from hand
       if (turn === 'player' && !actionRequired && selectedCard && phase === 'action') {
-          handleLanePointerDown(laneIndex);
+          handleLanePointerDown(laneIndex, owner);
           return;
       }
 

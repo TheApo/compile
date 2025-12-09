@@ -558,7 +558,8 @@
 .card-ticker-track .card-component.in-hand,
 .protocol-card-grid .card-component.in-hand,
 .selected-protocol-cards-container .card-component.in-hand,
-.debug-card-grid .card-component.in-hand {
+.debug-card-grid .card-component.in-hand,
+.revealed-deck-card-grid .card-component.in-hand {
     font-size: 0.6rem;
 }
 .lane-stack .card-front,
@@ -566,7 +567,8 @@
 .card-ticker-track .card-front,
 .protocol-card-grid .card-front,
 .selected-protocol-cards-container .card-front,
-.debug-card-grid .card-front {
+.debug-card-grid .card-front,
+.revealed-deck-card-grid .card-front {
     padding: 2px;
 }
 
@@ -575,7 +577,8 @@
 .card-ticker-track .card-component.in-hand .card-header,
 .protocol-card-grid .card-component.in-hand .card-header,
 .selected-protocol-cards-container .card-component.in-hand .card-header,
-.debug-card-grid .card-component.in-hand .card-header {
+.debug-card-grid .card-component.in-hand .card-header,
+.revealed-deck-card-grid .card-component.in-hand .card-header {
     margin-bottom: 4px;
     gap: 4px;
 }
@@ -585,7 +588,8 @@
 .card-ticker-track .card-component.in-hand .card-protocol,
 .protocol-card-grid .card-component.in-hand .card-protocol,
 .selected-protocol-cards-container .card-component.in-hand .card-protocol,
-.debug-card-grid .card-component.in-hand .card-protocol {
+.debug-card-grid .card-component.in-hand .card-protocol,
+.revealed-deck-card-grid .card-component.in-hand .card-protocol {
     padding: 2px 3px 2px 0;
     clip-path: none;
     font-size: 0.9em;
@@ -600,7 +604,8 @@
 .card-ticker-track .card-component.in-hand .card-value,
 .protocol-card-grid .card-component.in-hand .card-value,
 .selected-protocol-cards-container .card-component.in-hand .card-value,
-.debug-card-grid .card-component.in-hand .card-value {
+.debug-card-grid .card-component.in-hand .card-value,
+.revealed-deck-card-grid .card-component.in-hand .card-value {
     padding: 1px 6px;
     clip-path: polygon(6px 0, 100% 0, 100% 100%, 0% 100%);
     min-width: 30px;
@@ -611,7 +616,8 @@
 .card-ticker-track .card-component.in-hand .card-body,
 .protocol-card-grid .card-component.in-hand .card-body,
 .selected-protocol-cards-container .card-component.in-hand .card-body,
-.debug-card-grid .card-component.in-hand .card-body {
+.debug-card-grid .card-component.in-hand .card-body,
+.revealed-deck-card-grid .card-component.in-hand .card-body {
     gap: 2px;
 }
 
@@ -620,7 +626,8 @@
 .card-ticker-track .card-component.in-hand .card-rule-box,
 .protocol-card-grid .card-component.in-hand .card-rule-box,
 .selected-protocol-cards-container .card-component.in-hand .card-rule-box,
-.debug-card-grid .card-component.in-hand .card-rule-box {
+.debug-card-grid .card-component.in-hand .card-rule-box,
+.revealed-deck-card-grid .card-component.in-hand .card-rule-box {
     padding: 1px 3px;
     font-size: 0.9em;
     line-height: 1.25;
@@ -637,7 +644,9 @@
 .selected-protocol-cards-container .card-component.in-hand .card-rule-box::before,
 .selected-protocol-cards-container .card-component.in-hand .card-rule-box::after,
 .debug-card-grid .card-component.in-hand .card-rule-box::before,
-.debug-card-grid .card-component.in-hand .card-rule-box::after {
+.debug-card-grid .card-component.in-hand .card-rule-box::after,
+.revealed-deck-card-grid .card-component.in-hand .card-rule-box::before,
+.revealed-deck-card-grid .card-component.in-hand .card-rule-box::after {
     width: 6px;
     height: 6px;
 }
@@ -1059,11 +1068,15 @@
 
 .debug-card-grid .card-component.in-hand {
     cursor: pointer;
-    transition: transform 0.15s ease;
 }
 
 .debug-card-grid .card-component.in-hand:hover {
-    transform: scale(1.05);
+    z-index: 10;
+}
+
+.debug-card-grid .card-component.in-hand:hover .card-front {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px var(--primary-color), 0 0 25px rgba(0, 200, 255, 0.3);
 }
 
 /* --- Results Screen --- */

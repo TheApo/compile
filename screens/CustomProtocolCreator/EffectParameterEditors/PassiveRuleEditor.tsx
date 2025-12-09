@@ -41,6 +41,7 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                     </optgroup>
                     <optgroup label="Protocol Matching">
                         <option value="allow_any_protocol_play">Allow Any Protocol (Spirit-1, Chaos-3)</option>
+                        <option value="allow_play_on_opponent_side">Allow Play on Opponent Side (Corruption-0)</option>
                         <option value="require_non_matching_protocol">Require Non-Matching (Anarchy-1)</option>
                     </optgroup>
                     <optgroup label="Action Blocks">
@@ -114,6 +115,8 @@ const _generatePassiveRuleText = (params: PassiveRuleParams): string => {
             return `${targetText} can only play cards face-down${scopeText}.`;
         case 'allow_any_protocol_play':
             return `${targetText} may play cards without matching protocols${scopeText}.`;
+        case 'allow_play_on_opponent_side':
+            return `You may play this card in any line on either player's side.`;
         case 'require_non_matching_protocol':
             return `${targetText} can only play cards without matching protocols${scopeText}.`;
         case 'block_flips':

@@ -68,10 +68,18 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
 
     if (remainingDiscards <= 0) {
         const isHandLimitDiscard = (prevState.phase === 'hand_limit' && !currentAction.sourceCardId);
-        
+
         let stateAfterDiscard = newState;
-        
+
         if (isHandLimitDiscard) {
+            // Trigger reactive effects after self discards (for cards with after_discard trigger)
+            const selfDiscardResult = processReactiveEffects(stateAfterDiscard, 'after_discard', { player: 'player' });
+            stateAfterDiscard = selfDiscardResult.newState;
+
+            // Trigger reactive effects after opponent discards
+            const reactiveOpponentResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: 'opponent' });
+            stateAfterDiscard = reactiveOpponentResult.newState;
+
             // Decrease indent after completing Check Cache discards
             stateAfterDiscard = decreaseLogIndent(stateAfterDiscard);
 
@@ -92,8 +100,19 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             stateAfterDiscard.actionRequired = null;
             return stateAfterDiscard;
         } else {
-            // It was a discard from a card effect. Check for chained effects.
-            return handleChainedEffectsOnDiscard(newState, 'player', currentAction.sourceEffect, currentAction.sourceCardId);
+            // It was a discard from a card effect. Check for chained effects FIRST.
+            stateAfterDiscard = handleChainedEffectsOnDiscard(stateAfterDiscard, 'player', currentAction.sourceEffect, currentAction.sourceCardId);
+
+            // THEN trigger reactive effects after self discards (for cards with after_discard trigger)
+            // This must come AFTER handleChainedEffectsOnDiscard since that function clears actionRequired
+            const selfDiscardResult = processReactiveEffects(stateAfterDiscard, 'after_discard', { player: 'player' });
+            stateAfterDiscard = selfDiscardResult.newState;
+
+            // Trigger reactive effects after opponent discards
+            const reactiveOpponentResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: 'opponent' });
+            stateAfterDiscard = reactiveOpponentResult.newState;
+
+            return stateAfterDiscard;
         }
     } else {
         // More discards are needed for the current action.
@@ -198,13 +217,21 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 stateAfterDiscard.phase = 'end';
             }
         }
-        // Trigger reactive effects after opponent discards (Plague-1 custom protocol)
-        // Trigger for the opponent of the discarding player
+
+        // CRITICAL: Handle chained effects FIRST (this clears actionRequired)
+        stateAfterDiscard = handleChainedEffectsOnDiscard(stateAfterDiscard, player, action?.sourceEffect, action?.sourceCardId);
+
+        // THEN trigger reactive effects after self discards (for cards with after_discard trigger)
+        // This must come AFTER handleChainedEffectsOnDiscard since that function clears actionRequired
+        const selfDiscardResult = processReactiveEffects(stateAfterDiscard, 'after_discard', { player });
+        stateAfterDiscard = selfDiscardResult.newState;
+
+        // Trigger reactive effects after opponent discards
         const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
         const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: opponentOfDiscarder });
-        const stateAfterReactive = reactiveResult.newState;
+        stateAfterDiscard = reactiveResult.newState;
 
-        return handleChainedEffectsOnDiscard(stateAfterReactive, player, action?.sourceEffect, action?.sourceCardId);
+        return stateAfterDiscard;
     };
 
     if (originalAction && originalAction.actor === player) {
@@ -229,6 +256,10 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     }
     
     const isHandLimitDiscard = (prevState.phase === 'hand_limit');
+
+    // Trigger reactive effects after self discards (Corruption-2 custom protocol)
+    const selfDiscardResult = processReactiveEffects(newState, 'after_discard', { player });
+    newState = selfDiscardResult.newState;
 
     // Trigger reactive effects after opponent discards (Plague-1 custom protocol)
     const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';

@@ -32,6 +32,7 @@ export type TriggerType =
     | 'passive'      // Immer aktiv (z.B. value_modifier)
     | 'after_draw'   // Nach dem Ziehen
     | 'after_delete' // Nach dem Löschen
+    | 'after_discard' // Nach eigenem Abwurf (Corruption-2)
     | 'after_flip'   // Nach dem Flippen
     | 'after_clear_cache'  // Nach Cache-Phase
     | 'before_compile_delete'  // Vor Compile-Löschung
@@ -263,6 +264,7 @@ export function isReactiveTrigger(trigger: TriggerType): boolean {
     const reactiveTriggers: TriggerType[] = [
         'after_draw',
         'after_delete',
+        'after_discard',
         'after_flip',
         'after_clear_cache',
         'before_compile_delete',

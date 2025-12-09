@@ -238,6 +238,22 @@ export function hasAnyProtocolPlayRule(state: GameState, player: Player, laneInd
 }
 
 /**
+ * Check if a specific card can be played on opponent's side (Corruption-0)
+ * Returns true if the card has the allow_play_on_opponent_side passive rule
+ */
+export function hasPlayOnOpponentSideRule(state: GameState, card: PlayedCard): boolean {
+    // Check if the card itself has a bottom effect with allow_play_on_opponent_side
+    const customEffects = (card as any).customEffects;
+    if (!customEffects) return false;
+
+    const bottomEffects = customEffects.bottomEffects || [];
+    return bottomEffects.some((effect: any) => {
+        if (effect.params?.action !== 'passive_rule') return false;
+        return effect.params?.rule?.type === 'allow_play_on_opponent_side';
+    });
+}
+
+/**
  * Check if flipping is blocked (Frost-1)
  */
 export function canFlipCard(state: GameState, laneIndex: number): { allowed: boolean; reason?: string } {

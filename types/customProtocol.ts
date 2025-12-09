@@ -47,6 +47,7 @@ export type EffectTrigger =
     | 'passive'              // Always active when face-up
     // Reactive triggers (Top Box)
     | 'after_delete'         // After you delete cards (Hate-3)
+    | 'after_discard'        // After you discard cards (Corruption-2)
     | 'after_opponent_discard' // After opponent discards (Plague-1)
     | 'after_draw'           // After you draw cards (Spirit-3)
     | 'after_clear_cache'    // After you clear cache (Speed-1)
@@ -55,7 +56,8 @@ export type EffectTrigger =
     | 'after_shift'          // After cards are shifted
     | 'after_play'           // After cards are played
     | 'on_flip'              // When this card would be flipped (Metal-6)
-    | 'on_cover_or_flip';    // When this card would be covered OR flipped (Metal-6)
+    | 'on_cover_or_flip'     // When this card would be covered OR flipped (Metal-6)
+    | 'when_card_returned';  // When a card would be returned to a player's hand
 
 export type TargetOwner = 'any' | 'own' | 'opponent';
 export type TargetPosition = 'any' | 'covered' | 'uncovered' | 'covered_in_this_line';
@@ -194,6 +196,16 @@ export interface ReturnEffectParams {
 }
 
 /**
+ * Redirect Return to Deck Effect Parameters
+ * When a card would be returned to a player's hand, put it on their deck instead
+ */
+export interface RedirectReturnToDeckParams {
+    action: 'redirect_return_to_deck';
+    faceDown?: boolean;  // Put on deck face-down (default: true)
+    targetOwner?: 'own' | 'opponent';  // Whose returned cards to intercept (default: opponent)
+}
+
+/**
  * Play Effect Parameters
  */
 export interface PlayEffectParams {
@@ -282,6 +294,7 @@ export interface PassiveRuleParams {
             | 'block_all_play'               // Plague-0: Opponent can't play in this lane
             | 'require_face_down_play'       // Psychic-1: Opponent can only play face-down
             | 'allow_any_protocol_play'      // Spirit-1, Chaos-3: Play anywhere without matching
+            | 'allow_play_on_opponent_side'  // Corruption-0: Play on either player's side
             | 'require_non_matching_protocol' // Anarchy-1: Can only play non-matching
             | 'block_flips'                  // Frost-1: Cards can't be flipped face-up
             | 'block_protocol_rearrange'     // Frost-1: Protocols can't be rearranged

@@ -157,7 +157,11 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     if (params.action === 'discard') return `Discard ${params.count || 1}`;
                     if (params.action === 'flip' && params.flipSelf) return 'Flip This Card';
                     if (params.action === 'draw') return `Draw ${params.count || 1}`;
-                    return 'Option';
+                    if (params.action === 'delete' && params.deleteSelf) return 'Delete This Card';
+                    if (params.action === 'delete') return `Delete ${params.count || 1}`;
+                    if (params.action === 'return') return `Return ${params.count || 1}`;
+                    if (params.action === 'shift') return 'Shift';
+                    return params.action || 'Option';
                 };
 
                 return (
@@ -494,7 +498,11 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                             if (params.action === 'discard') return `you discard ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
                             if (params.action === 'flip' && params.flipSelf) return 'flip this card';
                             if (params.action === 'draw') return `draw ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
-                            return 'option';
+                            if (params.action === 'delete' && params.deleteSelf) return 'delete this card';
+                            if (params.action === 'delete') return `delete ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
+                            if (params.action === 'return') return `return ${params.count || 1} card${params.count !== 1 ? 's' : ''}`;
+                            if (params.action === 'shift') return 'shift a card';
+                            return params.action || 'option';
                         };
 
                         return `Either ${getOptionText(opt1)} or ${getOptionText(opt2)}.`;

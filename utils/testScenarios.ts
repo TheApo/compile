@@ -36,6 +36,7 @@ function createCard(protocol: string, value: number, isFaceUp: boolean = true): 
             keywords: {},
             isFaceUp,
             isRevealed: false,
+            category: 'Main',
         };
     }
 
@@ -49,6 +50,7 @@ function createCard(protocol: string, value: number, isFaceUp: boolean = true): 
         keywords: cardData.keywords,
         isFaceUp,
         isRevealed: false,
+        category: (cardData as any).category || 'Main',
         // Copy customEffects for custom protocol cards
         ...(cardData as any).customEffects && { customEffects: (cardData as any).customEffects }
     };
@@ -3158,6 +3160,66 @@ export const scenario58_ClarityAITest: TestScenario = {
     }
 };
 
+/**
+ * Szenario 59: Corruption Playground
+ *
+ * Test all Corruption cards (values 0,1,2,3,5,6)
+ * - Corruption-0: [Top Start] Flip 1 of your cards in this line. [Bottom] May play on opponent's side.
+ * - Corruption-1: [Middle] Return 1 card. [Bottom] Opponent's returned cards go to deck face-down.
+ * - Corruption-2: [Top] After you discard: Opponent discards 1. [Middle] Draw 1, discard 1.
+ * - Corruption-3: [Middle] May flip 1 covered face-up card.
+ * - Corruption-5: [Middle] Discard 1 card.
+ * - Corruption-6: [Top End] Choice: Discard 1 OR delete this card.
+ */
+export const scenario59_CorruptionCustomPlayground: TestScenario = {
+    name: "Corruption Test Playground",
+    description: "☠️ All Corruption cards on hand - corrupt your opponent's plans",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Corruption', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Corruption cards in hand (0,1,2,3,5,6)
+        newState.player.hand = [
+            createCard('Corruption', 0, true),
+            createCard('Corruption', 1, true),
+            createCard('Corruption', 2, true),
+            createCard('Corruption', 3, true),
+            createCard('Corruption', 5, true),
+            createCard('Corruption', 6, true),
+        ];
+
+        // Setup for Corruption-0 testing (flip own card in this lane at start)
+        // Player Lane 0: Own card to flip when Corruption-0 starts
+        newState = placeCard(newState, 'player', 0, createCard('Water', 2, true)); // Face-up - can flip
+
+        // Setup for Corruption-1 testing (return 1 card + redirect to deck)
+        // Opponent cards that can be returned
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 3, true));   // Can return
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 4, true));   // Can return
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));    // Can return
+
+        // Setup for Corruption-3 testing (flip covered face-up cards)
+        // Create covered cards that can be flipped
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 3, true));    // Bottom - covered
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 5, true));    // Top - covers Spirit-3
+
+        // Opponent has cards to discard (for Corruption-2 trigger)
+        newState.opponent.hand = [
+            createCard('Fire', 3, true),
+            createCard('Metal', 4, true),
+            createCard('Death', 5, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3217,4 +3279,5 @@ export const allScenarios: TestScenario[] = [
     scenario56_SmokeAITest,
     scenario57_ClarityCustomPlayground,
     scenario58_ClarityAITest,
+    scenario59_CorruptionCustomPlayground,
 ];

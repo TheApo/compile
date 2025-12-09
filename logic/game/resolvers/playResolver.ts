@@ -9,22 +9,29 @@ import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor'
 import { recalculateAllLaneValues } from '../stateManager';
 import { log, setLogSource, setLogPhase, increaseLogIndent } from '../../utils/log';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
-import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule } from '../passiveRuleChecker';
+import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule, hasPlayOnOpponentSideRule } from '../passiveRuleChecker';
 
-export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player): EffectResult => {
+export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player, targetOwner: Player = player): EffectResult => {
+    // player = who is playing the card (whose hand it comes from)
+    // targetOwner = whose lanes the card is placed into (usually same as player, but can be opponent for Corruption-0)
     const playerState = { ...prevState[player] };
     const cardToPlay = playerState.hand.find(c => c.id === cardId);
     if (!cardToPlay) return { newState: prevState };
 
     // NEW: Check passive rule restrictions (Metal-2, Plague-0, Psychic-1, etc.)
-    const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol);
-    if (!passiveRuleCheck.allowed) {
-        console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} - ${passiveRuleCheck.reason}`);
-        return { newState: prevState };
+    // Skip some checks when playing on opponent's side
+    if (targetOwner === player) {
+        const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol);
+        if (!passiveRuleCheck.allowed) {
+            console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} - ${passiveRuleCheck.reason}`);
+            return { newState: prevState };
+        }
     }
 
     const opponent = player === 'player' ? 'opponent' : 'player';
-    const opponentLane = prevState[opponent].lanes[laneIndex];
+    // When playing on opponent's side, the "opponent lane" is actually the player's lane
+    const otherSideOwner = targetOwner === 'player' ? 'opponent' : 'player';
+    const opponentLane = prevState[otherSideOwner].lanes[laneIndex];
     const topOpponentCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
 
     // RULE: An opponent's uncovered Plague-0 blocks playing into a lane.
@@ -48,7 +55,12 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // BLOCKER: Psychic-1 blocks all face-up plays
     // INVERTER: Anarchy-1 inverts the rule - can only play face-up if protocol does NOT match
     // Compiled status does NOT bypass this rule!
+    // SPECIAL: When playing on opponent's side (targetOwner !== player), only targetOwner's protocol matters
     if (isFaceUp) {
+        // When playing on opponent's side, we check the targetOwner's protocol
+        const targetOwnerProtocol = prevState[targetOwner].protocols[laneIndex];
+
+        // For normal plays, also check both protocols
         const playerProtocol = playerState.protocols[laneIndex];
         const opponentProtocol = prevState[opponent].protocols[laneIndex];
 
@@ -72,9 +84,18 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         // NEW: Check for custom cards with allow_any_protocol_play passive rule
         const hasCustomAnyProtocolRule = hasAnyProtocolPlayRule(prevState, player, laneIndex);
 
+        // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
+        const canPlayAnywhere = hasPlayOnOpponentSideRule(prevState, cardToPlay);
+
         let canPlayFaceUp: boolean;
 
-        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+        // Cards with allow_play_on_opponent_side can play face-up on ANY lane
+        if (canPlayAnywhere) {
+            canPlayFaceUp = !opponentHasPsychic1;
+        } else if (targetOwner !== player) {
+            // Playing on opponent's side (without canPlayAnywhere) - only need to match targetOwner's protocol
+            canPlayFaceUp = cardToPlay.protocol === targetOwnerProtocol && !opponentHasPsychic1;
+        } else if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play if protocol does NOT match
             const doesNotMatch = cardToPlay.protocol !== playerProtocol && cardToPlay.protocol !== opponentProtocol;
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
@@ -92,27 +113,28 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     }
 
     // 1. Check for onCover effect on the state BEFORE the card is played.
+    // NOTE: When playing on opponent's side, check THEIR lane for on_cover effects
     let onCoverResult: EffectResult = { newState: prevState };
-    const targetLaneBeforePlay = prevState[player].lanes[laneIndex];
+    const targetLaneBeforePlay = prevState[targetOwner].lanes[laneIndex];
     if (targetLaneBeforePlay.length > 0) {
         const topCard = targetLaneBeforePlay[targetLaneBeforePlay.length - 1];
 
         // NEW: Trigger reactive effects BEFORE cover (Metal-6: "When this card would be covered")
         // This allows cards like Metal-6 to delete themselves before being covered
-        const beforeCoverResult = processReactiveEffects(prevState, 'on_cover', { player, cardId: topCard.id });
+        const beforeCoverResult = processReactiveEffects(prevState, 'on_cover', { player: targetOwner, cardId: topCard.id });
         let stateBeforeCover = beforeCoverResult.newState;
 
         // Check if the card still exists after on_cover effects (Metal-6 might delete itself)
-        const laneAfterReactive = stateBeforeCover[player].lanes[laneIndex];
+        const laneAfterReactive = stateBeforeCover[targetOwner].lanes[laneIndex];
         const cardStillExists = laneAfterReactive.some(c => c.id === topCard.id);
 
         if (cardStillExists && topCard.isFaceUp) {
             // Card still exists - execute normal on_cover bottom effects
             const coverContext: EffectContext = {
-                cardOwner: player,
+                cardOwner: targetOwner,
                 actor: player,
                 currentTurn: stateBeforeCover.turn,
-                opponent: player === 'player' ? 'opponent' : 'player',
+                opponent: targetOwner === 'player' ? 'opponent' : 'player',
                 triggerType: 'cover'
             };
             onCoverResult = executeOnCoverEffect(topCard, laneIndex, stateBeforeCover, coverContext);
@@ -124,31 +146,62 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     const stateAfterOnCover = onCoverResult.newState;
 
     // 2. Physically play the card onto the board from the state returned by the onCover effect.
-    const playerStateAfterOnCover = { ...stateAfterOnCover[player] };
+    // Card is removed from player's hand and placed into targetOwner's lane
     const newCardOnBoard: PlayedCard = { ...cardToPlay, isFaceUp, isRevealed: false };
-    
-    const newStats = {
+
+    // Stats update for the player who played the card
+    const playerStateAfterOnCover = { ...stateAfterOnCover[player] };
+    const newPlayerStats = {
         ...playerStateAfterOnCover.stats,
         cardsPlayed: playerStateAfterOnCover.stats.cardsPlayed + 1,
     };
-    
-    const newPlayerState = {
-        ...playerStateAfterOnCover,
-        hand: playerStateAfterOnCover.hand.filter(c => c.id !== cardId),
-        lanes: playerStateAfterOnCover.lanes.map((lane, i) =>
-            i === laneIndex ? [...lane, newCardOnBoard] : lane
-        ),
-        stats: newStats,
-    };
 
-    let stateAfterMove: GameState = {
-        ...stateAfterOnCover,
-        [player]: newPlayerState,
-        stats: {
-            ...stateAfterOnCover.stats,
-            [player]: newStats
-        }
-    };
+    let stateAfterMove: GameState;
+
+    if (targetOwner === player) {
+        // Normal case: card goes to player's own lane
+        const newPlayerState = {
+            ...playerStateAfterOnCover,
+            hand: playerStateAfterOnCover.hand.filter(c => c.id !== cardId),
+            lanes: playerStateAfterOnCover.lanes.map((lane, i) =>
+                i === laneIndex ? [...lane, newCardOnBoard] : lane
+            ),
+            stats: newPlayerStats,
+        };
+        stateAfterMove = {
+            ...stateAfterOnCover,
+            [player]: newPlayerState,
+            stats: {
+                ...stateAfterOnCover.stats,
+                [player]: newPlayerStats
+            }
+        };
+    } else {
+        // Special case: card goes to opponent's lane (Corruption-0)
+        // Remove card from player's hand
+        const newPlayerState = {
+            ...playerStateAfterOnCover,
+            hand: playerStateAfterOnCover.hand.filter(c => c.id !== cardId),
+            stats: newPlayerStats,
+        };
+        // Place card in targetOwner's lane
+        const targetOwnerStateAfterOnCover = { ...stateAfterOnCover[targetOwner] };
+        const newTargetOwnerState = {
+            ...targetOwnerStateAfterOnCover,
+            lanes: targetOwnerStateAfterOnCover.lanes.map((lane, i) =>
+                i === laneIndex ? [...lane, newCardOnBoard] : lane
+            ),
+        };
+        stateAfterMove = {
+            ...stateAfterOnCover,
+            [player]: newPlayerState,
+            [targetOwner]: newTargetOwnerState,
+            stats: {
+                ...stateAfterOnCover.stats,
+                [player]: newPlayerStats
+            }
+        };
+    }
 
     // CRITICAL FIX: Preserve queuedActions from prevState
     // When resolving an interrupt by playing a card, the queuedActions must be maintained
@@ -182,7 +235,7 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     stateAfterMove = setLogPhase(stateAfterMove, undefined);
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
-    const protocolName = stateAfterMove[player].protocols[laneIndex];
+    const protocolName = stateAfterMove[targetOwner].protocols[laneIndex];
     let logMessage: string;
 
     if (player === 'opponent' && !isFaceUp) {
@@ -193,7 +246,13 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         if (!isFaceUp) {
             logMessage += ' face-down';
         }
-        logMessage += ` into Protocol ${protocolName}.`;
+        // Indicate if playing on opponent's side
+        if (targetOwner !== player) {
+            const targetSideName = targetOwner === 'player' ? "Player's" : "Opponent's";
+            logMessage += ` into ${targetSideName} Protocol ${protocolName}.`;
+        } else {
+            logMessage += ` into Protocol ${protocolName}.`;
+        }
     }
     stateAfterMove = log(stateAfterMove, player, logMessage);
 
@@ -227,11 +286,12 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         // For human player, execute immediately.
         let onPlayResult: EffectResult = { newState: stateAfterMove };
         if (isFaceUp && !stateAfterMove.actionRequired) {
+            // NOTE: cardOwner is targetOwner because the card is now on targetOwner's side
             const playContext: EffectContext = {
-                cardOwner: player,
+                cardOwner: targetOwner,
                 actor: player,
                 currentTurn: stateAfterMove.turn,
-                opponent: player === 'player' ? 'opponent' : 'player',
+                opponent: targetOwner === 'player' ? 'opponent' : 'player',
                 triggerType: 'play'
             };
             onPlayResult = executeOnPlayEffect(newCardOnBoard, laneIndex, stateAfterMove, playContext);

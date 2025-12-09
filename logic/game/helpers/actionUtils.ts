@@ -430,6 +430,47 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     return { newState: state };
 }
 
+/**
+ * Check if a redirect-to-deck passive is active for returns
+ * Returns the card with the passive if found, null otherwise
+ * @param state Current game state
+ * @param cardOwner Who owns the card being returned (whose hand it would go to)
+ * @param actor Who is performing the return action
+ */
+function hasRedirectReturnToDeckPassive(state: GameState, cardOwner: Player, actor: Player): PlayedCard | null {
+    // Check all face-up cards for redirect_return_to_deck passive
+    for (const player of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[player].lanes) {
+            for (const card of lane) {
+                if (!card.isFaceUp) continue;
+                const customEffects = (card as any).customEffects;
+                if (!customEffects) continue;
+
+                const bottomEffects = customEffects.bottomEffects || [];
+                for (const effect of bottomEffects) {
+                    if (effect.trigger !== 'when_card_returned') continue;
+                    if (effect.params?.action !== 'redirect_return_to_deck') continue;
+
+                    // Check targetOwner - default is 'opponent' (intercept opponent's cards being returned)
+                    const targetOwner = effect.params?.targetOwner || 'opponent';
+                    const passiveCardOwner = player;
+
+                    // Determine if this passive applies:
+                    // - If targetOwner is 'opponent': intercept when opponent's cards are returned
+                    // - If targetOwner is 'own': intercept when own cards are returned
+                    const interceptsOpponent = targetOwner === 'opponent' && cardOwner !== passiveCardOwner;
+                    const interceptsOwn = targetOwner === 'own' && cardOwner === passiveCardOwner;
+
+                    if (interceptsOpponent || interceptsOwn) {
+                        return card;
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
+
 export function internalReturnCard(state: GameState, targetCardId: string): EffectResult {
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (!cardInfo) return { newState: state };
@@ -446,13 +487,6 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     let newState = { ...state };
     const ownerState = { ...newState[owner] };
 
-    // Remove from board
-    ownerState.lanes = ownerState.lanes.map(lane => lane.filter(c => c.id !== targetCardId));
-    // Add to hand
-    ownerState.hand = [...ownerState.hand, { ...card, isFaceUp: true, isRevealed: false }];
-
-    newState[owner] = ownerState;
-
     // FIX: Use actor from actionRequired if available, otherwise fall back to turn
     // This is critical for interrupt scenarios (e.g., Psychic-4 during opponent's turn)
     const actor = (newState.actionRequired && 'actor' in newState.actionRequired)
@@ -461,7 +495,28 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     const actorName = actor === 'player' ? 'Player' : 'Opponent';
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const cardName = `${card.protocol}-${card.value}`;
-    newState = log(newState, actor, `${actorName} returns ${ownerName} ${cardName} to their hand.`);
+
+    // Check for redirect-to-deck passive (e.g., Corruption-1)
+    // This checks all face-up cards for when_card_returned trigger with redirect_return_to_deck action
+    const redirectPassiveCard = hasRedirectReturnToDeckPassive(state, owner, actor);
+
+    // Remove from board
+    ownerState.lanes = ownerState.lanes.map(lane => lane.filter(c => c.id !== targetCardId));
+
+    if (redirectPassiveCard) {
+        // Corruption-1: Put on top of deck face-down instead of returning to hand
+        const returnedCard = { ...card, isFaceUp: false, isRevealed: false };
+        ownerState.deck = [returnedCard, ...ownerState.deck];
+        newState[owner] = ownerState;
+
+        const passiveCardName = `${redirectPassiveCard.protocol}-${redirectPassiveCard.value}`;
+        newState = log(newState, actor, `${passiveCardName}: ${ownerName} ${cardName} is put on top of their deck face-down instead of returning to hand.`);
+    } else {
+        // Normal return: Add to hand
+        ownerState.hand = [...ownerState.hand, { ...card, isFaceUp: true, isRevealed: false }];
+        newState[owner] = ownerState;
+        newState = log(newState, actor, `${actorName} returns ${ownerName} ${cardName} to their hand.`);
+    }
 
     // CRITICAL: Queue pending custom effects before clearing actionRequired
     newState = queuePendingCustomEffects(newState);

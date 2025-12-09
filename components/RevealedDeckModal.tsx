@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GameState } from '../types';
 import { CardComponent } from './Card';
 
@@ -14,48 +14,62 @@ interface RevealedDeckModalProps {
 
 /**
  * Modal for selecting a card from a revealed deck (Clarity-2/3)
+ * Uses same layout pattern as DebugModal for consistency
  */
 export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModalProps) {
     const [previewCard, setPreviewCard] = useState<any>(null);
-    const isTouchDevice = useRef(false);
+    const hasInitialized = useRef(false);
 
     const action = gameState.actionRequired as any;
+
+    // Create card objects with IDs for display (before early return so we can use them in useEffect)
+    const revealedCards = action?.revealedCards;
+    const selectableCardIds = action?.selectableCardIds;
+    const deck = revealedCards || (action?.actor ? gameState[action.actor]?.deck : []) || [];
+
+    // Memoize deckCards to prevent infinite re-renders
+    const deckCards = useMemo(() => deck.map((card: any, index: number) => ({
+        ...card,
+        id: card.id || `deck-${index}`,
+        isFaceUp: true, // Show all cards face-up
+    })), [deck]);
+
+    // Auto-select first valid card on mount
+    useEffect(() => {
+        if (action?.type === 'select_card_from_revealed_deck' && selectableCardIds?.length > 0 && !hasInitialized.current) {
+            const firstSelectableCard = deckCards.find((card: any) => selectableCardIds.includes(card.id));
+            if (firstSelectableCard) {
+                setPreviewCard(firstSelectableCard);
+                hasInitialized.current = true;
+            }
+        }
+    }, [action?.type, selectableCardIds, deckCards]);
+
+    // Reset initialization when modal closes
+    useEffect(() => {
+        if (!action || action.type !== 'select_card_from_revealed_deck') {
+            hasInitialized.current = false;
+            setPreviewCard(null);
+        }
+    }, [action]);
+
     if (!action || action.type !== 'select_card_from_revealed_deck') {
         return null;
     }
 
-    const { revealedCards, selectableCardIds, valueFilter, actor } = action;
-    const actorState = gameState[actor];
-    const deck = revealedCards || actorState.deck;
-
-    // Create card objects with IDs for display
-    const deckCards = deck.map((card: any, index: number) => ({
-        ...card,
-        id: card.id || `deck-${index}`,
-        isFaceUp: true, // Show all cards face-up
-    }));
+    const { valueFilter } = action;
 
     const isSelectable = (cardId: string) => {
         return selectableCardIds?.includes(cardId);
     };
 
-    // Touch: tap = preview only
-    const handleTouchStart = (card: any) => {
-        isTouchDevice.current = true;
+    const handleCardHover = (card: any) => {
         if (isSelectable(card.id)) {
             setPreviewCard(card);
         }
     };
 
-    // Mouse: hover = preview, click = also just preview
-    const handleMouseEnter = (card: any) => {
-        if (!isTouchDevice.current && isSelectable(card.id)) {
-            setPreviewCard(card);
-        }
-    };
-
-    const handleClick = (card: any) => {
-        // Click only sets preview, selection happens via button
+    const handleCardClick = (card: any) => {
         if (isSelectable(card.id)) {
             setPreviewCard(card);
         }
@@ -73,11 +87,11 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
                 <h2>Your Revealed Deck</h2>
                 <p>Select a card with value {valueFilter} to draw:</p>
 
-                <div className="revealed-deck-layout">
-                    {/* Preview card on the left */}
-                    <div className="revealed-deck-preview">
-                        {previewCard ? (
-                            <>
+                <div className="revealed-deck-content-wrapper">
+                    {/* Left preview area - same as DebugModal */}
+                    <div className="revealed-deck-preview-area">
+                        {previewCard && (
+                            <div className="revealed-deck-preview-card">
                                 <CardComponent
                                     card={previewCard}
                                     isFaceUp={true}
@@ -88,41 +102,41 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
                                 >
                                     Draw {previewCard.protocol}-{previewCard.value}
                                 </button>
-                            </>
-                        ) : (
-                            <div className="preview-placeholder">
-                                Hover or tap a card to preview
                             </div>
                         )}
                     </div>
 
-                    {/* Card grid on the right */}
-                    <div className="revealed-deck-cards compact">
-                        {deckCards.map((card: any) => {
-                            const selectable = isSelectable(card.id);
-                            const isPreview = previewCard?.id === card.id;
-                            return (
-                                <div
-                                    key={card.id}
-                                    className={`revealed-deck-card-wrapper mini ${selectable ? 'selectable' : ''} ${isPreview ? 'previewing' : ''}`}
-                                    onTouchStart={() => handleTouchStart(card)}
-                                    onMouseEnter={() => handleMouseEnter(card)}
-                                    onClick={() => handleClick(card)}
-                                >
-                                    <CardComponent
-                                        card={card}
-                                        isFaceUp={true}
-                                        additionalClassName={selectable ? (isPreview ? 'highlight-selectable' : '') : 'dimmed'}
-                                    />
-                                </div>
-                            );
-                        })}
+                    {/* Card grid - same pattern as DebugModal */}
+                    <div className="revealed-deck-grids-area">
+                        <div className="revealed-deck-card-grid">
+                            {deckCards.length > 0 ? (
+                                deckCards.map((card: any) => {
+                                    const selectable = isSelectable(card.id);
+                                    const isPreview = previewCard?.id === card.id;
+                                    return (
+                                        <div
+                                            key={card.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCardClick(card);
+                                            }}
+                                            onMouseEnter={() => handleCardHover(card)}
+                                            style={{ cursor: selectable ? 'pointer' : 'default' }}
+                                        >
+                                            <CardComponent
+                                                card={card}
+                                                isFaceUp={true}
+                                                additionalClassName={`in-hand ${selectable ? (isPreview ? 'highlight-selectable' : '') : 'dimmed'}`}
+                                            />
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <p className="no-cards">No cards in deck.</p>
+                            )}
+                        </div>
                     </div>
                 </div>
-
-                {deckCards.length === 0 && (
-                    <p className="no-cards-message">No cards in deck.</p>
-                )}
             </div>
         </div>
     );

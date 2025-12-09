@@ -8,12 +8,12 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
-import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface GameBoardProps {
     gameState: GameState;
-    onLanePointerDown: (laneIndex: number) => void;
+    onLanePointerDown: (laneIndex: number, owner: Player) => void;
     onPlayFaceDown: (laneIndex: number) => void;
     onCardPointerDown: (card: PlayedCard, owner: Player, laneIndex: number) => void;
     onCardPointerEnter: (card: PlayedCard, owner: Player) => void;
@@ -105,8 +105,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         // NEW: Check for custom cards with allow_any_protocol_play passive rule (Spirit_custom-1)
         const hasCustomAllowAnyProtocol = hasAnyProtocolPlayRule(gameState, 'player', laneIndex);
 
+        // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
+        const canPlayAnywhere = hasPlayOnOpponentSideRule(gameState, card);
+
         let isMatching: boolean;
-        if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
+        if (canPlayAnywhere) {
+            // Can play face-up on ANY lane (ignores protocol matching)
+            isMatching = !opponentHasPsychic1;
+        } else if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {
             // Anarchy-1 OR custom require_non_matching_protocol: INVERTED rule - can only play face-up if protocol does NOT match
             const doesNotMatch = card.protocol !== player.protocols[laneIndex] && card.protocol !== opponent.protocols[laneIndex];
             isMatching = doesNotMatch && !opponentHasPsychic1;
@@ -132,6 +138,40 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         }
 
         return { isPlayable: true, isMatching, isCompilable };
+    }
+
+    // NEW: Check if opponent's lane is playable (for cards with allow_play_on_opponent_side)
+    const getOpponentLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean } => {
+        const isPlayerTurn = turn === 'player';
+        const isPlayFromHand = phase === 'action' && !actionRequired && selectedCardId;
+
+        if (!isPlayerTurn || !isPlayFromHand) {
+            return { isPlayable: false, isMatching: false };
+        }
+
+        const card = player.hand.find(c => c.id === selectedCardId);
+        if (!card) {
+            return { isPlayable: false, isMatching: false };
+        }
+
+        // Check if the selected card has allow_play_on_opponent_side passive rule
+        if (!hasPlayOnOpponentSideRule(gameState, card)) {
+            return { isPlayable: false, isMatching: false };
+        }
+
+        // Rule: Lane blocked by own uncovered Plague-0 (from player's perspective, opponent's Plague-0 blocks player)
+        // But here we're playing ON opponent's side, so check if PLAYER's Plague-0 blocks opponent lane
+        const playerLane = player.lanes[laneIndex];
+        const isLaneBlocked = playerLane.length > 0 &&
+                              playerLane[playerLane.length - 1].isFaceUp &&
+                              playerLane[playerLane.length - 1].protocol === 'Plague' &&
+                              playerLane[playerLane.length - 1].value === 0;
+        if (isLaneBlocked) {
+            return { isPlayable: false, isMatching: false };
+        }
+
+        // Cards with allow_play_on_opponent_side can play on ANY lane (face-up only on opponent's side)
+        return { isPlayable: true, isMatching: true };
     }
 
     const getLaneEffectTargetability = (targetLaneIndex: number): boolean => {
@@ -359,14 +399,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             <div className={`player-side opponent-side ${turn === 'opponent' ? 'active-turn' : ''}`}>
                 <div className="lanes">
                     {opponent.lanes.map((laneCards, i) => {
+                        const { isPlayable: oppIsPlayable, isMatching: oppIsMatching } = getOpponentLanePlayability(i);
                         return <Lane
                             key={`opp-lane-${i}`}
                             cards={laneCards}
-                            isPlayable={false}
+                            isPlayable={oppIsPlayable}
+                            isMatching={oppIsMatching}
                             isCompilable={false}
                             isShiftTarget={getLaneShiftTargetability(i, 'opponent')}
                             isEffectTarget={getLaneEffectTargetability(i)}
-                            onLanePointerDown={() => onLanePointerDown(i)}
+                            onLanePointerDown={() => onLanePointerDown(i, 'opponent')}
                             onCardPointerDown={(card) => onCardPointerDown(card, 'opponent', i)}
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')}
                             onCardPointerLeave={() => onCardPointerLeave()}
@@ -427,7 +469,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             isCompilable={isCompilable}
                             isShiftTarget={getLaneShiftTargetability(i, 'player')}
                             isEffectTarget={getLaneEffectTargetability(i)}
-                            onLanePointerDown={() => onLanePointerDown(i)}
+                            onLanePointerDown={() => onLanePointerDown(i, 'player')}
                             onPlayFaceDown={() => onPlayFaceDown(i)}
                             onCardPointerDown={(card) => onCardPointerDown(card, 'player', i)}
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')}

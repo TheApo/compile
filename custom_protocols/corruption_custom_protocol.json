@@ -1,0 +1,197 @@
+{
+  "id": "corruption-custom-001",
+  "name": "Corruption",
+  "description": "Corrupt your opponents plans. Use discard synergies and manipulate the return mechanic.",
+  "author": "System",
+  "createdAt": "2025-12-09T00:00:00.000Z",
+  "color": "#4A0080",
+  "pattern": "stripes",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "corruption-0-start-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "scope": "this_lane",
+            "targetFilter": {
+              "owner": "own",
+              "position": "any",
+              "faceState": "face_up",
+              "excludeSelf": true
+            },
+            "optional": false
+          },
+          "position": "top",
+          "trigger": "start"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "corruption-0-play-opponent-side",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "allow_play_on_opponent_side",
+              "target": "self",
+              "scope": "global"
+            }
+          },
+          "position": "bottom",
+          "trigger": "passive"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "corruption-1-return",
+          "params": {
+            "action": "return",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "corruption-1-redirect-return",
+          "params": {
+            "action": "redirect_return_to_deck",
+            "faceDown": true,
+            "targetOwner": "opponent"
+          },
+          "position": "bottom",
+          "trigger": "when_card_returned"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "corruption-2-after-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "opponent"
+          },
+          "position": "top",
+          "trigger": "after_discard",
+          "reactiveTriggerActor": "self"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "corruption-2-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "corruption-2-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "corruption-3-flip-covered",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "any",
+              "position": "covered",
+              "faceState": "face_up",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "corruption-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "corruption-6-end-choice",
+          "params": {
+            "action": "choice",
+            "options": [
+              {
+                "id": "corruption-6-choice-discard",
+                "params": {
+                  "action": "discard",
+                  "count": 1,
+                  "actor": "self"
+                },
+                "position": "top",
+                "trigger": "end"
+              },
+              {
+                "id": "corruption-6-choice-delete-self",
+                "params": {
+                  "action": "delete",
+                  "deleteSelf": true
+                },
+                "position": "top",
+                "trigger": "end"
+              }
+            ]
+          },
+          "position": "top",
+          "trigger": "end"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

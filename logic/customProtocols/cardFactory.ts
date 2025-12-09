@@ -191,8 +191,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             // NEW: Add scope text
+            // "this_lane" + "own" = "this stack" (only own side of lane)
+            // "this_lane" + "any/opponent" = "this line" (both sides)
             if (params.scope === 'this_lane') {
-                text += ' in this line';
+                const isOwnOnly = params.targetFilter?.owner === 'own';
+                text += isOwnOnly ? ' in this stack' : ' in this line';
             } else if (params.scope === 'each_lane') {
                 // Chaos-0: "In each line, flip 1 covered card."
                 text = `In each line, ${text.charAt(0).toLowerCase() + text.slice(1)}`;
@@ -838,6 +841,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 case 'allow_any_protocol_play':
                     mainText = 'You may play cards without matching protocols.';
                     break;
+                case 'allow_play_on_opponent_side':
+                    mainText = "You may play this card in any line on either player's side.";
+                    break;
                 case 'block_flips':
                     // Frost-1: scope is global, so no "in this line"
                     mainText = rule.scope === 'global' ? "Cards cannot be flipped face-up." : "Cards can't be flipped face-up in this line.";
@@ -980,6 +986,12 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'redirect_return_to_deck': {
+            const faceDown = params.faceDown !== false;
+            mainText = `Put that card on top of their deck ${faceDown ? 'face-down ' : ''}instead.`;
+            break;
+        }
+
         default:
             mainText = 'Effect';
             break;
@@ -1058,7 +1070,7 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         if (trigger === 'on_cover_or_flip') return `<div><span class='emphasis'>When this card would be covered or flipped:</span> First, ${summary.toLowerCase()}</div>`;
 
         // NEW: Reactive triggers - text depends on reactiveTriggerActor
-        if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_shift' || trigger === 'after_flip' || trigger === 'after_clear_cache') {
+        if (trigger === 'after_draw' || trigger === 'after_delete' || trigger === 'after_discard' || trigger === 'after_shift' || trigger === 'after_flip' || trigger === 'after_clear_cache') {
             const triggerActor = effect.reactiveTriggerActor || 'self';
             const actorText = triggerActor === 'self' ? 'you' :
                              triggerActor === 'opponent' ? 'opponent' :
@@ -1069,6 +1081,8 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
                 actionText = triggerActor === 'any' ? 'drawn' : 'draw cards';
             } else if (trigger === 'after_delete') {
                 actionText = triggerActor === 'any' ? 'deleted' : 'delete cards';
+            } else if (trigger === 'after_discard') {
+                actionText = triggerActor === 'any' ? 'discarded' : 'discard cards';
             } else if (trigger === 'after_shift') {
                 actionText = triggerActor === 'any' ? 'shifted' : 'shift cards';
             } else if (trigger === 'after_flip') {
@@ -1089,6 +1103,14 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         // NEW: Before compile delete trigger (Speed-2)
         if (trigger === 'before_compile_delete') {
             return `<div><span class='emphasis'>When this card would be deleted by compiling:</span> ${summary}</div>`;
+        }
+
+        // When a card would be returned to a player's hand
+        if (trigger === 'when_card_returned') {
+            // Check targetOwner to determine the text
+            const targetOwner = effect.params?.targetOwner || 'opponent';
+            const targetText = targetOwner === 'opponent' ? "your opponent's" : 'your';
+            return `<div><span class='emphasis'>When a card would be returned to ${targetText} hand:</span> ${summary}</div>`;
         }
 
         return summary;

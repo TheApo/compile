@@ -95,6 +95,8 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'shuffle_trash', optional: true };
         case 'shuffle_deck':
             return { action: 'shuffle_deck' };
+        case 'redirect_return_to_deck':
+            return { action: 'redirect_return_to_deck', faceDown: true };
         default:
             return {};
     }
@@ -315,6 +317,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             'on_flip': 'When Flipped',
             'on_cover_or_flip': 'When Covered or Flipped',
             'after_delete': 'After Delete',
+            'after_discard': 'After Discard',
             'after_draw': 'After Draw',
             'after_shift': 'After Shift',
             'after_flip': 'After Flip',
@@ -322,6 +325,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             'after_clear_cache': 'After Clear Cache',
             'after_opponent_discard': 'After Opponent Discards',
             'before_compile_delete': 'Before Compile Delete',
+            'when_card_returned': 'When Card Returned',
         };
         return triggerLabels[trigger] || trigger;
     };
@@ -362,6 +366,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="on_flip">When this card would be flipped</option>
                                 <option value="on_cover_or_flip">When covered or flipped</option>
                                 <option value="after_delete">After you delete cards</option>
+                                <option value="after_discard">After you discard cards</option>
                                 <option value="after_draw">After you draw cards</option>
                                 <option value="after_shift">After cards are shifted</option>
                                 <option value="after_flip">After cards are flipped</option>
@@ -369,6 +374,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="after_clear_cache">After you clear cache</option>
                                 <option value="after_opponent_discard">After opponent discards</option>
                                 <option value="before_compile_delete">Before deleted by compile</option>
+                                <option value="when_card_returned">When card returned to hand</option>
                             </optgroup>
                         </select>
                     </label>
@@ -402,7 +408,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             </div>
 
             {/* Reactive Trigger Actor (only for reactive triggers) */}
-            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard') && (
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard') && (
                 <div style={{ marginTop: '15px' }}>
                     <label>
                         Trigger Actor (who triggers this effect?)

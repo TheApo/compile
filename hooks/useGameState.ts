@@ -217,15 +217,16 @@ export const useGameState = (
     }, []);
 
 
-    const playSelectedCard = (laneIndex: number, isFaceUp: boolean) => {
+    const playSelectedCard = (laneIndex: number, isFaceUp: boolean, targetOwner: Player = 'player') => {
         if (!selectedCard || gameState.turn !== 'player' || gameState.phase !== 'action') return;
         const cardId = selectedCard;
         setSelectedCard(null);
 
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const { newState, animationRequests } = resolvers.playCard(prev, cardId, laneIndex, isFaceUp, 'player');
-            
+            // targetOwner determines whose lane the card is played into (for Corruption-0 play on opponent's side)
+            const { newState, animationRequests } = resolvers.playCard(prev, cardId, laneIndex, isFaceUp, 'player', targetOwner);
+
             const stateWithAnimation = { ...newState, animationState: { type: 'playCard' as const, cardId, owner: 'player' as Player }};
 
             setTimeout(() => {

@@ -233,6 +233,7 @@ function shouldRequireUncovered(trigger: TriggerType): boolean {
         'passive',
         'after_draw',
         'after_delete',
+        'after_discard',
         'after_flip',
         'after_clear_cache',
         'before_compile_delete',
