@@ -22,6 +22,7 @@ import metalCustomData from '../../custom_protocols/metal_custom_protocol.json';
 import plagueCustomData from '../../custom_protocols/plague_custom_protocol.json';
 import loveCustomData from '../../custom_protocols/love_custom_protocol.json';
 import psychicCustomData from '../../custom_protocols/psychic_custom_protocol.json';
+import smokeCustomData from '../../custom_protocols/smoke_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -57,6 +58,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(plagueCustomData as any);
         addCustomProtocol(loveCustomData as any);
         addCustomProtocol(psychicCustomData as any);
+        addCustomProtocol(smokeCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

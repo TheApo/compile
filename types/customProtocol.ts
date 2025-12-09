@@ -193,9 +193,14 @@ export interface PlayEffectParams {
     count: number;  // 1-6
     faceDown: boolean;
     destinationRule: {
-        type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line';
+        type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line' | 'line_with_matching_cards';
         excludeCurrentLane?: boolean;
         laneIndex?: number | 'current';  // NEW: For Gravity-6 "opponent plays in this line", 'current' = this card's lane
+        ownerFilter?: 'own' | 'opponent' | 'any';  // Whose cards to check
+        // NEW: Filter cards in lane by face state (Smoke-0, Smoke-3)
+        cardFilter?: {
+            faceState: 'face_down' | 'face_up';
+        };
     };
     // NEW: Conditional play
     condition?: {

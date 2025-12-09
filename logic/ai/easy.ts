@@ -673,18 +673,19 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_from_hand_to_play': {
             if (state.opponent.hand.length > 0) {
                 const cardToPlay = state.opponent.hand[0];
-                let playableLanes = [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
+                // NEW: Smoke-3 - use validLanes if provided, otherwise all lanes except disallowed
+                let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== action.disallowedLaneIndex);
 
-                playableLanes = playableLanes.filter(l => {
+                playableLanes = playableLanes.filter((l: number) => {
                     const result = canPlayCard(state, 'opponent', l, !action.isFaceDown, cardToPlay.protocol);
                     return result.allowed;
                 });
 
                 if (playableLanes.length > 0) {
                     const scoredLanes = playableLanes
-                        .filter(l => !state.opponent.compiled[l])
-                        .map(l => ({ lane: l, value: state.opponent.laneValues[l] }))
-                        .sort((a, b) => b.value - a.value);
+                        .filter((l: number) => !state.opponent.compiled[l])
+                        .map((l: number) => ({ lane: l, value: state.opponent.laneValues[l] }))
+                        .sort((a: { lane: number, value: number }, b: { lane: number, value: number }) => b.value - a.value);
 
                     return { type: 'playCard', cardId: cardToPlay.id, laneIndex: scoredLanes[0]?.lane ?? playableLanes[0], isFaceUp: false };
                 }

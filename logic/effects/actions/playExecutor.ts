@@ -86,25 +86,41 @@ export function executePlayEffect(
     }
 
     // NEW: Life-0 logic - Automatic play from deck to "each line where you/opponent have a card"
+    // Extended for Smoke-0: cardFilter to check for face-down cards specifically
     if (source === 'deck' && params.destinationRule?.type === 'each_line_with_card') {
         const ownerFilter = params.destinationRule.ownerFilter || 'any';
+        const cardFilter = params.destinationRule.cardFilter;
         const playerToCheck = ownerFilter === 'own' ? actor :
                              ownerFilter === 'opponent' ? (actor === 'player' ? 'opponent' : 'player') :
                              null;
 
-        // Find all lanes where the specified player has cards
+        // Helper to check if a lane has cards matching the filter
+        const laneHasMatchingCards = (laneIdx: number): boolean => {
+            const checkLane = (playerLanes: PlayedCard[]): boolean => {
+                if (playerLanes.length === 0) return false;
+                if (!cardFilter) return true; // No filter = any card matches
+
+                // Check if any card in lane matches the faceState filter
+                return playerLanes.some(c => {
+                    if (cardFilter.faceState === 'face_down') return !c.isFaceUp;
+                    if (cardFilter.faceState === 'face_up') return c.isFaceUp;
+                    return true;
+                });
+            };
+
+            if (playerToCheck) {
+                return checkLane(state[playerToCheck].lanes[laneIdx]);
+            } else {
+                // Check both players' lanes
+                return checkLane(state.player.lanes[laneIdx]) || checkLane(state.opponent.lanes[laneIdx]);
+            }
+        };
+
+        // Find all lanes where the specified player has cards (with optional filter)
         const lanesWithCards: number[] = [];
         for (let i = 0; i < 3; i++) {
-            if (playerToCheck) {
-                // Check specific player's lanes
-                if (state[playerToCheck].lanes[i].length > 0) {
-                    lanesWithCards.push(i);
-                }
-            } else {
-                // Check if ANY player has a card in this lane
-                if (state.player.lanes[i].length > 0 || state.opponent.lanes[i].length > 0) {
-                    lanesWithCards.push(i);
-                }
+            if (laneHasMatchingCards(i)) {
+                lanesWithCards.push(i);
             }
         }
 
@@ -186,10 +202,20 @@ export function executePlayEffect(
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-        const ownerText = ownerFilter === 'own' ? 'where you have a card' :
-                         ownerFilter === 'opponent' ? 'where opponent has a card' :
-                         'with a card';
-        newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down in each line ${ownerText}.`);
+        // Build description text based on filters
+        let filterText = '';
+        if (cardFilter?.faceState === 'face_down') {
+            filterText = 'with a face-down card';
+        } else if (cardFilter?.faceState === 'face_up') {
+            filterText = 'with a face-up card';
+        } else if (ownerFilter === 'own') {
+            filterText = 'where you have a card';
+        } else if (ownerFilter === 'opponent') {
+            filterText = 'where opponent has a card';
+        } else {
+            filterText = 'with a card';
+        }
+        newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down in each line ${filterText}.`);
 
         // Combine all animations: on_cover animations first, then play animations
         const allAnimations = [...onCoverAnimations, ...playAnimations];
@@ -339,6 +365,65 @@ export function executePlayEffect(
         const faceText = faceDown ? 'face-down' : 'face-up';
         const protocolName = state.player.protocols[resolvedLaneIndex];
         newState = log(newState, cardOwner, `${sourceCardName}: ${actorName} plays ${drawnCards.length} card(s) ${faceText} in ${protocolName} line.`);
+        return { newState };
+    }
+
+    // NEW: Smoke-3 logic - Play from hand to a lane with face-down cards
+    // Flow: 1. Select card from hand → 2. Select lane (only lanes with face-down cards highlighted)
+    if (source === 'hand' && params.destinationRule?.type === 'line_with_matching_cards') {
+        const cardFilter = params.destinationRule.cardFilter;
+
+        // Helper to check if a lane has cards matching the filter
+        const laneHasMatchingCards = (laneIdx: number): boolean => {
+            const checkLane = (playerLanes: PlayedCard[]): boolean => {
+                if (playerLanes.length === 0) return false;
+                if (!cardFilter) return true;
+
+                return playerLanes.some(c => {
+                    if (cardFilter.faceState === 'face_down') return !c.isFaceUp;
+                    if (cardFilter.faceState === 'face_up') return c.isFaceUp;
+                    return true;
+                });
+            };
+
+            // Check both players' lanes
+            return checkLane(state.player.lanes[laneIdx]) || checkLane(state.opponent.lanes[laneIdx]);
+        };
+
+        // Find valid lanes
+        const validLanes: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            if (laneHasMatchingCards(i)) {
+                validLanes.push(i);
+            }
+        }
+
+        if (validLanes.length === 0) {
+            const sourceCardInfo = findCardOnBoard(state, card.id);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+            let newState = log(state, cardOwner, `${sourceCardName}: No valid lanes with face-down cards. Effect skipped.`);
+            return { newState };
+        }
+
+        // Check if actor has any cards in hand to play
+        if (state[actor].hand.length === 0) {
+            console.log(`[Play Effect] ${actor} has no cards in hand to play - skipping effect.`);
+            return { newState: state };
+        }
+
+        // FIXED: First select card from hand, THEN select lane
+        let newState = log(state, cardOwner, `[Custom Play effect - select a card to play in a lane with a face-down card]`);
+        newState.actionRequired = {
+            type: 'select_card_from_hand_to_play',
+            sourceCardId: card.id,
+            actor,
+            count: params.count || 1,
+            faceDown: params.faceDown,
+            source: 'hand',
+            validLanes,  // Pass to lane selection step
+            cardFilter,  // Pass filter for UI/AI reference
+        } as any;
+
         return { newState };
     }
 

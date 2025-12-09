@@ -53,6 +53,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 return { isPlayable: false, isMatching: false, isCompilable };
             }
 
+            // NEW: Smoke-3 - validLanes restricts which lanes can be selected
+            const validLanes = (actionRequired as any).validLanes;
+            if (validLanes && !validLanes.includes(laneIndex)) {
+                return { isPlayable: false, isMatching: false, isCompilable };
+            }
+
             // Life-3: Playing from deck - no card in hand
             if ((actionRequired as any).source === 'deck') {
                 // Exclude current lane if specified (legacy check for excludeCurrentLane)

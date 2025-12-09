@@ -242,7 +242,25 @@ export const compileLane = (prevState: GameState, laneIndex: number): GameState 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
 
-    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown } = prevState.actionRequired as any;
+    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown, targetLaneIndex, validLanes } = prevState.actionRequired as any;
+
+    // NEW: Smoke-3 - if targetLaneIndex is already set, skip lane selection and go directly to play
+    if (targetLaneIndex !== undefined) {
+        return {
+            ...prevState,
+            actionRequired: {
+                type: 'select_lane_for_play',
+                cardInHandId: cardId,
+                sourceCardId,
+                isFaceDown: isFaceDown || faceDown,
+                actor,
+                source: 'hand',
+                // Pass targetLaneIndex so the resolver knows which lane was pre-selected
+                preSelectedLane: targetLaneIndex,
+            } as any
+        };
+    }
+
     return {
         ...prevState,
         actionRequired: {
@@ -254,6 +272,7 @@ export const selectHandCardForAction = (prevState: GameState, cardId: string): G
             actor,
             destinationRule, // Pass through for custom protocols
             condition, // Pass through for conditional play
+            validLanes, // NEW: Smoke-3 - pass valid lanes for highlighting
         } as any
     };
 };

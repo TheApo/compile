@@ -2919,6 +2919,113 @@ export const scenario54_Life1UncoverDoubleFlip: TestScenario = {
     }
 };
 
+/**
+ * Szenario 55: Smoke Playground
+ *
+ * Test all Smoke cards (values 0-5)
+ * - Smoke-0: Play the top card of your deck face-down in each line with a face-down card.
+ * - Smoke-1: Flip 1 of your cards. You may shift that card.
+ * - Smoke-2: [Top] Your total value in this line is increased by 1 for each face-down card in this line.
+ * - Smoke-3: Play 1 card face-down in a line with a face-down card.
+ * - Smoke-4: Shift 1 covered face-down card.
+ * - Smoke-5: You discard 1 card.
+ */
+export const scenario55_SmokeCustomPlayground: TestScenario = {
+    name: "Smoke Test Playground",
+    description: "🆕 All Smoke cards on hand - shroud your cards in mystery",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Smoke', 'Water', 'Spirit'],
+            ['Metal', 'Death', 'Fire'],
+            'player',
+            'action'
+        );
+
+        // Player: All Smoke cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Smoke', 0, true),
+            createCard('Smoke', 1, true),
+            createCard('Smoke', 2, true),
+            createCard('Smoke', 3, true),
+            createCard('Smoke', 4, true),
+            createCard('Smoke', 5, true),
+        ];
+
+        // Setup for Smoke-0 and Smoke-3 testing (lines with face-down cards)
+        // Lane 0: Face-down card for Smoke-0/Smoke-3 targeting
+        newState = placeCard(newState, 'player', 0, createCard('Water', 2, false)); // Face-down for Smoke-0/3
+
+        // Lane 1: Face-down card + another card for Smoke-4 (covered face-down)
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 3, false)); // Face-down (covered)
+        newState = placeCard(newState, 'opponent', 1, createCard('Death', 2, true));  // Face-up on top
+
+        // Lane 2: Face-up only (no face-down cards - Smoke-0/3 should NOT target this)
+        newState = placeCard(newState, 'opponent', 2, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+
+        // Setup for Smoke-1 testing (flip own cards)
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 4, true)); // Own card to flip
+
+        // Setup for Smoke-2 testing (value boost per face-down)
+        // Playing Smoke-2 in lane 0 should get +1 value from the face-down Water-2
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 56: Smoke AI Test
+ *
+ * Test AI playing Smoke cards
+ * Setup: AI has all Smoke cards in hand and Smoke protocol
+ * - Opponent's Turn (AI plays)
+ * - AI has face-down cards to target with Smoke-0 and Smoke-3
+ */
+export const scenario56_SmokeAITest: TestScenario = {
+    name: "Smoke AI Test",
+    description: "🆕 AI spielt Smoke Karten - test all Smoke card effects with AI",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Water', 'Spirit', 'Light'],
+            ['Smoke', 'Metal', 'Death'],
+            'opponent',  // AI's turn
+            'action'
+        );
+
+        // Opponent (AI): All Smoke cards in hand (0-5)
+        newState.opponent.hand = [
+            createCard('Smoke', 0, true),
+            createCard('Smoke', 1, true),
+            createCard('Smoke', 2, true),
+            createCard('Smoke', 3, true),
+            createCard('Smoke', 4, true),
+            createCard('Smoke', 5, true),
+        ];
+
+        // Setup for AI Smoke-0 and Smoke-3 testing (lines with face-down cards)
+        // Lane 0: Face-down card for AI targeting
+        newState = placeCard(newState, 'opponent', 0, createCard('Metal', 2, false)); // AI's face-down
+        newState = placeCard(newState, 'player', 0, createCard('Water', 3, true));    // Player's face-up
+
+        // Lane 1: Covered face-down card for Smoke-4
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 2, false));  // Player's face-down (covered)
+        newState = placeCard(newState, 'player', 1, createCard('Spirit', 4, true));   // Face-up on top
+
+        // Lane 2: No face-down cards (to test Smoke-0/3 NOT playing here)
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Light', 2, true));
+
+        // AI cards to flip with Smoke-1
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, true)); // AI's card to flip
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -2974,4 +3081,6 @@ export const allScenarios: TestScenario[] = [
     scenario52_UncoverAfterBulkDelete,
     scenario53_MultiUncoverAfterBulkDelete,
     scenario54_Life1UncoverDoubleFlip,
+    scenario55_SmokeCustomPlayground,
+    scenario56_SmokeAITest,
 ];

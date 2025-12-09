@@ -669,17 +669,27 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_play': {
-            const { cardInHandId, isFaceDown, actor, source, disallowedLaneIndex } = prev.actionRequired as any;
+            const { cardInHandId, isFaceDown, actor, source, disallowedLaneIndex, validLanes, preSelectedLane } = prev.actionRequired as any;
+
+            // NEW: Smoke-3 - if preSelectedLane is set, use it instead of targetLaneIndex
+            // This allows automatic lane resolution after card selection
+            const effectiveLaneIndex = preSelectedLane !== undefined ? preSelectedLane : targetLaneIndex;
 
             // CRITICAL: Server-side validation for disallowedLaneIndex (e.g., Darkness-3: "Play to other lines")
-            if (disallowedLaneIndex !== undefined && targetLaneIndex === disallowedLaneIndex) {
+            if (disallowedLaneIndex !== undefined && effectiveLaneIndex === disallowedLaneIndex) {
                 console.log(`[Lane Validation] Rejected: Cannot play to disallowed lane ${disallowedLaneIndex}`);
+                return { nextState: prev, requiresTurnEnd: false }; // Silently reject
+            }
+
+            // NEW: Smoke-3 validation - validLanes restricts which lanes can be selected
+            if (validLanes && !validLanes.includes(effectiveLaneIndex)) {
+                console.log(`[Lane Validation] Rejected: Lane ${effectiveLaneIndex} not in valid lanes ${validLanes}`);
                 return { nextState: prev, requiresTurnEnd: false }; // Silently reject
             }
 
             // NEW: Life-3 - play from deck to selected lane
             if (source === 'deck') {
-                console.log('[select_lane_for_play] Playing from deck to lane', targetLaneIndex);
+                console.log('[select_lane_for_play] Playing from deck to lane', effectiveLaneIndex);
                 const stateBeforePlay = { ...prev, actionRequired: null };
                 const playerState = stateBeforePlay[actor];
 
@@ -697,7 +707,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
                 // Add card to the chosen lane
                 const newPlayerLanes = [...playerState.lanes];
-                newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardToPlay];
+                newPlayerLanes[effectiveLaneIndex] = [...newPlayerLanes[effectiveLaneIndex], newCardToPlay];
 
                 const updatedPlayerState = {
                     ...playerState,
@@ -717,7 +727,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         type: 'play',
                         cardId: newCardToPlay.id,
                         owner: actor,
-                        laneIndex: targetLaneIndex,
+                        laneIndex: effectiveLaneIndex,
                         isFaceUp: newCardToPlay.isFaceUp
                     }],
                     onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
@@ -752,10 +762,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
                 const opponentId = actor === 'player' ? 'opponent' : 'player';
                 const opponentHasPsychic1 = prev[opponentId].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
-                canPlayFaceUp = (playerHasSpiritOne || playerHasChaosThree || cardInHand.protocol === prev[actor].protocols[targetLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[targetLaneIndex]) && !opponentHasPsychic1;
+                canPlayFaceUp = (playerHasSpiritOne || playerHasChaosThree || cardInHand.protocol === prev[actor].protocols[effectiveLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[effectiveLaneIndex]) && !opponentHasPsychic1;
             }
 
-            const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, targetLaneIndex, canPlayFaceUp, actor);
+            const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, effectiveLaneIndex, canPlayFaceUp, actor);
             newState = stateAfterPlay;
 
             console.log('[LANE RESOLVER] After playCard - actionRequired?', newState.actionRequired?.type || 'null', 'queuedActions?', newState.queuedActions?.length || 0, 'animationRequests?', animationRequests?.length || 0);

@@ -23,6 +23,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'metal_custom_1',
     'plague-custom-001',
     'psychic_custom_v1',
+    'smoke-custom-001',
     'speed_custom_1',
     'spirit_custom_1',
     'water_custom_1',

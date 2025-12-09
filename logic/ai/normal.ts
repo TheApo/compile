@@ -1127,14 +1127,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Speed-0 or Darkness-3: Play another card
             if (state.opponent.hand.length === 0) return { type: 'skip' };
 
-            // CRITICAL: Check if the effect FORCES face-down play (e.g., Darkness-3)
+            // CRITICAL: Check if the effect FORCES face-down play (e.g., Darkness-3, Smoke-3)
             // effectInterpreter sends 'faceDown', not 'isFaceDown'
             const isForcedFaceDown = (action as any).faceDown === true;
             console.log('[AI select_card_from_hand_to_play] faceDown:', (action as any).faceDown, 'isForcedFaceDown:', isForcedFaceDown);
 
-            // FIX: Filter out blocked lanes
-            let playableLanes = [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
-            playableLanes = playableLanes.filter(laneIndex => {
+            // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
+            let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
+            playableLanes = playableLanes.filter((laneIndex: number) => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
 
@@ -1283,9 +1283,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         // LEGACY REMOVED: select_lane_for_life_3_play - now uses generic select_lane_for_play
         case 'select_lane_for_play': {
-            // FIX: Filter out blocked lanes
-            let playableLanes = [0, 1, 2].filter(i => !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex);
-            playableLanes = playableLanes.filter(laneIndex => {
+            // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
+            let playableLanes = (action as any).validLanes || [0, 1, 2];
+            playableLanes = playableLanes.filter((i: number) => !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex);
+            playableLanes = playableLanes.filter((laneIndex: number) => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
 

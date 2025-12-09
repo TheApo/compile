@@ -1,0 +1,157 @@
+{
+  "id": "smoke-custom-001",
+  "name": "Smoke",
+  "description": "Shroud your cards in mystery. Use face-down cards to gain value and control.",
+  "author": "System",
+  "createdAt": "2025-12-09T00:00:00.000Z",
+  "color": "#5A5A5A",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "smoke-0-play-deck-each-facedown",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "each_line_with_card",
+              "cardFilter": {
+                "faceState": "face_down"
+              }
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "smoke-1-flip-own",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "own",
+              "position": "uncovered",
+              "faceState": "any"
+            },
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "smoke-1-shift-that-card",
+          "params": {
+            "action": "shift",
+            "optional": true,
+            "targetFilter": {
+              "owner": "own",
+              "position": "uncovered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "useCardFromPreviousEffect": true
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "smoke-2-value-per-facedown",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_per_condition",
+              "value": 1,
+              "condition": "per_face_down_card",
+              "target": "own_total",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "smoke-3-play-hand-facedown-lane",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "line_with_matching_cards",
+              "cardFilter": {
+                "faceState": "face_down"
+              }
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "smoke-4-shift-covered-facedown",
+          "params": {
+            "action": "shift",
+            "optional": false,
+            "targetFilter": {
+              "owner": "any",
+              "position": "covered",
+              "faceState": "face_down"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "smoke-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

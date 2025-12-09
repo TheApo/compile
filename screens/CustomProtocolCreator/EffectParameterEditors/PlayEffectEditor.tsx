@@ -69,9 +69,33 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                     <option value="each_other_line">Each other line (1 per line)</option>
                     <option value="specific_lane">Specific lane (this line)</option>
                     <option value="each_line_with_card">Each line with card</option>
+                    <option value="line_with_matching_cards">Line with matching cards (choose 1)</option>
                     <option value="under_this_card">Under this card</option>
                 </select>
             </label>
+
+            {/* Card Filter for each_line_with_card and line_with_matching_cards */}
+            {(destinationRule.type === 'each_line_with_card' || destinationRule.type === 'line_with_matching_cards') && (
+                <label>
+                    Card Filter (which cards must be in line)
+                    <select
+                        value={destinationRule.cardFilter?.faceState || 'any'}
+                        onChange={e => {
+                            const val = e.target.value;
+                            if (val === 'any') {
+                                const { cardFilter, ...rest } = destinationRule;
+                                onChange({ ...params, destinationRule: rest });
+                            } else {
+                                onChange({ ...params, destinationRule: { ...destinationRule, cardFilter: { faceState: val as any } } });
+                            }
+                        }}
+                    >
+                        <option value="any">Any card</option>
+                        <option value="face_down">Face-down cards only</option>
+                        <option value="face_up">Face-up cards only</option>
+                    </select>
+                </label>
+            )}
 
             <label>
                 Condition

@@ -132,13 +132,16 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const may = params.optional ? 'You may flip' : 'Flip';
             const isOwn = params.targetFilter?.owner === 'own';
             const isOpponent = params.targetFilter?.owner === 'opponent';
+            const excludeSelf = params.targetFilter?.excludeSelf;
 
             // Build target description in correct grammatical order:
-            // [owner] [other] [covered/uncovered] [face-state] card(s)
+            // [of your/opponent's] [other] [covered/uncovered] [face-state] card(s)
             let targetDesc = '';
-            if (isOwn) targetDesc += 'your ';
-            if (isOpponent) targetDesc += "opponent's ";
-            if (params.targetFilter?.excludeSelf) targetDesc += 'other ';
+            // Use "of your" for "Flip 1 of your cards" phrasing
+            if (isOwn && excludeSelf) targetDesc += 'of your other ';
+            else if (isOwn) targetDesc += 'of your ';
+            else if (isOpponent) targetDesc += "of your opponent's ";
+            else if (excludeSelf) targetDesc += 'other ';
             // Handle position filter: 'any' = "covered or uncovered", 'covered' = "covered", default (uncovered) = nothing
             if (params.targetFilter?.position === 'any') targetDesc += 'covered or uncovered ';
             else if (params.targetFilter?.position === 'covered') targetDesc += 'covered ';
@@ -160,7 +163,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 countText = params.count.toString();
             }
 
-            const cardWord = (params.count === 1) ? 'card' : 'cards';
+            // Use plural "cards" for "of your/opponent's" phrasing (e.g., "Flip 1 of your cards")
+            const usePluralCards = isOwn || isOpponent;
+            const cardWord = usePluralCards ? 'cards' : ((params.count === 1) ? 'card' : 'cards');
 
             // Build text differently for "of your" phrasing (Apathy-4)
             let text = '';
@@ -595,13 +600,29 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += ' under this card';
             } else if (params.destinationRule?.type === 'each_line_with_card') {
                 // Life-0: "in each line where you have a card" vs generic "to each line with a card"
+                // Smoke-0: "in each line with a face-down card"
                 const ownerFilter = params.destinationRule.ownerFilter;
-                if (ownerFilter === 'own') {
+                const cardFilter = params.destinationRule.cardFilter;
+                if (cardFilter?.faceState === 'face_down') {
+                    text += ' in each line with a face-down card';
+                } else if (cardFilter?.faceState === 'face_up') {
+                    text += ' in each line with a face-up card';
+                } else if (ownerFilter === 'own') {
                     text += ' in each line where you have a card';
                 } else if (ownerFilter === 'opponent') {
                     text += ' in each line where opponent has a card';
                 } else {
                     text += ' to each line with a card';
+                }
+            } else if (params.destinationRule?.type === 'line_with_matching_cards') {
+                // Smoke-3: "in a line with a face-down card"
+                const cardFilter = params.destinationRule.cardFilter;
+                if (cardFilter?.faceState === 'face_down') {
+                    text += ' in a line with a face-down card';
+                } else if (cardFilter?.faceState === 'face_up') {
+                    text += ' in a line with a face-up card';
+                } else {
+                    text += ' in a line with a card';
                 }
             } else if (params.destinationRule?.type === 'specific_lane') {
                 text += ' in this line';
