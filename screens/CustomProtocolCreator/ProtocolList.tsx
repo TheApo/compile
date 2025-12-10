@@ -21,6 +21,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'frost_custom_1',
     'gravity_custom_1',
     'hate-custom-001',
+    'ice_custom',
     'life_custom_1',
     'light_custom_1',
     'love_custom_v1',

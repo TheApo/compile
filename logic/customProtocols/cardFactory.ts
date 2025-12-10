@@ -243,6 +243,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 mainText = `If your opponent has a higher total value than you do in this line, ${mayShift.toLowerCase()} 1 card.`;
                 break;
             }
+            // NEW: this_card_is_covered conditional (Ice-3)
+            if (params.advancedConditional?.type === 'this_card_is_covered') {
+                mainText = `If this card is covered, ${mayShift.toLowerCase()} it.`;
+                break;
+            }
 
             // Handle explicit shiftSelf parameter
             if (params.shiftSelf) {
@@ -960,6 +965,27 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 case 'skip_check_cache_phase':
                     mainText = 'Skip check cache phase.';
                     break;
+                // NEW: Ice-4 - This card cannot be flipped
+                case 'block_flip_this_card':
+                    mainText = 'This card cannot be flipped.';
+                    break;
+                // NEW: Ice-6 - Conditional draw blocking (flexible)
+                case 'block_draw_conditional': {
+                    const conditionTarget = (rule as any).conditionTarget || 'self';
+                    const blockTarget = (rule as any).blockTarget || 'self';
+
+                    const conditionText = conditionTarget === 'self' ? 'you have' : 'your opponent has';
+                    let blockText: string;
+                    if (blockTarget === 'self') {
+                        blockText = 'you cannot draw';
+                    } else if (blockTarget === 'opponent') {
+                        blockText = 'your opponent cannot draw';
+                    } else {
+                        blockText = 'neither player can draw';
+                    }
+                    mainText = `If ${conditionText} any cards in hand, ${blockText} cards.`;
+                    break;
+                }
                 default:
                     mainText = 'Passive rule effect.';
             }
@@ -1195,6 +1221,21 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         // Plague-1: "After your opponent discards cards: Draw 1 card."
         if (trigger === 'after_opponent_discard') {
             return `<div><span class='emphasis'>After your opponent discards cards:</span> ${summary}</div>`;
+        }
+
+        // NEW: after_play with reactiveScope (Ice-1 Bottom)
+        if (trigger === 'after_play') {
+            const triggerActor = effect.reactiveTriggerActor || 'self';
+            const reactiveScope = (effect as any).reactiveScope || 'global';
+
+            if (triggerActor === 'opponent' && reactiveScope === 'this_lane') {
+                return `<div><span class='emphasis'>After your opponent plays a card in this line:</span> ${summary}</div>`;
+            } else if (triggerActor === 'opponent') {
+                return `<div><span class='emphasis'>After your opponent plays a card:</span> ${summary}</div>`;
+            } else if (reactiveScope === 'this_lane') {
+                return `<div><span class='emphasis'>After you play a card in this line:</span> ${summary}</div>`;
+            }
+            return `<div><span class='emphasis'>After you play a card:</span> ${summary}</div>`;
         }
 
         // NEW: Before compile delete trigger (Speed-2)

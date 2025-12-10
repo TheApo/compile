@@ -125,6 +125,7 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                     <option value="none">None</option>
                     <option value="empty_hand">Only if hand is empty</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                    <option value="this_card_is_covered">Only if this card is covered</option>
                 </select>
             </label>
 

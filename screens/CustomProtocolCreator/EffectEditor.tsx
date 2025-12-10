@@ -408,7 +408,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             </div>
 
             {/* Reactive Trigger Actor (only for reactive triggers) */}
-            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard') && (
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard' || effect.trigger === 'after_play') && (
                 <div style={{ marginTop: '15px' }}>
                     <label>
                         Trigger Actor (who triggers this effect?)
@@ -437,6 +437,37 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                             : effect.reactiveTriggerActor === 'opponent'
                             ? 'Effect triggers only when OPPONENT deletes/draws/etc.'
                             : 'Effect triggers when ANYONE deletes/draws/etc.'}
+                    </small>
+                </div>
+            )}
+
+            {/* Reactive Scope (for lane-based reactive triggers) */}
+            {(effect.trigger === 'after_play' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_delete') && (
+                <div style={{ marginTop: '15px' }}>
+                    <label>
+                        Reactive Scope
+                        <select
+                            value={(effect as any).reactiveScope || 'global'}
+                            onChange={(e) => onChange({ ...effect, reactiveScope: e.target.value as any })}
+                            style={{
+                                width: '100%',
+                                padding: '8px',
+                                marginTop: '5px',
+                                backgroundColor: '#1A113B',
+                                color: '#F0F0F0',
+                                border: '1px solid rgba(97, 239, 255, 0.3)',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="global">Any lane (default)</option>
+                            <option value="this_lane">This lane only</option>
+                        </select>
+                    </label>
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        {(effect as any).reactiveScope === 'this_lane'
+                            ? 'Effect only triggers when the action happens in the same lane as this card.'
+                            : 'Effect triggers when the action happens anywhere on the board.'}
                     </small>
                 </div>
             )}

@@ -3401,6 +3401,107 @@ export const scenario63_FearAITest: TestScenario = {
     }
 };
 
+/**
+ * Ice Custom Protocol Playground
+ *
+ * Ice Cards:
+ * - Ice-1: [Middle] You may shift this card. [Bottom Reactive] After opponent plays in this line: Opponent discards 1 card.
+ * - Ice-2: [Middle] Shift 1 other card.
+ * - Ice-3: [Top End] If this card is covered, you may shift it.
+ * - Ice-4: [Bottom Passive] This card cannot be flipped.
+ * - Ice-5: [Middle] You discard 1 card.
+ * - Ice-6: [Top Passive] If you have any cards in hand, you cannot draw cards.
+ */
+export const scenario64_IceCustomPlayground: TestScenario = {
+    name: 'Ice Custom Playground',
+    description: '❄️ Test all Ice effects: conditional shift, flip block, draw block, lane-reactive discard',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Ice', 'Fire', 'Speed'];
+        const opponentProtocols = ['Spirit', 'Water', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Ice', 1, true),
+            createCard('Ice', 2, true),
+            createCard('Ice', 3, true),
+            createCard('Ice', 4, true),
+            createCard('Ice', 5, true),
+            createCard('Ice', 6, true),
+            createCard('Fire', 0, true),
+        ];
+
+        // Board setup for testing:
+        // Lane 0: Player cards for Ice-3 (covered card) testing
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));  // Bottom - to cover Ice-3
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 5, true));  // Top - covers Fire-3
+
+        // Lane 1: Opponent cards for shift and discard tests
+        newState = placeCard(newState, 'opponent', 1, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 1, createCard('Speed', 4, true));
+
+        // Lane 2: Cards for Ice-2 shift test
+        newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 5, true));
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
+export const scenario65_IceAITest: TestScenario = {
+    name: 'Ice AI Test',
+    description: '❄️ Test AI with Ice protocol: shift self, shift others, passive rules',
+    setup: (state: GameState): GameState => {
+        // AI (opponent) has Ice protocol
+        const playerProtocols = ['Spirit', 'Water', 'Fire'];
+        const opponentProtocols = ['Ice', 'Speed', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // AI hand - key Ice cards for testing
+        newState.opponent.hand = [
+            createCard('Ice', 1, true),
+            createCard('Ice', 2, true),
+            createCard('Ice', 3, true),
+            createCard('Ice', 4, true),
+            createCard('Ice', 5, true),
+            createCard('Ice', 6, true),
+        ];
+
+        // Board setup:
+        // Lane 0: Player cards for AI to interact with
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, true));
+
+        // Lane 1: Covered AI card for Ice-3 test
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 2, true));  // Bottom
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 4, true));  // Top
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+
+        // Lane 2: Mixed setup
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Speed', 5, true));
+
+        // Player needs hand for discard tests
+        newState.player.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Water', 3, true),
+            createCard('Fire', 4, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3465,4 +3566,6 @@ export const allScenarios: TestScenario[] = [
     scenario61_CourageAITest,
     scenario62_FearCustomPlayground,
     scenario63_FearAITest,
+    scenario64_IceCustomPlayground,
+    scenario65_IceAITest,
 ];

@@ -256,8 +256,8 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     }
     stateAfterMove = log(stateAfterMove, player, logMessage);
 
-    // NEW: Trigger reactive effects after play
-    const reactivePlayResult = processReactiveEffects(stateAfterMove, 'after_play', { player, cardId: newCardOnBoard.id });
+    // NEW: Trigger reactive effects after play (with laneIndex for reactiveScope filtering)
+    const reactivePlayResult = processReactiveEffects(stateAfterMove, 'after_play', { player, cardId: newCardOnBoard.id, laneIndex });
     stateAfterMove = reactivePlayResult.newState;
 
     // 4. Decide whether to execute onPlay now or queue it.

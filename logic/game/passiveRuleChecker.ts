@@ -17,6 +17,7 @@ interface PassiveRule {
     rule: PassiveRuleParams['rule'];
     cardOwner: Player;
     laneIndex: number;
+    sourceCardId?: string;  // ID of the card that has this rule (for block_flip_this_card)
 }
 
 /**
@@ -42,7 +43,8 @@ export function getActivePassiveRules(state: GameState): PassiveRule[] {
                                 rules.push({
                                     rule: effect.params.rule,
                                     cardOwner: player,
-                                    laneIndex
+                                    laneIndex,
+                                    sourceCardId: card.id  // Track which card has this rule
                                 });
                             }
                         });
@@ -54,7 +56,8 @@ export function getActivePassiveRules(state: GameState): PassiveRule[] {
                                 rules.push({
                                     rule: effect.params.rule,
                                     cardOwner: player,
-                                    laneIndex
+                                    laneIndex,
+                                    sourceCardId: card.id  // Track which card has this rule
                                 });
                             }
                         });
@@ -67,7 +70,8 @@ export function getActivePassiveRules(state: GameState): PassiveRule[] {
                                     rules.push({
                                         rule: effect.params.rule,
                                         cardOwner: player,
-                                        laneIndex
+                                        laneIndex,
+                                        sourceCardId: card.id  // Track which card has this rule
                                     });
                                 }
                             });
@@ -386,4 +390,77 @@ export function isFrost1Active(state: GameState): boolean {
 export function isFrost1BottomActive(state: GameState): boolean {
     const rules = getActivePassiveRules(state);
     return rules.some(({ rule }) => rule.type === 'block_protocol_rearrange');
+}
+
+/**
+ * Check if a SPECIFIC card can be flipped (Ice-4: block_flip_this_card)
+ * Different from canFlipCard which checks lane-based block_flips rules
+ * @param state Current game state
+ * @param cardId ID of the card to check
+ * @returns Whether the specific card can be flipped
+ */
+export function canFlipSpecificCard(
+    state: GameState,
+    cardId: string
+): { allowed: boolean; reason?: string } {
+    const rules = getActivePassiveRules(state);
+
+    for (const { rule, sourceCardId } of rules) {
+        // Check block_flip_this_card - only blocks the card that has this rule
+        if (rule.type === 'block_flip_this_card' && sourceCardId === cardId) {
+            return {
+                allowed: false,
+                reason: `This card cannot be flipped (passive rule)`
+            };
+        }
+    }
+
+    return { allowed: true };
+}
+
+/**
+ * Check if a player can draw cards (Ice-6: block_draw_conditional)
+ * Supports flexible condition and block targets
+ * @param state Current game state
+ * @param player Player who wants to draw
+ * @returns Whether the player can draw
+ */
+export function canPlayerDraw(
+    state: GameState,
+    player: Player
+): { allowed: boolean; reason?: string } {
+    const rules = getActivePassiveRules(state);
+
+    for (const { rule, cardOwner } of rules) {
+        if (rule.type === 'block_draw_conditional') {
+            // Determine who must have cards for the condition to apply
+            const conditionTarget = (rule as any).conditionTarget || 'self';
+            const conditionPlayer = conditionTarget === 'self' ? cardOwner :
+                                   (cardOwner === 'player' ? 'opponent' : 'player');
+
+            // Determine who is blocked from drawing
+            const blockTarget = (rule as any).blockTarget || 'self';
+            let blockedPlayer: Player | 'all';
+            if (blockTarget === 'self') {
+                blockedPlayer = cardOwner;
+            } else if (blockTarget === 'opponent') {
+                blockedPlayer = cardOwner === 'player' ? 'opponent' : 'player';
+            } else {
+                blockedPlayer = 'all';
+            }
+
+            // Check if the condition is met (condition player has cards in hand)
+            if (state[conditionPlayer].hand.length > 0) {
+                // Condition met - check if this player is blocked
+                if (blockedPlayer === 'all' || blockedPlayer === player) {
+                    return {
+                        allowed: false,
+                        reason: `Cannot draw cards (passive rule)`
+                    };
+                }
+            }
+        }
+    }
+
+    return { allowed: true };
 }

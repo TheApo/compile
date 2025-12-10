@@ -11,7 +11,7 @@
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
 import { findCardOnBoard } from '../../game/helpers/actionUtils';
-import { isFrost1Active } from '../../game/passiveRuleChecker';
+import { isFrost1Active, canFlipSpecificCard } from '../../game/passiveRuleChecker';
 import { getPlayerLaneValue } from '../../game/stateManager';
 
 /**
@@ -319,6 +319,10 @@ export function executeFlipEffect(
                 // CRITICAL: Frost-1 restriction - only face-up cards can be flipped (to become face-down)
                 // Face-down cards cannot be flipped because they would become face-up (blocked)
                 if (frost1Active && !c.isFaceUp) continue;
+
+                // NEW: Check block_flip_this_card (Ice-4) - specific card cannot be flipped
+                const specificCardCheck = canFlipSpecificCard(state, c.id);
+                if (!specificCardCheck.allowed) continue;
 
                 validTargets.push(c.id);
             }

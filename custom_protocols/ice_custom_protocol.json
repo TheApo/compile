@@ -1,0 +1,142 @@
+{
+  "id": "ice_custom",
+  "name": "Ice",
+  "description": "Control and disruption through shifting and conditional effects",
+  "author": "System",
+  "createdAt": "2025-12-10T00:00:00Z",
+  "color": "#B0E0E6",
+  "pattern": "radial",
+  "category": "Main 2",
+  "cards": [
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "ice-1-shift",
+          "params": {
+            "action": "shift",
+            "shiftSelf": true,
+            "optional": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "ice-1-reactive",
+          "params": {
+            "action": "discard",
+            "actor": "opponent",
+            "count": 1
+          },
+          "position": "bottom",
+          "trigger": "after_play",
+          "reactiveTriggerActor": "opponent",
+          "reactiveScope": "this_lane"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "ice-2-shift",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [
+        {
+          "id": "ice-3-end-shift",
+          "params": {
+            "action": "shift",
+            "shiftSelf": true,
+            "optional": true,
+            "advancedConditional": {
+              "type": "this_card_is_covered"
+            }
+          },
+          "position": "top",
+          "trigger": "end"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "ice-4-passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_flip_this_card",
+              "target": "this_card",
+              "scope": "this_card"
+            }
+          },
+          "position": "bottom",
+          "trigger": "passive"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "ice-5-discard",
+          "params": {
+            "action": "discard",
+            "actor": "self",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "ice-6-passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "block_draw_conditional",
+              "conditionTarget": "self",
+              "blockTarget": "self",
+              "scope": "global"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ]
+}

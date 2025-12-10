@@ -27,6 +27,7 @@ import clarityCustomData from '../../custom_protocols/clarity_custom_protocol.js
 import corruptionCustomData from '../../custom_protocols/corruption_custom_protocol.json';
 import courageCustomData from '../../custom_protocols/courage_custom_protocol.json';
 import fearCustomData from '../../custom_protocols/fear_custom_protocol.json';
+import iceCustomData from '../../custom_protocols/ice_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -67,6 +68,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(corruptionCustomData as any);
         addCustomProtocol(courageCustomData as any);
         addCustomProtocol(fearCustomData as any);
+        addCustomProtocol(iceCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

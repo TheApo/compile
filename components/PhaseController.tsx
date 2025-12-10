@@ -404,7 +404,15 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 case 'prompt_optional_effect': {
                     const effectAction = (actionRequired as any).effectDef?.params?.action || 'effect';
                     const effectCount = (actionRequired as any).effectDef?.params?.count;
-                    return `Optional: Execute ${effectAction}${effectCount ? ` ${effectCount}` : ''}?`;
+                    // Generate more natural question text based on action type
+                    const actionText = effectAction === 'shift' ? 'shift a card' :
+                                      effectAction === 'flip' ? 'flip a card' :
+                                      effectAction === 'draw' ? `draw ${effectCount || 1} card(s)` :
+                                      effectAction === 'discard' ? `discard ${effectCount || 1} card(s)` :
+                                      effectAction === 'delete' ? 'delete a card' :
+                                      effectAction === 'return' ? 'return a card' :
+                                      `execute ${effectAction}${effectCount ? ` ${effectCount}` : ''}`;
+                    return `Do you want to ${actionText}?`;
                 }
                 case 'select_card_to_flip_for_fire_3':
                     return 'Action: Select a card to flip';

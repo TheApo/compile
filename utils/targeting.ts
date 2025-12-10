@@ -5,7 +5,7 @@
 
 import { GameState, PlayedCard, Player } from "../types";
 // REMOVED: findAllHighestUncoveredCards - no longer needed after Hate-2 migration to generic handler
-import { isFrost1Active } from "../logic/game/passiveRuleChecker";
+import { isFrost1Active, canFlipSpecificCard } from "../logic/game/passiveRuleChecker";
 import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
 
 /**
@@ -108,6 +108,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
 
             // Check excludeSelf
             if (targetFilter.excludeSelf && card.id === actionRequired.sourceCardId) return false;
+
+            // NEW: Check block_flip_this_card passive rule (Ice-4)
+            const flipCheck = canFlipSpecificCard(gameState, card.id);
+            if (!flipCheck.allowed) return false;
 
             return true;
         }
@@ -310,10 +314,17 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             // Frost-1: Only face-up cards can be flipped (to face-down)
             const frost1Active = isFrost1Active(gameState);
             if (frost1Active && !card.isFaceUp) return false;
+            // NEW: Check block_flip_this_card passive rule (Ice-4)
+            const flipCheckAny = canFlipSpecificCard(gameState, card.id);
+            if (!flipCheckAny.allowed) return false;
             return isUncovered;
         }
-        case 'select_any_face_down_card_to_flip_optional':
+        case 'select_any_face_down_card_to_flip_optional': {
+            // NEW: Check block_flip_this_card passive rule (Ice-4)
+            const flipCheckFaceDown = canFlipSpecificCard(gameState, card.id);
+            if (!flipCheckFaceDown.allowed) return false;
             return !card.isFaceUp && isUncovered;
+        }
         // REMOVED: select_card_to_flip_for_light_0 - Light-0 now uses generic select_card_to_flip
         // REMOVED: select_face_down_card_to_reveal_for_light_2 - Light-2 now uses select_board_card_to_reveal_custom
         case 'select_board_card_to_reveal_custom': {

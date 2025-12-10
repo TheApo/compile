@@ -11,6 +11,7 @@ import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internal
 import * as phaseManager from '../phaseManager';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+import { canFlipSpecificCard } from '../passiveRuleChecker';
 
 export type CardActionResult = {
     nextState: GameState;
@@ -195,6 +196,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     switch (prev.actionRequired.type) {
         // Generic flip handler - all legacy types now use select_card_to_flip with targetFilter
         case 'select_card_to_flip': {
+            // NEW: Validate that this card can be flipped (Ice-4: block_flip_this_card)
+            const flipCheck = canFlipSpecificCard(prev, targetCardId);
+            if (!flipCheck.allowed) {
+                console.warn(`[cardResolver] Card ${targetCardId} cannot be flipped: ${flipCheck.reason}`);
+                return { nextState: prev }; // Invalid selection, return unchanged state
+            }
+
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
             const draws = 'draws' in prev.actionRequired ? prev.actionRequired.draws : 0;
 

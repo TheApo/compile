@@ -43,6 +43,27 @@ export function executeShiftEffect(
             return { newState: state };
         }
     }
+    // NEW: Check 'this_card_is_covered' - only execute if this card is covered (not top card)
+    if (params.advancedConditional?.type === 'this_card_is_covered') {
+        const ownerLanes = state[cardOwner].lanes;
+        let isCardCovered = false;
+
+        for (let i = 0; i < ownerLanes.length; i++) {
+            const lane = ownerLanes[i];
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            if (cardIndex !== -1) {
+                // Card is covered if it's NOT the last (topmost) card in the lane
+                isCardCovered = cardIndex < lane.length - 1;
+                break;
+            }
+        }
+
+        if (!isCardCovered) {
+            console.log(`[Shift Effect] this_card_is_covered check failed: card is not covered. Skipping shift.`);
+            return { newState: state };
+        }
+        console.log(`[Shift Effect] this_card_is_covered check passed: card is covered.`);
+    }
 
     console.log(`[DEBUG executeShiftEffect] Called for ${card.protocol}-${card.value}`);
     console.log(`[DEBUG executeShiftEffect] params.useCardFromPreviousEffect: ${params.useCardFromPreviousEffect}`);

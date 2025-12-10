@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
 import { findCardOnBoard } from '../../game/helpers/actionUtils';
 import { getEffectiveCardValue, getPlayerLaneValue } from '../../game/stateManager';
+import { canPlayerDraw } from '../../game/passiveRuleChecker';
 
 /**
  * Helper function to draw cards from deck
@@ -48,6 +49,14 @@ export function executeDrawEffect(
     const { cardOwner } = context;
     const target = params.target || 'self';
     const drawingPlayer = target === 'opponent' ? context.opponent : cardOwner;
+
+    // NEW: Check if player can draw (Ice-6: block_draw_conditional)
+    const drawCheck = canPlayerDraw(state, drawingPlayer);
+    if (!drawCheck.allowed) {
+        console.log(`[Draw Effect] ${drawCheck.reason}. Skipping draw for ${drawingPlayer}.`);
+        let newState = log(state, cardOwner, drawCheck.reason || 'Cannot draw cards.');
+        return { newState };
+    }
 
     // NEW: Calculate draw count based on conditional (Anarchy-0)
     if (params.conditional) {

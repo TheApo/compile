@@ -138,7 +138,7 @@ export interface ShiftEffectParams {
     scope?: 'any' | 'this_lane' | 'each_lane';  // 'each_lane' = execute once per lane
     // Advanced conditionals - effect only executes if condition is met
     advancedConditional?: {
-        type: 'empty_hand' | 'opponent_higher_value_in_lane';
+        type: 'empty_hand' | 'opponent_higher_value_in_lane' | 'this_card_is_covered';  // Ice-3: only if this card is covered
     };
 }
 
@@ -329,11 +329,16 @@ export interface PassiveRuleParams {
             | 'block_shifts_to_lane'         // Can't shift TO this lane
             | 'block_shifts_from_and_to_lane' // Frost-3: Can't shift FROM or TO this lane
             | 'ignore_middle_commands'       // Apathy-2: Ignore middle effects in this lane
-            | 'skip_check_cache_phase';      // Spirit-0: Skip check cache phase
-        target: 'self' | 'opponent' | 'all';  // Who is affected
-        scope: 'this_lane' | 'global';        // Where it applies
+            | 'skip_check_cache_phase'       // Spirit-0: Skip check cache phase
+            | 'block_flip_this_card'         // Ice-4: This card cannot be flipped
+            | 'block_draw_conditional';      // Ice-6: Conditional draw blocking
+        target: 'self' | 'opponent' | 'all' | 'this_card';  // Who is affected (this_card = only this card)
+        scope: 'this_lane' | 'global' | 'this_card';        // Where it applies (this_card = only this card)
         // NEW: Only active during card owner's turn (Fear-0: "During your turn...")
         onlyDuringYourTurn?: boolean;
+        // NEW: For block_draw_conditional - flexible condition and target (Ice-6)
+        conditionTarget?: 'self' | 'opponent';  // Who must have cards in hand?
+        blockTarget?: 'self' | 'opponent' | 'all';  // Who cannot draw?
     };
 }
 
@@ -420,6 +425,10 @@ export interface EffectDefinition {
     // - 'opponent': Only when opponent performs the action
     // - 'any': When anyone performs the action
     reactiveTriggerActor?: 'self' | 'opponent' | 'any';
+    // NEW: For reactive triggers - scope of the trigger (Ice-1 Bottom)
+    // - 'global': Trigger regardless of which lane the action happened in (default)
+    // - 'this_lane': Only trigger if the action happened in this card's lane
+    reactiveScope?: 'global' | 'this_lane';
 }
 
 /**

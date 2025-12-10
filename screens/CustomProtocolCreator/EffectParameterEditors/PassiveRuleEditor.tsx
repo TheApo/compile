@@ -17,6 +17,9 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
     const target = params.rule?.target || 'opponent';
     const scope = params.rule?.scope || 'this_lane';
     const onlyDuringYourTurn = params.rule?.onlyDuringYourTurn || false;
+    // NEW: For block_draw_conditional
+    const conditionTarget = (params.rule as any)?.conditionTarget || 'self';
+    const blockTarget = (params.rule as any)?.blockTarget || 'self';
 
     return (
         <div className="param-editor passive-rule-editor">
@@ -50,6 +53,10 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                         <option value="block_protocol_rearrange">Block Protocol Rearrange (Frost-1)</option>
                         <option value="block_shifts_from_lane">Block Shifts From Lane (Frost-3)</option>
                         <option value="block_shifts_to_lane">Block Shifts To Lane (Frost-3)</option>
+                        <option value="block_flip_this_card">This Card Cannot Be Flipped</option>
+                    </optgroup>
+                    <optgroup label="Draw Restrictions">
+                        <option value="block_draw_conditional">Conditional Draw Block</option>
                     </optgroup>
                     <optgroup label="Effect Modifications">
                         <option value="ignore_middle_commands">Ignore Middle Commands (Apathy-2)</option>
@@ -105,6 +112,53 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                         Effect only applies during card owner's turn, not during opponent's turn.
                     </small>
                 </label>
+            )}
+
+            {/* NEW: block_draw_conditional options */}
+            {ruleType === 'block_draw_conditional' && (
+                <>
+                    <label>
+                        Condition (who must have cards in hand)
+                        <select
+                            value={conditionTarget}
+                            onChange={e => onChange({
+                                ...params,
+                                rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget: e.target.value, blockTarget } as any
+                            })}
+                        >
+                            <option value="self">Card owner (you)</option>
+                            <option value="opponent">Opponent of card owner</option>
+                        </select>
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            If this player has any cards in hand, the draw block activates.
+                        </small>
+                    </label>
+
+                    <label>
+                        Block target (who cannot draw)
+                        <select
+                            value={blockTarget}
+                            onChange={e => onChange({
+                                ...params,
+                                rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget, blockTarget: e.target.value } as any
+                            })}
+                        >
+                            <option value="self">Card owner (you)</option>
+                            <option value="opponent">Opponent of card owner</option>
+                            <option value="all">Both players</option>
+                        </select>
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            This player cannot draw cards when the condition is met.
+                        </small>
+                    </label>
+                </>
+            )}
+
+            {/* NEW: block_flip_this_card info */}
+            {ruleType === 'block_flip_this_card' && (
+                <small style={{ display: 'block', marginTop: '8px', color: '#8A79E8' }}>
+                    This card cannot be flipped by any effect. Only affects this specific card.
+                </small>
             )}
 
             <div className="effect-preview">

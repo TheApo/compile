@@ -20,6 +20,7 @@ export function processReactiveEffects(
         player?: Player;          // Player who triggered the event
         cardId?: string;          // Specific card involved (for before_compile_delete, on_flip)
         count?: number;           // Count for after_draw, etc.
+        laneIndex?: number;       // Lane where the event happened (for reactiveScope filtering)
     }
 ): EffectResult {
     let newState = { ...state };
@@ -43,38 +44,54 @@ export function processReactiveEffects(
     // The _processingReactiveEffects flag already prevents recursive triggering within the same event.
 
     // Find all face-up custom protocol cards with matching reactive trigger
-    const reactiveCards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; box: 'top' }> = [];
+    const reactiveCards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; box: 'top' | 'middle' | 'bottom' }> = [];
+
+    // Helper function to check if effects match the trigger
+    const hasMatchingTrigger = (effects: any[]): boolean => {
+        return effects.some((effect: any) => {
+            if (effect.trigger === triggerType) return true;
+            if (effect.trigger === 'on_cover_or_flip' && (triggerType === 'on_cover' || triggerType === 'on_flip')) return true;
+            return false;
+        });
+    };
 
     // Search both players' lanes for reactive trigger cards
     for (const player of ['player', 'opponent'] as Player[]) {
         newState[player].lanes.forEach((lane, laneIndex) => {
-            lane.forEach(card => {
-                // Rule: Top box effects are active if the card is face-up, even if covered
-                if (card.isFaceUp) {
-                    const customCard = card as any;
-                    if (customCard.customEffects && customCard.customEffects.topEffects) {
-                        const matchingEffects = customCard.customEffects.topEffects.filter(
-                            (effect: any) => {
-                                // Match exact trigger
-                                if (effect.trigger === triggerType) return true;
-                                // Also match on_cover_or_flip for both on_cover and on_flip events
-                                if (effect.trigger === 'on_cover_or_flip' && (triggerType === 'on_cover' || triggerType === 'on_flip')) return true;
-                                return false;
-                            }
-                        );
+            lane.forEach((card, cardIndex) => {
+                if (!card.isFaceUp) return;
 
-                        if (matchingEffects.length > 0) {
-                            // CRITICAL: Skip if this card already triggered for certain trigger types this turn
-                            if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
-                                console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
-                                return;
-                            }
-                            // NOTE: after_draw triggers are NOT skipped based on previous triggers!
-                            // Spirit-3 should trigger on EVERY draw event.
-                            // The _processingReactiveEffects flag prevents recursive triggering within the same event.
-                            reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
-                        }
+                const customCard = card as any;
+                if (!customCard.customEffects) return;
+
+                const isUncovered = cardIndex === lane.length - 1;
+
+                // Rule: Top box effects are active if the card is face-up, even if covered
+                if (customCard.customEffects.topEffects && hasMatchingTrigger(customCard.customEffects.topEffects)) {
+                    // CRITICAL: Skip if this card already triggered for certain trigger types this turn
+                    if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
+                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
+                        return;
                     }
+                    reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
+                }
+
+                // Rule: Middle box effects are active if the card is face-up, even if covered
+                if (customCard.customEffects.middleEffects && hasMatchingTrigger(customCard.customEffects.middleEffects)) {
+                    if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
+                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache (middle) - already triggered this turn`);
+                        return;
+                    }
+                    reactiveCards.push({ card, owner: player, laneIndex, box: 'middle' });
+                }
+
+                // Rule: Bottom box effects are ONLY active if the card is face-up AND uncovered
+                if (isUncovered && customCard.customEffects.bottomEffects && hasMatchingTrigger(customCard.customEffects.bottomEffects)) {
+                    if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
+                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache (bottom) - already triggered this turn`);
+                        return;
+                    }
+                    reactiveCards.push({ card, owner: player, laneIndex, box: 'bottom' });
                 }
             });
         });
@@ -90,14 +107,24 @@ export function processReactiveEffects(
     console.log(`[Reactive Effects] Found ${reactiveCards.length} card(s) with ${triggerType} trigger`);
 
     // Execute all matching reactive effects
-    for (const { card, owner, laneIndex } of reactiveCards) {
-        // Re-validate: card must still be face-up
+    for (const { card, owner, laneIndex, box } of reactiveCards) {
+        // Re-validate: card must still be face-up (and uncovered for bottom effects)
         const currentLane = newState[owner].lanes[laneIndex];
-        const cardStillExists = currentLane?.some(c => c.id === card.id && c.isFaceUp);
+        const cardIndex = currentLane?.findIndex(c => c.id === card.id);
+        const cardStillExists = cardIndex !== undefined && cardIndex !== -1 && currentLane[cardIndex]?.isFaceUp;
 
         if (!cardStillExists) {
             console.log(`[Reactive Effects] Card ${card.protocol}-${card.value} no longer face-up, skipping`);
             continue;
+        }
+
+        // For bottom effects, also check if still uncovered
+        if (box === 'bottom') {
+            const isStillUncovered = cardIndex === currentLane.length - 1;
+            if (!isStillUncovered) {
+                console.log(`[Reactive Effects] Card ${card.protocol}-${card.value} no longer uncovered (bottom effect), skipping`);
+                continue;
+            }
         }
 
         // Special handling for before_compile_delete: only trigger for the specific card
@@ -119,7 +146,12 @@ export function processReactiveEffects(
         }
 
         const customCard = card as any;
-        const matchingEffects = customCard.customEffects.topEffects.filter(
+        // Get effects from the correct box (top, middle, or bottom)
+        const effectsFromBox = box === 'top' ? customCard.customEffects.topEffects :
+                               box === 'middle' ? customCard.customEffects.middleEffects :
+                               customCard.customEffects.bottomEffects;
+
+        const matchingEffects = effectsFromBox.filter(
             (effect: any) => {
                 // Match exact trigger OR on_cover_or_flip for both on_cover and on_flip events
                 if (effect.trigger === triggerType) {
@@ -168,6 +200,16 @@ export function processReactiveEffects(
                 }
             }
             // triggerActor === 'any' -> always trigger
+
+            // NEW: Check reactiveScope for lane-based trigger filtering (Ice-1 Bottom)
+            const reactiveScope = (effect as any).reactiveScope || 'global';
+            if (reactiveScope === 'this_lane' && context?.laneIndex !== undefined) {
+                // Only trigger if the event happened in the same lane as this card
+                if (laneIndex !== context.laneIndex) {
+                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - reactiveScope=this_lane, event in lane ${context.laneIndex}, card in lane ${laneIndex}`);
+                    return false;
+                }
+            }
 
             return true;
         });

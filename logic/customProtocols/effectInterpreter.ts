@@ -175,6 +175,23 @@ export function executeCustomEffect(
                         canExecute = false;
                         skipReason = 'Card is already in opponent\'s highest value lane';
                     }
+                } else if (params.advancedConditional?.type === 'this_card_is_covered') {
+                    // Ice-3: "If this card is covered, you may shift it"
+                    // Check if the card is actually covered (not the topmost card in lane)
+                    const ownerLanes = state[context.cardOwner].lanes;
+                    let isCardCovered = false;
+                    for (let i = 0; i < ownerLanes.length; i++) {
+                        const lane = ownerLanes[i];
+                        const cardIndex = lane.findIndex(c => c.id === card.id);
+                        if (cardIndex !== -1) {
+                            isCardCovered = cardIndex < lane.length - 1;
+                            break;
+                        }
+                    }
+                    if (!isCardCovered) {
+                        canExecute = false;
+                        skipReason = 'Card is not covered';
+                    }
                 } else {
                     // CRITICAL: Spirit-3 special case - "shift this card, even if covered"
                     // When position === 'any' AND owner === 'own' AND !excludeSelf,
