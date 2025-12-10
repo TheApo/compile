@@ -427,6 +427,18 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return true;
         }
 
+        case 'select_phase_effect': {
+            // Phase effect selection: highlight cards that are in the available effects list
+            const phaseAction = actionRequired as {
+                type: 'select_phase_effect';
+                actor: Player;
+                availableEffects: Array<{ cardId: string; cardName: string; box: 'top' | 'bottom'; effectDescription: string }>;
+            };
+
+            // Only cards in the available effects list are targetable
+            return phaseAction.availableEffects.some(effect => effect.cardId === card.id);
+        }
+
         default:
             return false;
     }

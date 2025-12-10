@@ -432,13 +432,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // SELECT CARD TO SHIFT - GENERIC (uses targetFilter, destinationRestriction)
         // =========================================================================
         case 'select_card_to_shift': {
-            // CRITICAL: Check sourceLaneIndex (set by shiftExecutor) for scope: 'this_lane' restriction
-            const restrictedLaneIndex = (action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Only restrict lane if scope is explicitly 'this_lane'
+            const scope = (action as any).scope;
+            const restrictedLaneIndex = scope === 'this_lane'
+                ? ((action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex)
+                : undefined;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
-                action.scope,
+                scope,
                 action.sourceCardId,
                 restrictedLaneIndex
             );
@@ -823,6 +826,25 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             // Pick first available lane
             return { type: 'selectLane', laneIndex: possibleLanes[0] };
+        }
+
+        // =========================================================================
+        // SELECT PHASE EFFECT - Choose which Start/End effect to execute first
+        // =========================================================================
+        case 'select_phase_effect': {
+            const phaseAction = action as {
+                type: 'select_phase_effect';
+                availableEffects: Array<{ cardId: string; cardName: string; box: 'top' | 'bottom'; effectDescription: string }>;
+            };
+
+            if (phaseAction.availableEffects.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Easy AI: Just pick the first available effect
+            const selectedEffect = phaseAction.availableEffects[0];
+
+            return { type: 'flipCard', cardId: selectedEffect.cardId };
         }
     }
 

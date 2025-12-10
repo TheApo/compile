@@ -8,6 +8,5 @@
  * This function will handle the game action of taking a card.
  */
 export function takeCard() {
-  console.log('Executing "take" logic...');
   // Future implementation will go here.
 }

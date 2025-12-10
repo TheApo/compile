@@ -32,9 +32,6 @@ export function executeDiscardEffect(
         const cardName = `${card.protocol}-${card.value}`;
         const actorName = actor === 'player' ? 'Player' : 'Opponent';
 
-        console.log(`[Discard Effect] useCardFromPreviousEffect: Looking for card ${targetCardId}`);
-        console.log(`[Discard Effect] actor: ${actor}, deck length: ${actorState.deck.length}`);
-        console.log(`[Discard Effect] Deck card IDs:`, actorState.deck.map((c: any) => c.id));
 
         // Find the card - it could be in deck (Clarity-1 revealed top)
         const deckIndex = actorState.deck.findIndex((c: any) => c.id === targetCardId);
@@ -94,18 +91,15 @@ export function executeDiscardEffect(
         const rawCount = (context.discardedCount || 0) + (params.countOffset || 0);
         // CRITICAL: Limit to actual hand size (like original Plague-2)
         count = Math.min(rawCount, state[actor].hand.length);
-        console.log(`[Discard Effect] Using dynamic count: ${context.discardedCount} + ${params.countOffset} = ${rawCount}, limited to hand size: ${count}`);
 
         // If count is 0 or negative, skip the discard
         if (count <= 0) {
-            console.log('[Discard Effect] Dynamic count is 0 or less, skipping discard.');
             return { newState: state };
         }
     }
 
     // CRITICAL FIX: Check if actor has any cards to discard
     if (state[actor].hand.length === 0) {
-        console.log(`[Discard Effect] ${actor} has no cards to discard - skipping effect.`);
         const actorName = actor === 'player' ? 'Player' : 'Opponent';
         let newState = log(state, actor, `${actorName} has no cards to discard - effect skipped.`);
         // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals like Fire-3)
@@ -119,14 +113,12 @@ export function executeDiscardEffect(
     if (params.upTo) {
         const originalCount = count;
         count = Math.min(count, state[actor].hand.length);
-        console.log(`[Discard Effect] upTo mode: requesting ${originalCount}, adjusted to ${count} (hand size: ${state[actor].hand.length})`);
     }
 
     // CRITICAL: Always limit count to actual hand size (prevents softlock)
     // Also log when partial discard happens
     const requestedCount = count;
     if (typeof count === 'number' && count > state[actor].hand.length) {
-        console.log(`[Discard Effect] Count ${count} exceeds hand size ${state[actor].hand.length}, limiting.`);
         count = state[actor].hand.length;
     }
     // Log partial discard (only when not in upTo mode, since upTo is already voluntary)
@@ -134,7 +126,6 @@ export function executeDiscardEffect(
 
     // Random discard: automatically select random card(s) without user choice
     if (params.random && actor !== cardOwner) {
-        console.log(`[Discard Effect] Random discard: auto-selecting ${count} random card(s) for ${actor}`);
         const handCards = [...state[actor].hand];
         const actualCount = Math.min(count as number, handCards.length);
 
@@ -195,7 +186,6 @@ export function executeDiscardEffect(
     // Auto-execute "discard all"
     // When count is 'all', automatically discard entire hand without user selection
     if (count === 'all') {
-        console.log(`[Discard Effect] Auto-discarding entire hand for ${actor}`);
         const handCards = state[actor].hand;
         const discardedCards = handCards.map(({ id, isFaceUp, ...card }) => card);
         const newHand: any[] = [];

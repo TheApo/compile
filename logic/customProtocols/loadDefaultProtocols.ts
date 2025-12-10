@@ -42,7 +42,6 @@ export const loadDefaultCustomProtocols = (): void => {
         if (oldDarkCustIndex >= 0) {
             existingProtocols.splice(oldDarkCustIndex, 1);
             saveCustomProtocols(existingProtocols);
-            console.log('[Default Protocols] Removed old Dark_cust protocol');
         }
 
         addCustomProtocol(anarchyCustomData as any);

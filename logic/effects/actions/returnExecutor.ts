@@ -30,7 +30,6 @@ export function executeReturnEffect(
     // Advanced Conditional Checks - skip effect if condition not met
     if (params.advancedConditional?.type === 'empty_hand') {
         if (state[cardOwner].hand.length > 0) {
-            console.log(`[Return Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping return.`);
             return { newState: state };
         }
     }
@@ -39,7 +38,6 @@ export function executeReturnEffect(
         const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
         const oppValue = getPlayerLaneValue(state, opp, laneIndex);
         if (oppValue <= ownValue) {
-            console.log(`[Return Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping return.`);
             return { newState: state };
         }
     }

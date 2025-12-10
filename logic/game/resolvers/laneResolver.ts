@@ -66,7 +66,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
                 const shiftCheck = canShiftCard(currentState, currentLaneIdx, targetLaneIndex);
                 if (!shiftCheck.allowed) {
-                    console.log(`Card ${cardId} cannot be shifted: ${shiftCheck.reason}`);
                     unaffectedCardIds.push(cardId);
                     continue;
                 }
@@ -278,12 +277,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             if (followUpEffect && sourceCardId) {
                                 const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
                                 if (shouldExecute) {
-                                    console.log('[laneResolver ANIM select_lane_for_shift] Queueing followUpEffect due to uncover interrupt:', followUpEffect.id);
+                                    // Get source card name for log context (state context may already be cleared)
+                                    const sourceCardForLog = findCardOnBoard(finalState, sourceCardId);
+                                    // Determine phase from state (could be 'start' or 'end')
+                                    const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
                                     const queuedFollowUp = {
                                         type: 'execute_follow_up_effect',
                                         sourceCardId: sourceCardId,
                                         followUpEffect: followUpEffect,
                                         actor: actor,
+                                        // CRITICAL: Store card name explicitly since state context may be cleared
+                                        logContext: {
+                                            indentLevel: 1,  // Follow-ups are always indented
+                                            sourceCardName: sourceCardForLog ? `${sourceCardForLog.card.protocol}-${sourceCardForLog.card.value}` : undefined,
+                                            phase: phaseContext,
+                                        },
                                     };
                                     finalState.queuedActions = [
                                         ...(finalState.queuedActions || []),
@@ -301,7 +309,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             // NEW: Queue pending effects from custom cards if shift created an interrupt
                             const pendingEffects = (finalState as any)._pendingCustomEffects;
                             if (pendingEffects) {
-                                console.log(`[laneResolver] Queueing ${pendingEffects.effects.length} pending effects due to interrupt`);
                                 const sourceCard = findCardOnBoard(finalState, pendingEffects.sourceCardId);
                                 if (sourceCard && sourceCard.card.isFaceUp) {
                                     const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === pendingEffects.sourceCardId));
@@ -344,7 +351,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // Execute pending effects from custom cards (e.g., Anarchy_custom-0)
                         const pendingEffects = (finalState as any)._pendingCustomEffects;
                         if (pendingEffects) {
-                            console.log(`[laneResolver] Executing ${pendingEffects.effects.length} pending effects after shift`);
                             // Check if source card is still uncovered and face-up
                             const sourceCard = findCardOnBoard(finalState, pendingEffects.sourceCardId);
                             if (sourceCard && sourceCard.card.isFaceUp) {
@@ -386,13 +392,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NEW: Handle generic followUpEffect for custom protocols ("Shift 1. If you do, draw 2.")
                         const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                         const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                        console.log('[laneResolver] After shift - followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType, 'sourceCardId:', sourceCardId, 'cardToShiftId:', cardToShiftId);
                         if (followUpEffect && sourceCardId) {
                             // For 'if_executed' conditionals, only execute if the shift actually happened
                             const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId; // shift happened if cardToShiftId exists
 
                             if (shouldExecute) {
-                                console.log('[laneResolver] Executing followUpEffect after shift');
                                 const sourceCard = findCardOnBoard(finalState, sourceCardId);
                                 if (sourceCard && sourceCard.card.isFaceUp) {
                                     const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
@@ -402,6 +406,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                         actor: actor,
                                         currentTurn: finalState.turn,
                                         opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    // CRITICAL: Set log context before executing followUp effect
+                                    const cardName = `${sourceCard.card.protocol}-${sourceCard.card.value}`;
+                                    const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
+                                    finalState = {
+                                        ...finalState,
+                                        _logIndentLevel: 1,
+                                        _currentEffectSource: cardName,
+                                        _currentPhaseContext: phaseContext as 'start' | 'end',
                                     };
                                     const result = executeCustomEffect(sourceCard.card, laneIndex, finalState, context, followUpEffect);
                                     finalState = result.newState;
@@ -470,12 +483,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (followUpEffect && sourceCardId) {
                         const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
                         if (shouldExecute) {
-                            console.log('[laneResolver select_lane_for_shift] Queueing followUpEffect due to uncover interrupt:', followUpEffect.id);
+                            // Get source card name for log context (state context may already be cleared)
+                            const sourceCardForLog = findCardOnBoard(newState, sourceCardId);
+                            // Determine phase from state (could be 'start' or 'end')
+                            const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
                             const queuedFollowUp = {
                                 type: 'execute_follow_up_effect',
                                 sourceCardId: sourceCardId,
                                 followUpEffect: followUpEffect,
                                 actor: actor,
+                                // CRITICAL: Store card name explicitly since state context may be cleared
+                                logContext: {
+                                    indentLevel: 1,  // Follow-ups are always indented
+                                    sourceCardName: sourceCardForLog ? `${sourceCardForLog.card.protocol}-${sourceCardForLog.card.value}` : undefined,
+                                    phase: phaseContext,
+                                },
                             };
                             newState.queuedActions = [
                                 ...(newState.queuedActions || []),
@@ -501,7 +523,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0) - NO ANIMATION case
                     const pendingEffects = (newState as any)._pendingCustomEffects;
                     if (pendingEffects) {
-                        console.log(`[laneResolver NO ANIM] Executing ${pendingEffects.effects.length} pending effects after shift`);
                         const sourceCardPending = findCardOnBoard(newState, pendingEffects.sourceCardId);
                         if (sourceCardPending && sourceCardPending.card.isFaceUp) {
                             const lane = newState[sourceCardPending.owner].lanes.find(l => l.some(c => c.id === pendingEffects.sourceCardId));
@@ -546,13 +567,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // This handles "Shift 1. If you do, flip this card." like Speed-3
                     const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                     const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                    console.log('[laneResolver NO ANIM] After shift - followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType, 'sourceCardId:', sourceCardId, 'cardToShiftId:', cardToShiftId);
                     if (followUpEffect && sourceCardId) {
                         // For 'if_executed' conditionals, only execute if the shift actually happened
                         const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
 
                         if (shouldExecute) {
-                            console.log('[laneResolver NO ANIM] Executing followUpEffect after shift');
                             const sourceCardForFollow = findCardOnBoard(newState, sourceCardId);
                             if (sourceCardForFollow && sourceCardForFollow.card.isFaceUp) {
                                 const laneForFollow = newState[sourceCardForFollow.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
@@ -562,6 +581,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                     actor: actor,
                                     currentTurn: newState.turn,
                                     opponent: (sourceCardForFollow.owner === 'player' ? 'opponent' : 'player') as Player,
+                                };
+                                // CRITICAL: Set log context before executing followUp effect
+                                const cardName = `${sourceCardForFollow.card.protocol}-${sourceCardForFollow.card.value}`;
+                                const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
+                                newState = {
+                                    ...newState,
+                                    _logIndentLevel: 1,
+                                    _currentEffectSource: cardName,
+                                    _currentPhaseContext: phaseContext as 'start' | 'end',
                                 };
                                 const result = executeCustomEffect(sourceCardForFollow.card, laneIndexForFollow, newState, context, followUpEffect);
                                 newState = result.newState;
@@ -613,8 +641,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
             const actor = prev.actionRequired.actor;
 
-            console.log('[DEBUG shift_flipped_card_optional] === START ===');
-            console.log('[DEBUG shift_flipped_card_optional] actionRequired:', JSON.stringify(prev.actionRequired, null, 2));
 
             // CRITICAL: Find which player owns the card (Spirit-3 on player side, Darkness-1 on opponent side)
             let cardOwner: Player | null = null;
@@ -636,9 +662,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const conditionalType = (prev.actionRequired as any)?.conditionalType;
             const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
 
-            console.log('[DEBUG shift_flipped_card_optional] followUpEffect:', followUpEffect ? followUpEffect.id : 'NONE');
-            console.log('[DEBUG shift_flipped_card_optional] conditionalType:', conditionalType);
-            console.log('[DEBUG shift_flipped_card_optional] sourceCardId:', sourceCardId);
 
             const shiftResult = internalShiftCard(prev, cardToShiftId, cardOwner, targetLaneIndex, actor);
             newState = shiftResult.newState;
@@ -649,18 +672,27 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (followUpEffect && sourceCardId) {
                 const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
                 if (shouldExecute) {
+                    // Get source card name for log context (state context may already be cleared)
+                    const sourceCardForLog = findCardOnBoard(newState, sourceCardId);
+                    // Determine phase from state (could be 'start' or 'end')
+                    const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
                     // Queue the followUpEffect to execute after any pending actions
                     const queuedFollowUp = {
                         type: 'execute_follow_up_effect',
                         sourceCardId: sourceCardId,
                         followUpEffect: followUpEffect,
                         actor: actor,
+                        // CRITICAL: Store card name explicitly since state context may be cleared
+                        logContext: {
+                            indentLevel: 1,  // Follow-ups are always indented
+                            sourceCardName: sourceCardForLog ? `${sourceCardForLog.card.protocol}-${sourceCardForLog.card.value}` : undefined,
+                            phase: phaseContext,
+                        },
                     };
                     newState = {
                         ...newState,
                         queuedActions: [...(newState.queuedActions || []), queuedFollowUp]
                     };
-                    console.log('[shift_flipped_card_optional] Queued followUpEffect for later execution:', followUpEffect.id);
                 }
             }
 
@@ -684,19 +716,16 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             // CRITICAL: Server-side validation for disallowedLaneIndex (e.g., Darkness-3: "Play to other lines")
             if (disallowedLaneIndex !== undefined && effectiveLaneIndex === disallowedLaneIndex) {
-                console.log(`[Lane Validation] Rejected: Cannot play to disallowed lane ${disallowedLaneIndex}`);
                 return { nextState: prev, requiresTurnEnd: false }; // Silently reject
             }
 
             // NEW: Smoke-3 validation - validLanes restricts which lanes can be selected
             if (validLanes && !validLanes.includes(effectiveLaneIndex)) {
-                console.log(`[Lane Validation] Rejected: Lane ${effectiveLaneIndex} not in valid lanes ${validLanes}`);
                 return { nextState: prev, requiresTurnEnd: false }; // Silently reject
             }
 
             // NEW: Life-3 - play from deck to selected lane
             if (source === 'deck') {
-                console.log('[select_lane_for_play] Playing from deck to lane', effectiveLaneIndex);
                 const stateBeforePlay = { ...prev, actionRequired: null };
                 const playerState = stateBeforePlay[actor];
 
@@ -775,19 +804,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, effectiveLaneIndex, canPlayFaceUp, actor);
             newState = stateAfterPlay;
 
-            console.log('[LANE RESOLVER] After playCard - actionRequired?', newState.actionRequired?.type || 'null', 'queuedActions?', newState.queuedActions?.length || 0, 'animationRequests?', animationRequests?.length || 0);
 
             if (animationRequests) {
                 // FIX: Implemented `onCompleteCallback` for card-play animations to ensure turn progression occurs correctly after animations complete.
                 requiresAnimation = {
                     animationRequests,
                     onCompleteCallback: (s, endTurnCb) => {
-                        console.log('[PLAY CALLBACK] Animation complete. queuedActions?', s.queuedActions?.length || 0);
                         if (s.queuedActions && s.queuedActions.length > 0) {
-                            console.log('[PLAY CALLBACK] Queue found! First action:', s.queuedActions[0].type);
                         }
                         // CRITICAL: ALWAYS call endTurnCb - processEndOfAction will handle the queue automatically
-                        console.log('[PLAY CALLBACK] Calling endTurnCb');
                         return endTurnCb(s);
                     }
                 };
@@ -1154,7 +1179,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         case 'select_lane_to_shift_revealed_board_card_custom': {
             const { revealedCardId, actor } = prev.actionRequired;
             const cardInfo = findCardOnBoard(prev, revealedCardId);
-            console.log('[DEBUG Light-2 Shift] Card before shift:', cardInfo?.card.protocol, cardInfo?.card.value, 'isFaceUp:', cardInfo?.card.isFaceUp);
             if (cardInfo) {
                 const shiftResult = internalShiftCard(prev, revealedCardId, cardInfo.owner, targetLaneIndex, actor);
                 newState = shiftResult.newState;
@@ -1179,7 +1203,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
     // The queue contains auto-resolving actions that should be processed by processQueuedActions,
     // not treated as user actions.
 
-    console.log('[LANE RESOLVER END] Returning - actionRequired?', newState.actionRequired?.type || 'null', 'queuedActions?', newState.queuedActions?.length || 0, 'requiresAnimation?', requiresAnimation ? 'yes' : 'no');
 
     return { nextState: recalculateAllLaneValues(newState), requiresAnimation };
 };

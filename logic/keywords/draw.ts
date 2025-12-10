@@ -8,6 +8,5 @@
  * This function will handle the game action of drawing a card.
  */
 export function drawCard() {
-  console.log('Executing "draw" logic...');
   // Future implementation will go here.
 }

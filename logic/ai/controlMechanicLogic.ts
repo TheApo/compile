@@ -263,7 +263,6 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
         }
 
         if (blockWinSwap) {
-            console.log(`[AI Control Rearrange] BLOCKING WIN: Player has ${playerEffectiveValues[blockWinSwap.uncompiledIdx]} in uncompiled lane ${blockWinSwap.uncompiledIdx}, swapping with compiled lane ${blockWinSwap.compiledIdx}`);
             const newOrder = [...playerState.protocols];
             [newOrder[blockWinSwap.compiledIdx], newOrder[blockWinSwap.uncompiledIdx]] =
                 [newOrder[blockWinSwap.uncompiledIdx], newOrder[blockWinSwap.compiledIdx]];
@@ -392,7 +391,6 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
 
         // Execute swap if it improves our position (score > 0)
         if (bestSwap && bestSwap.score > 0) {
-            console.log(`[AI Control Rearrange] Swapping own protocols: compiled lane ${bestSwap.compiledIdx} (value ${aiEffectiveValues[bestSwap.compiledIdx]}) <-> uncompiled lane ${bestSwap.uncompiledIdx} (value ${aiEffectiveValues[bestSwap.uncompiledIdx]}). New uncompiled value: ${bestSwap.newUncompiledValue}`);
             const newOrder = [...aiState.protocols];
             [newOrder[bestSwap.compiledIdx], newOrder[bestSwap.uncompiledIdx]] =
                 [newOrder[bestSwap.uncompiledIdx], newOrder[bestSwap.compiledIdx]];
@@ -445,7 +443,6 @@ function findValidFallbackArrangement(
             const testOrder = [...currentOrder];
             [testOrder[i], testOrder[j]] = [testOrder[j], testOrder[i]];
             if (isValidArrangement(testOrder)) {
-                console.log(`[AI Rearrange] Current order invalid, swapping indices ${i} and ${j} to satisfy Anarchy-3 restriction`);
                 return { type: 'rearrangeProtocols', newOrder: testOrder };
             }
         }

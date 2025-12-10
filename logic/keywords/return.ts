@@ -8,6 +8,5 @@
  * This function will handle the game action of returning a card.
  */
 export function returnCard() {
-  console.log('Executing "return" logic...');
   // Future implementation will go here.
 }

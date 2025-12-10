@@ -3502,6 +3502,42 @@ export const scenario65_IceAITest: TestScenario = {
     }
 };
 
+export const scenario66_endPhasePlayground: TestScenario = {
+    name: 'End Phase Test',
+    description: 'Test the game rule for the end or start phase, only 1 trigger',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Light', 'Fire', 'Speed'];
+        const opponentProtocols = ['Spirit', 'Water', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Light', 5, true),
+            createCard('Fire', 0, true),
+        ];
+
+        // Board setup for testing:
+        newState = placeCard(newState, 'player', 0, createCard('Light', 1, true));  // 
+        newState = placeCard(newState, 'player', 0, createCard('Light', 2, true));  // 
+
+
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 3, true));  // 
+        //newState = placeCard(newState, 'player', 1, createCard('Fire', 2, true));  // 
+
+        newState = placeCard(newState, 'player', 2, createCard('Speed', 3, true));
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3568,4 +3604,5 @@ export const allScenarios: TestScenario[] = [
     scenario63_FearAITest,
     scenario64_IceCustomPlayground,
     scenario65_IceAITest,
+	scenario66_endPhasePlayground,
 ];

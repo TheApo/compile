@@ -258,7 +258,6 @@ export function executeCustomEffect(
         }
 
         if (!canExecute) {
-            console.log(`[Custom Effect] Optional ${action} skipped - ${skipReason}`);
             let newState = log(state, actor, `${skipReason} - effect skipped.`);
             // Mark effect as not executed for if_executed conditionals
             (newState as any)._effectSkippedNoTargets = true;
@@ -268,7 +267,6 @@ export function executeCustomEffect(
             return { newState };
         }
 
-        console.log(`[Custom Effect] Optional effect detected (${action}) - creating prompt`);
         let newState = { ...state };
         newState.actionRequired = {
             type: 'prompt_optional_effect',
@@ -293,7 +291,6 @@ export function executeCustomEffect(
             // Refresh is a form of drawing, so the same restriction applies
             const refreshDrawCheck = canPlayerDraw(state, actor);
             if (!refreshDrawCheck.allowed) {
-                console.log(`[Refresh Effect] ${refreshDrawCheck.reason}. Skipping refresh for ${actor}.`);
                 let newState = log(state, context.cardOwner, refreshDrawCheck.reason || 'Cannot refresh (draw blocked).');
                 result = { newState };
                 break;
@@ -504,11 +501,9 @@ export function executeCustomEffect(
     // Handle conditional follow-up effects
     if (effectDef.conditional && effectDef.conditional.thenEffect) {
         const { newState } = result;
-        console.log('[Custom Effect] Effect has conditional follow-up:', effectDef.id, 'Conditional type:', effectDef.conditional.type, 'Action created?', !!newState.actionRequired, 'actionRequired.type:', newState.actionRequired?.type);
 
         if (newState.actionRequired) {
             // Store the conditional for later execution (after user completes the action)
-            console.log('[Custom Effect] Storing follow-up effect for later execution:', effectDef.conditional.thenEffect.id, 'to actionRequired type:', newState.actionRequired.type);
 
             // CRITICAL: Store conditional type so we know if it's if_executed or then
             // CRITICAL FIX: Also store the OUTER source card info, in case the actionRequired
@@ -526,7 +521,6 @@ export function executeCustomEffect(
             result = { newState: stateWithFollowUp };
         } else {
             // Effect completed immediately - check if we should execute conditional now
-            console.log('[Custom Effect] Effect completed immediately, conditional type:', effectDef.conditional.type);
 
             // CRITICAL FIX: For "if_executed" conditionals, check if the effect actually did something
             // This handles "Discard 1. If you do, delete 1" when player has no cards to discard
@@ -536,7 +530,6 @@ export function executeCustomEffect(
                 const discardedCount = discardContext?.discardedCount || 0;
 
                 if (discardedCount === 0) {
-                    console.log('[Custom Effect] Skipping if_executed follow-up - no action was executed (no discard)');
                     // Clean up and return without executing follow-up
                     delete (newState as any)._discardContext;
                     result = { newState };
@@ -546,8 +539,6 @@ export function executeCustomEffect(
 
             // NEW: For 'optional' conditionals, create a prompt instead of executing immediately
             if (effectDef.conditional.type === 'optional') {
-                console.log('[Custom Effect] Optional conditional - creating prompt for user choice');
-                console.log('[Custom Effect] Preserving lastCustomEffectTargetCardId:', newState.lastCustomEffectTargetCardId);
                 let promptState = { ...newState };
                 promptState.actionRequired = {
                     type: 'prompt_optional_effect',
@@ -562,7 +553,6 @@ export function executeCustomEffect(
                 return result;
             }
 
-            console.log('[Custom Effect] Executing conditional follow-up effect immediately');
 
             // NEW: Propagate discard context for Chaos-4 "Discard your hand. Draw the same amount of cards"
             let enrichedContext = context;
@@ -575,7 +565,6 @@ export function executeCustomEffect(
                 } as any;
                 // Clean up
                 delete (newState as any)._discardContext;
-                console.log('[Custom Effect] Propagated discard context:', enrichedContext);
             }
 
             result = executeCustomEffect(card, laneIndex, newState, enrichedContext, effectDef.conditional.thenEffect);

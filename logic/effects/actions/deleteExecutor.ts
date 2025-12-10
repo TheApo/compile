@@ -29,7 +29,6 @@ export function executeDeleteEffect(
     // Advanced Conditional Checks - skip effect if condition not met
     if (params.advancedConditional?.type === 'empty_hand') {
         if (state[cardOwner].hand.length > 0) {
-            console.log(`[Delete Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping delete.`);
             return { newState: state };
         }
     }
@@ -38,7 +37,6 @@ export function executeDeleteEffect(
         const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
         const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
         if (oppValue <= ownValue) {
-            console.log(`[Delete Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping delete.`);
             return { newState: state };
         }
     }
@@ -110,10 +108,8 @@ export function executeDeleteEffect(
         const cardsInLane = playerCardsInLane + opponentCardsInLane;
 
         if (cardsInLane < minCards) {
-            console.log(`[Delete Effect] Line filter not met: ${cardsInLane} < ${minCards} cards in lane. Skipping delete.`);
             return { newState: state };
         }
-        console.log(`[Delete Effect] Line filter met: ${cardsInLane} >= ${minCards} cards in lane.`);
     }
 
     // NEW: Lane Condition - Courage-1: "Delete in a line where opponent has higher value"
@@ -127,7 +123,6 @@ export function executeDeleteEffect(
             (newState as any)._effectSkippedNoTargets = true;
             return { newState };
         }
-        console.log(`[Delete Effect] Opponent higher value lanes: ${validLaneIndices.join(', ')}`);
     }
 
     // NEW: Determine actor based on actorChooses
@@ -216,7 +211,6 @@ export function executeDeleteEffect(
     if (params.upTo) {
         const originalCount = count;
         count = Math.min(count, validTargets.length);
-        console.log(`[Delete Effect] upTo mode: requesting ${originalCount}, adjusted to ${count} (available targets: ${validTargets.length})`);
         if (count === 0) {
             let newState = log(state, cardOwner, `No valid targets available. Delete effect skipped.`);
             return { newState };
@@ -263,12 +257,10 @@ export function executeDeleteEffect(
         // Keep only cards with that value
         filteredTargets = validTargets.filter(id => cardValues.get(id) === targetValue);
 
-        console.log(`[Delete Effect] Filtered by ${targetFilter.calculation}: ${filteredTargets.length} card(s) with value ${targetValue}`);
     }
 
     // NEW: Auto-execute (Hate-4: automatically delete lowest value card without user selection)
     if (params.autoExecute) {
-        console.log(`[Delete Effect] Auto-executing delete for ${filteredTargets.length} card(s)`);
 
         // Take first N cards from filteredTargets (or all if count >= length)
         const cardsToDelete = filteredTargets.slice(0, count);
@@ -339,17 +331,14 @@ export function executeDeleteEffect(
     // NEW: Handle deleteSelf (Life-0 on_cover: "then delete this card")
     // Directly delete the source card without prompting
     if (params.deleteSelf) {
-        console.log(`[deleteSelf] Trying to delete card ${card.protocol}-${card.value} (id: ${card.id}), laneIndex from params: ${laneIndex}`);
 
         // CRITICAL: Use the laneIndex parameter (we already know where the card is)
         // Don't use findCardOnBoard because in on_cover context, the state might be mid-transition
         const owner = cardOwner;
         const lane = state[owner].lanes[laneIndex];
-        console.log(`[deleteSelf] owner=${owner}, laneIndex=${laneIndex}, lane.length=${lane?.length}`);
 
         // CRITICAL: Check if lane exists (card might have been deleted already)
         if (!lane || lane.length === 0) {
-            console.log(`[deleteSelf] Lane is ${!lane ? 'null' : 'empty'}! Skipping delete.`);
             newState = log(newState, cardOwner, `Card already deleted. Delete effect skipped.`);
             return { newState };
         }
@@ -357,7 +346,6 @@ export function executeDeleteEffect(
         // Find the card in the lane
         const cardIndex = lane.findIndex(c => c.id === card.id);
         if (cardIndex === -1) {
-            console.log(`[deleteSelf] Card not found in lane ${laneIndex}!`);
             newState = log(newState, cardOwner, `Card already deleted. Delete effect skipped.`);
             return { newState };
         }
@@ -367,7 +355,6 @@ export function executeDeleteEffect(
         // This handles Life-0: If a card was already placed on top, don't trigger uncover
         const currentLane = state[owner].lanes[laneIndex];
         const wasTopCard = currentLane.length > 0 && currentLane[currentLane.length - 1].id === card.id;
-        console.log(`[deleteSelf] Card is ${wasTopCard ? 'TOP' : 'COVERED'} card in CURRENT lane (length=${currentLane.length}), cardIndex=${cardIndex}`);
 
         // Delete the card immediately
         newState = log(newState, cardOwner, `Deleting ${card.protocol}-${card.value}.`);
@@ -376,10 +363,8 @@ export function executeDeleteEffect(
         const laneCopy = [...currentLane];
         const currentCardIndex = laneCopy.findIndex(c => c.id === card.id);
         if (currentCardIndex === -1) {
-            console.log(`[deleteSelf] Card no longer in lane! Already deleted or moved.`);
             return { newState };
         }
-        console.log(`[deleteSelf] Removing card at index ${currentCardIndex} from lane`);
         laneCopy.splice(currentCardIndex, 1);
 
         // CRITICAL: Use newState[owner].lanes, not state[owner].lanes!

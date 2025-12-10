@@ -8,6 +8,5 @@
  * This function will handle the game action of deleting a card.
  */
 export function deleteCard() {
-  console.log('Executing "delete" logic...');
   // Future implementation will go here.
 }

@@ -536,6 +536,15 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     const valueFilter = (actionRequired as any).valueFilter;
                     return `Action: Select a card with value ${valueFilter} from your revealed deck`;
                 }
+                case 'select_phase_effect': {
+                    const phaseAction = actionRequired as {
+                        type: 'select_phase_effect';
+                        phase: 'Start' | 'End';
+                        availableEffects: Array<{ cardId: string; cardName: string; effectDescription: string }>;
+                    };
+                    const effectNames = phaseAction.availableEffects.map(e => e.cardName).join(', ');
+                    return `${phaseAction.phase} Phase: Choose which effect to resolve first (${effectNames})`;
+                }
                 default:
                     return 'Action Required';
             }

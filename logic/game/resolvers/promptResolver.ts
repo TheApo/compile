@@ -17,9 +17,7 @@ import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
 // NEW: Generic optional draw prompt resolver (composable for any card)
 export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean): GameState => {
-    console.log('[DEBUG resolveOptionalDrawPrompt] Called with accept:', accept, 'actionRequired type:', prevState.actionRequired?.type);
     if (prevState.actionRequired?.type !== 'prompt_optional_draw') {
-        console.log('[DEBUG resolveOptionalDrawPrompt] Type mismatch! Returning prev state.');
         return prevState;
     }
 
@@ -35,12 +33,10 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
         // Check if there's a follow-up effect from conditional chaining (if_executed)
         const followUpEffect = (prevState.actionRequired as any).followUpEffect;
         const conditionalType = (prevState.actionRequired as any).conditionalType;
-        console.log('[DEBUG resolveOptionalDrawPrompt] followUpEffect:', followUpEffect?.id, 'conditionalType:', conditionalType);
 
         if (followUpEffect) {
             // Execute the follow-up effect (e.g., delete other card for Death-1)
             const sourceCard = findCardOnBoard(newState, sourceCardId);
-            console.log('[DEBUG resolveOptionalDrawPrompt] sourceCard found:', !!sourceCard, 'sourceCardId:', sourceCardId);
 
             if (sourceCard) {
                 const laneIndex = newState[sourceCard.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
@@ -52,7 +48,6 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                     opponent,
                     triggerType: 'start' as const
                 };
-                console.log('[DEBUG resolveOptionalDrawPrompt] Executing followUpEffect:', followUpEffect.id);
                 const result = executeCustomEffect(sourceCard.card, laneIndex, newState, context, followUpEffect);
                 newState = result.newState;
 
@@ -61,7 +56,6 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
             } else {
                 // Source card not found on board - it might have been deleted or returned
                 // Still try to execute the follow-up effect with a synthetic card
-                console.log('[DEBUG resolveOptionalDrawPrompt] Source card not found! Creating synthetic card for follow-up.');
                 const opponent: Player = actor === 'player' ? 'opponent' : 'player';
 
                 // Find any lane where the actor has cards (for context)
@@ -89,7 +83,6 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                     triggerType: 'start' as const
                 };
 
-                console.log('[DEBUG resolveOptionalDrawPrompt] Executing followUpEffect with synthetic card:', followUpEffect.id);
                 const result = executeCustomEffect(syntheticCard, fallbackLaneIndex, newState, context, followUpEffect);
                 newState = result.newState;
 
@@ -173,19 +166,15 @@ export const resolveOptionalDiscardCustomPrompt = (prevState: GameState, accept:
  * Works for ALL optional effects (flip, delete, shift, return, discard, etc.)
  */
 export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolean): GameState => {
-    console.log('[DEBUG resolveOptionalEffectPrompt] Called with accept:', accept, 'actionRequired type:', prevState.actionRequired?.type);
     if (prevState.actionRequired?.type !== 'prompt_optional_effect') return prevState;
 
     const { actor, sourceCardId, effectDef, laneIndex, savedTargetCardId } = prevState.actionRequired as any;
-    console.log('[DEBUG resolveOptionalEffectPrompt] effectDef:', effectDef.id, 'has conditional?', !!effectDef.conditional);
-    console.log('[DEBUG resolveOptionalEffectPrompt] savedTargetCardId:', savedTargetCardId, 'current lastCustomEffectTargetCardId:', prevState.lastCustomEffectTargetCardId);
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
     // CRITICAL: Restore the target card ID if it was saved (for useCardFromPreviousEffect)
     if (savedTargetCardId) {
         newState.lastCustomEffectTargetCardId = savedTargetCardId;
-        console.log('[DEBUG resolveOptionalEffectPrompt] Restored lastCustomEffectTargetCardId to:', savedTargetCardId);
     }
 
     if (accept) {
@@ -222,18 +211,14 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             conditional: undefined  // Remove conditional - we handle it here
         };
 
-        console.log('[DEBUG resolveOptionalEffectPrompt] BEFORE executeCustomEffect, newState.lastCustomEffectTargetCardId:', newState.lastCustomEffectTargetCardId);
-        console.log('[DEBUG resolveOptionalEffectPrompt] effectToExecute:', effectToExecute.id, 'params:', JSON.stringify(effectToExecute.params));
         const result = executeCustomEffect(sourceCard, laneIndex, newState, context, effectToExecute);
         const hasActionRequired = !!result.newState.actionRequired;
         const hasSkipMarker = !!(result.newState as any)._effectSkippedNoTargets;
-        console.log('[DEBUG resolveOptionalEffectPrompt] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null', '_effectSkippedNoTargets:', hasSkipMarker, 'hasActionRequired:', hasActionRequired);
 
         // CRITICAL: Check if effect was skipped due to no valid targets
         // BUT: If actionRequired is set, the effect DID find targets and needs user input - don't skip!
         const effectWasSkipped = hasSkipMarker && !hasActionRequired;
         if (effectWasSkipped) {
-            console.log('[DEBUG resolveOptionalEffectPrompt] Effect was skipped (no valid targets), NOT executing if_executed followUp');
             // Clean up the marker and ensure actionRequired is cleared
             const cleanedState = { ...result.newState };
             delete (cleanedState as any)._effectSkippedNoTargets;
@@ -243,18 +228,15 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
 
         // Clean up stale marker if effect did execute (has actionRequired)
         if (hasSkipMarker && hasActionRequired) {
-            console.log('[DEBUG resolveOptionalEffectPrompt] Cleaning stale _effectSkippedNoTargets - effect has valid actionRequired');
             delete (result.newState as any)._effectSkippedNoTargets;
         }
 
         // CRITICAL: Handle conditional follow-up effects (if_executed)
         if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
-            console.log('[DEBUG resolveOptionalEffectPrompt] Has if_executed followUp:', effectDef.conditional.thenEffect.id);
 
             // If the effect created an actionRequired (user needs to select something),
             // we need to attach the followUp to it so it executes AFTER the action completes
             if (result.newState.actionRequired) {
-                console.log('[DEBUG resolveOptionalEffectPrompt] Effect has actionRequired, attaching followUp for later execution');
                 const stateWithFollowUp = {
                     ...result.newState,
                     actionRequired: {
@@ -267,17 +249,13 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             }
 
             // Effect completed immediately (no actionRequired), execute followUp now
-            console.log('[DEBUG resolveOptionalEffectPrompt] Executing if_executed followUp immediately:', effectDef.conditional.thenEffect.id);
             const followUpEffect = effectDef.conditional.thenEffect;
-            console.log('[DEBUG resolveOptionalEffectPrompt] followUpEffect:', followUpEffect.id, 'params:', JSON.stringify(followUpEffect.params), 'has conditional?', !!followUpEffect.conditional, 'actor:', actor);
             const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, followUpEffect);
-            console.log('[DEBUG resolveOptionalEffectPrompt] After followUp executeCustomEffect, actionRequired:', followUpResult.newState.actionRequired?.type || 'null');
 
             // CRITICAL: If the followUp created an actionRequired AND the followUp has its own conditional,
             // attach the nested conditional as a followUpEffect so it executes after the action completes
             // Example: Death-1's "draw -> if you do, delete other -> then delete self"
             if (followUpResult.newState.actionRequired && followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
-                console.log('[DEBUG resolveOptionalEffectPrompt] followUp has actionRequired AND nested conditional, attaching:', followUpEffect.conditional.thenEffect.id);
                 const stateWithNestedFollowUp = {
                     ...followUpResult.newState,
                     actionRequired: {
@@ -286,11 +264,9 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
                         conditionalType: followUpEffect.conditional.type,
                     } as any
                 };
-                console.log('[DEBUG resolveOptionalEffectPrompt] Returning state with nested followUp, actionRequired:', stateWithNestedFollowUp.actionRequired?.type);
                 return stateWithNestedFollowUp;
             }
 
-            console.log('[DEBUG resolveOptionalEffectPrompt] No nested conditional, returning followUpResult.newState, actionRequired:', followUpResult.newState.actionRequired?.type || 'null');
             return followUpResult.newState;
         }
 
@@ -306,7 +282,6 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             // If the effect created an actionRequired (like lane selection for shift),
             // attach the outer followUpEffect to it for execution after user input
             if (finalState.actionRequired) {
-                console.log('[Optional Effect Accept] Attaching outer followUpEffect to new actionRequired');
                 return {
                     ...finalState,
                     actionRequired: {
@@ -319,7 +294,6 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             }
 
             // Effect completed immediately (no actionRequired), execute outer followUpEffect now
-            console.log('[Optional Effect Accept] Executing outer followUpEffect immediately:', outerFollowUpEffect.id);
             const outerSourceCard = [...finalState.player.lanes.flat(), ...finalState.opponent.lanes.flat()]
                 .find(c => c.id === outerFollowUpSourceCardId);
 
@@ -447,7 +421,6 @@ export const resolveRearrangeProtocols = (
     // This is duplicated from the central logic because we need it BEFORE processQueuedActions
     const pendingEffects = (newState as any)._pendingCustomEffects;
     if (pendingEffects && pendingEffects.effects.length > 0) {
-        console.log('[resolveRearrangeProtocols] Found pending effects:', pendingEffects.effects.length);
         const pendingAction: any = {
             type: 'execute_remaining_custom_effects',
             sourceCardId: pendingEffects.sourceCardId,
@@ -465,7 +438,6 @@ export const resolveRearrangeProtocols = (
 
         // Clear from state after queueing
         delete (newState as any)._pendingCustomEffects;
-        console.log('[resolveRearrangeProtocols] Queued pending effects');
     }
 
     // Convert sourceCardId to a readable name
@@ -489,16 +461,12 @@ export const resolveRearrangeProtocols = (
     let stateAfterRecalc = recalculateAllLaneValues(newState);
 
     if (originalAction) {
-        console.log('[DEBUG resolveRearrangeProtocols] originalAction:', originalAction);
         // Reset indent to 0 before resuming the main action (compile/refresh)
         stateAfterRecalc = { ...stateAfterRecalc, _logIndentLevel: 0 };
         if (originalAction.type === 'compile') {
             return performCompile(stateAfterRecalc, originalAction.laneIndex, onEndGame);
         } else if (originalAction.type === 'fill_hand') {
-            console.log('[DEBUG resolveRearrangeProtocols] Calling performFillHand for actor:', actor, 'hand before:', stateAfterRecalc[actor].hand.length);
             const stateAfterFill = performFillHand(stateAfterRecalc, actor);
-            console.log('[DEBUG resolveRearrangeProtocols] After performFillHand, hand length:', stateAfterFill[actor].hand.length);
-            console.log('[DEBUG resolveRearrangeProtocols] RETURNING state with', stateAfterFill[actor].hand.length, 'cards');
             return stateAfterFill;
         } else if (originalAction.type === 'continue_turn') {
             // After compile + control rearrange, the turn should END (unless there are Speed-2 actions)
@@ -559,7 +527,6 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
     // This is duplicated from the central logic because we need it BEFORE processQueuedActions
     const pendingEffects = (newState as any)._pendingCustomEffects;
     if (pendingEffects && pendingEffects.effects.length > 0) {
-        console.log('[resolveSwapProtocols] Found pending effects:', pendingEffects.effects.length);
         const pendingAction: any = {
             type: 'execute_remaining_custom_effects',
             sourceCardId: pendingEffects.sourceCardId,
@@ -577,7 +544,6 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
 
         // Clear from state after queueing
         delete (newState as any)._pendingCustomEffects;
-        console.log('[resolveSwapProtocols] Queued pending effects');
     }
 
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);

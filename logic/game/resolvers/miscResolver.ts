@@ -34,7 +34,6 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
 
     if (compileBlocked) {
         const compilerName = compiler === 'player' ? 'Player' : 'Opponent';
-        console.log(`[Compile Block] ${compilerName}'s compile is blocked until turn ${(newState as any).compileBlockedUntilTurn}`);
         newState = log(newState, compiler, `${compilerName} can't compile - blocked by opponent's effect.`);
         return newState;
     }
@@ -90,7 +89,6 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
 
     // Execute before_compile_delete effects
     for (const { card, owner } of customCardsWithBeforeDelete) {
-        console.log(`[before_compile_delete] Executing effect for custom card ${card.protocol}-${card.value}`);
         const reactiveResult = processReactiveEffects(newState, 'before_compile_delete', { player: owner, cardId: card.id });
         newState = reactiveResult.newState;
     }
@@ -247,7 +245,6 @@ export const selectHandCardForAction = (prevState: GameState, cardId: string): G
 
     // NEW: Validate that selected card is in the selectable list (for valueFilter effects like Clarity-2)
     if (selectableCardIds && !selectableCardIds.includes(cardId)) {
-        console.log(`[selectHandCardForAction] Card ${cardId} is not in selectableCardIds - ignoring selection`);
         return prevState;
     }
 

@@ -220,7 +220,6 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         }
     } else {
         // onCover added new actions, merge them
-        console.log('[DEBUG] playCard - Merging queuedActions: oldQueue:', oldQueue.length, 'coverQueue:', coverQueue.length);
         stateAfterMove.queuedActions = [...oldQueue, ...coverQueue];
     }
 
@@ -233,6 +232,8 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // IMPORTANT: Clear effect context before logging non-effect actions
     stateAfterMove = setLogSource(stateAfterMove, undefined);
     stateAfterMove = setLogPhase(stateAfterMove, undefined);
+    // CRITICAL: Reset log indent level for the play log - ensures it appears at level 0
+    stateAfterMove = { ...stateAfterMove, _logIndentLevel: 0 };
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     const protocolName = stateAfterMove[targetOwner].protocols[laneIndex];
@@ -311,7 +312,6 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 };
 
 export const performFillHand = (prevState: GameState, player: Player): GameState => {
-    console.log('[DEBUG performFillHand] Called for player:', player, 'Current hand length:', prevState[player].hand.length);
     // IMPORTANT: Clear effect context before filling hand at phase level
     // This is a phase action, not part of a card effect
     let newState = setLogSource(prevState, undefined);
@@ -319,7 +319,6 @@ export const performFillHand = (prevState: GameState, player: Player): GameState
     newState = { ...newState, _logIndentLevel: 0 };
 
     const result = refreshHandForPlayer(newState, player);
-    console.log('[DEBUG performFillHand] After refresh, hand length:', result[player].hand.length);
     return result;
 }
 

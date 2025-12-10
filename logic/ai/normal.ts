@@ -188,10 +188,8 @@ const getBestMove = (state: GameState): AIAction => {
     }
 
     if (controlHuntingMode) {
-        console.log(`[AI Normal] CONTROL HUNTING MODE: Player has ${playerCompiledCount} compiled, we lead ${lanesWeAreLead} lanes, need 2 for control`);
     }
     if (controlDefenseMode && playerThreateningWin) {
-        console.log(`[AI Normal] CONTROL DEFENSE MODE: We have control, player threatening win in lane ${playerThreateningLaneIndex}`);
     }
 
     // =========================================================================
@@ -285,7 +283,6 @@ const getBestMove = (state: GameState): AIAction => {
         laneScores.sort((a, b) => b.score - a.score);
         if (laneScores.length > 0) {
             focusLaneIndex = laneScores[0].laneIndex;
-            console.log(`[AI Normal] Focus lane: ${focusLaneIndex} (compiled: ${ourCompiledCount}) - ${laneScores[0].reason} [score: ${laneScores[0].score}]`);
         }
     }
 
@@ -811,7 +808,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // PRIORITY 1: Can we force a recompile instead of a winning compile?
             // Player has 10+ in uncompiled lane AND has compiled lanes to swap with
             if (playerThreateningLane !== -1 && playerCompiledLanes.length > 0) {
-                console.log(`[AI Control] BLOCKING WIN: Player threatening in lane ${playerThreateningLane}, swapping with compiled lane`);
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
@@ -888,7 +884,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
             const sourceCardId = action.sourceCardId;
 
-            console.log('[AI select_cards_to_delete] allowedIds:', allowedIds, 'ownerFilter:', targetFilter?.owner);
 
             // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
             // This handles custom effects like "Your opponent deletes 1 of their face-down cards"
@@ -929,7 +924,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (ownerFilter === 'own') {
                 // Delete own cards only (AI = opponent)
                 const ownCards = getUncovered('opponent').filter(c => !disallowedIds.includes(c.id));
-                console.log('[AI select_cards_to_delete] ownerFilter=own, ownCards:', ownCards.map(c => `${c.protocol}-${c.value}`));
                 if (ownCards.length > 0) {
                     // Delete lowest value card (minimize loss) - but if allowedIds is set, just pick from those
                     const weakest = ownCards.sort((a, b) => a.value - b.value)[0];
@@ -1077,7 +1071,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             // Check if enables compile
                             if (!isCompiled && laneValue + valueChange >= 10) {
                                 score += 200;
-                                console.log(`[AI Flip] Own ${card.protocol}-${card.value} flip enables COMPILE!`);
                             }
                         } else {
                             score = valueChange * 15 - 30;
@@ -1088,7 +1081,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             score = valueChange * 20 + 40;
                             if (!isCompiled && laneValue + valueChange >= 10) {
                                 score += 200;
-                                console.log(`[AI Flip] Own ${card.protocol}-${card.value} flip enables COMPILE!`);
                             }
                         } else {
                             score = -10;
@@ -1137,7 +1129,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // CRITICAL: Check if the effect FORCES face-down play (e.g., Darkness-3, Smoke-3)
             // effectInterpreter sends 'faceDown', not 'isFaceDown'
             const isForcedFaceDown = (action as any).faceDown === true;
-            console.log('[AI select_card_from_hand_to_play] faceDown:', (action as any).faceDown, 'isForcedFaceDown:', isForcedFaceDown);
 
             // NEW: Respect selectableCardIds filter (Clarity-2: only cards with specific value)
             const selectableCardIds = (action as any).selectableCardIds;
@@ -1651,14 +1642,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             scoredLanes.sort((a, b) => b.score - a.score);
 
             // Log decision
-            console.log(`[AI select_lane_for_return] Scoring:`);
             for (const sl of scoredLanes) {
-                console.log(`  ${sl.reason}`);
             }
 
             // Pick best lane (or least bad if all negative)
             if (scoredLanes.length > 0) {
-                console.log(`[AI select_lane_for_return] Choosing lane ${scoredLanes[0].laneIndex} with score ${scoredLanes[0].score}`);
                 return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
             }
             return { type: 'selectLane', laneIndex: 0 };
@@ -1718,7 +1706,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                                 // Flip PLAYER cards if it HURTS them (reduces their value)
                                 if (card.isFaceUp && currentValue > flippedValue) {
                                     hasBeneficialTarget = true;
-                                    console.log(`[AI Flip Decision] Found beneficial target: flip player's ${card.protocol}-${card.value} (${currentValue} -> ${flippedValue})`);
                                     break;
                                 }
                             } else {
@@ -1729,19 +1716,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                                 // SMART: Flip face-up to face-down if it GAINS value (e.g., 0 -> 2)
                                 if (card.isFaceUp && valueGain > 0) {
                                     hasBeneficialTarget = true;
-                                    console.log(`[AI Flip Decision] Found beneficial target: flip own ${card.protocol}-${card.value} face-up->down (+${valueGain} value)`);
                                     break;
                                 }
                                 // SMART: Flip face-down to face-up if real value > 2
                                 if (!card.isFaceUp && card.value > 2) {
                                     hasBeneficialTarget = true;
-                                    console.log(`[AI Flip Decision] Found beneficial target: flip own ${card.protocol}-${card.value} face-down->up (+${valueGain} value)`);
                                     break;
                                 }
                                 // CRITICAL: Check if flipping would enable COMPILE!
                                 if (valueGain > 0 && laneValue + valueGain >= 10 && !state.opponent.compiled[laneIdx]) {
                                     hasBeneficialTarget = true;
-                                    console.log(`[AI Flip Decision] COMPILE OPPORTUNITY: flip own ${card.protocol}-${card.value} enables compile! (${laneValue} + ${valueGain} = ${laneValue + valueGain})`);
                                     break;
                                 }
                             }
@@ -1889,7 +1873,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         if (gain > 0 && potentialValue >= 10) {
                             if (!bestCompileFlip || potentialValue > bestCompileFlip.newValue) {
                                 bestCompileFlip = { card, newValue: potentialValue, gain };
-                                console.log(`[AI Covered Flip] Found compile opportunity: ${card.protocol}-${card.value} (${card.isFaceUp ? 'face-up' : 'face-down'}) gain=${gain}, newValue=${potentialValue}`);
                             }
                         }
 
@@ -1901,13 +1884,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
                     // If we can compile, do it!
                     if (bestCompileFlip) {
-                        console.log(`[AI Covered Flip] COMPILE: Flipping ${bestCompileFlip.card.protocol}-${bestCompileFlip.card.value} for +${bestCompileFlip.gain} value -> ${bestCompileFlip.newValue}`);
                         return { type: 'flipCard', cardId: bestCompileFlip.card.id };
                     }
 
                     // If we can gain value and get closer to compile, do it
                     if (bestGainFlip && bestGainFlip.gain > 0) {
-                        console.log(`[AI Covered Flip] VALUE GAIN: Flipping ${bestGainFlip.card.protocol}-${bestGainFlip.card.value} for +${bestGainFlip.gain} value -> ${bestGainFlip.newValue}`);
                         return { type: 'flipCard', cardId: bestGainFlip.card.id };
                     }
                 }
@@ -2282,7 +2263,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             // Log for debugging
             if (restrictedLaneIndex !== undefined || scope === 'this_lane') {
-                console.log(`[AI select_card_to_flip] Lane restriction: ${restrictedLaneIndex}, scope: ${scope}`);
             }
 
             for (const playerKey of ['player', 'opponent'] as const) {
@@ -2354,7 +2334,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             // BONUS: Check if this enables compile
                             if (!isCompiled && laneValue + valueChange >= 10) {
                                 score += 200; // Huge bonus for enabling compile!
-                                console.log(`[AI Flip Score] Flip own ${card.protocol}-${card.value} face-up->down ENABLES COMPILE! (${laneValue} + ${valueChange} = ${laneValue + valueChange})`);
                             }
                         } else {
                             // We LOSE value - bad choice
@@ -2367,7 +2346,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             // BONUS: Check if this enables compile
                             if (!isCompiled && laneValue + valueChange >= 10) {
                                 score += 200;
-                                console.log(`[AI Flip Score] Flip own ${card.protocol}-${card.value} face-down->up ENABLES COMPILE! (${laneValue} + ${valueChange} = ${laneValue + valueChange})`);
                             }
                         } else {
                             // card.value <= 2, no gain or loss
@@ -2393,9 +2371,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_shift': {
             // Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            // CRITICAL: Check sourceLaneIndex (set by shiftExecutor) for scope: 'this_lane' restriction
-            const restrictedLaneIndex = (action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Only restrict lane if scope is explicitly 'this_lane'
             const scope = (action as any).scope;
+            const restrictedLaneIndex = scope === 'this_lane'
+                ? ((action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex)
+                : undefined;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;
             const validTargets: PlayedCard[] = [];
@@ -2410,7 +2390,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
                     // CRITICAL: If lane is restricted (this_lane scope), only check that lane!
                     if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
-                    if (scope === 'this_lane' && restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
 
                     const lane = state[playerKey].lanes[laneIdx];
                     for (let i = 0; i < lane.length; i++) {
@@ -2427,7 +2406,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (validTargets.length > 0) {
                 const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
-                return { type: 'deleteCard', cardId: randomTarget.id };
+                return { type: 'shiftCard', cardId: randomTarget.id };
             }
             return { type: 'skip' };
         }
@@ -2699,9 +2678,56 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'resolveCustomChoice', optionIndex: score0 >= score1 ? 0 : 1 };
         }
 
+        // =========================================================================
+        // SELECT PHASE EFFECT - Choose which Start/End effect to execute first
+        // =========================================================================
+        case 'select_phase_effect': {
+            const phaseAction = action as {
+                type: 'select_phase_effect';
+                phase: 'Start' | 'End';
+                availableEffects: Array<{ cardId: string; cardName: string; box: 'top' | 'bottom'; effectDescription: string }>;
+            };
+
+            if (phaseAction.availableEffects.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Normal AI: Score each effect and pick the best one
+            // For now, prioritize effects based on action type:
+            // 1. Draw effects (card advantage)
+            // 2. Delete effects (remove opponent cards)
+            // 3. Shift effects (positioning)
+            // 4. Flip effects
+            // 5. Other
+
+            const scoredEffects = phaseAction.availableEffects.map(effect => {
+                let score = 0;
+                const desc = effect.effectDescription.toLowerCase();
+
+                if (desc.includes('draw')) score += 100;
+                else if (desc.includes('delete')) score += 80;
+                else if (desc.includes('shift')) score += 60;
+                else if (desc.includes('flip')) score += 40;
+                else score += 20;
+
+                // Add some randomness (20% chance to pick suboptimally)
+                if (Math.random() < 0.2) {
+                    score = Math.random() * 50;
+                }
+
+                return { effect, score };
+            });
+
+            // Sort by score descending
+            scoredEffects.sort((a, b) => b.score - a.score);
+
+            const selectedEffect = scoredEffects[0].effect;
+
+            return { type: 'flipCard', cardId: selectedEffect.cardId };
+        }
+
         // Fallback for other actions - use simple random/first selection
         default: {
-            console.log('[AI DEFAULT] Unhandled action type:', action.type, 'optional:', (action as any).optional);
             // Generic handlers for unimplemented actions
             if ('optional' in action && action.optional) return { type: 'skip' };
 

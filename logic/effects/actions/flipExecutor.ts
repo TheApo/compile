@@ -26,8 +26,6 @@ export function executeFlipEffect(
 ): EffectResult {
     const { cardOwner } = context;
 
-    console.log('[DEBUG executeFlipEffect] Called with params:', JSON.stringify(params));
-    console.log('[DEBUG executeFlipEffect] card:', `${card.protocol}-${card.value}`, 'laneIndex:', laneIndex, 'cardOwner:', cardOwner);
 
     // NEW: Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
@@ -143,9 +141,6 @@ export function executeFlipEffect(
 
     // NEW: Flip self mode (Anarchy-6)
     if (params.flipSelf) {
-        console.log('[DEBUG executeFlipEffect] flipSelf mode - card:', `${card.protocol}-${card.value}`, 'laneIndex:', laneIndex, 'cardOwner:', cardOwner);
-        console.log('[DEBUG executeFlipEffect] Lanes:', state[cardOwner].lanes.map((l, i) => `Lane ${i}: ${l.map(c => c.id.substring(0, 8)).join(', ')}`));
-        console.log('[DEBUG executeFlipEffect] Looking for card.id:', card.id);
 
         // Check advanced conditional
         if (params.advancedConditional?.type === 'protocol_match') {
@@ -153,10 +148,8 @@ export function executeFlipEffect(
             const cardProtocol = state[cardOwner].protocols[laneIndex];
 
             if (cardProtocol !== requiredProtocol) {
-                console.log(`[Flip Effect] Protocol match failed: card is in ${cardProtocol} lane, requires ${requiredProtocol}. Skipping flip.`);
                 return { newState: state };
             }
-            console.log(`[Flip Effect] Protocol match success: card is in ${cardProtocol} lane (requires ${requiredProtocol}).`);
         }
 
         // NEW: Check opponent_higher_value_in_lane (Courage-6)
@@ -166,10 +159,8 @@ export function executeFlipEffect(
             const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
 
             if (oppValue <= ownValue) {
-                console.log(`[Flip Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping flip.`);
                 return { newState: state };
             }
-            console.log(`[Flip Effect] Opponent higher value check passed: own=${ownValue}, opponent=${oppValue}.`);
         }
 
         // Flip this card
@@ -177,16 +168,13 @@ export function executeFlipEffect(
         const lane = newState[cardOwner].lanes[laneIndex];
         const cardInLane = lane.find(c => c.id === card.id);
 
-        console.log('[DEBUG executeFlipEffect] cardInLane found?', !!cardInLane, 'lane length:', lane.length);
 
         if (cardInLane) {
             cardInLane.isFaceUp = !cardInLane.isFaceUp;
             const playerName = cardOwner === 'player' ? 'Player' : 'Opponent';
             const direction = cardInLane.isFaceUp ? 'face-up' : 'face-down';
             newState = log(newState, cardOwner, `${playerName} flips this card ${direction}.`);
-            console.log('[DEBUG executeFlipEffect] Flipped card to', direction);
         } else {
-            console.log('[DEBUG executeFlipEffect] Card NOT found in lane! Lane cards:', lane.map(c => c.id));
         }
 
         return { newState };

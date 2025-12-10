@@ -8,6 +8,5 @@
  * This function will handle the game action of rearranging protocols.
  */
 export function rearrange() {
-  console.log('Executing "rearrange" logic...');
   // Future implementation will go here.
 }

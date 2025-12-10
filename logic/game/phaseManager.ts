@@ -77,6 +77,8 @@ export const advancePhase = (state: GameState): GameState => {
             nextState = setLogSource(nextState, undefined);
             nextState = setLogPhase(nextState, undefined);
             nextState = { ...nextState, _logIndentLevel: 0 };
+            // Clear start phase snapshot when leaving start phase
+            nextState._startPhaseEffectSnapshot = undefined;
             return { ...nextState, phase: 'control' };
 
         case 'control': {
@@ -160,6 +162,8 @@ export const advancePhase = (state: GameState): GameState => {
         }
 
         case 'end': {
+            // Clear end phase snapshot at the beginning of end phase processing
+            // (it will be recreated if needed by executeEndPhaseEffects)
             const stateBeforeEffects = { ...nextState };
             nextState = executeEndPhaseEffects(nextState).newState;
 
@@ -206,6 +210,9 @@ export const advancePhase = (state: GameState): GameState => {
                 processedEndEffectIds: [],
                 processedSpeed1TriggerThisTurn: false,
                 processedUncoverEventIds: [],
+                // CRITICAL: Clear phase effect snapshots when starting a new turn
+                _startPhaseEffectSnapshot: undefined,
+                _endPhaseEffectSnapshot: undefined,
                 // CRITICAL: Clear interrupt state when starting a new turn
                 _interruptedTurn: undefined,
                 _interruptedPhase: undefined,
@@ -329,7 +336,7 @@ export const processQueuedActions = (state: GameState): GameState => {
         // GENERIC: Auto-resolve execute_follow_up_effect actions (Speed-3 "If you do, flip this card")
         // This handles conditional effects that were queued because an interrupt (uncover) occurred
         if (nextAction.type === 'execute_follow_up_effect') {
-            const { sourceCardId, followUpEffect, actor } = nextAction as any;
+            const { sourceCardId, followUpEffect, actor, logContext } = nextAction as any;
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
@@ -343,7 +350,19 @@ export const processQueuedActions = (state: GameState): GameState => {
                     currentTurn: mutableState.turn,
                     opponent: (sourceCardInfo.owner === 'player' ? 'opponent' : 'player') as Player,
                 };
-                console.log(`[execute_follow_up_effect] Executing queued followUpEffect: ${followUpEffect.id} for ${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`);
+
+                // CRITICAL: Restore log context so followUp appears indented under original effect
+                // Use sourceCardName from logContext, with fallback to sourceCardInfo
+                const cardName = (logContext?.sourceCardName) || `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                // Determine phase context - use logContext.phase, fallback to current game phase
+                const phaseContext = logContext?.phase || (mutableState.phase === 'start' ? 'start' : 'end');
+                mutableState = {
+                    ...mutableState,
+                    _logIndentLevel: logContext?.indentLevel || 1,
+                    _currentEffectSource: cardName,
+                    _currentPhaseContext: phaseContext as 'start' | 'end',
+                };
+
                 const result = executeCustomEffect(sourceCardInfo.card, laneIdx, mutableState, context, followUpEffect);
                 mutableState = result.newState;
 
@@ -365,7 +384,6 @@ export const processQueuedActions = (state: GameState): GameState => {
         // Internal queue action type for executing remaining custom effects
         if ((nextAction as any).type === 'execute_remaining_custom_effects') {
             const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
-            console.log(`[DEBUG execute_remaining_custom_effects] Processing queue action with ${effects?.length} effects:`, effects?.map((e: any) => e.id));
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
 
             // CRITICAL: Check if source card still exists and is active
@@ -399,14 +417,12 @@ export const processQueuedActions = (state: GameState): GameState => {
             // Execute remaining effects sequentially
             for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
                 const effectDef = effects[effectIndex];
-                console.log(`[DEBUG execute_remaining_custom_effects] Executing effect ${effectIndex}: ${effectDef.id} (${effectDef.params?.action})`);
                 const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
                 mutableState = result.newState;
 
                 // CRITICAL: If this effect has animations AND no actionRequired, show them
                 // But if actionRequired is set, prioritize it over animations
                 if (result.animationRequests && result.animationRequests.length > 0 && !mutableState.actionRequired) {
-                    console.log(`[execute_remaining_custom_effects] Effect ${effectIndex + 1} has ${result.animationRequests.length} animations - stopping to show them`);
 
                     const remainingEffects = effects.slice(effectIndex + 1);
 
@@ -459,7 +475,6 @@ export const processQueuedActions = (state: GameState): GameState => {
 
                     // CRITICAL: Save remaining effects to be executed after this action completes
                     if (remainingEffects.length > 0) {
-                        console.log(`[processQueuedActions] Stopping at effect ${effectIndex + 1}/${effects.length}, ${remainingEffects.length} effects remaining`);
                         (mutableState as any)._pendingCustomEffects = {
                             sourceCardId,
                             laneIndex,
@@ -510,7 +525,6 @@ export const processQueuedActions = (state: GameState): GameState => {
         // GENERIC: Auto-resolve pending_uncover_effect actions (bulk delete uncovered multiple cards)
         if (nextAction.type === 'pending_uncover_effect') {
             const { owner, laneIndex } = nextAction as any;
-            console.log(`[pending_uncover_effect] Processing uncover for ${owner} in lane ${laneIndex}`);
 
             const uncoverResult = handleUncoverEffect(mutableState, owner, laneIndex);
             mutableState = uncoverResult.newState;
@@ -603,6 +617,9 @@ export const processEndOfAction = (state: GameState): GameState => {
                     processedEndEffectIds: [],
                     processedSpeed1TriggerThisTurn: false,
                     processedUncoverEventIds: [],
+                    // CRITICAL: Clear phase effect snapshots when starting a new turn
+                    _startPhaseEffectSnapshot: undefined,
+                    _endPhaseEffectSnapshot: undefined,
                     // CRITICAL: Clear interrupt state when starting a new turn
                     _interruptedTurn: undefined,
                     _interruptedPhase: undefined,
@@ -620,8 +637,6 @@ export const processEndOfAction = (state: GameState): GameState => {
 
     // If the original action that caused the control prompt is stored, execute it now.
     if (state.actionRequired?.type === 'prompt_rearrange_protocols' && state.actionRequired.originalAction) {
-        console.log('[DEBUG processEndOfAction] FALLBACK HANDLER TRIGGERED - This should NOT happen if resolveRearrangeProtocols was called!');
-        console.log('[DEBUG processEndOfAction] originalAction:', state.actionRequired.originalAction);
         const originalAction = state.actionRequired.originalAction;
         let stateAfterRearrange = { ...state, actionRequired: null, controlCardHolder: null }; // Reset control
 
@@ -633,9 +648,7 @@ export const processEndOfAction = (state: GameState): GameState => {
         } else if (originalAction.type === 'fill_hand') {
             // Re-trigger the fill hand logic
             // FIX: Access hand.length to get the number of cards, not length on the PlayerState object.
-            console.log('[DEBUG processEndOfAction] Using fallback drawForPlayer, hand before:', stateAfterRearrange[stateAfterRearrange.turn].hand.length);
             const stateAfterFill = drawForPlayer(stateAfterRearrange, stateAfterRearrange.turn, 5 - stateAfterRearrange[stateAfterRearrange.turn].hand.length);
-            console.log('[DEBUG processEndOfAction] After fallback drawForPlayer, hand:', stateAfterFill[stateAfterFill.turn].hand.length);
             return continueTurnProgression(stateAfterFill);
         }
     }
@@ -849,7 +862,6 @@ export const continueTurnProgression = (state: GameState): GameState => {
 };
 
 export const continueTurnAfterStartPhaseAction = (state: GameState): GameState => {
-    console.log('[continueTurnAfterStartPhaseAction] Called with phase:', state.phase, 'turn:', state.turn);
     // The previous action has been resolved, clear it.
     let stateAfterAction = { ...state, actionRequired: null };
 
@@ -858,10 +870,8 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     // is queued in queuedActions after the first flip completes during start phase.
     // Without this, the queued actions would be lost and cause a softlock.
     if (stateAfterAction.queuedActions && stateAfterAction.queuedActions.length > 0) {
-        console.log('[continueTurnAfterStartPhaseAction] Processing queuedActions:', stateAfterAction.queuedActions.length);
         const stateAfterQueue = processQueuedActions(stateAfterAction);
         if (stateAfterQueue.actionRequired) {
-            console.log('[continueTurnAfterStartPhaseAction] queuedActions created actionRequired:', stateAfterQueue.actionRequired.type);
             return stateAfterQueue;
         }
         stateAfterAction = stateAfterQueue;
@@ -870,12 +880,10 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     // Now, re-evaluate the start phase to see if there are other start effects to process.
     // The `processedStartEffectIds` will prevent the same effect from running again.
     const stateAfterRecheck = executeStartPhaseEffects(stateAfterAction).newState;
-    console.log('[continueTurnAfterStartPhaseAction] After executeStartPhaseEffects, actionRequired:', stateAfterRecheck.actionRequired?.type);
 
     // If re-checking triggered another prompt (e.g., a second start-phase card),
     // then return the state immediately and wait for the new action.
     if (stateAfterRecheck.actionRequired) {
-        console.log('[continueTurnAfterStartPhaseAction] Returning early due to actionRequired');
         return stateAfterRecheck;
     }
 
@@ -885,14 +893,11 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     if (nextState.phase !== 'control') {
         nextState = { ...nextState, phase: 'control' };
     }
-    console.log('[continueTurnAfterStartPhaseAction] Phase set to control, advancing...');
 
     nextState = advancePhase(nextState); // -> compile
-    console.log('[continueTurnAfterStartPhaseAction] After first advancePhase, phase:', nextState.phase, 'actionRequired:', nextState.actionRequired?.type);
     if(nextState.actionRequired) return nextState;
 
     nextState = advancePhase(nextState); // -> action OR stays in compile if compilableLanes > 0
-    console.log('[continueTurnAfterStartPhaseAction] After second advancePhase, phase:', nextState.phase, 'turn:', nextState.turn);
     return nextState;
 };
 

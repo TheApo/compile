@@ -30,7 +30,6 @@ export function executeShiftEffect(
     // Advanced Conditional Checks - skip effect if condition not met
     if (params.advancedConditional?.type === 'empty_hand') {
         if (state[cardOwner].hand.length > 0) {
-            console.log(`[Shift Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping shift.`);
             return { newState: state };
         }
     }
@@ -39,7 +38,6 @@ export function executeShiftEffect(
         const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
         const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
         if (oppValue <= ownValue) {
-            console.log(`[Shift Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping shift.`);
             return { newState: state };
         }
     }
@@ -59,20 +57,14 @@ export function executeShiftEffect(
         }
 
         if (!isCardCovered) {
-            console.log(`[Shift Effect] this_card_is_covered check failed: card is not covered. Skipping shift.`);
             return { newState: state };
         }
-        console.log(`[Shift Effect] this_card_is_covered check passed: card is covered.`);
     }
 
-    console.log(`[DEBUG executeShiftEffect] Called for ${card.protocol}-${card.value}`);
-    console.log(`[DEBUG executeShiftEffect] params.useCardFromPreviousEffect: ${params.useCardFromPreviousEffect}`);
-    console.log(`[DEBUG executeShiftEffect] state.lastCustomEffectTargetCardId: ${state.lastCustomEffectTargetCardId}`);
 
     // NEW: Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
     if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
-        console.log(`[DEBUG executeShiftEffect] TAKING lastCustomEffectTargetCardId PATH!`);
         const targetCardId = state.lastCustomEffectTargetCardId;
         const targetCardInfo = findCardOnBoard(state, targetCardId);
 
@@ -96,7 +88,6 @@ export function executeShiftEffect(
             }
 
             // Execute shift immediately
-            console.log(`[Custom Shift with useCardFromPreviousEffect] Executing immediate shift to lane ${resolvedTargetLane}`);
             const shiftResult = internalShiftCard(state, targetCardId, targetCardInfo.owner, resolvedTargetLane, cardOwner);
 
             return {
@@ -171,7 +162,6 @@ export function executeShiftEffect(
             // CRITICAL: Execute shift IMMEDIATELY like Original Gravity-2 (no user interaction)
             // Original Gravity-2 shifts immediately when no interrupt, only queues on interrupt
             // Since we're in execute_remaining_custom_effects, no actionRequired is set, so shift immediately
-            console.log(`[Custom Shift] Executing immediate shift to lane ${resolvedTargetLane}`);
             const shiftResult = internalShiftCard(newState, selectedCardId, selectedCardInfo.owner, resolvedTargetLane, cardOwner);
 
             // CRITICAL: Return animation requests for shift animation!
@@ -195,7 +185,6 @@ export function executeShiftEffect(
     // NEW: shiftSelf parameter - this card shifts itself (Speed-2, Spirit-3, Courage-3)
     // This bypasses all target filtering and directly shifts the source card
     if (params.shiftSelf) {
-        console.log('[DEBUG shiftExecutor] shiftSelf path - creating actionRequired');
 
         // Handle opponent_highest_value_lane destination (Courage-3)
         if (params.destinationRestriction?.type === 'opponent_highest_value_lane') {
@@ -235,7 +224,6 @@ export function executeShiftEffect(
 
                 // Auto-shift to the only valid lane
                 const targetLane = filteredLanes[0];
-                console.log(`[Shift Effect] Auto-shifting to opponent's highest value lane: ${targetLane}`);
                 const shiftResult = internalShiftCard(newState, card.id, cardOwner, targetLane, cardOwner);
                 return { newState: shiftResult.newState, animationRequests: shiftResult.animationRequests };
             }
@@ -264,7 +252,6 @@ export function executeShiftEffect(
             actor: cardOwner,
             allowCovered: params.allowCoveredSelf || false,  // Speed-2: can shift even if covered
         } as any;
-        console.log('[DEBUG shiftExecutor] Created actionRequired:', JSON.stringify(newState.actionRequired, null, 2));
         return { newState };
     }
 
@@ -295,8 +282,6 @@ export function executeShiftEffect(
     // Collect all potential target cards based on filters
     const potentialTargets: Array<{ card: PlayedCard, currentLane: number, owner: 'player' | 'opponent' }> = [];
 
-    console.log(`[Shift Effect DEBUG] cardOwner: ${cardOwner}, ownerFilter: ${ownerFilter}, position: ${position}, faceState: ${faceState}, excludeSelf: ${excludeSelf}`);
-    console.log(`[Shift Effect DEBUG] Source card: ${card.protocol}-${card.value} (id: ${card.id})`);
 
     for (const player of ['player', 'opponent'] as const) {
         // Skip if owner filter doesn't match
@@ -326,13 +311,11 @@ export function executeShiftEffect(
                 if (faceState === 'face_up' && !targetCard.isFaceUp) continue;
                 if (faceState === 'face_down' && targetCard.isFaceUp) continue;
 
-                console.log(`[Shift Effect DEBUG] Found potential target: ${targetCard.protocol}-${targetCard.value} in lane ${i} (owner: ${player})`);
                 potentialTargets.push({ card: targetCard, currentLane: i, owner: player });
             }
         }
     }
 
-    console.log(`[Shift Effect DEBUG] Total potential targets: ${potentialTargets.length}`);
 
     if (potentialTargets.length === 0) {
         newState = log(newState, cardOwner, `No valid cards to shift.`);

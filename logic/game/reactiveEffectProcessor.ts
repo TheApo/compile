@@ -28,7 +28,6 @@ export function processReactiveEffects(
     // IMPORTANT: Prevent recursive reactive effect triggering
     // If we're already processing reactive effects, don't trigger new ones
     if ((newState as any)._processingReactiveEffects) {
-        console.log(`[Reactive Effects] Already processing reactive effects, skipping ${triggerType}`);
         return { newState };
     }
 
@@ -70,7 +69,6 @@ export function processReactiveEffects(
                 if (customCard.customEffects.topEffects && hasMatchingTrigger(customCard.customEffects.topEffects)) {
                     // CRITICAL: Skip if this card already triggered for certain trigger types this turn
                     if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
-                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache - already triggered this turn`);
                         return;
                     }
                     reactiveCards.push({ card, owner: player, laneIndex, box: 'top' });
@@ -79,19 +77,25 @@ export function processReactiveEffects(
                 // Rule: Middle box effects are active if the card is face-up, even if covered
                 if (customCard.customEffects.middleEffects && hasMatchingTrigger(customCard.customEffects.middleEffects)) {
                     if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
-                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache (middle) - already triggered this turn`);
                         return;
                     }
                     reactiveCards.push({ card, owner: player, laneIndex, box: 'middle' });
                 }
 
                 // Rule: Bottom box effects are ONLY active if the card is face-up AND uncovered
-                if (isUncovered && customCard.customEffects.bottomEffects && hasMatchingTrigger(customCard.customEffects.bottomEffects)) {
-                    if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
-                        console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} after_clear_cache (bottom) - already triggered this turn`);
-                        return;
+                // CRITICAL: Skip 'on_cover' trigger for bottom effects - these are handled by executeOnCoverEffect
+                // processReactiveEffects should only handle REACTIVE triggers (on_cover_or_flip, after_draw, etc.)
+                if (isUncovered && customCard.customEffects.bottomEffects) {
+                    // Filter out pure 'on_cover' effects - they're handled by executeOnCoverEffect in playResolver
+                    const reactiveBottomEffects = customCard.customEffects.bottomEffects.filter((e: any) =>
+                        e.trigger !== 'on_cover'
+                    );
+                    if (reactiveBottomEffects.length > 0 && hasMatchingTrigger(reactiveBottomEffects)) {
+                        if (triggerType === 'after_clear_cache' && processedClearCacheTriggerIds.includes(card.id)) {
+                            return;
+                        }
+                        reactiveCards.push({ card, owner: player, laneIndex, box: 'bottom' });
                     }
-                    reactiveCards.push({ card, owner: player, laneIndex, box: 'bottom' });
                 }
             });
         });
@@ -104,7 +108,6 @@ export function processReactiveEffects(
         return { newState };
     }
 
-    console.log(`[Reactive Effects] Found ${reactiveCards.length} card(s) with ${triggerType} trigger`);
 
     // Execute all matching reactive effects
     for (const { card, owner, laneIndex, box } of reactiveCards) {
@@ -114,7 +117,6 @@ export function processReactiveEffects(
         const cardStillExists = cardIndex !== undefined && cardIndex !== -1 && currentLane[cardIndex]?.isFaceUp;
 
         if (!cardStillExists) {
-            console.log(`[Reactive Effects] Card ${card.protocol}-${card.value} no longer face-up, skipping`);
             continue;
         }
 
@@ -122,7 +124,6 @@ export function processReactiveEffects(
         if (box === 'bottom') {
             const isStillUncovered = cardIndex === currentLane.length - 1;
             if (!isStillUncovered) {
-                console.log(`[Reactive Effects] Card ${card.protocol}-${card.value} no longer uncovered (bottom effect), skipping`);
                 continue;
             }
         }
@@ -179,7 +180,6 @@ export function processReactiveEffects(
             // The card should trigger if its owner IS context.player (they are the opponent of the discarder)
             if (triggerType === 'after_opponent_discard') {
                 if (context.player !== owner) {
-                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - card owner (${owner}) is not the opponent of discarder (${context.player})`);
                     return false;
                 }
                 return true;
@@ -189,13 +189,11 @@ export function processReactiveEffects(
             if (triggerActor === 'self') {
                 // Only trigger if card owner performed the action
                 if (context.player !== owner) {
-                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - triggerActor=self, but triggered by ${context.player} (owner: ${owner})`);
                     return false;
                 }
             } else if (triggerActor === 'opponent') {
                 // Only trigger if opponent performed the action
                 if (context.player === owner) {
-                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - triggerActor=opponent, but triggered by ${context.player} (owner: ${owner})`);
                     return false;
                 }
             }
@@ -206,7 +204,6 @@ export function processReactiveEffects(
             if (reactiveScope === 'this_lane' && context?.laneIndex !== undefined) {
                 // Only trigger if the event happened in the same lane as this card
                 if (laneIndex !== context.laneIndex) {
-                    console.log(`[Reactive Effects] Skipping ${card.protocol}-${card.value} ${triggerType} - reactiveScope=this_lane, event in lane ${context.laneIndex}, card in lane ${laneIndex}`);
                     return false;
                 }
             }
@@ -239,7 +236,6 @@ export function processReactiveEffects(
         if (triggerType === 'after_clear_cache') {
             const currentProcessedIds = (newState as any).processedClearCacheTriggerIds || [];
             (newState as any).processedClearCacheTriggerIds = [...currentProcessedIds, card.id];
-            console.log(`[Reactive Effects] Marked ${cardName} as processed for after_clear_cache`);
         }
         // NOTE: after_draw triggers are NOT marked as processed!
         // Spirit-3 should be able to trigger on every separate draw event.
@@ -251,13 +247,11 @@ export function processReactiveEffects(
 
             // If an action is required, stop and return
             if (newState.actionRequired) {
-                console.log(`[Reactive Effects] Action required after ${cardName} reactive effect`);
 
                 // CRITICAL: If there are pending effects from the original card (e.g., Darkness-0 shift
                 // being interrupted by Spirit-3 after_draw), queue them to execute after the reactive prompt
                 const pendingEffects = (newState as any)._pendingCustomEffects;
                 if (pendingEffects && pendingEffects.effects.length > 0) {
-                    console.log(`[Reactive Effects] Queueing ${pendingEffects.effects.length} pending effects from original card`);
                     const pendingAction: any = {
                         type: 'execute_remaining_custom_effects',
                         sourceCardId: pendingEffects.sourceCardId,

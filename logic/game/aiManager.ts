@@ -174,7 +174,6 @@ export const resolveRequiredOpponentAction = (
                     const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
                     if (shouldExecute) {
-                        console.log(`[AI Interrupt discard_completed] Executing follow-up effect, discardedCount: ${discardedCount}`);
 
                         let laneIndex = -1;
                         for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
@@ -232,11 +231,8 @@ export const resolveRequiredOpponentAction = (
                 trackPlayerRearrange(action.actor);
             }
 
-            console.log('[DEBUG aiManager] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
             const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-            console.log('[DEBUG aiManager] After resolveRearrangeProtocols, actor hand:', newState[action.actor].hand.length);
             const finalState = endActionForPhase(newState, phaseManager);
-            console.log('[DEBUG aiManager] After endActionForPhase, actor hand:', finalState[action.actor].hand.length);
             return finalState;
         }
 
@@ -247,7 +243,6 @@ export const resolveRequiredOpponentAction = (
 
         // GENERIC: Handle ALL optional effect prompts (Spirit-2, Spirit-3, etc. during interrupts)
         if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_effect') {
-            console.log('[AI resolveRequiredOpponentAction] resolveOptionalEffectPrompt accept:', aiDecision.accept);
             const nextState = resolvers.resolveOptionalEffectPrompt(state, aiDecision.accept);
             if (nextState.actionRequired) return nextState; // New action created, re-run processor
             return endActionForPhase(nextState, phaseManager);
@@ -310,7 +305,7 @@ export const resolveRequiredOpponentAction = (
             return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, false);
         }
 
-        console.warn(`AI has no logic for mandatory action during player turn, clearing it: ${action.type}`);
+        console.warn(`AI has no logic for mandatory action during player turn, clearing it: ${action.type}, aiDecision: ${JSON.stringify(aiDecision)}`);
         const stateWithClearedAction = { ...state, actionRequired: null };
         return endActionForPhase(stateWithClearedAction, phaseManager);
     });
@@ -341,7 +336,6 @@ const handleRequiredAction = (
                 const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
                 if (shouldExecute) {
-                    console.log(`[AI runOpponentTurn discard_completed] Executing follow-up effect, discardedCount: ${discardedCount}`);
 
                     let laneIndex = -1;
                     for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
@@ -373,22 +367,17 @@ const handleRequiredAction = (
     const aiDecision = getAIAction(state, state.actionRequired, difficulty);
 
     if (aiDecision.type === 'skip') {
-        console.log('[AI SKIP] Skipping action, phase:', state.phase, 'turn:', state.turn);
         const newState = actions.skipAction(state);
         const stateAfterSkip = state.phase === 'start' ? phaseManager.continueTurnAfterStartPhaseAction(newState) : phaseManager.processEndOfAction(newState);
-        console.log('[AI SKIP] After skip processing, phase:', stateAfterSkip.phase, 'turn:', stateAfterSkip.turn, 'actionRequired:', stateAfterSkip.actionRequired?.type);
 
         // CRITICAL FIX: After skipping a start-phase action, the turn should continue!
         // If there's no actionRequired and it's still opponent's turn, we need to continue processing.
         // Schedule a recursive call to runOpponentTurn to handle the next phase (action/compile).
         if (!stateAfterSkip.actionRequired && stateAfterSkip.turn === 'opponent' && !stateAfterSkip.winner) {
-            console.log('[AI SKIP] Scheduling runOpponentTurn continuation in 500ms');
             setTimeout(() => {
-                console.log('[AI SKIP] Running scheduled runOpponentTurn');
                 runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
             }, 500);
         } else {
-            console.log('[AI SKIP] NOT scheduling continuation - actionRequired:', !!stateAfterSkip.actionRequired, 'turn:', stateAfterSkip.turn, 'winner:', !!stateAfterSkip.winner);
         }
         return stateAfterSkip;
     }
@@ -451,7 +440,6 @@ const handleRequiredAction = (
 
     // GENERIC: Handle ALL optional effect prompts
     if (aiDecision.type === 'resolveOptionalEffectPrompt') {
-        console.log('[AI resolveOptionalEffectPrompt] accept:', aiDecision.accept, 'phase:', state.phase);
         const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action created, re-run processor
         // Use endActionForPhase which correctly handles both start and action phases
@@ -503,11 +491,8 @@ const handleRequiredAction = (
             trackPlayerRearrange(action.actor);
         }
 
-        console.log('[DEBUG aiManager 2] Before resolveRearrangeProtocols, actor hand:', state[action.actor].hand.length);
         const nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-        console.log('[DEBUG aiManager 2] After resolveRearrangeProtocols, actor hand:', nextState[action.actor].hand.length);
         const finalState = endActionForPhase(nextState, phaseManager);
-        console.log('[DEBUG aiManager 2] After endActionForPhase, actor hand:', finalState[action.actor].hand.length);
         return finalState;
     }
 
@@ -643,11 +628,8 @@ export const runOpponentTurn = (
     phaseManager: PhaseManager,
     trackPlayerRearrange?: TrackPlayerRearrange
 ) => {
-    console.log('[runOpponentTurn] Called with currentGameState phase:', currentGameState.phase, 'turn:', currentGameState.turn);
     setGameState(currentState => {
-        console.log('[runOpponentTurn] Inside setGameState, currentState phase:', currentState.phase, 'turn:', currentState.turn, 'actionRequired:', currentState.actionRequired?.type);
         if (currentState.turn !== 'opponent' || currentState.winner || currentState.animationState) {
-            console.log('[runOpponentTurn] Early return - turn:', currentState.turn, 'winner:', !!currentState.winner, 'animationState:', !!currentState.animationState);
             return currentState;
         }
 

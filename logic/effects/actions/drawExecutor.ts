@@ -53,7 +53,6 @@ export function executeDrawEffect(
     // NEW: Check if player can draw (Ice-6: block_draw_conditional)
     const drawCheck = canPlayerDraw(state, drawingPlayer);
     if (!drawCheck.allowed) {
-        console.log(`[Draw Effect] ${drawCheck.reason}. Skipping draw for ${drawingPlayer}.`);
         let newState = log(state, cardOwner, drawCheck.reason || 'Cannot draw cards.');
         return { newState };
     }
@@ -83,7 +82,6 @@ export function executeDrawEffect(
                         dynamicCount++;
                     }
                 }
-                console.log(`[Draw Effect] non_matching_protocols: ${dynamicCount} lanes have non-matching face-up cards`);
                 break;
             }
 
@@ -96,7 +94,6 @@ export function executeDrawEffect(
                     }
                 }
                 dynamicCount = totalFaceDown;
-                console.log(`[Draw Effect] count_face_down: ${dynamicCount} face-down cards on entire board`);
                 break;
             }
 
@@ -107,7 +104,6 @@ export function executeDrawEffect(
                 const lane = state[cardOwner].lanes[laneIndex];
                 const isCovering = lane.length > 1;
                 dynamicCount = isCovering ? (params.count || 1) : 0;
-                console.log(`[Draw Effect] is_covering: ${isCovering ? 'yes' : 'no'} (lane has ${lane.length} cards)`);
                 break;
             }
         }
@@ -116,7 +112,6 @@ export function executeDrawEffect(
         let count = dynamicCount;
 
         if (count <= 0) {
-            console.log(`[Draw Effect] Conditional count is ${count}, skipping draw`);
             return { newState: state };
         }
 
@@ -177,30 +172,22 @@ export function executeDrawEffect(
             // Light-0: "Flip 1 card. Draw cards equal to that card's value"
             // Use lastCustomEffectTargetCardId from state (set by previous effect)
             const targetCardId = state.lastCustomEffectTargetCardId;
-            console.log(`[Draw Effect - Light-0 DEBUG] Starting equal_to_card_value check`);
-            console.log(`[Draw Effect - Light-0 DEBUG] lastCustomEffectTargetCardId: ${targetCardId}`);
-            console.log(`[Draw Effect - Light-0 DEBUG] Full state keys:`, Object.keys(state));
-            console.log(`[Draw Effect - Light-0 DEBUG] actionRequired:`, state.actionRequired?.type);
 
             if (targetCardId) {
                 const targetCardInfo = findCardOnBoard(state, targetCardId);
-                console.log(`[Draw Effect - Light-0 DEBUG] findCardOnBoard result:`, targetCardInfo ? `${targetCardInfo.card.protocol}-${targetCardInfo.card.value}` : 'null');
 
                 if (targetCardInfo) {
                     const targetOwner = targetCardInfo.owner;
                     const laneContext = state[targetOwner].lanes.find(l => l.some(c => c.id === targetCardId)) || [];
                     count = getEffectiveCardValue(targetCardInfo.card, laneContext);
-                    console.log(`[Draw Effect] Using referenced card value: ${count} from card ${targetCardInfo.card.protocol}-${targetCardInfo.card.value}`);
                 } else {
                     // Card was removed from board (e.g., Water-4 returned to hand after flip)
                     count = 0;
                     let newState = log(state, cardOwner, `Cannot draw cards - referenced card is no longer on board (was returned/deleted).`);
-                    console.log(`[Draw Effect] Referenced card not found on board - was likely returned/deleted by its own effect. Skipping draw.`);
                     return { newState };
                 }
             } else {
                 count = context.referencedCardValue || 0;
-                console.log(`[Draw Effect - Light-0 DEBUG] No lastCustomEffectTargetCardId, using context.referencedCardValue: ${count}`);
             }
             break;
         }
@@ -208,7 +195,6 @@ export function executeDrawEffect(
         case 'equal_to_discarded':
             // Fire-4: "Discard 1 or more cards. Draw the amount discarded plus 1"
             count = (context.discardedCount || 0) + (params.countOffset || 0);
-            console.log(`[Draw Effect] Using discarded count: ${context.discardedCount} + offset ${params.countOffset} = ${count}`);
             break;
 
         case 'hand_size':
@@ -216,7 +202,6 @@ export function executeDrawEffect(
             // Chaos-4 End: "Discard your hand. Draw the same amount of cards"
             // Use previousHandSize from the discard action if available
             count = (context as any).previousHandSize || context.handSize || 0;
-            console.log(`[Draw Effect] Using previous hand size: ${count}`);
             break;
 
         case 'count_face_down': {
@@ -229,7 +214,6 @@ export function executeDrawEffect(
                 }
             }
             count = totalFaceDown * (params.count || 1);
-            console.log(`[Draw Effect] count_face_down: ${totalFaceDown} face-down cards on board, drawing ${count} cards`);
             break;
         }
 
@@ -240,9 +224,7 @@ export function executeDrawEffect(
                 const targetValue = params.valueFilter.equals;
                 const matchingCardsInDeck = state[drawingPlayer].deck.filter(c => c.value === targetValue);
                 count = matchingCardsInDeck.length;
-                console.log(`[Draw Effect] all_matching: ${count} cards with value ${targetValue} in deck`);
             } else {
-                console.log(`[Draw Effect] all_matching: No valueFilter specified, defaulting to 0`);
                 count = 0;
             }
             break;
@@ -257,8 +239,6 @@ export function executeDrawEffect(
 
     // Prevent drawing 0 or negative cards
     if (count <= 0) {
-        console.log(`[Draw Effect] Count is ${count}, skipping draw`);
-        console.log(`[Draw Effect DEBUG] Returning state - turn: ${state.turn}, phase: ${state.phase}, actionRequired: ${state.actionRequired?.type || 'null'}`);
         return { newState: state };
     }
 
@@ -268,19 +248,15 @@ export function executeDrawEffect(
         const cardProtocol = state[cardOwner].protocols[laneIndex];
 
         if (cardProtocol !== requiredProtocol) {
-            console.log(`[Draw Effect] Protocol match failed: card is in ${cardProtocol} lane, requires ${requiredProtocol}. Skipping draw.`);
             return { newState: state };
         }
-        console.log(`[Draw Effect] Protocol match success: card is in ${cardProtocol} lane (requires ${requiredProtocol}).`);
     }
 
     // NEW: Advanced Conditional - Empty Hand (Courage-0)
     if (params.advancedConditional?.type === 'empty_hand') {
         if (state[drawingPlayer].hand.length > 0) {
-            console.log(`[Draw Effect] Empty hand check failed: ${state[drawingPlayer].hand.length} cards in hand. Skipping draw.`);
             return { newState: state };
         }
-        console.log(`[Draw Effect] Empty hand check passed: hand is empty.`);
     }
 
     // NEW: Advanced Conditional - Opponent Higher Value in Lane (Courage-2)
@@ -290,10 +266,8 @@ export function executeDrawEffect(
         const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
 
         if (oppValue <= ownValue) {
-            console.log(`[Draw Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping draw.`);
             return { newState: state };
         }
-        console.log(`[Draw Effect] Opponent higher value check passed: own=${ownValue}, opponent=${oppValue}.`);
     }
 
     // NEW: Advanced Conditional - Compile Block (Metal-1)
@@ -309,13 +283,11 @@ export function executeDrawEffect(
             compileBlockedPlayer: opponent,
         } as any;
 
-        console.log(`[Draw Effect] Opponent's compile blocked for ${duration} turn(s).`);
         newState = log(newState, cardOwner, `Opponent can't compile for ${duration} turn${duration !== 1 ? 's' : ''}.`);
     }
 
     // NEW: Handle optional draw (Death-1: "You may draw 1 card")
     if (params.optional) {
-        console.log('[Draw Effect] Creating prompt_optional_draw for optional draw, card:', card.protocol, '-', card.value);
         newState.actionRequired = {
             type: 'prompt_optional_draw',
             sourceCardId: card.id,
@@ -355,7 +327,6 @@ export function executeDrawEffect(
         drawnCards = [...newState[drawingPlayer].hand, ...newCards];
         remainingDeck = nonMatchingCards;
 
-        console.log(`[Draw Effect] all_matching: Extracted ${newCards.length} cards with value ${targetValue}`);
     } else if (params.valueFilter?.equals !== undefined && params.fromRevealed) {
         // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
         // Player must SELECT from the revealed deck - ALWAYS show modal so player can see the deck
@@ -370,7 +341,6 @@ export function executeDrawEffect(
             const cardName = `${card.protocol}-${card.value}`;
             newState = log(newState, drawingPlayer, `${cardName}: No cards with value ${targetValue} in deck.`);
             // Don't return - fall through to let the effect chain continue
-            console.log(`[Draw Effect] fromRevealed: No matching cards, continuing with effect chain`);
         } else {
             // 1 or more options - ALWAYS show modal so player can see the revealed deck
             newState.actionRequired = {
@@ -383,7 +353,6 @@ export function executeDrawEffect(
                 selectableCardIds: matchingCards.map((c: any) => c.id || `deck-${deck.indexOf(c)}`), // IDs of selectable cards
             } as any;
 
-            console.log(`[Draw Effect] fromRevealed: Prompting player to select ${count} card(s) with value ${targetValue} from ${matchingCards.length} options`);
             return { newState };
         }
     } else if (params.valueFilter?.equals !== undefined) {
@@ -413,7 +382,6 @@ export function executeDrawEffect(
         drawnCards = [...newState[drawingPlayer].hand, ...newCards];
         remainingDeck = remainingCards;
 
-        console.log(`[Draw Effect] valueFilter: Drew ${newCards.length} of ${count} requested cards with value ${targetValue}`);
     } else {
         // Simple draw without conditionals for now
         const result = drawCardsUtil(

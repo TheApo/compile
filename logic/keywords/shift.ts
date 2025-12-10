@@ -8,6 +8,5 @@
  * This function will handle the game action of shifting a card.
  */
 export function shiftCard() {
-  console.log('Executing "shift" logic...');
   // Future implementation will go here.
 }

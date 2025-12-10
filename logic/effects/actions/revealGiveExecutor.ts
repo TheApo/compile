@@ -127,7 +127,6 @@ export function executeRevealGiveEffect(
         newState[cardOwner] = ownerState;
         newState.lastCustomEffectTargetCardId = topCardId;
 
-        console.log(`[RevealGiveExecutor] Revealed top card ${topCard.protocol}-${topCard.value} with ID: ${topCardId}`);
 
         return { newState };
     }

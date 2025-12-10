@@ -55,18 +55,12 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
         let currentState = stateWithContext;
 
-        console.log(`[DEBUG executeOnPlayEffect] Starting effects for ${cardName}, middleEffects count: ${customCard.customEffects.middleEffects.length}`);
-        console.log(`[DEBUG executeOnPlayEffect] Effects order:`, customCard.customEffects.middleEffects.map((e: any, i: number) => `${i}: ${e.id} (${e.params?.action})`));
-        console.log(`[DEBUG executeOnPlayEffect] lastCustomEffectTargetCardId: ${currentState.lastCustomEffectTargetCardId}`);
-        console.log(`[DEBUG executeOnPlayEffect] _pendingCustomEffects: ${JSON.stringify((currentState as any)._pendingCustomEffects?.effects?.map((e: any) => e.id))}`);
 
         // CRITICAL: If there are pending effects from a DIFFERENT card (e.g., Darkness-1's shift effect
         // still pending while Spirit-2 is being uncovered), we must queue them to execute AFTER this card
         // finishes. We must do this BEFORE clearing lastCustomEffectTargetCardId!
         const existingPendingEffects = (currentState as any)._pendingCustomEffects;
         if (existingPendingEffects && existingPendingEffects.sourceCardId !== card.id) {
-            console.log(`[effectExecutor] Found pending effects from different card (${existingPendingEffects.sourceCardId}), queueing them for later`);
-            console.log(`[effectExecutor] Effects to queue:`, existingPendingEffects.effects.map((e: any) => e.id));
 
             // CRITICAL: Preserve the lastCustomEffectTargetCardId for "Flip X. Shift THAT card" chains
             // When Darkness-1 flips Fire-2, the shift should target Fire-2
@@ -83,7 +77,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                 // CRITICAL: Pass the target card ID for "shift THAT card" effects
                 selectedCardFromPreviousEffect: savedTargetCardId || existingPendingEffects.selectedCardFromPreviousEffect,
             };
-            console.log(`[effectExecutor] Queued action with selectedCardFromPreviousEffect:`, pendingAction.selectedCardFromPreviousEffect);
 
             currentState = {
                 ...currentState,
@@ -97,21 +90,18 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         // incorrectly picked up by effects that use useCardFromPreviousEffect (e.g., Darkness-1 shift)
         // NOTE: This must happen AFTER we've saved pending effects above!
         if (currentState.lastCustomEffectTargetCardId) {
-            console.log(`[effectExecutor] Clearing stale lastCustomEffectTargetCardId (${currentState.lastCustomEffectTargetCardId}) for new card ${cardName}`);
             currentState = { ...currentState, lastCustomEffectTargetCardId: null };
         }
 
         // Execute all middle effects sequentially
         for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
             const effectDef = customCard.customEffects.middleEffects[i];
-            console.log(`[DEBUG executeOnPlayEffect] Executing effect ${i}: ${effectDef.id} (${effectDef.params?.action}) for ${cardName}`);
 
             // CRITICAL: Store remaining effects BEFORE executing the current effect
             // This ensures that if a reactive effect (like Spirit-3 after_draw) interrupts,
             // the remaining effects are already saved and can be queued
             const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
             if (remainingEffects.length > 0) {
-                console.log(`[effectExecutor] Pre-storing ${remainingEffects.length} pending effects for ${card.protocol}-${card.value} before effect ${i + 1}`);
                 (currentState as any)._pendingCustomEffects = {
                     sourceCardId: card.id,
                     laneIndex,
@@ -125,7 +115,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
             // If an action is required, the remaining effects are already stored, just return
             if (currentState.actionRequired) {
-                console.log(`[effectExecutor] actionRequired after effect ${i + 1}, remaining effects already stored: ${remainingEffects.length}`);
                 return { newState: recalculateAllLaneValues(currentState) };
             }
 
@@ -204,7 +193,6 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         );
 
         if (onCoverEffects.length > 0) {
-            console.log('[DEBUG executeOnCoverEffect] Found', onCoverEffects.length, 'on-cover effects for', `${coveredCard.protocol}-${coveredCard.value}`);
             const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
             let stateWithContext = setLogSource(state, cardName);
             stateWithContext = setLogPhase(stateWithContext, undefined);
@@ -214,9 +202,7 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
 
             // Execute all on-cover effects sequentially
             for (const effectDef of onCoverEffects) {
-                console.log('[DEBUG executeOnCoverEffect] Executing effect:', JSON.stringify(effectDef.params));
                 const result = executeCustomEffect(coveredCard, laneIndex, currentState, context, effectDef);
-                console.log('[DEBUG executeOnCoverEffect] After executeCustomEffect, actionRequired:', result.newState.actionRequired?.type || 'null');
                 currentState = result.newState;
 
                 // CRITICAL: Collect animation requests (Hate-4: delete animation)
@@ -274,6 +260,160 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     return { newState: state };
 }
 
+/**
+ * Type for phase effect snapshot entries
+ */
+type PhaseEffectSnapshotEntry = {
+    cardId: string;
+    box: 'top' | 'bottom';
+    effectIds: string[];
+};
+
+/**
+ * Creates a snapshot of all cards with Start/End triggers at the beginning of a phase.
+ * Only cards in this snapshot will have their phase effects executed - cards that become
+ * uncovered DURING the phase will NOT trigger their phase effects.
+ *
+ * This implements the official rule: "When entering the Start phase on your turn, note all
+ * visible commands in your stacks that have a 'Start:' trigger. If a 'Start:' command is
+ * added to the field after the beginning of the Start phase when commands were noted,
+ * it doesn't do anything."
+ */
+function createPhaseEffectSnapshot(
+    state: GameState,
+    player: Player,
+    effectKeyword: 'Start' | 'End'
+): PhaseEffectSnapshotEntry[] {
+    const snapshot: PhaseEffectSnapshotEntry[] = [];
+    const seenCardIds = new Set<string>();
+    const triggerType = effectKeyword === 'Start' ? 'start' : 'end';
+
+    // Top-Box Effekte (face-up, auch wenn covered)
+    state[player].lanes.flat().forEach(card => {
+        if (!card.isFaceUp || seenCardIds.has(card.id)) return;
+
+        const customCard = card as any;
+        if (customCard.customEffects?.topEffects) {
+            const matchingEffects = customCard.customEffects.topEffects
+                .filter((e: any) => e.trigger === triggerType);
+            if (matchingEffects.length > 0) {
+                snapshot.push({
+                    cardId: card.id,
+                    box: 'top',
+                    effectIds: matchingEffects.map((e: any) => e.id)
+                });
+                seenCardIds.add(card.id);
+            }
+        }
+
+        // Legacy: HTML-basierte Erkennung für alte Karten
+        if (card.top.includes(`'emphasis'>${effectKeyword}:`)) {
+            if (!seenCardIds.has(card.id)) {
+                snapshot.push({ cardId: card.id, box: 'top', effectIds: [] });
+                seenCardIds.add(card.id);
+            }
+        }
+    });
+
+    // Bottom-Box Effekte (NUR uncovered + face-up)
+    state[player].lanes.forEach(lane => {
+        if (lane.length === 0) return;
+        const uncoveredCard = lane[lane.length - 1];
+        if (!uncoveredCard.isFaceUp || seenCardIds.has(uncoveredCard.id)) return;
+
+        const customCard = uncoveredCard as any;
+        if (customCard.customEffects?.bottomEffects) {
+            const matchingEffects = customCard.customEffects.bottomEffects
+                .filter((e: any) => e.trigger === triggerType);
+            if (matchingEffects.length > 0) {
+                snapshot.push({
+                    cardId: uncoveredCard.id,
+                    box: 'bottom',
+                    effectIds: matchingEffects.map((e: any) => e.id)
+                });
+                seenCardIds.add(uncoveredCard.id);
+            }
+        }
+
+        // Legacy: HTML-basierte Erkennung
+        if (uncoveredCard.bottom.includes(`'emphasis'>${effectKeyword}:`)) {
+            if (!seenCardIds.has(uncoveredCard.id)) {
+                snapshot.push({ cardId: uncoveredCard.id, box: 'bottom', effectIds: [] });
+                seenCardIds.add(uncoveredCard.id);
+            }
+        }
+    });
+
+    return snapshot;
+}
+
+/**
+ * Validates a snapshot entry and returns card info if valid
+ */
+function validateSnapshotEntry(
+    state: GameState,
+    player: Player,
+    entry: PhaseEffectSnapshotEntry
+): { card: PlayedCard; laneIndex: number } | null {
+    // Find the card in the current state
+    for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
+        const lane = state[player].lanes[laneIdx];
+        const foundCard = lane.find(c => c.id === entry.cardId);
+        if (foundCard) {
+            // VALIDATION 1: Card must still be face-up
+            if (!foundCard.isFaceUp) {
+                return null;
+            }
+
+            // VALIDATION 2: For bottom-box effects, card must still be uncovered
+            if (entry.box === 'bottom') {
+                const isStillUncovered = lane.length > 0 && lane[lane.length - 1].id === foundCard.id;
+                if (!isStillUncovered) {
+                    return null;
+                }
+            }
+
+            return { card: foundCard, laneIndex: laneIdx };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Gets the effect description for a card's phase effect
+ */
+function getPhaseEffectDescription(card: PlayedCard, box: 'top' | 'bottom', effectKeyword: 'Start' | 'End'): string {
+    const customCard = card as any;
+    const triggerType = effectKeyword === 'Start' ? 'start' : 'end';
+
+    if (customCard.customEffects) {
+        const effectsSource = box === 'top' ? customCard.customEffects.topEffects : customCard.customEffects.bottomEffects;
+        const matchingEffects = effectsSource?.filter((e: any) => e.trigger === triggerType) || [];
+
+        if (matchingEffects.length > 0) {
+            // Get the action descriptions
+            const actions = matchingEffects.map((e: any) => {
+                const action = e.params?.action || 'effect';
+                const count = e.params?.count;
+                if (count) return `${action} ${count}`;
+                return action;
+            });
+            return actions.join(', ');
+        }
+    }
+
+    // Fallback to HTML text parsing
+    const text = box === 'top' ? card.top : card.bottom;
+    // Extract text after "Start:" or "End:"
+    const match = text.match(new RegExp(`${effectKeyword}:\\s*</span>\\s*([^<]+)`, 'i'));
+    if (match) {
+        return match[1].trim();
+    }
+
+    return effectKeyword + ' effect';
+}
+
 function processTriggeredEffects(
     state: GameState,
     effectKeyword: 'Start' | 'End',
@@ -282,128 +422,136 @@ function processTriggeredEffects(
     const player = state.turn;
     // CRITICAL: Reset indent to 0 at the start of processing triggered effects
     // This ensures "Start/End effect triggers" messages are always at top level
-    let newState = { ...state, _logIndentLevel: 0 };
-    const processedIds = effectKeyword === 'Start'
-        ? newState.processedStartEffectIds || []
-        : newState.processedEndEffectIds || [];
+    let newState: GameState = { ...state, _logIndentLevel: 0 };
 
-    const effectCardsToProcess: { card: PlayedCard, box: 'top' | 'bottom' }[] = [];
-    const effectCardIds = new Set<string>();
+    const isStartPhase = effectKeyword === 'Start';
 
-    // Rule: Top box effects are active if the card is face-up, even if covered.
-    newState[player].lanes.flat().forEach(card => {
-        if (card.isFaceUp && card.top.includes(`'emphasis'>${effectKeyword}:`) && !processedIds.includes(card.id) && !effectCardIds.has(card.id)) {
-            effectCardsToProcess.push({ card, box: 'top' });
-            effectCardIds.add(card.id);
+    const snapshotKey = isStartPhase ? '_startPhaseEffectSnapshot' : '_endPhaseEffectSnapshot';
+    const selectedEffectIdKey = isStartPhase ? '_selectedStartEffectId' : '_selectedEndEffectId';
+
+
+    // Check if there's a selected effect waiting to be executed
+    // This is set by the cardResolver when the player chooses which effect to run first
+    const selectedEffectId = (newState as any)[selectedEffectIdKey] as string | undefined;
+
+    // CRITICAL: Get existing snapshot and VALIDATE it
+    // If snapshot exists but NO cards from it exist anymore, it's from an old session → delete it
+    let snapshot = (newState as any)[snapshotKey] as PhaseEffectSnapshotEntry[] | undefined;
+
+    if (snapshot && snapshot.length > 0) {
+        // Check if at least ONE card from the snapshot still exists on the field
+        const anyCardExists = snapshot.some(entry => {
+            return newState[player].lanes.flat().some(c => c.id === entry.cardId);
+        });
+        if (!anyCardExists) {
+            // Snapshot is completely invalid (old session) → delete it
+            snapshot = undefined;
+            (newState as any)[snapshotKey] = undefined;
         }
-    });
+    }
 
-    // Rule: Bottom box effects are only active if the card is face-up AND uncovered.
-    newState[player].lanes.forEach(lane => {
-        if (lane.length > 0) {
-            const uncoveredCard = lane[lane.length - 1];
-            if (uncoveredCard.isFaceUp && uncoveredCard.bottom.includes(`'emphasis'>${effectKeyword}:`) && !processedIds.includes(uncoveredCard.id) && !effectCardIds.has(uncoveredCard.id)) {
-                effectCardsToProcess.push({ card: uncoveredCard, box: 'bottom' });
-                effectCardIds.add(uncoveredCard.id);
-            }
+    // Create new snapshot if none exists (or was just cleared)
+    if (!snapshot) {
+        snapshot = createPhaseEffectSnapshot(newState, player, effectKeyword);
+        (newState as any)[snapshotKey] = snapshot;
+    }
+
+    const processedIds = isStartPhase
+        ? (newState.processedStartEffectIds || [])
+        : (newState.processedEndEffectIds || []);
+
+
+    // Get all VALID unprocessed effects from the snapshot
+    const validUnprocessedEffects: Array<{
+        entry: PhaseEffectSnapshotEntry;
+        card: PlayedCard;
+        laneIndex: number;
+    }> = [];
+
+    for (const entry of snapshot) {
+        const isProcessed = processedIds.includes(entry.cardId);
+        if (isProcessed) continue;
+
+        const validationResult = validateSnapshotEntry(newState, player, entry);
+        if (validationResult) {
+            validUnprocessedEffects.push({
+                entry,
+                card: validationResult.card,
+                laneIndex: validationResult.laneIndex
+            });
         }
-    });
+    }
 
-    for (const { card, box } of effectCardsToProcess) {
-        // Re-validate the card's state at the moment of execution.
-        const currentLane = newState[player].lanes.find(l => l.some(c => c.id === card.id));
-        if (!currentLane) continue; // Card was removed by a previous effect in the chain.
+    // If no valid effects remaining, we're done
+    if (validUnprocessedEffects.length === 0) {
+        // Clear the snapshot and selected effect ID - phase is complete
+        (newState as any)[snapshotKey] = undefined;
+        (newState as any)[selectedEffectIdKey] = undefined;
+        return { newState };
+    }
 
-        const isStillFaceUp = currentLane.some(c => c.id === card.id && c.isFaceUp);
-        if (!isStillFaceUp) continue; // Card was flipped by a previous effect.
+    // Check if player already selected which effect to execute
+    let effectToExecute: typeof validUnprocessedEffects[0] | undefined;
 
-        if (box === 'bottom') {
-            const isStillUncovered = currentLane[currentLane.length - 1].id === card.id;
-            if (!isStillUncovered) continue; // Card was covered by a previous effect.
+    if (selectedEffectId) {
+        // Player selected an effect - find it and execute it
+        effectToExecute = validUnprocessedEffects.find(e => e.entry.cardId === selectedEffectId);
+        if (effectToExecute) {
+            // Clear the selected effect ID - we're about to execute it
+            (newState as any)[selectedEffectIdKey] = undefined;
+        } else {
+            console.warn(`[processTriggeredEffects] Selected effect ${selectedEffectId} not found in valid effects!`);
+            (newState as any)[selectedEffectIdKey] = undefined;
         }
+    }
 
-        // Build context for the effect
-        const opponent = player === 'player' ? 'opponent' : 'player';
-        const context: EffectContext = {
-            cardOwner: player,
-            actor: player,
-            currentTurn: state.turn,
-            opponent,
-            triggerType: effectKeyword === 'Start' ? 'start' : 'end'
-        };
+    // If no pre-selected effect, check if we need to prompt for selection
+    if (!effectToExecute) {
+        if (validUnprocessedEffects.length > 1) {
+            // MORE THAN ONE valid effect - prompt the player to choose which to execute first
+            const availableEffects = validUnprocessedEffects.map(({ entry, card }) => ({
+                cardId: entry.cardId,
+                cardName: `${card.protocol}-${card.value}`,
+                box: entry.box,
+                effectDescription: getPhaseEffectDescription(card, entry.box, effectKeyword)
+            }));
 
-        // Check if this is a custom protocol card with custom effects
-        const customCard = card as any;
-        const triggerType = effectKeyword === 'Start' ? 'start' : 'end';
+            newState.actionRequired = {
+                type: 'select_phase_effect',
+                actor: player,
+                phase: effectKeyword,
+                availableEffects
+            };
 
-        if (customCard.customEffects) {
-            const effectsSource = box === 'top' ? customCard.customEffects.topEffects : customCard.customEffects.bottomEffects;
-            const matchingEffects = effectsSource?.filter((e: any) => e.trigger === triggerType) || [];
-
-            if (matchingEffects.length > 0) {
-                const cardName = `${card.protocol}-${card.value}`;
-                const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
-
-                // Log the "triggers" message at indent level 0 WITHOUT phase context
-                // (phase context forces indent >= 1, but "triggers" should be at indent 0)
-                newState = setLogSource(newState, cardName);
-                newState = setLogPhase(newState, phaseContext);
-                // Temporarily clear phase context for this log entry
-                const tempState = { ...newState, _currentPhaseContext: undefined };
-                const loggedState = log(tempState, player, `${effectKeyword} effect triggers.`);
-                // Restore phase context and copy the log
-                newState = { ...newState, log: loggedState.log };
-
-                // IMPORTANT: Increase indent for effect details (now at level 1)
-                newState = increaseLogIndent(newState);
-
-                // Find lane index
-                const laneIndex = newState[player].lanes.findIndex(l => l.some(c => c.id === card.id));
-
-                // Execute all matching effects sequentially
-                for (let effectIdx = 0; effectIdx < matchingEffects.length; effectIdx++) {
-                    const effectDef = matchingEffects[effectIdx];
-                    console.log('[effectExecutor] Executing custom effect:', effectDef.id, 'hasConditional:', !!effectDef.conditional, 'conditionalType:', effectDef.conditional?.type);
-                    const result = executeCustomEffect(card, laneIndex, newState, context, effectDef);
-                    newState = recalculateAllLaneValues(result.newState);
-
-                    if (newState.actionRequired) {
-                        // Store remaining effects to execute after this action resolves
-                        const remainingEffects = matchingEffects.slice(effectIdx + 1);
-                        if (remainingEffects.length > 0) {
-                            // CRITICAL: Use _pendingCustomEffects pattern (same as middleEffects)
-                            (newState as any)._pendingCustomEffects = {
-                                sourceCardId: card.id,
-                                laneIndex,
-                                context,
-                                effects: remainingEffects
-                            };
-                        }
-                        // Mark as processed before returning
-                        const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
-                        newState[processedKey] = [...(newState[processedKey] || []), card.id];
-                        return { newState };
-                    }
-                }
-
-                // Mark as processed
-                const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
-                newState[processedKey] = [...(newState[processedKey] || []), card.id];
-
-                // Decrease indent after effect completes
-                newState = decreaseLogIndent(newState);
-                newState = setLogSource(newState, undefined);
-                newState = setLogPhase(newState, undefined);
-
-                continue; // Skip standard registry check
-            }
+            return { newState };
         }
 
-        // Standard card - use registry
-        const effectKey = `${card.protocol}-${card.value}`;
-        const execute = effectRegistry[effectKey];
-        if (execute) {
-            // Set logging context: card name and phase
+        // Only ONE effect - execute it directly (no choice needed)
+        effectToExecute = validUnprocessedEffects[0];
+    }
+
+    // Execute the selected/only effect
+    const { entry, card, laneIndex: cardLaneIndex } = effectToExecute;
+
+    // Build context for the effect
+    const opponent = player === 'player' ? 'opponent' : 'player';
+    const context: EffectContext = {
+        cardOwner: player,
+        actor: player,
+        currentTurn: state.turn,
+        opponent,
+        triggerType: effectKeyword === 'Start' ? 'start' : 'end'
+    };
+
+    // Check if this is a custom protocol card with custom effects
+    const customCard = card as any;
+    const triggerType = effectKeyword === 'Start' ? 'start' : 'end';
+
+    if (customCard.customEffects) {
+        const effectsSource = entry.box === 'top' ? customCard.customEffects.topEffects : customCard.customEffects.bottomEffects;
+        const matchingEffects = effectsSource?.filter((e: any) => e.trigger === triggerType) || [];
+
+        if (matchingEffects.length > 0) {
             const cardName = `${card.protocol}-${card.value}`;
             const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
 
@@ -420,25 +568,99 @@ function processTriggeredEffects(
             // IMPORTANT: Increase indent for effect details (now at level 1)
             newState = increaseLogIndent(newState);
 
-            // FIXED: Now calls execute with proper signature (card, state, context)
-            const result = execute(card, newState, context);
-            newState = recalculateAllLaneValues(result.newState);
+            // Execute all matching effects sequentially
+            for (let effectIdx = 0; effectIdx < matchingEffects.length; effectIdx++) {
+                const effectDef = matchingEffects[effectIdx];
+                const result = executeCustomEffect(card, cardLaneIndex, newState, context, effectDef);
+                newState = recalculateAllLaneValues(result.newState);
 
-            const processedKey = effectKeyword === 'Start' ? 'processedStartEffectIds' : 'processedEndEffectIds';
-            newState[processedKey] = [...(newState[processedKey] || []), card.id];
-
-            if (newState.actionRequired) {
-                // If an action is required, keep indent and context active
-                // They will be cleared when the action is resolved
-                return { newState }; // Stop processing if an action is required
+                if (newState.actionRequired) {
+                    // Store remaining effects to execute after this action resolves
+                    const remainingEffects = matchingEffects.slice(effectIdx + 1);
+                    if (remainingEffects.length > 0) {
+                        // CRITICAL: Use _pendingCustomEffects pattern (same as middleEffects)
+                        (newState as any)._pendingCustomEffects = {
+                            sourceCardId: card.id,
+                            laneIndex: cardLaneIndex,
+                            context,
+                            effects: remainingEffects
+                        };
+                    }
+                    // Mark as processed before returning
+                    if (isStartPhase) {
+                        newState.processedStartEffectIds = [...(newState.processedStartEffectIds || []), card.id];
+                    } else {
+                        newState.processedEndEffectIds = [...(newState.processedEndEffectIds || []), card.id];
+                    }
+                    return { newState };
+                }
             }
 
-            // Decrease indent after effect completes (only if no action is pending)
+            // Mark as processed
+            if (isStartPhase) {
+                newState.processedStartEffectIds = [...(newState.processedStartEffectIds || []), card.id];
+            } else {
+                newState.processedEndEffectIds = [...(newState.processedEndEffectIds || []), card.id];
+            }
+
+            // Decrease indent after effect completes
             newState = decreaseLogIndent(newState);
             newState = setLogSource(newState, undefined);
             newState = setLogPhase(newState, undefined);
+
+            // CRITICAL: Recursively call processTriggeredEffects to handle remaining effects
+            // This ensures all phase effects are processed before moving to the next phase
+            return processTriggeredEffects(newState, effectKeyword, effectRegistry);
         }
     }
+
+    // Standard card - use registry (legacy support)
+    const effectKey = `${card.protocol}-${card.value}`;
+    const execute = effectRegistry[effectKey];
+    if (execute) {
+        // Set logging context: card name and phase
+        const cardName = `${card.protocol}-${card.value}`;
+        const phaseContext = effectKeyword === 'Start' ? 'start' : 'end';
+
+        // Log the "triggers" message at indent level 0 WITHOUT phase context
+        // (phase context forces indent >= 1, but "triggers" should be at indent 0)
+        newState = setLogSource(newState, cardName);
+        newState = setLogPhase(newState, phaseContext);
+        // Temporarily clear phase context for this log entry
+        const tempState = { ...newState, _currentPhaseContext: undefined };
+        const loggedState = log(tempState, player, `${effectKeyword} effect triggers.`);
+        // Restore phase context and copy the log
+        newState = { ...newState, log: loggedState.log };
+
+        // IMPORTANT: Increase indent for effect details (now at level 1)
+        newState = increaseLogIndent(newState);
+
+        // FIXED: Now calls execute with proper signature (card, state, context)
+        const result = execute(card, newState, context);
+        newState = recalculateAllLaneValues(result.newState);
+
+        if (isStartPhase) {
+            newState.processedStartEffectIds = [...(newState.processedStartEffectIds || []), card.id];
+        } else {
+            newState.processedEndEffectIds = [...(newState.processedEndEffectIds || []), card.id];
+        }
+
+        if (newState.actionRequired) {
+            // If an action is required, keep indent and context active
+            // They will be cleared when the action is resolved
+            return { newState }; // Stop processing if an action is required
+        }
+
+        // Decrease indent after effect completes (only if no action is pending)
+        newState = decreaseLogIndent(newState);
+        newState = setLogSource(newState, undefined);
+        newState = setLogPhase(newState, undefined);
+
+        // CRITICAL: Recursively call processTriggeredEffects to handle remaining effects
+        // This ensures all phase effects are processed before moving to the next phase
+        return processTriggeredEffects(newState, effectKeyword, effectRegistry);
+    }
+
     return { newState };
 }
 

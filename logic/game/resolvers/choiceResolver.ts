@@ -46,7 +46,6 @@ export const resolveCustomChoice = (prevState: GameState, selectedOptionIndex: n
     let stateBeforeEffect = { ...prevState, actionRequired: null };
 
     // Execute the selected effect
-    console.log(`[Choice Resolver] Executing option ${selectedOptionIndex}`);
     const result = executeCustomEffect(sourceCardInfo.card, laneIndex, stateBeforeEffect, effectContext, selectedEffect);
     let newState = recalculateAllLaneValues(result.newState);
 

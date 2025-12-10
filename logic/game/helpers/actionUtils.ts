@@ -66,7 +66,6 @@ export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: stri
     if (followUpEffect && sourceCardId) {
         const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
         if (sourceCardInfo) {
-            console.log('[Custom Effect] Executing conditional follow-up effect after flip');
 
             const context: EffectContext = {
                 cardOwner: sourceCardInfo.owner,
@@ -77,7 +76,6 @@ export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: stri
                 referencedCard: flippedCardInfo?.card,
                 referencedCardValue: referencedCardValue,
             };
-            console.log(`[Context Propagation] Flipped card ${flippedCardInfo?.card.protocol}-${flippedCardInfo?.card.value}, value: ${referencedCardValue}`);
 
             // Find lane index
             let laneIndex = -1;
@@ -131,11 +129,9 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
             if (!shouldExecute) {
-                console.log(`[Custom Effect] Skipping follow-up effect - conditional type: ${conditionalType}, discarded: ${discardedCount}`);
                 return newState;
             }
 
-            console.log(`[Custom Effect] Executing conditional follow-up effect after discard (type: ${conditionalType})`);
 
             const context: EffectContext = {
                 cardOwner: sourceCardInfo.owner,
@@ -146,7 +142,6 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
                 discardedCount: discardedCount,
                 previousHandSize: previousHandSize, // For Chaos-4: draw same amount as discarded
             } as any;
-            console.log(`[Context Propagation] Discarded ${discardedCount} cards, previousHandSize: ${previousHandSize}`);
 
             // Find lane index
             let laneIndex = -1;
@@ -178,7 +173,6 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     const discardedCount = Math.max(0, previousHandSize - currentHandSize);
 
     if (discardedCount === 0) {
-        console.log(`[Fire Effect] Skipping chained effect for ${sourceEffect} - no cards were discarded (previousHandSize: ${previousHandSize}, currentHandSize: ${currentHandSize})`);
         return newState;
     }
 
@@ -270,7 +264,6 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
         if (laneIndex !== -1) {
             const flipCheck = canFlipCard(state, laneIndex);
             if (!flipCheck.allowed) {
-                console.log(`Flip blocked: ${flipCheck.reason}`);
                 return state; // Block the flip
             }
         }
@@ -283,7 +276,6 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     // Check if the card still exists after on_flip effects (Metal-6 might delete itself)
     const cardAfterOnFlip = findCardOnBoard(newState, targetCardId);
     if (!cardAfterOnFlip) {
-        console.log(`[on_flip] Card ${card.protocol}-${card.value} no longer exists after on_flip effect`);
         return newState; // Card was deleted by on_flip effect, abort flip
     }
 
@@ -326,12 +318,9 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     if (uncoveredCard.isFaceUp && isStillUncovered) {
         // Create a unique ID for this specific uncover event to prevent double-triggering.
         const eventId = `${uncoveredCard.id}-${laneIndex}`;
-        console.log('[UNCOVER] Checking eventId:', eventId, 'processedUncoverEventIds:', state.processedUncoverEventIds);
         if (state.processedUncoverEventIds?.includes(eventId)) {
-            console.log('[UNCOVER] SKIPPING - already processed');
             return { newState: state }; // This specific event has already been processed in this action chain.
         }
-        console.log('[UNCOVER] PROCESSING - not yet in list');
 
         // Set logging context for uncover
         const cardName = `${uncoveredCard.protocol}-${uncoveredCard.value}`;
@@ -366,12 +355,10 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
 
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
-            console.log('[UNCOVER DEBUG] actionRequired created:', result.newState.actionRequired.type, 'actor:', newActionActor, 'state.turn:', state.turn, '_interruptedTurn:', state._interruptedTurn);
             // If an interrupt is already in progress...
             if (state._interruptedTurn) {
                 // ...and the new action is for the ORIGINAL turn player...
                 if (newActionActor === state._interruptedTurn) {
-                    console.log('[UNCOVER DEBUG] Queueing action for original turn player:', newActionActor);
                     // CRITICAL FIX: When queueing the actionRequired, we need to:
                     // 1. First queue the actionRequired (e.g., flip)
                     // 2. THEN queue the pending effects (e.g., shift)
@@ -399,7 +386,6 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             // Standard interrupt logic if no interrupt is in progress, or if the new action
             // is for the currently interrupting player.
             if (newActionActor !== state.turn) {
-                console.log('[UNCOVER DEBUG] Creating interrupt: newActionActor=', newActionActor, 'state.turn=', state.turn);
                 result.newState._interruptedTurn = state.turn;
                 result.newState._interruptedPhase = state.phase;
                 result.newState.turn = newActionActor;
@@ -417,11 +403,8 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
                     };
                 }
             } else {
-                console.log('[UNCOVER DEBUG] No interrupt needed - same actor:', newActionActor);
             }
-            console.log('[UNCOVER DEBUG] Final state: turn=', result.newState.turn, 'actionRequired=', result.newState.actionRequired?.type, '_interruptedTurn=', result.newState._interruptedTurn);
         } else {
-            console.log('[UNCOVER DEBUG] No actionRequired created');
             // CRITICAL FIX: If the uncover effect didn't create an action requirement,
             // but the turn was previously interrupted, restore the original turn holder.
             // This prevents the current player from getting an extra turn.
@@ -546,7 +529,6 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
 }
 
 export function internalShiftCard(state: GameState, cardToShiftId: string, cardOwner: Player, targetLaneIndex: number, actor: Player): EffectResult {
-    console.log('[DEBUG internalShiftCard] Attempting to shift card', cardToShiftId, 'to lane', targetLaneIndex, 'owner:', cardOwner);
     const cardToShiftInfo = findCardOnBoard(state, cardToShiftId);
     if (!cardToShiftInfo || cardToShiftInfo.owner !== cardOwner) return { newState: state };
     const { card: cardToShift } = cardToShiftInfo;
@@ -565,16 +547,13 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     // CRITICAL: Cannot shift to the same lane
     if (originalLaneIndex === targetLaneIndex) {
-        console.log('[DEBUG internalShiftCard] Cannot shift to same lane, skipping');
         return { newState: state };
     }
 
-    console.log('[DEBUG internalShiftCard] Shifting from lane', originalLaneIndex, 'to lane', targetLaneIndex);
 
     // NEW: Check passive rules for shift restrictions (Frost-3, custom cards with block_shifts rules)
     const shiftCheck = canShiftCard(state, originalLaneIndex, targetLaneIndex);
     if (!shiftCheck.allowed) {
-        console.log(`[SHIFT BLOCKED] ${shiftCheck.reason}`);
         return { newState: state }; // Block the shift
     }
     
@@ -594,8 +573,6 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         ? lanesAfterRemoval[targetLaneIndex][lanesAfterRemoval[targetLaneIndex].length - 1]
         : null;
 
-    console.log('[DEBUG internalShiftCard] Card to be covered:', cardToBeCovered ? `${cardToBeCovered.protocol}-${cardToBeCovered.value} (faceUp: ${cardToBeCovered.isFaceUp})` : 'null');
-    console.log('[DEBUG internalShiftCard] Target lane has', lanesAfterRemoval[targetLaneIndex].length, 'cards before shift');
 
     // Create another new lanes array with the card added to the target lane.
     const lanesAfterAddition = lanesAfterRemoval.map((lane, index) => {
@@ -634,10 +611,7 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
 
     let resultAfterOnCover: EffectResult = { newState: stateAfterRecalc };
     if (cardToBeCovered) {
-        console.log('[DEBUG internalShiftCard] Executing on-cover effect for', `${cardToBeCovered.protocol}-${cardToBeCovered.value}`);
-        console.log('[DEBUG internalShiftCard] cardToBeCovered has customEffects?', !!(cardToBeCovered as any).customEffects);
         if ((cardToBeCovered as any).customEffects) {
-            console.log('[DEBUG internalShiftCard] bottomEffects:', JSON.stringify((cardToBeCovered as any).customEffects.bottomEffects));
         }
         const coverContext: EffectContext = {
             cardOwner: cardOwner,
@@ -647,7 +621,6 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
             triggerType: 'cover'
         };
         resultAfterOnCover = executeOnCoverEffect(cardToBeCovered, targetLaneIndex, stateAfterRecalc, coverContext);
-        console.log('[DEBUG internalShiftCard] After executeOnCoverEffect, actionRequired:', resultAfterOnCover.newState.actionRequired?.type || 'null');
     }
 
     let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;

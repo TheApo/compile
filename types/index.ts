@@ -410,6 +410,21 @@ export type ActionRequired =
 }
 
 // -----------------------------------------------------------------------------
+// PHASE EFFECT SELECTION (when multiple Start/End effects are available)
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_phase_effect';
+    actor: Player;
+    phase: 'Start' | 'End';
+    availableEffects: Array<{
+        cardId: string;
+        cardName: string;
+        box: 'top' | 'bottom';
+        effectDescription: string;
+    }>;
+}
+
+// -----------------------------------------------------------------------------
 // NULL (no action required)
 // -----------------------------------------------------------------------------
 | null;
@@ -461,6 +476,21 @@ export interface GameState {
     compilableLanes: number[];
     processedStartEffectIds?: string[];
     processedEndEffectIds?: string[];
+    // Phase Effect Snapshots - capture cards with Start/End triggers at phase begin
+    // Only cards in these snapshots will have their phase effects executed
+    _startPhaseEffectSnapshot?: Array<{
+        cardId: string;
+        box: 'top' | 'bottom';
+        effectIds: string[];
+    }>;
+    _endPhaseEffectSnapshot?: Array<{
+        cardId: string;
+        box: 'top' | 'bottom';
+        effectIds: string[];
+    }>;
+    // Selected phase effect ID - set by cardResolver when player chooses which effect to execute first
+    _selectedStartEffectId?: string;
+    _selectedEndEffectId?: string;
     processedSpeed1TriggerThisTurn?: boolean;
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;

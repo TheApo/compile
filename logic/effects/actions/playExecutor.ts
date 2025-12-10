@@ -37,7 +37,6 @@ export function executePlayEffect(
     // Advanced Conditional Checks - skip effect if condition not met
     if (params.advancedConditional?.type === 'empty_hand') {
         if (state[cardOwner].hand.length > 0) {
-            console.log(`[Play Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping play.`);
             return { newState: state };
         }
     }
@@ -46,7 +45,6 @@ export function executePlayEffect(
         const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
         const oppValue = getPlayerLaneValue(state, opp, laneIndex);
         if (oppValue <= ownValue) {
-            console.log(`[Play Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping play.`);
             return { newState: state };
         }
     }
@@ -246,11 +244,8 @@ export function executePlayEffect(
 
     // NEW: Life-3 logic - Prompt user to select "another line" to play from deck
     if (source === 'deck' && params.destinationRule?.type === 'another_line') {
-        console.log(`[another_line] Life-3 triggered! laneIndex=${laneIndex}, source=${source}`);
         const otherLaneIndices = [0, 1, 2].filter(i => i !== laneIndex);
-        console.log(`[another_line] Other lane indices: ${otherLaneIndices}`);
         if (otherLaneIndices.length === 0) {
-            console.log(`[another_line] No other lanes available!`);
             return { newState: state };
         }
 
@@ -267,7 +262,6 @@ export function executePlayEffect(
             source: params.source,  // 'deck'
         } as any;
 
-        console.log(`[another_line] Created prompt for user to select lane`);
         return { newState };
     }
 
@@ -425,7 +419,6 @@ export function executePlayEffect(
 
         // Check if actor has any cards in hand to play
         if (state[actor].hand.length === 0) {
-            console.log(`[Play Effect] ${actor} has no cards in hand to play - skipping effect.`);
             return { newState: state };
         }
 
@@ -478,7 +471,6 @@ export function executePlayEffect(
 
     // CRITICAL FIX: Check if actor has any cards in hand to play
     if (source === 'hand' && state[actor].hand.length === 0) {
-        console.log(`[Play Effect] ${actor} has no cards in hand to play - skipping effect.`);
         return { newState: state };
     }
 
