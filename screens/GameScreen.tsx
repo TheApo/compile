@@ -219,7 +219,21 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     return null;
   }, [gameState.lastPlayedCardId, gameState.player.lanes, gameState.opponent.lanes]);
 
-  const previewState = hoveredCard || lastPlayedCardInfo;
+  // Auto-preview the source card when an effect is active (highlighted with golden border)
+  const sourceCardInfo = useMemo(() => {
+    const sourceId = gameState.actionRequired?.sourceCardId;
+    if (sourceId) {
+        const cardInfo = findCardOnBoard(gameState, sourceId);
+        if (cardInfo) {
+            const showContents = cardInfo.owner === 'player' || cardInfo.card.isFaceUp;
+            return { card: cardInfo.card, showContents };
+        }
+    }
+    return null;
+  }, [gameState.actionRequired?.sourceCardId, gameState.player.lanes, gameState.opponent.lanes]);
+
+  // Priority: 1) User hover, 2) Effect source card, 3) Last played card
+  const previewState = hoveredCard || sourceCardInfo || lastPlayedCardInfo;
 
   useEffect(() => {
     if (gameState.log.length > lastLogLengthRef.current) {

@@ -178,7 +178,7 @@ export function executeShiftEffect(
 
         // Handle opponent_highest_value_lane destination (Courage-3)
         if (params.destinationRestriction?.type === 'opponent_highest_value_lane') {
-            const validLanes = getOpponentHighestValueLanes(state, cardOwner);
+            const validLanes = getOpponentHighestValueLanes(newState, cardOwner);
 
             // Check if card is already in one of the opponent's highest value lanes
             if (validLanes.includes(laneIndex)) {

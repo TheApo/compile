@@ -226,6 +226,22 @@ export function queuePendingCustomEffects(state: GameState): GameState {
         return state; // No pending effects, nothing to do
     }
 
+    // CRITICAL FIX: Check if these exact effects are already queued (by sourceCardId AND effect IDs)
+    // This prevents double-queueing when card deletion triggers uncover + callback restoration
+    const pendingEffectIds = pendingEffects.effects.map((e: any) => e.id).join(',');
+    const alreadyQueued = state.queuedActions?.some((action: any) =>
+        action.type === 'execute_remaining_custom_effects' &&
+        action.sourceCardId === pendingEffects.sourceCardId &&
+        action.effects?.map((e: any) => e.id).join(',') === pendingEffectIds
+    );
+
+    if (alreadyQueued) {
+        // Effects already in queue - just clear _pendingCustomEffects without re-adding
+        const newState = { ...state };
+        delete (newState as any)._pendingCustomEffects;
+        return newState;
+    }
+
     const pendingAction: any = {
         type: 'execute_remaining_custom_effects',
         sourceCardId: pendingEffects.sourceCardId,

@@ -2393,8 +2393,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_shift': {
             // Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
-            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Check sourceLaneIndex (set by shiftExecutor) for scope: 'this_lane' restriction
+            const restrictedLaneIndex = (action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const scope = (action as any).scope;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;

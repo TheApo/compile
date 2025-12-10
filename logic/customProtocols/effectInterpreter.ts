@@ -12,7 +12,7 @@ import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 import { isFrost1Active, isFrost1BottomActive } from '../game/passiveRuleChecker';
 import { executeOnCoverEffect } from '../effectExecutor';
-import { getEffectiveCardValue } from '../game/stateManager';
+import { getEffectiveCardValue, getOpponentHighestValueLanes } from '../game/stateManager';
 
 // Import modular effect executors (replacing local implementations)
 import { executeDrawEffect } from '../effects/actions/drawExecutor';
@@ -166,6 +166,14 @@ export function executeCustomEffect(
                         // No target card stored - effect cannot be executed
                         canExecute = false;
                         skipReason = 'No target card from previous effect';
+                    }
+                } else if (params.shiftSelf && params.destinationRestriction?.type === 'opponent_highest_value_lane') {
+                    // Courage-3: "Shift this card to opponent's highest value lane"
+                    // Skip if already in that lane
+                    const validLanes = getOpponentHighestValueLanes(state, context.cardOwner);
+                    if (validLanes.includes(laneIndex)) {
+                        canExecute = false;
+                        skipReason = 'Card is already in opponent\'s highest value lane';
                     }
                 } else {
                     // CRITICAL: Spirit-3 special case - "shift this card, even if covered"

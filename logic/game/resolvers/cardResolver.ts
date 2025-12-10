@@ -72,11 +72,19 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
 
         const onCompleteCallback = (s: GameState, endTurnCb: (s2: GameState) => GameState) => {
             // CRITICAL: Restore pending effects from before the animation
-            // These are the remaining effects from Darkness-1 (the shift effect)
+            // These are the remaining effects from the source card (e.g., Fire-0's draw after flip)
             let workingState = { ...s };
-            if (savedPendingEffects) {
+
+            // CRITICAL FIX: Only restore savedPendingEffects if they haven't been processed yet.
+            // We track this by checking if they're already in queuedActions (by sourceCardId match).
+            const alreadyQueued = savedPendingEffects && workingState.queuedActions?.some(
+                (action: any) => action.type === 'execute_remaining_custom_effects' &&
+                                action.sourceCardId === savedPendingEffects.sourceCardId
+            );
+
+            if (savedPendingEffects && !alreadyQueued) {
                 (workingState as any)._pendingCustomEffects = savedPendingEffects;
-                // Also set lastCustomEffectTargetCardId to the flipped card (Metal-6)
+                // Also set lastCustomEffectTargetCardId to the flipped card
                 // This allows the shift effect to detect that the card no longer exists
                 workingState.lastCustomEffectTargetCardId = targetCardId;
             }
@@ -85,7 +93,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             const reactiveResult = processReactiveEffects(workingState, 'after_delete', { player: workingState.turn });
             let stateAfterTriggers = reactiveResult.newState;
 
-            // CRITICAL: Handle uncover effect if Metal-6 was top card and there was a card below
+            // CRITICAL: Handle uncover effect if deleted card was top card and there was a card below
             if (wasTopCard && hadCardBelow) {
                 const uncoverResult = handleUncoverEffect(stateAfterTriggers, cardOwner, laneIndex);
                 stateAfterTriggers = uncoverResult.newState;
@@ -112,9 +120,14 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
                 };
             }
 
-            // CRITICAL: Restore pending effects if they were lost during processing
-            // This happens because processReactiveEffects and handleUncoverEffect create new state objects
-            if (savedPendingEffects && !(stateAfterTriggers as any)._pendingCustomEffects) {
+            // CRITICAL FIX: Check if savedPendingEffects are already in queue before restoring
+            // This prevents double-queueing when handleUncoverEffect already queued them
+            const effectsAlreadyInQueue = savedPendingEffects && stateAfterTriggers.queuedActions?.some(
+                (action: any) => action.type === 'execute_remaining_custom_effects' &&
+                                action.sourceCardId === savedPendingEffects.sourceCardId
+            );
+
+            if (savedPendingEffects && !(stateAfterTriggers as any)._pendingCustomEffects && !effectsAlreadyInQueue) {
                 (stateAfterTriggers as any)._pendingCustomEffects = savedPendingEffects;
                 // Also restore the target card ID for "shift THAT card" effects
                 stateAfterTriggers.lastCustomEffectTargetCardId = targetCardId;

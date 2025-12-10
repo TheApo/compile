@@ -432,8 +432,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // SELECT CARD TO SHIFT - GENERIC (uses targetFilter, destinationRestriction)
         // =========================================================================
         case 'select_card_to_shift': {
-            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
-            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Check sourceLaneIndex (set by shiftExecutor) for scope: 'this_lane' restriction
+            const restrictedLaneIndex = (action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
