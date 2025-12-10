@@ -1441,9 +1441,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         // Simple lane selections
         case 'select_lane_for_shift': {
-            let possibleLanes = [0, 1, 2].filter(i =>
+            // NEW: Respect validLanes restriction (Courage-3: opponent_highest_value_lane)
+            let possibleLanes = (action as any).validLanes || [0, 1, 2];
+            possibleLanes = possibleLanes.filter((i: number) =>
                 !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex
-            ).filter(i =>
+            ).filter((i: number) =>
                 !('originalLaneIndex' in action) || i !== action.originalLaneIndex
             );
 

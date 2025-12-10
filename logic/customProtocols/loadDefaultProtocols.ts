@@ -25,6 +25,7 @@ import psychicCustomData from '../../custom_protocols/psychic_custom_protocol.js
 import smokeCustomData from '../../custom_protocols/smoke_custom_protocol.json';
 import clarityCustomData from '../../custom_protocols/clarity_custom_protocol.json';
 import corruptionCustomData from '../../custom_protocols/corruption_custom_protocol.json';
+import courageCustomData from '../../custom_protocols/courage_custom_protocol.json';
 
 /**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
@@ -63,6 +64,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(smokeCustomData as any);
         addCustomProtocol(clarityCustomData as any);
         addCustomProtocol(corruptionCustomData as any);
+        addCustomProtocol(courageCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

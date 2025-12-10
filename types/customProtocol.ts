@@ -80,7 +80,7 @@ export interface DrawEffectParams {
     preAction?: 'refresh';  // Refresh hand before drawing
     // NEW: Advanced conditionals
     advancedConditional?: {
-        type: 'protocol_match' | 'compile_block';  // Anarchy-6, Metal-1
+        type: 'protocol_match' | 'compile_block' | 'empty_hand' | 'opponent_higher_value_in_lane';  // Anarchy-6, Metal-1, Courage-0, Courage-2
         protocol?: string;  // For 'protocol_match'
         turnDuration?: number;  // For 'compile_block'
     };
@@ -111,7 +111,7 @@ export interface FlipEffectParams {
     scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane (Chaos-0)
     // NEW: Advanced conditionals
     advancedConditional?: {
-        type: 'protocol_match';  // Anarchy-6: "if this card is in line with Anarchy protocol"
+        type: 'protocol_match' | 'opponent_higher_value_in_lane';  // Anarchy-6, Courage-6
         protocol?: string;  // For 'protocol_match'
     };
 }
@@ -130,11 +130,16 @@ export interface ShiftEffectParams {
         excludeSelf?: boolean;  // NEW: For Anarchy-1 "shift 1 other card"
     };
     destinationRestriction?: {
-        type: 'non_matching_protocol' | 'specific_lane' | 'to_another_line' | 'to_this_lane' | 'to_or_from_this_lane' | 'any';
-        laneIndex?: number | 'current';  // If type is 'specific_lane', 'to_this_lane', or 'to_or_from_this_lane', 'current' = this card's lane (Gravity-1, Gravity-2, Gravity-4)
+        type: 'non_matching_protocol' | 'specific_lane' | 'to_another_line' | 'to_this_lane' | 'to_or_from_this_lane' | 'any' | 'opponent_highest_value_lane';
+        laneIndex?: number | 'current';  // If type is 'specific_lane', 'to_this_lane', or 'to_or_from_this_lane', 'current' = this card's lane
     };
+    shiftSelf?: boolean;  // Shift this card itself
     chainedFrom?: 'flip';  // If shift follows a flip
-    scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane
+    scope?: 'any' | 'this_lane' | 'each_lane';  // 'each_lane' = execute once per lane
+    // Advanced conditionals - effect only executes if condition is met
+    advancedConditional?: {
+        type: 'empty_hand' | 'opponent_higher_value_in_lane';
+    };
 }
 
 /**
@@ -148,17 +153,29 @@ export interface DeleteEffectParams {
         faceState: TargetFaceState;
         valueRange?: { min: number; max: number };  // e.g., values 0-1
         calculation?: 'highest_value' | 'lowest_value';
-        owner?: 'own' | 'opponent';  // NEW: which player's cards
+        owner?: 'own' | 'opponent';  // which player's cards
     };
     scope?: {
         type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line' | 'each_lane';
         laneRestriction?: number;
-        minCardsInLane?: number;  // NEW: Metal-3 - "8 or more cards in line"
+        minCardsInLane?: number;  // Metal-3 - "8 or more cards in line"
     };
     protocolMatching?: 'must_match' | 'must_not_match';
     excludeSelf: boolean;
-    // NEW: Who chooses which card to delete?
+    // Who chooses which card to delete?
     actorChooses?: 'effect_owner' | 'card_owner';  // Plague-4: opponent chooses their own card
+    // Lane-based conditions for targeting
+    laneCondition?: {
+        type: 'opponent_higher_value';  // Only lanes where opponent has higher total value
+    };
+    // Select lane first, then card
+    selectLane?: boolean;
+    // Delete this card itself
+    deleteSelf?: boolean;
+    // Advanced conditionals - effect only executes if condition is met
+    advancedConditional?: {
+        type: 'empty_hand' | 'opponent_higher_value_in_lane';
+    };
 }
 
 /**
@@ -187,11 +204,15 @@ export interface ReturnEffectParams {
     targetFilter?: {
         valueEquals?: number;  // Return all cards with value X
         position?: 'any';
-        owner?: 'own' | 'opponent' | 'any';  // NEW: whose cards to return (default: 'any')
+        owner?: 'own' | 'opponent' | 'any';  // whose cards to return (default: 'any')
     };
     scope?: {
         type: 'any_card' | 'cards_in_lane';
         laneSelection?: 'prompt';
+    };
+    // Advanced conditionals - effect only executes if condition is met
+    advancedConditional?: {
+        type: 'empty_hand' | 'opponent_higher_value_in_lane';
     };
 }
 
@@ -216,22 +237,26 @@ export interface PlayEffectParams {
     destinationRule: {
         type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line' | 'line_with_matching_cards';
         excludeCurrentLane?: boolean;
-        laneIndex?: number | 'current';  // NEW: For Gravity-6 "opponent plays in this line", 'current' = this card's lane
+        laneIndex?: number | 'current';  // For Gravity-6 "opponent plays in this line", 'current' = this card's lane
         ownerFilter?: 'own' | 'opponent' | 'any';  // Whose cards to check
-        // NEW: Filter cards in lane by face state (Smoke-0, Smoke-3)
+        // Filter cards in lane by face state
         cardFilter?: {
             faceState: 'face_down' | 'face_up';
         };
     };
-    // NEW: Conditional play
+    // Conditional play
     condition?: {
         type: 'per_x_cards_in_line' | 'only_in_lines_with_cards' | 'per_x_face_down_cards';
         cardCount?: number;  // For 'per_x_cards_in_line' and 'per_x_face_down_cards' (e.g., 2 for "every 2 cards")
     };
     actor?: 'self' | 'opponent';  // Who plays (default: self)
-    // NEW: Value filter for playing specific cards (Clarity-2: "Play 1 card with a value of 1")
+    // Value filter for playing specific cards
     valueFilter?: {
         equals: number;  // Play only cards with this value
+    };
+    // Advanced conditionals - effect only executes if condition is met
+    advancedConditional?: {
+        type: 'empty_hand' | 'opponent_higher_value_in_lane';
     };
 }
 

@@ -11,6 +11,7 @@
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../../game/helpers/actionUtils';
+import { getOpponentHighestValueLanes, getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Execute SHIFT effect
@@ -24,6 +25,23 @@ export function executeShiftEffect(
 ): EffectResult {
     const { cardOwner } = context;
     let newState = { ...state };
+
+    // Advanced Conditional Checks - skip effect if condition not met
+    if (params.advancedConditional?.type === 'empty_hand') {
+        if (state[cardOwner].hand.length > 0) {
+            console.log(`[Shift Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping shift.`);
+            return { newState: state };
+        }
+    }
+    if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+        const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+        const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+        const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
+        if (oppValue <= ownValue) {
+            console.log(`[Shift Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping shift.`);
+            return { newState: state };
+        }
+    }
 
     console.log(`[DEBUG executeShiftEffect] Called for ${card.protocol}-${card.value}`);
     console.log(`[DEBUG executeShiftEffect] params.useCardFromPreviousEffect: ${params.useCardFromPreviousEffect}`);
@@ -152,10 +170,70 @@ export function executeShiftEffect(
         return { newState };
     }
 
-    // NEW: shiftSelf parameter - this card shifts itself (Speed-2, Spirit-3)
+    // NEW: shiftSelf parameter - this card shifts itself (Speed-2, Spirit-3, Courage-3)
     // This bypasses all target filtering and directly shifts the source card
     if (params.shiftSelf) {
         console.log('[DEBUG shiftExecutor] shiftSelf path - creating actionRequired');
+
+        // Handle opponent_highest_value_lane destination (Courage-3)
+        if (params.destinationRestriction?.type === 'opponent_highest_value_lane') {
+            const validLanes = getOpponentHighestValueLanes(state, cardOwner);
+
+            // Check if card is already in one of the opponent's highest value lanes
+            if (validLanes.includes(laneIndex)) {
+                newState = log(newState, cardOwner, `Card is already in opponent's highest value lane. Shift skipped.`);
+                return { newState };
+            }
+
+            // Filter out current lane (can't shift to same lane) - should not happen if above check passed
+            const filteredLanes = validLanes.filter(l => l !== laneIndex);
+
+            if (filteredLanes.length === 0) {
+                newState = log(newState, cardOwner, `No valid destination lane. Shift skipped.`);
+                return { newState };
+            }
+
+            if (filteredLanes.length === 1) {
+                // Auto-shift to the only valid lane (or skip if optional and user doesn't want to)
+                if (params.optional) {
+                    // Let user decide whether to shift
+                    newState.actionRequired = {
+                        type: 'select_lane_for_shift',
+                        cardToShiftId: card.id,
+                        cardOwner: cardOwner,
+                        originalLaneIndex: laneIndex,
+                        sourceCardId: card.id,
+                        actor: cardOwner,
+                        validLanes: filteredLanes,
+                        destinationRestriction: params.destinationRestriction,
+                        optional: true,
+                    } as any;
+                    return { newState };
+                }
+
+                // Auto-shift to the only valid lane
+                const targetLane = filteredLanes[0];
+                console.log(`[Shift Effect] Auto-shifting to opponent's highest value lane: ${targetLane}`);
+                const shiftResult = internalShiftCard(newState, card.id, cardOwner, targetLane, cardOwner);
+                return { newState: shiftResult.newState, animationRequests: shiftResult.animationRequests };
+            }
+
+            // Multiple lanes with same highest value - let player choose
+            newState.actionRequired = {
+                type: 'select_lane_for_shift',
+                cardToShiftId: card.id,
+                cardOwner: cardOwner,
+                originalLaneIndex: laneIndex,
+                sourceCardId: card.id,
+                actor: cardOwner,
+                validLanes: filteredLanes,
+                destinationRestriction: params.destinationRestriction,
+                optional: params.optional || false,
+            } as any;
+            return { newState };
+        }
+
+        // Default shiftSelf behavior (Spirit-3, Speed-2)
         newState.actionRequired = {
             type: 'shift_flipped_card_optional',
             cardId: card.id,

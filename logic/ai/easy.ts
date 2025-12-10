@@ -490,7 +490,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // LANE SELECTION - GENERIC
         // =========================================================================
         case 'select_lane_for_shift': {
-            let possibleLanes = [0, 1, 2].filter(l => l !== action.originalLaneIndex);
+            // NEW: Respect validLanes restriction (Courage-3: opponent_highest_value_lane)
+            let possibleLanes = (action as any).validLanes || [0, 1, 2];
+            possibleLanes = possibleLanes.filter((l: number) => l !== action.originalLaneIndex);
 
             // Apply destination restriction
             if (action.destinationRestriction) {
@@ -534,7 +536,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'select_lane_for_delete': {
-            const validLanes = [0, 1, 2].filter(l => {
+            // NEW: Respect validLanes restriction (Courage-1: opponent_higher_value)
+            let validLanes = (action as any).validLanes || [0, 1, 2];
+            validLanes = validLanes.filter((l: number) => {
                 if (action.excludeSourceLane && l === action.laneIndex) return false;
                 return true;
             });

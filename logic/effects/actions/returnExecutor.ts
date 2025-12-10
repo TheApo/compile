@@ -10,6 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
+import { getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Execute RETURN effect
@@ -26,7 +27,24 @@ export function executeReturnEffect(
     const owner = params.targetFilter?.owner || 'any';
     const position = params.targetFilter?.position || 'uncovered';
 
-    // NEW: Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
+    // Advanced Conditional Checks - skip effect if condition not met
+    if (params.advancedConditional?.type === 'empty_hand') {
+        if (state[cardOwner].hand.length > 0) {
+            console.log(`[Return Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping return.`);
+            return { newState: state };
+        }
+    }
+    if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+        const opp = cardOwner === 'player' ? 'opponent' : 'player';
+        const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+        const oppValue = getPlayerLaneValue(state, opp, laneIndex);
+        if (oppValue <= ownValue) {
+            console.log(`[Return Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping return.`);
+            return { newState: state };
+        }
+    }
+
+    // Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
     // User first selects a lane, then all matching cards in that lane are returned
     if (params.selectLane) {
         let newState = { ...state };

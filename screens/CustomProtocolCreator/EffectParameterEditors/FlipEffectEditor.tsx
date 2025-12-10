@@ -116,6 +116,11 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                         if (e.target.value === '') {
                             const { advancedConditional, ...rest } = params;
                             onChange(rest as FlipEffectParams);
+                        } else if (e.target.value === 'protocol_match') {
+                            onChange({
+                                ...params,
+                                advancedConditional: { type: 'protocol_match', protocol: '' }
+                            });
                         } else {
                             onChange({
                                 ...params,
@@ -126,6 +131,7 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 >
                     <option value="">None</option>
                     <option value="protocol_match">Only if in specific protocol line</option>
+                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
                 </select>
             </label>
 

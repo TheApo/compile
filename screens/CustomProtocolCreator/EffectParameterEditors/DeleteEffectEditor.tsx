@@ -229,6 +229,70 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                 )}
             </label>
 
+            <h5>Advanced Conditional</h5>
+
+            <label>
+                Conditional Type
+                <select
+                    value={params.advancedConditional?.type || 'none'}
+                    onChange={e => {
+                        if (e.target.value === 'none') {
+                            const { advancedConditional, ...rest } = params;
+                            onChange(rest as DeleteEffectParams);
+                        } else {
+                            onChange({ ...params, advancedConditional: { type: e.target.value as any } });
+                        }
+                    }}
+                >
+                    <option value="none">None</option>
+                    <option value="empty_hand">Only if hand is empty</option>
+                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                </select>
+            </label>
+
+            <h5>Lane Restriction</h5>
+
+            <label>
+                Lane Condition
+                <select
+                    value={params.laneCondition?.type || 'none'}
+                    onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'none') {
+                            const { laneCondition, selectLane, ...rest } = params;
+                            onChange(rest as DeleteEffectParams);
+                        } else {
+                            onChange({
+                                ...params,
+                                laneCondition: { type: val as any },
+                                selectLane: true
+                            });
+                        }
+                    }}
+                >
+                    <option value="none">None (any lane)</option>
+                    <option value="opponent_higher_value">Only lanes where opponent has higher value</option>
+                </select>
+                {params.laneCondition?.type === 'opponent_higher_value' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Can only delete cards in lanes where opponent's total value is higher than yours.
+                        Player selects lane first, then card.
+                    </small>
+                )}
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.selectLane || false}
+                    onChange={e => onChange({ ...params, selectLane: e.target.checked })}
+                />
+                Select lane first (player chooses lane, then card)
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Enable if player should pick a lane before selecting a card.
+                </small>
+            </label>
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>

@@ -13,6 +13,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'chaos_custom_1',
     'clarity-custom-001',
     'corruption-custom-001',
+    'courage-custom-001',
     'darkness_custom_v1',
     'death_custom_v1',
     'fire-custom-001',

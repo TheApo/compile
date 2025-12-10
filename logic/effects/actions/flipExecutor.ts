@@ -12,6 +12,7 @@ import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../.
 import { log } from '../../utils/log';
 import { findCardOnBoard } from '../../game/helpers/actionUtils';
 import { isFrost1Active } from '../../game/passiveRuleChecker';
+import { getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Execute FLIP effect
@@ -156,6 +157,19 @@ export function executeFlipEffect(
                 return { newState: state };
             }
             console.log(`[Flip Effect] Protocol match success: card is in ${cardProtocol} lane (requires ${requiredProtocol}).`);
+        }
+
+        // NEW: Check opponent_higher_value_in_lane (Courage-6)
+        if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+            const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+            const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+            const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
+
+            if (oppValue <= ownValue) {
+                console.log(`[Flip Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping flip.`);
+                return { newState: state };
+            }
+            console.log(`[Flip Effect] Opponent higher value check passed: own=${ownValue}, opponent=${oppValue}.`);
         }
 
         // Flip this card

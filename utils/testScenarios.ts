@@ -3171,6 +3171,84 @@ export const scenario58_ClarityAITest: TestScenario = {
  * - Corruption-5: [Middle] Discard 1 card.
  * - Corruption-6: [Top End] Choice: Discard 1 OR delete this card.
  */
+export const scenario60_CourageCustomPlayground: TestScenario = {
+    name: 'Courage Custom Playground',
+    description: 'Test all Courage effects: empty hand draw, opponent higher value delete, conditional draw/flip, highest value shift',
+    setup: (state: GameState): GameState => {
+        // Player has Courage protocol
+        // Opponent has higher value in lanes 0 and 1
+        // Opponent has lower value in lane 2
+        const playerProtocols = ['Courage', 'Fire', 'Speed'];
+        const opponentProtocols = ['Spirit', 'Water', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Courage cards
+        newState.player.hand = [
+            createCard('Courage', 0, true),
+            createCard('Courage', 1, true),
+            createCard('Courage', 2, true),
+            createCard('Courage', 3, true),
+            createCard('Courage', 5, true),
+        ];
+
+        // Board setup:
+        // Lane 0: Opponent has 8, Player has 3 → Opponent higher (test Courage-1, Courage-2 End, Courage-6)
+        newState = placeCard(newState, 'opponent', 0, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+
+        // Lane 1: Opponent has 6, Player has 4 → Opponent higher
+        newState = placeCard(newState, 'opponent', 1, createCard('Water', 6, true));
+        newState = placeCard(newState, 'player', 1, createCard('Speed', 4, true));
+
+        // Lane 2: Opponent has 2, Player has 5 → Player higher (not valid for opponent_higher_value)
+        newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 5, true));
+
+        return finalizeScenario(newState);
+    }
+};
+
+export const scenario61_CourageAITest: TestScenario = {
+    name: 'Courage AI Test',
+    description: 'Test AI with Courage protocol: lane-restricted delete, self-shift to highest value lane',
+    setup: (state: GameState): GameState => {
+        // AI (opponent) has Courage protocol
+        // Player has varying values in lanes
+        const playerProtocols = ['Spirit', 'Water', 'Fire'];
+        const opponentProtocols = ['Courage', 'Speed', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // AI hand - key Courage cards for testing
+        newState.opponent.hand = [
+            createCard('Courage', 1, true),  // Delete in opponent_higher_value lane
+            createCard('Courage', 3, true),  // Shift to highest value lane
+            createCard('Courage', 6, true),  // Flip self if opponent higher
+            createCard('Speed', 4, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        // Board setup:
+        // Lane 0: Player has 10 (highest), AI has 3 → Player higher
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, true));
+
+        // Lane 1: Player has 6, AI has 4 → Player higher
+        newState = placeCard(newState, 'player', 1, createCard('Water', 6, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 2, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Darkness', 2, false)); // Face-down
+
+        // Lane 2: Player has 3, AI has 5 → AI higher (not valid for opponent_higher_value)
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Speed', 5, true));
+
+        return finalizeScenario(newState);
+    }
+};
+
 export const scenario59_CorruptionCustomPlayground: TestScenario = {
     name: "Corruption Test Playground",
     description: "☠️ All Corruption cards on hand - corrupt your opponent's plans",
@@ -3280,4 +3358,6 @@ export const allScenarios: TestScenario[] = [
     scenario57_ClarityCustomPlayground,
     scenario58_ClarityAITest,
     scenario59_CorruptionCustomPlayground,
+    scenario60_CourageCustomPlayground,
+    scenario61_CourageAITest,
 ];

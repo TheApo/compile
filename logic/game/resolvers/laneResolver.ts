@@ -137,6 +137,13 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 return { nextState: prev }; // Block the illegal move
             }
 
+            // NEW: Validate validLanes restriction (Courage-3: opponent_highest_value_lane)
+            const validLanes = (prev.actionRequired as any).validLanes;
+            if (validLanes && !validLanes.includes(targetLaneIndex)) {
+                console.error(`Illegal shift: Lane ${targetLaneIndex} not in valid lanes ${validLanes}`);
+                return { nextState: prev }; // Block the illegal move
+            }
+
             // CRITICAL VALIDATION for Anarchy-1: "Shift 1 other card to a line without a matching protocol"
             // The destination lane must NOT have a matching protocol for the card being shifted
             // IMPORTANT: This rule only applies to face-up cards. Face-down cards can be shifted to any lane.
@@ -788,14 +795,23 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_delete': {
-            // NEW: Generic lane selection for delete with composable filters
-            // Used by Death-2 and other cards that need lane-based deletion
+            // Generic lane selection for delete with composable filters
+            // Used by Death-2, Courage-1 and other cards that need lane-based deletion
             const actor = prev.actionRequired.actor;
             const actorName = actor === 'player' ? 'Player' : 'Opponent';
             const targetProtocolName = prev.player.protocols[targetLaneIndex];
             const targetFilter = (prev.actionRequired as any).targetFilter || {};
             const sourceCardInfo = findCardOnBoard(prev, prev.actionRequired.sourceCardId);
             const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
+            const deleteCount = (prev.actionRequired as any).count || 1;
+            const deleteAll = (prev.actionRequired as any).deleteAll === true;
+
+            // Validate validLanes restriction (Courage-1: opponent_higher_value)
+            const validLanes = (prev.actionRequired as any).validLanes;
+            if (validLanes && !validLanes.includes(targetLaneIndex)) {
+                console.error(`Illegal delete lane selection: Lane ${targetLaneIndex} not in valid lanes ${validLanes}`);
+                return { nextState: prev }; // Block the illegal move
+            }
 
             newState = log(newState, actor, `${sourceCardName}: ${actorName} targets Protocol ${targetProtocolName}.`);
 
@@ -815,7 +831,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const faceDownValueInLane = playerState.lanes[targetLaneIndex]
                     .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
 
-                for (const card of playerState.lanes[targetLaneIndex]) {
+                const laneCards = playerState.lanes[targetLaneIndex];
+                for (let cardIdx = 0; cardIdx < laneCards.length; cardIdx++) {
+                    const card = laneCards[cardIdx];
+                    const isUncovered = cardIdx === laneCards.length - 1;
+
                     // Apply targetFilter to determine if card should be deleted
                     const value = card.isFaceUp ? card.value : faceDownValueInLane;
 
@@ -833,12 +853,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.owner === 'own' && p !== actor) continue;
                     if (targetFilter.owner === 'opponent' && p === actor) continue;
 
+                    // Check position filter (uncovered/covered/any)
+                    if (targetFilter.position === 'uncovered' && !isUncovered) continue;
+                    if (targetFilter.position === 'covered' && isUncovered) continue;
+
                     cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
                     deletedCardIds.add(card.id);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
                     deletedCardNames.push(`${ownerName} ${cardName}`);
+
+                    // Respect count limit (unless deleteAll is true)
+                    if (!deleteAll && cardsToDelete.length >= deleteCount) break;
                 }
+                // Break outer loop too if we hit count limit
+                if (!deleteAll && cardsToDelete.length >= deleteCount) break;
             }
 
             if (deletedCardNames.length > 0) {

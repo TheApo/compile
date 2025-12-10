@@ -13,7 +13,7 @@ import { log } from '../../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
 import { findCardOnBoard } from '../../game/helpers/actionUtils';
-import { getEffectiveCardValue } from '../../game/stateManager';
+import { getEffectiveCardValue, getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Helper function to draw cards from deck
@@ -263,6 +263,28 @@ export function executeDrawEffect(
             return { newState: state };
         }
         console.log(`[Draw Effect] Protocol match success: card is in ${cardProtocol} lane (requires ${requiredProtocol}).`);
+    }
+
+    // NEW: Advanced Conditional - Empty Hand (Courage-0)
+    if (params.advancedConditional?.type === 'empty_hand') {
+        if (state[drawingPlayer].hand.length > 0) {
+            console.log(`[Draw Effect] Empty hand check failed: ${state[drawingPlayer].hand.length} cards in hand. Skipping draw.`);
+            return { newState: state };
+        }
+        console.log(`[Draw Effect] Empty hand check passed: hand is empty.`);
+    }
+
+    // NEW: Advanced Conditional - Opponent Higher Value in Lane (Courage-2)
+    if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+        const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+        const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+        const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
+
+        if (oppValue <= ownValue) {
+            console.log(`[Draw Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping draw.`);
+            return { newState: state };
+        }
+        console.log(`[Draw Effect] Opponent higher value check passed: own=${ownValue}, opponent=${oppValue}.`);
     }
 
     // NEW: Advanced Conditional - Compile Block (Metal-1)

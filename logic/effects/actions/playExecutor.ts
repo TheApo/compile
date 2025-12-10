@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { findCardOnBoard } from '../../game/helpers/actionUtils';
 import { drawCards } from '../../../utils/gameStateModifiers';
 import { executeOnCoverEffect } from '../../effectExecutor';
+import { getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Execute PLAY effect
@@ -32,6 +33,23 @@ export function executePlayEffect(
     // If undefined, the resolver will use normal game rules (face-down if not matching protocol)
     const faceDown = params.faceDown; // Can be true, false, or undefined
     const actor = params.actor === 'opponent' ? opponent : cardOwner;
+
+    // Advanced Conditional Checks - skip effect if condition not met
+    if (params.advancedConditional?.type === 'empty_hand') {
+        if (state[cardOwner].hand.length > 0) {
+            console.log(`[Play Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping play.`);
+            return { newState: state };
+        }
+    }
+    if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+        const opp = cardOwner === 'player' ? 'opponent' : 'player';
+        const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+        const oppValue = getPlayerLaneValue(state, opp, laneIndex);
+        if (oppValue <= ownValue) {
+            console.log(`[Play Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping play.`);
+            return { newState: state };
+        }
+    }
 
     // CRITICAL: Water-1 logic - Automatic play from deck to each other line
     // If playing from deck with each_other_line, play automatically WITHOUT user interaction

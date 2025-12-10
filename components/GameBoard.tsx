@@ -177,7 +177,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const getLaneEffectTargetability = (targetLaneIndex: number): boolean => {
         if (!actionRequired || actionRequired.actor !== 'player') return false;
         switch (actionRequired.type) {
-            case 'select_lane_for_delete':
+            case 'select_lane_for_delete': {
+                // NEW: Check validLanes for Courage-1 (opponent_higher_value)
+                const validLanes = (actionRequired as any).validLanes;
+                if (validLanes && !validLanes.includes(targetLaneIndex)) return false;
+                return true;
+            }
             case 'select_lane_for_death_2':
             case 'select_lane_for_water_3':
             case 'select_lane_for_return':
@@ -217,6 +222,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             case 'select_lane_for_shift': {
                 // Target lane must belong to the card's owner and not be the original lane.
                 if (targetOwner !== actionRequired.cardOwner || targetLaneIndex === actionRequired.originalLaneIndex) {
+                    return false;
+                }
+
+                // NEW: Check validLanes for Courage-3 (opponent_highest_value_lane)
+                const validLanes = (actionRequired as any).validLanes;
+                if (validLanes && !validLanes.includes(targetLaneIndex)) {
                     return false;
                 }
 

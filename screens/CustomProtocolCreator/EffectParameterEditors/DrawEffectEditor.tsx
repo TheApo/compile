@@ -178,12 +178,18 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                             onChange({ ...params, advancedConditional: { type: 'protocol_match', protocol: '' } });
                         } else if (e.target.value === 'compile_block') {
                             onChange({ ...params, advancedConditional: { type: 'compile_block', turnDuration: 1 } });
+                        } else if (e.target.value === 'empty_hand') {
+                            onChange({ ...params, advancedConditional: { type: 'empty_hand' } });
+                        } else if (e.target.value === 'opponent_higher_value_in_lane') {
+                            onChange({ ...params, advancedConditional: { type: 'opponent_higher_value_in_lane' } });
                         }
                     }}
                 >
                     <option value="none">None</option>
-                    <option value="protocol_match">Only if in line with matching protocol (Anarchy-6)</option>
-                    <option value="compile_block">Block opponent's compile next turn (Metal-1)</option>
+                    <option value="protocol_match">Only if in line with matching protocol</option>
+                    <option value="compile_block">Block opponent's compile next turn</option>
+                    <option value="empty_hand">Only if hand is empty</option>
+                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
                 </select>
             </label>
 

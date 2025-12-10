@@ -313,3 +313,49 @@ export const calculateCompilableLanes = (state: GameState, player: Player): numb
     }
     return compilableLanes;
 };
+
+/**
+ * Calculate total lane value for a specific player (uses cached laneValues)
+ * This is more efficient than recalculating from scratch
+ */
+export const getPlayerLaneValue = (state: GameState, player: Player, laneIndex: number): number => {
+    return state[player].laneValues[laneIndex];
+};
+
+/**
+ * Find lanes where opponent has higher total value than the card owner (Courage-1)
+ */
+export const getLanesWhereOpponentHasHigherValue = (state: GameState, cardOwner: Player): number[] => {
+    const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+    const validLanes: number[] = [];
+
+    for (let i = 0; i < 3; i++) {
+        const ownValue = state[cardOwner].laneValues[i];
+        const oppValue = state[opponent].laneValues[i];
+        if (oppValue > ownValue) {
+            validLanes.push(i);
+        }
+    }
+    return validLanes;
+};
+
+/**
+ * Find lane(s) with opponent's highest total value (Courage-3)
+ * Returns array in case of ties
+ */
+export const getOpponentHighestValueLanes = (state: GameState, cardOwner: Player): number[] => {
+    const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+    let maxValue = -1;
+    let maxLanes: number[] = [];
+
+    for (let i = 0; i < 3; i++) {
+        const oppValue = state[opponent].laneValues[i];
+        if (oppValue > maxValue) {
+            maxValue = oppValue;
+            maxLanes = [i];
+        } else if (oppValue === maxValue) {
+            maxLanes.push(i);
+        }
+    }
+    return maxLanes;
+};

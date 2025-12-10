@@ -104,6 +104,20 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // NEW: Advanced Conditional - Empty Hand (Courage-0)
+            if (params.advancedConditional?.type === 'empty_hand') {
+                const count = params.count || 1;
+                mainText = `If you have no cards in hand, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
+            // NEW: Advanced Conditional - Opponent Higher Value in Lane (Courage-2)
+            if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                const count = params.count || 1;
+                mainText = `If your opponent has a higher total value than you do in this line, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
             // NEW: Handle optional draw (Death-1: "You may draw...")
             const optionalPrefix = params.optional ? 'You may ' : '';
 
@@ -130,8 +144,14 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            // NEW: Handle flipSelf mode (Anarchy-6)
+            // NEW: Handle flipSelf mode (Anarchy-6, Courage-6)
             if (params.flipSelf) {
+                // NEW: Courage-6 - Opponent higher value conditional
+                if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                    mainText = 'If your opponent has a higher value in this line than you do, flip this card.';
+                    break;
+                }
+
                 let text = params.optional ? 'Flip this card' : 'Flip this card';
 
                 // NEW: Add conditional text (Anarchy-6)
@@ -214,8 +234,24 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         case 'shift': {
             const mayShift = params.optional ? 'You may shift' : 'Shift';
 
-            // NEW: Handle explicit shiftSelf parameter (Speed-2)
+            // Advanced Conditional prefix for shift
+            if (params.advancedConditional?.type === 'empty_hand') {
+                mainText = `If you have no cards in hand, ${mayShift.toLowerCase()} 1 card.`;
+                break;
+            }
+            if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                mainText = `If your opponent has a higher total value than you do in this line, ${mayShift.toLowerCase()} 1 card.`;
+                break;
+            }
+
+            // Handle explicit shiftSelf parameter
             if (params.shiftSelf) {
+                // Shift to opponent's highest value lane
+                if (params.destinationRestriction?.type === 'opponent_highest_value_lane') {
+                    mainText = `${mayShift} this card to the line where your opponent has their highest total value.`;
+                    break;
+                }
+
                 let text = `${mayShift} this card`;
                 if (params.allowCoveredSelf) {
                     text += ', even if this card is covered';
@@ -341,15 +377,36 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'delete': {
+            // Advanced Conditional prefix for delete
+            if (params.advancedConditional?.type === 'empty_hand') {
+                const count = params.count || 1;
+                mainText = `If you have no cards in hand, delete ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+            if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                const count = params.count || 1;
+                mainText = `If your opponent has a higher total value than you do in this line, delete ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 mainText = 'Delete that card.';
                 break;
             }
 
-            // NEW: Handle deleteSelf (Death-1: "delete this card")
+            // Handle deleteSelf
             if (params.deleteSelf) {
                 mainText = 'Delete this card.';
+                break;
+            }
+
+            // Handle laneCondition
+            if (params.laneCondition?.type === 'opponent_higher_value') {
+                const count = params.count || 1;
+                const ownerText = params.targetFilter?.owner === 'opponent' ? "of your opponent's " : '';
+                const cardWord = count === 1 ? 'card' : 'cards';
+                mainText = `Delete ${count} ${ownerText}${cardWord} in a line where they have a higher total value than you do.`;
                 break;
             }
 
@@ -520,6 +577,18 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'return': {
+            // Advanced Conditional prefix for return
+            if (params.advancedConditional?.type === 'empty_hand') {
+                const count = params.count || 1;
+                mainText = `If you have no cards in hand, return ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+            if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                const count = params.count || 1;
+                mainText = `If your opponent has a higher total value than you do in this line, return ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 mainText = 'Return that card to hand.';
@@ -563,6 +632,18 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
         }
 
         case 'play': {
+            // Advanced Conditional prefix for play
+            if (params.advancedConditional?.type === 'empty_hand') {
+                const count = params.count || 1;
+                mainText = `If you have no cards in hand, play ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+            if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+                const count = params.count || 1;
+                mainText = `If your opponent has a higher total value than you do in this line, play ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 const faceState = params.faceDown === true ? 'face-down' : params.faceDown === false ? 'face-up' : '';

@@ -94,6 +94,41 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             </label>
 
             <label>
+                <input
+                    type="checkbox"
+                    checked={params.shiftSelf || false}
+                    onChange={e =>
+                        onChange({ ...params, shiftSelf: e.target.checked })
+                    }
+                />
+                Shift this card (instead of selecting target)
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    The card shifts itself, ignoring target filter.
+                </small>
+            </label>
+
+            <h5>Advanced Conditional</h5>
+
+            <label>
+                Conditional Type
+                <select
+                    value={params.advancedConditional?.type || 'none'}
+                    onChange={e => {
+                        if (e.target.value === 'none') {
+                            const { advancedConditional, ...rest } = params;
+                            onChange(rest as ShiftEffectParams);
+                        } else {
+                            onChange({ ...params, advancedConditional: { type: e.target.value as any } });
+                        }
+                    }}
+                >
+                    <option value="none">None</option>
+                    <option value="empty_hand">Only if hand is empty</option>
+                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                </select>
+            </label>
+
+            <label>
                 Destination
                 <select
                     value={params.destinationRestriction?.type || 'any'}
@@ -110,7 +145,15 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                     <option value="to_another_line">To another line</option>
                     <option value="non_matching_protocol">Non-matching protocol</option>
                     <option value="specific_lane">This line (within)</option>
+                    <option value="to_this_lane">To THIS lane only</option>
+                    <option value="to_or_from_this_lane">To OR from this lane</option>
+                    <option value="opponent_highest_value_lane">To opponent's highest value lane</option>
                 </select>
+                {params.destinationRestriction?.type === 'opponent_highest_value_lane' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Card can only be shifted to the lane where opponent has highest total value.
+                    </small>
+                )}
             </label>
 
             <div className="effect-preview">

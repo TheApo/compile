@@ -1,0 +1,174 @@
+{
+  "id": "courage-custom-001",
+  "name": "Courage",
+  "description": "Face challenges head-on. Gain power when outnumbered.",
+  "author": "System",
+  "createdAt": "2025-12-10T00:00:00.000Z",
+  "color": "#D4AF37",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "courage-0-start-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "advancedConditional": {
+              "type": "empty_hand"
+            }
+          },
+          "position": "top",
+          "trigger": "start"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "courage-0-draw",
+          "params": {
+            "action": "draw",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "courage-0-end-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "optional": true
+          },
+          "position": "bottom",
+          "trigger": "end",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "courage-0-opponent-discard",
+              "params": {
+                "action": "discard",
+                "count": 1,
+                "actor": "opponent"
+              },
+              "position": "bottom",
+              "trigger": "end"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "courage-1-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "uncovered"
+            },
+            "selectLane": true,
+            "laneCondition": {
+              "type": "opponent_higher_value"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "courage-2-draw",
+          "params": {
+            "action": "draw",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "courage-2-end-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "advancedConditional": {
+              "type": "opponent_higher_value_in_lane"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "courage-3-shift",
+          "params": {
+            "action": "shift",
+            "shiftSelf": true,
+            "optional": true,
+            "destinationRestriction": {
+              "type": "opponent_highest_value_lane"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "courage-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "courage-6-flip",
+          "params": {
+            "action": "flip",
+            "flipSelf": true,
+            "advancedConditional": {
+              "type": "opponent_higher_value_in_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "end"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

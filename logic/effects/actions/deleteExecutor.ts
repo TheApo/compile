@@ -11,6 +11,7 @@
 import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
 import { log } from '../../utils/log';
 import { findCardOnBoard, handleUncoverEffect } from '../../game/helpers/actionUtils';
+import { getLanesWhereOpponentHasHigherValue, getPlayerLaneValue } from '../../game/stateManager';
 
 /**
  * Execute DELETE effect
@@ -25,7 +26,24 @@ export function executeDeleteEffect(
     const { cardOwner } = context;
     let count = params.count || 1;
 
-    // NEW: Generic useCardFromPreviousEffect support
+    // Advanced Conditional Checks - skip effect if condition not met
+    if (params.advancedConditional?.type === 'empty_hand') {
+        if (state[cardOwner].hand.length > 0) {
+            console.log(`[Delete Effect] Empty hand check failed: ${state[cardOwner].hand.length} cards in hand. Skipping delete.`);
+            return { newState: state };
+        }
+    }
+    if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
+        const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+        const ownValue = getPlayerLaneValue(state, cardOwner, laneIndex);
+        const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
+        if (oppValue <= ownValue) {
+            console.log(`[Delete Effect] Opponent higher value check failed: own=${ownValue}, opponent=${oppValue}. Skipping delete.`);
+            return { newState: state };
+        }
+    }
+
+    // Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
     if (params.useCardFromPreviousEffect && state.lastCustomEffectTargetCardId) {
         const targetCardId = state.lastCustomEffectTargetCardId;
@@ -96,6 +114,20 @@ export function executeDeleteEffect(
             return { newState: state };
         }
         console.log(`[Delete Effect] Line filter met: ${cardsInLane} >= ${minCards} cards in lane.`);
+    }
+
+    // NEW: Lane Condition - Courage-1: "Delete in a line where opponent has higher value"
+    // Compute valid lanes based on lane condition
+    let validLaneIndices: number[] = [0, 1, 2];
+    if (params.laneCondition?.type === 'opponent_higher_value') {
+        validLaneIndices = getLanesWhereOpponentHasHigherValue(state, cardOwner);
+
+        if (validLaneIndices.length === 0) {
+            let newState = log(state, cardOwner, `No lanes where opponent has higher value. Delete effect skipped.`);
+            (newState as any)._effectSkippedNoTargets = true;
+            return { newState };
+        }
+        console.log(`[Delete Effect] Opponent higher value lanes: ${validLaneIndices.join(', ')}`);
     }
 
     // NEW: Determine actor based on actorChooses
@@ -383,8 +415,9 @@ export function executeDeleteEffect(
         return { newState, animationRequests };
     }
 
-    // NEW: Handle selectLane (Death-2: "Delete all cards in 1 line with values of 1 or 2")
-    // User first selects a lane, then all matching cards in that lane are deleted
+    // Handle selectLane (Death-2: "Delete all cards in 1 line with values of 1 or 2")
+    // User first selects a lane, then matching cards in that lane are deleted
+    // Also used for Courage-1: selectLane with laneCondition (only valid lanes where opponent has higher value)
     if (params.selectLane) {
         newState.actionRequired = {
             type: 'select_lane_for_delete',
@@ -392,7 +425,11 @@ export function executeDeleteEffect(
             actor,
             count: params.count,
             targetFilter: params.targetFilter,
-            deleteAll: params.count === 'all' || params.count === undefined,
+            // Only deleteAll if count is explicitly 'all_in_lane' or 'all'
+            deleteAll: params.count === 'all_in_lane' || params.count === 'all',
+            // Pass validLanes for Courage-1 (lanes where opponent has higher value)
+            validLanes: validLaneIndices.length < 3 ? validLaneIndices : undefined,
+            laneCondition: params.laneCondition,
         } as any;
 
         return { newState };

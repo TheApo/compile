@@ -133,10 +133,31 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                         })}
                     />
                     <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                        Gravity-0: "For every 2 cards in this line, play..." → X = 2
+                        Example: "For every 2 cards in this line, play..." → X = 2
                     </small>
                 </label>
             )}
+
+            <h5>Advanced Conditional</h5>
+
+            <label>
+                Conditional Type
+                <select
+                    value={params.advancedConditional?.type || 'none'}
+                    onChange={e => {
+                        if (e.target.value === 'none') {
+                            const { advancedConditional, ...rest } = params;
+                            onChange(rest as PlayEffectParams);
+                        } else {
+                            onChange({ ...params, advancedConditional: { type: e.target.value as any } });
+                        }
+                    }}
+                >
+                    <option value="none">None</option>
+                    <option value="empty_hand">Only if hand is empty</option>
+                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                </select>
+            </label>
 
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
