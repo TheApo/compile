@@ -11,6 +11,9 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
     params,
     onChange,
 }) => {
+    // Ensure targetFilter has default values to prevent undefined errors
+    const targetFilter = params.targetFilter || { owner: 'any', position: 'uncovered', faceState: 'any' };
+
     return (
         <div className="param-editor">
             <h4>Shift Effect</h4>
@@ -34,9 +37,9 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             <label>
                 Target Owner
                 <select
-                    value={params.targetFilter.owner}
+                    value={targetFilter.owner || 'any'}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, owner: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, owner: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -47,9 +50,9 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             <label>
                 Position
                 <select
-                    value={params.targetFilter.position}
+                    value={targetFilter.position || 'uncovered'}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, position: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, position: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -60,9 +63,9 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             <label>
                 Face State
                 <select
-                    value={params.targetFilter.faceState}
+                    value={targetFilter.faceState || 'any'}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, faceState: e.target.value as any } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, faceState: e.target.value as any } })
                     }
                 >
                     <option value="any">Any</option>
@@ -74,9 +77,9 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
             <label>
                 <input
                     type="checkbox"
-                    checked={params.targetFilter.excludeSelf || false}
+                    checked={targetFilter.excludeSelf || false}
                     onChange={e =>
-                        onChange({ ...params, targetFilter: { ...params.targetFilter, excludeSelf: e.target.checked } })
+                        onChange({ ...params, targetFilter: { ...targetFilter, excludeSelf: e.target.checked } })
                     }
                 />
                 Exclude self ("other card")
@@ -181,9 +184,6 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                 )}
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

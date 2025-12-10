@@ -96,9 +96,6 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                 </label>
             )}
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

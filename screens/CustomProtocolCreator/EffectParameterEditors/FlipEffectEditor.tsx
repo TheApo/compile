@@ -211,9 +211,6 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 Exclude self ("other cards")
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

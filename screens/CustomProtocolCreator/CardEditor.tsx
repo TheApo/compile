@@ -120,21 +120,42 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
         setEditingEffect({ box, effectIndex, effect });
     };
 
-    const getTriggerLabel = (trigger: string): string => {
+    const getTriggerLabel = (trigger: string, effect?: EffectDefinition): string => {
+        const triggerActor = effect?.reactiveTriggerActor || 'self';
+        const reactiveScope = (effect as any)?.reactiveScope || 'global';
+
+        // Special handling for after_play with actor and scope
+        if (trigger === 'after_play') {
+            const actorText = triggerActor === 'opponent' ? 'your opponent plays' :
+                             triggerActor === 'any' ? 'a card is played' : 'you play';
+            const scopeText = reactiveScope === 'this_lane' ? ' in this line' : '';
+            return `After ${actorText} a card${scopeText}`;
+        }
+
+        // Other reactive triggers with actor context
+        if (['after_delete', 'after_discard', 'after_draw', 'after_shift', 'after_flip'].includes(trigger)) {
+            const actionMap: Record<string, string> = {
+                'after_delete': 'delete cards',
+                'after_discard': 'discard cards',
+                'after_draw': 'draw cards',
+                'after_shift': 'shift cards',
+                'after_flip': 'flip cards',
+            };
+            const actorText = triggerActor === 'opponent' ? 'your opponent' :
+                             triggerActor === 'any' ? 'anyone' : 'you';
+            const scopeText = reactiveScope === 'this_lane' ? ' in this line' : '';
+            return `After ${actorText} ${actionMap[trigger]}${scopeText}`;
+        }
+
         switch (trigger) {
             case 'passive': return '';
             case 'on_play': return '';
             case 'start': return 'Start';
             case 'end': return 'End';
             case 'on_cover': return 'On Cover';
-            case 'after_delete': return 'After you delete cards';
             case 'after_opponent_discard': return 'After opponent discards';
-            case 'after_draw': return 'After you draw cards';
             case 'after_clear_cache': return 'After you clear cache';
             case 'before_compile_delete': return 'Before deleted by compile';
-            case 'after_flip': return 'After cards are flipped';
-            case 'after_shift': return 'After cards are shifted';
-            case 'after_play': return 'After cards are played';
             case 'on_flip': return 'When this card would be flipped';
             case 'on_cover_or_flip': return 'When covered or flipped';
             default: return trigger;
@@ -244,7 +265,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                             <div key={effect.id} className="effect-item">
                                 <span onClick={() => handleEditEffect('top', index)} className={readOnly ? 'read-only-clickable' : ''}>
                                     {effect.trigger !== 'passive' && (
-                                        <strong>{getTriggerLabel(effect.trigger)}:</strong>
+                                        <strong>{getTriggerLabel(effect.trigger, effect)}:</strong>
                                     )}{' '}
                                     {getEffectSummary(effect)}
                                 </span>
@@ -380,7 +401,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
                         {card.bottomEffects.map((effect, index) => (
                             <div key={effect.id} className="effect-item">
                                 <span onClick={() => handleEditEffect('bottom', index)} className={readOnly ? 'read-only-clickable' : ''}>
-                                    <strong>{getTriggerLabel(effect.trigger)}:</strong>{' '}
+                                    <strong>{getTriggerLabel(effect.trigger, effect)}:</strong>{' '}
                                     {getEffectSummary(effect)}
                                 </span>
                                 {!readOnly && <button onClick={() => handleRemoveEffect('bottom', index)}>×</button>}

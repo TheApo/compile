@@ -215,9 +215,6 @@ export const ValueModifierEditor: React.FC<ValueModifierEditorProps> = ({ params
                 </select>
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'passive', position: 'top', params })}
-            </div>
         </div>
     );
 };

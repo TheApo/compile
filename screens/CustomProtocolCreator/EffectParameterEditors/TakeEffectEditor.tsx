@@ -50,9 +50,6 @@ export const TakeEffectEditor: React.FC<TakeEffectEditorProps> = ({ params, onCh
                 Random (if unchecked, you choose)
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

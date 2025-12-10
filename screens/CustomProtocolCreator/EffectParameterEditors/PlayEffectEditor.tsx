@@ -159,9 +159,6 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                 </select>
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

@@ -24,6 +24,7 @@ import { ValueModifierEditor } from './EffectParameterEditors/ValueModifierEdito
 import { BlockCompileEffectEditor } from './EffectParameterEditors/BlockCompileEffectEditor';
 import { DeleteAllInLaneEffectEditor } from './EffectParameterEditors/DeleteAllInLaneEffectEditor';
 import { ShuffleTrashEffectEditor, ShuffleDeckEffectEditor } from './EffectParameterEditors/ShuffleEffectEditor';
+import { generateEffectText } from '../../logic/customProtocols/cardFactory';
 
 interface EffectEditorProps {
     effect: EffectDefinition;
@@ -306,8 +307,34 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
         }
     };
 
-    // Get trigger label for display
-    const getTriggerLabel = (trigger: string): string => {
+    // Get trigger label for display (includes reactiveTriggerActor and reactiveScope context)
+    const getTriggerLabel = (trigger: string, eff?: EffectDefinition): string => {
+        const triggerActor = eff?.reactiveTriggerActor || 'self';
+        const reactiveScope = (eff as any)?.reactiveScope || 'global';
+
+        // Special handling for after_play with actor and scope
+        if (trigger === 'after_play') {
+            const actorText = triggerActor === 'opponent' ? 'opponent plays' :
+                             triggerActor === 'any' ? 'any player plays' : 'you play';
+            const scopeText = reactiveScope === 'this_lane' ? ' in this line' : '';
+            return `After ${actorText} a card${scopeText}`;
+        }
+
+        // Other reactive triggers with actor context
+        if (['after_delete', 'after_discard', 'after_draw', 'after_shift', 'after_flip'].includes(trigger)) {
+            const actionMap: Record<string, string> = {
+                'after_delete': 'cards are deleted',
+                'after_discard': 'cards are discarded',
+                'after_draw': 'cards are drawn',
+                'after_shift': 'cards are shifted',
+                'after_flip': 'cards are flipped',
+            };
+            const actorPrefix = triggerActor === 'opponent' ? 'After opponent: ' :
+                               triggerActor === 'any' ? 'After anyone: ' : 'After you: ';
+            const scopeSuffix = reactiveScope === 'this_lane' ? ' (this line)' : '';
+            return actorPrefix + actionMap[trigger] + scopeSuffix;
+        }
+
         const triggerLabels: Record<string, string> = {
             'on_play': 'On Play',
             'passive': 'Passive (always active)',
@@ -316,12 +343,6 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             'on_cover': 'When Covered',
             'on_flip': 'When Flipped',
             'on_cover_or_flip': 'When Covered or Flipped',
-            'after_delete': 'After Delete',
-            'after_discard': 'After Discard',
-            'after_draw': 'After Draw',
-            'after_shift': 'After Shift',
-            'after_flip': 'After Flip',
-            'after_play': 'After Play',
             'after_clear_cache': 'After Clear Cache',
             'after_opponent_discard': 'After Opponent Discards',
             'before_compile_delete': 'Before Compile Delete',
@@ -365,13 +386,13 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                             <optgroup label="Reactive (Top Box)">
                                 <option value="on_flip">When this card would be flipped</option>
                                 <option value="on_cover_or_flip">When covered or flipped</option>
-                                <option value="after_delete">After you delete cards</option>
-                                <option value="after_discard">After you discard cards</option>
-                                <option value="after_draw">After you draw cards</option>
+                                <option value="after_delete">After cards are deleted</option>
+                                <option value="after_discard">After cards are discarded</option>
+                                <option value="after_draw">After cards are drawn</option>
                                 <option value="after_shift">After cards are shifted</option>
                                 <option value="after_flip">After cards are flipped</option>
-                                <option value="after_play">After cards are played</option>
-                                <option value="after_clear_cache">After you clear cache</option>
+                                <option value="after_play">After a card is played</option>
+                                <option value="after_clear_cache">After cache is cleared</option>
                                 <option value="after_opponent_discard">After opponent discards</option>
                                 <option value="before_compile_delete">Before deleted by compile</option>
                                 <option value="when_card_returned">When card returned to hand</option>
@@ -388,6 +409,12 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             <div className="main-effect">
                 <h3>Main Effect</h3>
                 {renderEffectParams(effect, handleParamsChange)}
+
+                {/* Full Effect Preview */}
+                <div className="effect-preview">
+                    <strong>Preview:</strong>{' '}
+                    <span dangerouslySetInnerHTML={{ __html: generateEffectText([effect]) }} />
+                </div>
             </div>
 
             {/* Use Card from Previous Effect */}

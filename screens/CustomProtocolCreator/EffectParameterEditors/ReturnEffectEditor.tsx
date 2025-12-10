@@ -148,9 +148,6 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                 </select>
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

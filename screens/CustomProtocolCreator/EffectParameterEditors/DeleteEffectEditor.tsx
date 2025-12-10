@@ -293,9 +293,6 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                 </small>
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

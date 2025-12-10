@@ -161,9 +161,6 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                 </small>
             )}
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'passive', position: 'top', params })}
-            </div>
         </div>
     );
 };

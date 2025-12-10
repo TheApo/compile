@@ -230,9 +230,6 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                 </label>
             )}
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

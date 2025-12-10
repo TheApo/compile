@@ -35,9 +35,6 @@ export const ShuffleTrashEffectEditor: React.FC<{
                 Optional ("You may shuffle...")
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };
@@ -52,10 +49,6 @@ export const ShuffleDeckEffectEditor: React.FC<{
             <p style={{ color: '#8A79E8', fontSize: '14px', marginBottom: '15px' }}>
                 Shuffle your deck. Typically used after revealing the deck.
             </p>
-
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };

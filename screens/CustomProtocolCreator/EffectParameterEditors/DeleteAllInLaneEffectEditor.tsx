@@ -53,9 +53,6 @@ export const DeleteAllInLaneEffectEditor: React.FC<DeleteAllInLaneEffectEditorPr
                 Exclude current lane (other lanes only)
             </label>
 
-            <div className="effect-preview">
-                <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
-            </div>
         </div>
     );
 };
