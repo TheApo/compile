@@ -883,9 +883,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete': {
             const disallowedIds = action.disallowedIds || [];
+            const allowedIds = (action as any).allowedIds as string[] | undefined; // NEW: For calculation filters (highest_value, lowest_value)
             const targetFilter = ((action as any).targetFilter ?? {}) as TargetFilter;
             const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
             const sourceCardId = action.sourceCardId;
+
+            console.log('[AI select_cards_to_delete] allowedIds:', allowedIds, 'ownerFilter:', targetFilter?.owner);
 
             // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
             // This handles custom effects like "Your opponent deletes 1 of their face-down cards"
@@ -896,6 +899,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     if (lane.length > 0) {
                         const topCard = lane[lane.length - 1]; // Only uncovered
                         if (matchesTargetFilter(topCard, true, targetFilter, sourceCardId)) {
+                            // NEW: Also check allowedIds if present (for calculation filters)
+                            if (allowedIds && !allowedIds.includes(topCard.id)) return;
                             ownValidCards.push(topCard);
                         }
                     }
@@ -913,7 +918,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const getUncovered = (p: Player) => state[p].lanes
                 .map(lane => lane.length > 0 ? lane[lane.length - 1] : null)
                 .filter((c): c is PlayedCard => c !== null)
-                .filter(c => matchesTargetFilter(c, true, targetFilter, sourceCardId));
+                .filter(c => matchesTargetFilter(c, true, targetFilter, sourceCardId))
+                .filter(c => !allowedIds || allowedIds.includes(c.id)); // NEW: Filter by allowedIds if present
 
             // CRITICAL: owner filter is relative to cardOwner (action.actor)
             // 'own' = cards belonging to cardOwner (AI = opponent)
@@ -923,8 +929,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (ownerFilter === 'own') {
                 // Delete own cards only (AI = opponent)
                 const ownCards = getUncovered('opponent').filter(c => !disallowedIds.includes(c.id));
+                console.log('[AI select_cards_to_delete] ownerFilter=own, ownCards:', ownCards.map(c => `${c.protocol}-${c.value}`));
                 if (ownCards.length > 0) {
-                    // Delete lowest value card (minimize loss)
+                    // Delete lowest value card (minimize loss) - but if allowedIds is set, just pick from those
                     const weakest = ownCards.sort((a, b) => a.value - b.value)[0];
                     return { type: 'deleteCard', cardId: weakest.id };
                 }

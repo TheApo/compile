@@ -81,6 +81,21 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                 </select>
             </label>
 
+            {/* Random selection - only available when actor is opponent */}
+            {params.actor === 'opponent' && (
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={params.random || false}
+                        onChange={e => onChange({ ...params, random: e.target.checked })}
+                    />
+                    Random selection (opponent can't choose which card)
+                    <small style={{ display: 'block', marginLeft: '24px', marginTop: '4px', color: '#8A79E8' }}>
+                        A random card is discarded instead of opponent choosing.
+                    </small>
+                </label>
+            )}
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>

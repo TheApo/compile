@@ -366,10 +366,12 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
 
         if (result.newState.actionRequired) {
             const newActionActor = result.newState.actionRequired.actor;
+            console.log('[UNCOVER DEBUG] actionRequired created:', result.newState.actionRequired.type, 'actor:', newActionActor, 'state.turn:', state.turn, '_interruptedTurn:', state._interruptedTurn);
             // If an interrupt is already in progress...
             if (state._interruptedTurn) {
                 // ...and the new action is for the ORIGINAL turn player...
                 if (newActionActor === state._interruptedTurn) {
+                    console.log('[UNCOVER DEBUG] Queueing action for original turn player:', newActionActor);
                     // CRITICAL FIX: When queueing the actionRequired, we need to:
                     // 1. First queue the actionRequired (e.g., flip)
                     // 2. THEN queue the pending effects (e.g., shift)
@@ -397,6 +399,7 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             // Standard interrupt logic if no interrupt is in progress, or if the new action
             // is for the currently interrupting player.
             if (newActionActor !== state.turn) {
+                console.log('[UNCOVER DEBUG] Creating interrupt: newActionActor=', newActionActor, 'state.turn=', state.turn);
                 result.newState._interruptedTurn = state.turn;
                 result.newState._interruptedPhase = state.phase;
                 result.newState.turn = newActionActor;
@@ -413,8 +416,12 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
                         }
                     };
                 }
+            } else {
+                console.log('[UNCOVER DEBUG] No interrupt needed - same actor:', newActionActor);
             }
+            console.log('[UNCOVER DEBUG] Final state: turn=', result.newState.turn, 'actionRequired=', result.newState.actionRequired?.type, '_interruptedTurn=', result.newState._interruptedTurn);
         } else {
+            console.log('[UNCOVER DEBUG] No actionRequired created');
             // CRITICAL FIX: If the uncover effect didn't create an action requirement,
             // but the turn was previously interrupted, restore the original turn holder.
             // This prevents the current player from getting an extra turn.

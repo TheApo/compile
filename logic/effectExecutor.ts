@@ -34,8 +34,9 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         return { newState: state }; // Card is covered, do not trigger middle effect.
     }
 
-    // NEW: Check passive rules for ignore middle command (Apathy-2, custom cards)
-    if (shouldIgnoreMiddleCommand(state, laneIndex)) {
+    // Check passive rules for ignore middle command
+    // Pass cardOwner so rules like "opponent's cards do not have middle commands" work correctly
+    if (shouldIgnoreMiddleCommand(state, laneIndex, cardOwner)) {
         return { newState: state }; // Middle effects are ignored in this line
     }
 

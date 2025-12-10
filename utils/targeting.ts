@@ -380,6 +380,13 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
 
             const targetFilter = (actionRequired as any).targetFilter || {};
             const destinationRestriction = (actionRequired as any).destinationRestriction;
+            const scope = (actionRequired as any).scope;
+            const sourceLaneIndex = (actionRequired as any).sourceLaneIndex;
+
+            // NEW: scope 'this_lane' - only cards in the source card's lane are targetable (Fear-3)
+            if (scope === 'this_lane' && sourceLaneIndex !== undefined && laneIndex !== sourceLaneIndex) {
+                return false;
+            }
 
             // CRITICAL: For non_matching_protocol restriction, we need to know the card's protocol
             // Face-down cards have unknown protocols → can't validate destination → skip them

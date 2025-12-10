@@ -132,7 +132,67 @@ export function executeDiscardEffect(
     // Log partial discard (only when not in upTo mode, since upTo is already voluntary)
     const willLogPartialDiscard = !params.upTo && typeof requestedCount === 'number' && requestedCount > count;
 
-    // NEW: Auto-execute "discard all" (Chaos-4: "Discard your hand")
+    // Random discard: automatically select random card(s) without user choice
+    if (params.random && actor !== cardOwner) {
+        console.log(`[Discard Effect] Random discard: auto-selecting ${count} random card(s) for ${actor}`);
+        const handCards = [...state[actor].hand];
+        const actualCount = Math.min(count as number, handCards.length);
+
+        // Select random cards
+        const selectedIndices: number[] = [];
+        const availableIndices = handCards.map((_, i) => i);
+
+        for (let i = 0; i < actualCount && availableIndices.length > 0; i++) {
+            const randomIndex = Math.floor(Math.random() * availableIndices.length);
+            selectedIndices.push(availableIndices[randomIndex]);
+            availableIndices.splice(randomIndex, 1);
+        }
+
+        // Sort descending to safely remove from array
+        selectedIndices.sort((a, b) => b - a);
+
+        const discardedCards: any[] = [];
+        const newHand = [...handCards];
+
+        for (const idx of selectedIndices) {
+            const { id, isFaceUp, ...card } = newHand.splice(idx, 1)[0] as any;
+            discardedCards.push(card);
+        }
+
+        const newDiscard = [...state[actor].discard, ...discardedCards];
+        const newStats = { ...state[actor].stats, cardsDiscarded: state[actor].stats.cardsDiscarded + discardedCards.length };
+        const newPlayerState = { ...state[actor], hand: newHand, discard: newDiscard, stats: newStats };
+
+        let newState = {
+            ...state,
+            [actor]: newPlayerState,
+            stats: {
+                ...state.stats,
+                [actor]: newStats,
+            }
+        };
+
+        // Log the discard
+        const actorName = actor === 'player' ? 'Player' : 'Opponent';
+        const cardWord = discardedCards.length === 1 ? 'card' : 'cards';
+        if (actor === 'player' || discardedCards.every(c => c.isRevealed)) {
+            const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+            newState = log(newState, actor, `${actorName} randomly discards ${discardedCards.length} ${cardWord}: ${cardNames}.`);
+        } else {
+            newState = log(newState, actor, `${actorName} randomly discards ${discardedCards.length} ${cardWord}.`);
+        }
+
+        // Store context for follow-up effects
+        (newState as any)._discardContext = {
+            actor,
+            discardedCount: discardedCards.length,
+            sourceCardId: card.id,
+        };
+
+        return { newState };
+    }
+
+    // Auto-execute "discard all"
     // When count is 'all', automatically discard entire hand without user selection
     if (count === 'all') {
         console.log(`[Discard Effect] Auto-discarding entire hand for ${actor}`);

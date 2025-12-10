@@ -354,6 +354,14 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     return { nextState: prev, requiresTurnEnd: false }; // Silently reject
                 }
 
+                // NEW: Validate scope filter (Fear-3: "in this line")
+                const scope = (prev.actionRequired as any).scope;
+                const sourceLaneIndex = (prev.actionRequired as any).sourceLaneIndex;
+                if (scope === 'this_lane' && sourceLaneIndex !== undefined && originalLaneIndex !== sourceLaneIndex) {
+                    console.log(`[Shift Validation] Rejected: Card is in lane ${originalLaneIndex} but scope requires lane ${sourceLaneIndex}`);
+                    return { nextState: prev, requiresTurnEnd: false }; // Silently reject
+                }
+
                 if (originalLaneIndex !== -1) {
                     // CRITICAL: If targetLaneIndex is specified (like Gravity-4 and custom 'to_this_lane'), shift directly!
                     // No lane selection needed - destination is fixed

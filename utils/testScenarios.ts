@@ -3190,6 +3190,7 @@ export const scenario60_CourageCustomPlayground: TestScenario = {
             createCard('Courage', 2, true),
             createCard('Courage', 3, true),
             createCard('Courage', 5, true),
+            createCard('Courage', 6, true),
         ];
 
         // Board setup:
@@ -3223,11 +3224,12 @@ export const scenario61_CourageAITest: TestScenario = {
 
         // AI hand - key Courage cards for testing
         newState.opponent.hand = [
-            createCard('Courage', 1, true),  // Delete in opponent_higher_value lane
-            createCard('Courage', 3, true),  // Shift to highest value lane
-            createCard('Courage', 6, true),  // Flip self if opponent higher
-            createCard('Speed', 4, true),
-            createCard('Darkness', 3, true),
+            createCard('Courage', 0, true),
+            createCard('Courage', 1, true),
+            createCard('Courage', 2, true),
+            createCard('Courage', 3, true),
+            createCard('Courage', 5, true),
+            createCard('Courage', 6, true),
         ];
 
         // Board setup:
@@ -3298,6 +3300,107 @@ export const scenario59_CorruptionCustomPlayground: TestScenario = {
     }
 };
 
+/**
+ * Fear Custom Protocol Playground
+ *
+ * Fear Cards:
+ * - Fear-0: [Top Passive] During your turn, opponent's cards don't have middle commands. [Middle] Shift or flip 1 card.
+ * - Fear-1: [Middle] Draw 2. Opponent discards hand, draws discarded - 1.
+ * - Fear-2: [Middle] Return 1 of opponent's cards.
+ * - Fear-3: [Middle] Shift 1 of opponent's covered or uncovered cards in this line.
+ * - Fear-4: [Middle] Opponent discards 1 random card.
+ * - Fear-5: [Middle] You discard 1 card.
+ */
+export const scenario62_FearCustomPlayground: TestScenario = {
+    name: 'Fear Custom Playground',
+    description: 'Test all Fear effects: passive ignore middle, choice shift/flip, chain discard, return, random discard',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Fear', 'Fire', 'Speed'];
+        const opponentProtocols = ['Spirit', 'Water', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Fear cards
+        newState.player.hand = [
+            createCard('Fear', 0, true),
+            createCard('Fear', 1, true),
+            createCard('Fear', 2, true),
+            createCard('Fear', 3, true),
+            createCard('Fear', 4, true),
+            createCard('Fear', 5, true),
+        ];
+
+        // Board setup for testing:
+        // Lane 0: Opponent cards for return/shift tests
+        newState = placeCard(newState, 'opponent', 0, createCard('Spirit', 2, true));  // Covered
+        newState = placeCard(newState, 'opponent', 0, createCard('Spirit', 3, true));  // Uncovered - can return
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+
+        // Lane 1: Opponent cards with middle effects (for Fear-0 passive test)
+        newState = placeCard(newState, 'opponent', 1, createCard('Water', 4, true));  // Has middle effect
+        newState = placeCard(newState, 'player', 1, createCard('Speed', 4, true));
+
+        // Lane 2: Face-down cards for flip tests
+        newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 2, false));  // Face-down
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 5, true));
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+            createCard('Spirit', 4, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
+export const scenario63_FearAITest: TestScenario = {
+    name: 'Fear AI Test',
+    description: 'Test AI with Fear protocol: random discard execution, passive rule handling',
+    setup: (state: GameState): GameState => {
+        // AI (opponent) has Fear protocol
+        const playerProtocols = ['Spirit', 'Water', 'Fire'];
+        const opponentProtocols = ['Fear', 'Speed', 'Darkness'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // AI hand - key Fear cards for testing
+        newState.opponent.hand = [
+            createCard('Fear', 0, true),
+            createCard('Fear', 1, true),
+            createCard('Fear', 2, true),  // Random discard
+            createCard('Fear', 3, true),
+            createCard('Fear', 4, true),
+            createCard('Fear', 5, true),
+        ];
+
+        // Board setup:
+        // Lane 0: Player cards for AI to target
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 5, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, true));
+
+        // Lane 1: Player covered card for shift test
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true));  // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));  // Uncovered
+
+        // Lane 2: Mixed setup
+        newState = placeCard(newState, 'player', 2, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 5, true));
+
+        // Player needs hand for discard tests
+        newState.player.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Water', 3, true),
+            createCard('Fire', 4, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3360,4 +3463,6 @@ export const allScenarios: TestScenario[] = [
     scenario59_CorruptionCustomPlayground,
     scenario60_CourageCustomPlayground,
     scenario61_CourageAITest,
+    scenario62_FearCustomPlayground,
+    scenario63_FearAITest,
 ];

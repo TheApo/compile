@@ -16,6 +16,7 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
     const ruleType = params.rule?.type || 'block_all_play';
     const target = params.rule?.target || 'opponent';
     const scope = params.rule?.scope || 'this_lane';
+    const onlyDuringYourTurn = params.rule?.onlyDuringYourTurn || false;
 
     return (
         <div className="param-editor passive-rule-editor">
@@ -80,13 +81,31 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                     value={scope}
                     onChange={e => onChange({
                         ...params,
-                        rule: { ...params.rule, type: ruleType, target, scope: e.target.value as any }
+                        rule: { ...params.rule, type: ruleType, target, scope: e.target.value as any, onlyDuringYourTurn }
                     })}
                 >
                     <option value="this_lane">This Lane Only</option>
                     <option value="global">Global (All Lanes)</option>
                 </select>
             </label>
+
+            {/* Only during your turn - for ignore_middle_commands */}
+            {ruleType === 'ignore_middle_commands' && (
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={onlyDuringYourTurn}
+                        onChange={e => onChange({
+                            ...params,
+                            rule: { ...params.rule, type: ruleType, target, scope, onlyDuringYourTurn: e.target.checked }
+                        })}
+                    />
+                    Only during your turn
+                    <small style={{ display: 'block', marginLeft: '24px', marginTop: '4px', color: '#8A79E8' }}>
+                        Effect only applies during card owner's turn, not during opponent's turn.
+                    </small>
+                </label>
+            )}
 
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'passive', position: 'top', params })}

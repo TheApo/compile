@@ -1,0 +1,194 @@
+{
+  "id": "fear_custom",
+  "name": "Fear",
+  "description": "Terror and disruption protocol - Control through fear",
+  "author": "System",
+  "createdAt": "2025-01-10T00:00:00Z",
+  "color": "#800020",
+  "pattern": "radial",
+  "category": "Main 2",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "fear-0-passive",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "ignore_middle_commands",
+              "target": "opponent",
+              "scope": "global",
+              "onlyDuringYourTurn": true
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "fear-0-choice",
+          "params": {
+            "action": "choice",
+            "options": [
+              {
+                "id": "fear-0-shift",
+                "params": {
+                  "action": "shift",
+                  "targetFilter": {
+                    "owner": "any",
+                    "position": "uncovered",
+                    "faceState": "any"
+                  }
+                },
+                "position": "middle",
+                "trigger": "on_play"
+              },
+              {
+                "id": "fear-0-flip",
+                "params": {
+                  "action": "flip",
+                  "count": 1,
+                  "targetFilter": {
+                    "owner": "any",
+                    "position": "uncovered",
+                    "faceState": "any",
+                    "excludeSelf": false
+                  },
+                  "optional": false
+                },
+                "position": "middle",
+                "trigger": "on_play"
+              }
+            ]
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fear-1-draw",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "fear-1-opponent-discard-hand",
+              "params": {
+                "action": "discard",
+                "count": "all",
+                "actor": "opponent"
+              },
+              "position": "middle",
+              "trigger": "on_play",
+              "conditional": {
+                "type": "then",
+                "thenEffect": {
+                  "id": "fear-1-opponent-draw",
+                  "params": {
+                    "action": "draw",
+                    "countType": "equal_to_discarded",
+                    "countOffset": -1,
+                    "target": "opponent",
+                    "source": "own_deck"
+                  },
+                  "position": "middle",
+                  "trigger": "on_play"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fear-2-return",
+          "params": {
+            "action": "return",
+            "count": 1,
+            "targetFilter": {
+              "owner": "opponent"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fear-3-shift",
+          "params": {
+            "action": "shift",
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "any",
+              "faceState": "any"
+            },
+            "scope": "this_lane"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fear-4-discard-random",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "opponent",
+            "random": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "fear-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

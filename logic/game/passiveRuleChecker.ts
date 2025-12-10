@@ -328,14 +328,45 @@ export function canRearrangeProtocols(state: GameState): { allowed: boolean; rea
 }
 
 /**
- * Check if middle commands should be ignored in a lane (Apathy-2)
+ * Check if middle commands should be ignored in a lane
+ * @param state - Current game state
+ * @param laneIndex - Lane to check
+ * @param cardOwnerToCheck - Optional: only check if the card owner's middle commands should be ignored
+ *                           This is used for "ignore opponent's middle commands" rules
  */
-export function shouldIgnoreMiddleCommand(state: GameState, laneIndex: number): boolean {
+export function shouldIgnoreMiddleCommand(
+    state: GameState,
+    laneIndex: number,
+    cardOwnerToCheck?: Player
+): boolean {
     const rules = getActivePassiveRules(state);
+    const currentPlayer = state.currentPlayer;
 
-    return rules.some(({ rule, laneIndex: ruleLaneIndex }) => {
+    return rules.some(({ rule, cardOwner, laneIndex: ruleLaneIndex }) => {
         if (rule.type !== 'ignore_middle_commands') return false;
-        return rule.scope === 'global' || ruleLaneIndex === laneIndex;
+
+        // Check if rule applies to this lane
+        const appliesToLane = rule.scope === 'global' || ruleLaneIndex === laneIndex;
+        if (!appliesToLane) return false;
+
+        // Check onlyDuringYourTurn: rule only applies if it's the rule owner's turn
+        if (rule.onlyDuringYourTurn && currentPlayer !== cardOwner) {
+            return false;
+        }
+
+        // Check target: if rule targets 'opponent', only apply to opponent's cards
+        if (cardOwnerToCheck !== undefined) {
+            const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+            if (rule.target === 'opponent' && cardOwnerToCheck !== opponent) {
+                return false;
+            }
+            if (rule.target === 'self' && cardOwnerToCheck !== cardOwner) {
+                return false;
+            }
+            // 'all' target applies to everyone
+        }
+
+        return true;
     });
 }
 

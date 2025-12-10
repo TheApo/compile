@@ -338,7 +338,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_cards_to_delete': {
             // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (executors may use either!)
             const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
-            const validTargets = getValidTargets(
+            const allowedIds = (action as any).allowedIds as string[] | undefined; // NEW: Server-set allowed IDs (for calculation filters)
+            let validTargets = getValidTargets(
                 state,
                 action.actor,
                 action.targetFilter,
@@ -346,6 +347,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 action.sourceCardId,
                 restrictedLaneIndex
             );
+
+            // NEW: If server specified allowedIds, use those instead (handles calculation filters like highest_value)
+            if (allowedIds) {
+                validTargets = validTargets.filter(c => allowedIds.includes(c.id));
+            }
 
             // Filter out disallowed IDs
             const disallowedIds = action.disallowedIds || [];

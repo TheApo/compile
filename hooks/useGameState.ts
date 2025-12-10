@@ -1032,9 +1032,12 @@ export const useGameState = (
             !gameState.animationState &&
             hasOpponentAction;
 
+        console.log('[USEEFFECT INTERRUPT DEBUG] turn:', gameState.turn, '_interruptedTurn:', gameState._interruptedTurn, 'actionRequired:', action?.type, 'actor:', action && 'actor' in action ? action.actor : 'N/A', 'isPlayerTurnOrInterrupt:', isPlayerTurnOrInterrupt, 'hasOpponentAction:', hasOpponentAction, 'animationState:', !!gameState.animationState, 'isProcessingAI:', isProcessingAIRef.current);
+
         // CRITICAL: Check the lock AND set it in a way that prevents race conditions
         // We check !isProcessingAIRef.current AFTER all other conditions, and set it immediately
         if (isOpponentActionDuringPlayerTurn && !isProcessingAIRef.current) {
+            console.log('[USEEFFECT INTERRUPT DEBUG] Calling resolveRequiredOpponentAction!');
             isProcessingAIRef.current = true;
 
             // CRITICAL: Execute IMMEDIATELY without setTimeout to avoid React Hook race conditions

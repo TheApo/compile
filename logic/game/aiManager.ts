@@ -245,7 +245,20 @@ export const resolveRequiredOpponentAction = (
             return endActionForPhase(newState, phaseManager);
         }
 
-        // NOTE: Spirit-3 prompt now uses generic prompt_optional_effect handler
+        // GENERIC: Handle ALL optional effect prompts (Spirit-2, Spirit-3, etc. during interrupts)
+        if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_effect') {
+            console.log('[AI resolveRequiredOpponentAction] resolveOptionalEffectPrompt accept:', aiDecision.accept);
+            const nextState = resolvers.resolveOptionalEffectPrompt(state, aiDecision.accept);
+            if (nextState.actionRequired) return nextState; // New action created, re-run processor
+            return endActionForPhase(nextState, phaseManager);
+        }
+
+        // GENERIC: Handle custom choice prompts during interrupts
+        if (aiDecision.type === 'resolveCustomChoice' && action.type === 'custom_choice') {
+            const nextState = resolvers.resolveCustomChoice(state, aiDecision.optionIndex);
+            if (nextState.actionRequired) return nextState;
+            return endActionForPhase(nextState, phaseManager);
+        }
 
         // --- Generic Lane Selection Handler ---
         if (aiDecision.type === 'selectLane') {

@@ -156,6 +156,30 @@ export const ShiftEffectEditor: React.FC<{ params: ShiftEffectParams; onChange: 
                 )}
             </label>
 
+            <label>
+                Source Scope
+                <select
+                    value={params.scope || 'any'}
+                    onChange={e => {
+                        if (e.target.value === 'any') {
+                            const { scope, ...rest } = params;
+                            onChange(rest as ShiftEffectParams);
+                        } else {
+                            onChange({ ...params, scope: e.target.value as any });
+                        }
+                    }}
+                >
+                    <option value="any">Any lane (select from all lanes)</option>
+                    <option value="this_lane">This line only</option>
+                    <option value="each_lane">Each lane (execute per lane)</option>
+                </select>
+                {params.scope === 'this_lane' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Only cards in this line can be selected as shift targets.
+                    </small>
+                )}
+            </label>
+
             <div className="effect-preview">
                 <strong>Preview:</strong> {getEffectSummary({ id: 'preview', trigger: 'on_play', position: 'middle', params })}
             </div>

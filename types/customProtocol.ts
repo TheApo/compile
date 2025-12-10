@@ -193,6 +193,8 @@ export interface DiscardEffectParams {
     // NEW: Dynamic discard count (Plague-2)
     countType?: 'fixed' | 'equal_to_discarded';
     countOffset?: number;  // For Plague-2: "discard count + 1" → offset = 1
+    // NEW: Random selection - opponent can't choose which card to discard (Fear-4)
+    random?: boolean;
 }
 
 /**
@@ -330,6 +332,8 @@ export interface PassiveRuleParams {
             | 'skip_check_cache_phase';      // Spirit-0: Skip check cache phase
         target: 'self' | 'opponent' | 'all';  // Who is affected
         scope: 'this_lane' | 'global';        // Where it applies
+        // NEW: Only active during card owner's turn (Fear-0: "During your turn...")
+        onlyDuringYourTurn?: boolean;
     };
 }
 

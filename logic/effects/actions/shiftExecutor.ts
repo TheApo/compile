@@ -12,6 +12,7 @@ import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../.
 import { log } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard } from '../../game/helpers/actionUtils';
 import { getOpponentHighestValueLanes, getPlayerLaneValue } from '../../game/stateManager';
+import { canShiftCard } from '../../game/passiveRuleChecker';
 
 /**
  * Execute SHIFT effect
@@ -408,10 +409,23 @@ export function executeShiftEffect(
                 } else if (destinationRestriction.type === 'to_another_line') {
                     // NEW: Shift to any lane EXCEPT current lane
                     if (targetLane === currentLane) continue;
+                } else if (destinationRestriction.type === 'to_or_from_this_lane') {
+                    // Gravity-1: Shift either TO or FROM this line
+                    // Valid if: source lane is this lane OR target lane is this lane (but not both = same lane)
+                    const isFromThisLane = currentLane === resolvedDestLaneIndex;
+                    const isToThisLane = targetLane === resolvedDestLaneIndex;
+                    if (!isFromThisLane && !isToThisLane) continue; // Must involve this lane
+                    if (targetLane === currentLane) continue; // Can't shift to same lane
                 }
             } else {
                 // No restriction - can't shift to same lane
                 if (targetLane === currentLane) continue;
+            }
+
+            // CRITICAL: Check if shift is blocked by passive rules (Frost-3, etc.)
+            const shiftCheck = canShiftCard(newState, currentLane, targetLane);
+            if (!shiftCheck.allowed) {
+                continue; // This destination is blocked
             }
 
             // Found at least one valid destination
@@ -448,6 +462,7 @@ export function executeShiftEffect(
         destinationRestriction: resolvedDestinationRestriction,
         sourceLaneIndex: laneIndex,  // NEW: Store source lane for validation
         targetLaneIndex: fixedTargetLane,  // NEW: Fixed destination (like Gravity-4)
+        scope: params.scope,  // NEW: For 'this_lane' restriction (Fear-3)
     } as any;
 
     return { newState };

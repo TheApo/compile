@@ -358,6 +358,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const cardWord = usePluralCards ? 'cards' : (countText === '1' ? 'card' : 'cards');
             let text = `${mayShift} ${countText} ${targetDesc}${cardWord}`;
 
+            // NEW: Source scope text (Fear-3: "in this line" = where to select from)
+            if (params.scope === 'this_lane') {
+                text += ' in this line';
+            }
+
             // NEW: Better destination text (Anarchy-1, Gravity-1, Gravity-2, Gravity-4)
             if (params.destinationRestriction?.type === 'non_matching_protocol') {
                 text += ' to a line without a matching protocol';
@@ -567,6 +572,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.actor === 'opponent') {
                 if (params.count === 'all') {
                     mainText = `Opponent discards their hand.`;
+                } else if (params.random) {
+                    const cardWord = params.count === 1 ? 'card' : 'cards';
+                    mainText = `Your opponent discards ${params.count} random ${cardWord}.`;
                 } else {
                     mainText = `Your opponent discards ${countText}.`;
                 }
@@ -908,7 +916,15 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     }
                     break;
                 case 'ignore_middle_commands':
-                    mainText = 'Ignore all middle commands of cards in this line.';
+                    if (rule.onlyDuringYourTurn && rule.target === 'opponent' && rule.scope === 'global') {
+                        mainText = "During your turn, your opponent's cards do not have middle commands.";
+                    } else if (rule.onlyDuringYourTurn) {
+                        const targetText = rule.target === 'opponent' ? "your opponent's " : rule.target === 'self' ? 'your ' : '';
+                        const scopeText = rule.scope === 'global' ? '' : ' in this line';
+                        mainText = `During your turn, ignore all middle commands of ${targetText}cards${scopeText}.`;
+                    } else {
+                        mainText = 'Ignore all middle commands of cards in this line.';
+                    }
                     break;
                 case 'block_face_down_play':
                     mainText = "Opponent can't play cards face-down in this line.";
