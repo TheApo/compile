@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { GameState, PlayedCard, Player } from '../types';
+import { canPlayerDraw } from '../logic/game/passiveRuleChecker';
 
 interface PhaseControllerProps {
     gameState: GameState;
@@ -260,16 +261,30 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
         if (phase === 'action') {
             const canFillHand = player.hand.length < 5;
             const mustFillHand = player.hand.length === 0;
+            // NEW: Check if draw is blocked by passive rule (Ice-6)
+            const drawCheck = canPlayerDraw(gameState, 'player');
+            const canRefresh = canFillHand && drawCheck.allowed;
 
             if (mustFillHand) {
-                 return <button className="btn" onClick={onFillHand}>Refresh (Required)</button>;
+                // Even if required, disable if draw is blocked
+                return (
+                    <button
+                        className="btn"
+                        onClick={onFillHand}
+                        disabled={!drawCheck.allowed}
+                        title={!drawCheck.allowed ? drawCheck.reason : undefined}
+                    >
+                        Refresh (Required)
+                    </button>
+                );
             }
 
             return (
-                <button 
-                    className="btn" 
+                <button
+                    className="btn"
                     onClick={onFillHand}
-                    disabled={!canFillHand || !!selectedCardId}
+                    disabled={!canRefresh || !!selectedCardId}
+                    title={!drawCheck.allowed ? drawCheck.reason : undefined}
                 >
                     Refresh
                 </button>

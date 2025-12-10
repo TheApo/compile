@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard } from '../game/helpers/actionUtils';
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
-import { isFrost1Active, isFrost1BottomActive } from '../game/passiveRuleChecker';
+import { isFrost1Active, isFrost1BottomActive, canPlayerDraw } from '../game/passiveRuleChecker';
 import { executeOnCoverEffect } from '../effectExecutor';
 import { getEffectiveCardValue, getOpponentHighestValueLanes } from '../game/stateManager';
 
@@ -288,6 +288,17 @@ export function executeCustomEffect(
         case 'refresh': {
             // Spirit-0: Refresh hand to 5 cards
             const actor = context.actor;
+
+            // NEW: Check if player can draw (Ice-6: block_draw_conditional)
+            // Refresh is a form of drawing, so the same restriction applies
+            const refreshDrawCheck = canPlayerDraw(state, actor);
+            if (!refreshDrawCheck.allowed) {
+                console.log(`[Refresh Effect] ${refreshDrawCheck.reason}. Skipping refresh for ${actor}.`);
+                let newState = log(state, context.cardOwner, refreshDrawCheck.reason || 'Cannot refresh (draw blocked).');
+                result = { newState };
+                break;
+            }
+
             const currentHandSize = state[actor].hand.length;
             const cardsNeeded = Math.max(0, 5 - currentHandSize);
 
