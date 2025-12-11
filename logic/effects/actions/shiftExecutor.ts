@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard, internalShiftCard } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, internalShiftCard, isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
 import { getOpponentHighestValueLanes, getPlayerLaneValue } from '../../game/stateManager';
 import { canShiftCard } from '../../game/passiveRuleChecker';
 
@@ -299,11 +299,14 @@ export function executeShiftEffect(
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const targetCard = lane[cardIdx];
 
+                // CRITICAL: Exclude committed card
+                if (isCardCommitted(newState, targetCard.id)) continue;
+
                 // Skip self if excludeSelf is true
                 if (excludeSelf && targetCard.id === card.id) continue;
 
-                // Check position filter
-                const isTopCard = cardIdx === lane.length - 1;
+                // CRITICAL: Use central helper for uncovered calculation
+                const isTopCard = isCardAtIndexUncovered(newState, lane, cardIdx);
                 if (position === 'uncovered' && !isTopCard) continue;
                 if (position === 'covered' && isTopCard) continue;
 

@@ -114,14 +114,19 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
     // 1. Check for onCover effect on the state BEFORE the card is played.
     // NOTE: When playing on opponent's side, check THEIR lane for on_cover effects
-    let onCoverResult: EffectResult = { newState: prevState };
-    const targetLaneBeforePlay = prevState[targetOwner].lanes[laneIndex];
+    // CRITICAL: Mark the card as "committed" - it should not be selectable for effects
+    // until the on_cover effects AND their resulting actions are completed.
+    // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
+    let stateWithCommitted: GameState = { ...prevState, _committedCardId: cardId };
+
+    let onCoverResult: EffectResult = { newState: stateWithCommitted };
+    const targetLaneBeforePlay = stateWithCommitted[targetOwner].lanes[laneIndex];
     if (targetLaneBeforePlay.length > 0) {
         const topCard = targetLaneBeforePlay[targetLaneBeforePlay.length - 1];
 
         // NEW: Trigger reactive effects BEFORE cover (Metal-6: "When this card would be covered")
         // This allows cards like Metal-6 to delete themselves before being covered
-        const beforeCoverResult = processReactiveEffects(prevState, 'on_cover', { player: targetOwner, cardId: topCard.id });
+        const beforeCoverResult = processReactiveEffects(stateWithCommitted, 'on_cover', { player: targetOwner, cardId: topCard.id });
         let stateBeforeCover = beforeCoverResult.newState;
 
         // Check if the card still exists after on_cover effects (Metal-6 might delete itself)
@@ -273,6 +278,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             animationRequests: onCoverResult.animationRequests,
         };
     } else {
+        // No actionRequired from on_cover - the committed card "lands" NOW
+        // Clear _committedCardId since the card is now officially on the board
+        stateAfterMove = { ...stateAfterMove, _committedCardId: undefined };
+
         // For AI, always queue the onPlay effect to create a visual delay.
         if (player === 'opponent') {
             if (isFaceUp) {

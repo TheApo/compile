@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
 import { isFrost1Active, canFlipSpecificCard } from '../../game/passiveRuleChecker';
 import { getPlayerLaneValue } from '../../game/stateManager';
 
@@ -291,7 +291,13 @@ export function executeFlipEffect(
 
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const c = lane[cardIdx];
-                const isUncovered = cardIdx === lane.length - 1;
+
+                // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+                // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
+                if (isCardCommitted(state, c.id)) continue;
+
+                // CRITICAL: Use central helper that considers committed cards for uncovered calculation
+                const isUncovered = isCardAtIndexUncovered(state, lane, cardIdx);
 
                 // Check excludeSelf
                 if (targetFilter.excludeSelf && c.id === card.id) continue;

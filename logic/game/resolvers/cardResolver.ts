@@ -198,10 +198,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     switch (prev.actionRequired.type) {
         // Generic flip handler - all legacy types now use select_card_to_flip with targetFilter
         case 'select_card_to_flip': {
+            // CRITICAL: Validate that the card is not "committed" (being played but not yet landed)
+            // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
+            const committedCardId = (prev as any)._committedCardId;
+            if (committedCardId && targetCardId === committedCardId) {
+                return { nextState: prev }; // Invalid selection, return unchanged state
+            }
+
             // NEW: Validate that this card can be flipped (Ice-4: block_flip_this_card)
             const flipCheck = canFlipSpecificCard(prev, targetCardId);
             if (!flipCheck.allowed) {
-                console.warn(`[cardResolver] Card ${targetCardId} cannot be flipped: ${flipCheck.reason}`);
                 return { nextState: prev }; // Invalid selection, return unchanged state
             }
 

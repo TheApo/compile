@@ -11,7 +11,7 @@
 
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
-import { findCardOnBoard } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
 import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
@@ -2278,9 +2278,15 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     if (scope === 'this_lane' && restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
 
                     const lane = state[playerKey].lanes[laneIdx];
+
                     for (let i = 0; i < lane.length; i++) {
                         const card = lane[i];
-                        const isTopCard = i === lane.length - 1;
+
+                        // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+                        if (isCardCommitted(state, card.id)) continue;
+
+                        // CRITICAL: Use central helper for uncovered calculation
+                        const isTopCard = isCardAtIndexUncovered(state, lane, i);
 
                         // Use centralized filter matching (includes valueRange, valueEquals, etc.)
                         if (!matchesTargetFilter(card, isTopCard, targetFilter, sourceCardId)) continue;

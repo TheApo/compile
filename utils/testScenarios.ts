@@ -3575,6 +3575,37 @@ export const scenario67_startPhasePlayground: TestScenario = {
     }
 };
 
+export const scenario68_CommittedCardPlayground: TestScenario = {
+    name: 'Committed Card Test',
+    description: 'Committed Card Test',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Spirit', 'Darkness', 'Psychic'];
+        const opponentProtocols = ['Light', 'Water', 'Fire'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Darkness', 0, true),
+            createCard('Death', 0, true),
+        ];
+
+        // Board setup for testing:
+        newState = placeCard(newState, 'player', 0, createCard('Spirit', 0, true));  // 
+		newState = placeCard(newState, 'player', 0, createCard('Spirit', 3, true));  // 
+
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Light', 1, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3643,4 +3674,5 @@ export const allScenarios: TestScenario[] = [
     scenario65_IceAITest,
 	scenario66_endPhasePlayground,
 	scenario67_startPhasePlayground,
+	scenario68_CommittedCardPlayground,
 ];

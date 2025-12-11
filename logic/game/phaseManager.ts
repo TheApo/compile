@@ -733,9 +733,12 @@ export const processEndOfAction = (state: GameState): GameState => {
     }
 
     // Check for a queued effect before advancing phase.
+    // This is where the "committed" card officially "lands" on the board.
     if (state.queuedEffect) {
         const { card, laneIndex } = state.queuedEffect;
-        const stateWithoutQueue = { ...state, queuedEffect: undefined };
+        // CRITICAL: Clear _committedCardId - the card is now officially "landed"
+        // This allows the card to be selectable for effects triggered by its own on_play
+        const stateWithoutQueue = { ...state, queuedEffect: undefined, _committedCardId: undefined };
         const cardLocation = findCardOnBoard(stateWithoutQueue, card.id);
 
         if (cardLocation) {

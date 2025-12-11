@@ -11,6 +11,7 @@
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
 import { getPlayerLaneValue } from '../../game/stateManager';
+import { isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
 
 /**
  * Execute RETURN effect
@@ -62,12 +63,19 @@ export function executeReturnEffect(
     const checkPlayer = (player: Player) => {
         for (const lane of state[player].lanes) {
             for (let i = 0; i < lane.length; i++) {
-                const isUncovered = i === lane.length - 1;
+                const c = lane[i];
+
+                // CRITICAL: Exclude committed card
+                if (isCardCommitted(state, c.id)) continue;
+
+                // CRITICAL: Use central helper for uncovered calculation
+                const isUncovered = isCardAtIndexUncovered(state, lane, i);
+
                 // Check position filter
                 if (position === 'uncovered' && !isUncovered) continue;
                 if (position === 'covered' && isUncovered) continue;
                 // position === 'any' allows both
-                availableCards.push({ card: lane[i], isUncovered });
+                availableCards.push({ card: c, isUncovered });
             }
         }
     };

@@ -7,6 +7,16 @@ import { GameState, PlayedCard, Player } from "../types";
 // REMOVED: findAllHighestUncoveredCards - no longer needed after Hate-2 migration to generic handler
 import { isFrost1Active, canFlipSpecificCard } from "../logic/game/passiveRuleChecker";
 import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
+import { isCardCommitted as isCardCommittedHelper, isCardAtIndexUncovered } from "../logic/game/helpers/actionUtils";
+
+/**
+ * Check if a card is "committed" (being played but not yet landed on board).
+ * Per official rules: "the committed card IS NOT a valid selection" during on_cover effects.
+ * This prevents selecting a card that's being played while its target card's on_cover effects resolve.
+ */
+const isCardCommitted = (gameState: GameState, cardId: string): boolean => {
+    return isCardCommittedHelper(gameState, cardId);
+};
 
 /**
  * GENERIC: Check if there's an active shift-blocking rule in a lane.
@@ -51,7 +61,9 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
     if (!owner) return false;
 
     // Rule: By default, only uncovered cards are targetable.
-    const isUncovered = card.id === lane[lane.length - 1]?.id;
+    // CRITICAL: Use central helper that considers committed cards for uncovered calculation
+    const cardIndex = lane.findIndex(c => c.id === card.id);
+    const isUncovered = isCardAtIndexUncovered(gameState, lane, cardIndex);
 
     // SPECIAL: During lane selection for shift, highlight the card being shifted (red)
     if (actionRequired.type === 'select_lane_for_shift') {
@@ -77,6 +89,10 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
 
         case 'select_card_to_flip': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
+            if (isCardCommitted(gameState, card.id)) return false;
+
             // Generic flip for custom protocols (supports scope: 'each_lane' via currentLaneIndex parameter)
             const targetFilter = (actionRequired as any).targetFilter || {};
             const cardIndex = lane.findIndex(c => c.id === card.id);
@@ -171,6 +187,9 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return !card.isFaceUp && isUncovered;
         case 'select_cards_to_delete': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
+
             // Check if disallowed
             if (actionRequired.disallowedIds.includes(card.id)) return false;
 
@@ -259,6 +278,9 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         case 'select_low_value_card_to_delete':
             return card.isFaceUp && (card.value === 0 || card.value === 1) && isUncovered;
         case 'select_card_from_other_lanes_to_delete': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
+
             const { disallowedLaneIndex, lanesSelected } = actionRequired;
             return laneIndex !== disallowedLaneIndex && !lanesSelected.includes(laneIndex) && isUncovered;
         }
@@ -276,6 +298,9 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return card.id !== actionRequired.sourceCardId && isUncovered;
         }
         case 'select_card_to_return': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
+
             // Check if owner filter is specified (for custom protocols)
             const targetOwner = (actionRequired as any).targetOwner || 'any';
             const targetFilter = (actionRequired as any).targetFilter;
@@ -301,6 +326,8 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         }
         // REMOVED: select_card_to_flip_for_fire_3 - Fire-3 now uses generic select_card_to_flip
         case 'select_card_to_shift_for_gravity_1':
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
@@ -371,18 +398,24 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
         // REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - Hate-2 now uses generic select_cards_to_delete with calculation: highest_value
         // REMOVED: select_card_to_delete_for_anarchy_2 - Anarchy-2 now uses generic select_cards_to_delete with protocolMatching: must_match
         case 'select_card_to_shift_for_anarchy_1': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
             // Anarchy-1: Can shift any uncovered card (validation happens in laneResolver)
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         }
         case 'select_card_to_shift_for_anarchy_0': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
             // Anarchy-0: Can shift any uncovered card (no restrictions)
             // Frost-3 blocks shifts from its lane
             if (hasFrost3InLane(gameState, laneIndex)) return false;
             return isUncovered;
         }
         case 'select_card_to_shift': {
+            // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+            if (isCardCommitted(gameState, card.id)) return false;
             // Generic shift for custom protocols
             // IMPORTANT: Like Anarchy-1, we allow all cards matching basic filters
             // Destination protocol validation happens in laneResolver (for face-up cards only)

@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard, handleUncoverEffect } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, handleUncoverEffect, isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
 import { getLanesWhereOpponentHasHigherValue, getPlayerLaneValue } from '../../game/stateManager';
 
 /**
@@ -150,7 +150,12 @@ export function executeDeleteEffect(
             const lane = state[player].lanes[laneIdx];
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const c = lane[cardIdx];
-                const isUncovered = cardIdx === lane.length - 1;
+
+                // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+                if (isCardCommitted(state, c.id)) continue;
+
+                // CRITICAL: Use central helper that considers committed cards for uncovered calculation
+                const isUncovered = isCardAtIndexUncovered(state, lane, cardIdx);
 
                 // Check excludeSelf
                 if (params.excludeSelf && c.id === card.id) continue;
@@ -429,7 +434,12 @@ export function executeDeleteEffect(
                 const lane = state[player].lanes[targetLaneIndex];
                 for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                     const c = lane[cardIdx];
-                    const isUncovered = cardIdx === lane.length - 1;
+
+                    // CRITICAL: Exclude committed card
+                    if (isCardCommitted(state, c.id)) continue;
+
+                    // CRITICAL: Use central helper for uncovered calculation
+                    const isUncovered = isCardAtIndexUncovered(state, lane, cardIdx);
 
                     // Check excludeSelf
                     if (params.excludeSelf && c.id === card.id) continue;

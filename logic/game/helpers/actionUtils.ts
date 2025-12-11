@@ -28,17 +28,61 @@ export function findCardOnBoard(state: GameState, cardId: string | undefined): {
 /**
  * Check if a card is UNCOVERED (top card in its lane).
  * Returns true only if the card is on top of its lane (not covered by another card).
+ *
+ * CRITICAL: If there's a "committed" card (being played but not yet landed),
+ * that card doesn't count for coverage. Per rules: committed cards have not yet
+ * landed, so the card below them is effectively "uncovered" for targeting purposes.
  */
 export function isCardUncovered(state: GameState, cardId: string | undefined): boolean {
     if (!cardId) return false;
+    const committedCardId = (state as any)._committedCardId;
+
     for (const p of ['player', 'opponent'] as Player[]) {
         for (const lane of state[p].lanes) {
-            if (lane.length > 0 && lane[lane.length - 1].id === cardId) {
-                return true; // Card is on top of this lane
+            if (lane.length === 0) continue;
+
+            // Determine the effective top card (ignoring committed card if it's on top)
+            let effectiveTopIndex = lane.length - 1;
+            if (committedCardId && lane.length >= 2 && lane[lane.length - 1].id === committedCardId) {
+                // The top card is committed - the card below it is effectively "uncovered"
+                effectiveTopIndex = lane.length - 2;
+            }
+
+            if (lane[effectiveTopIndex]?.id === cardId) {
+                return true; // Card is effectively on top of this lane
             }
         }
     }
     return false; // Card not found or is covered
+}
+
+/**
+ * Check if a card is the committed card (being played but not yet landed).
+ * Committed cards cannot be manipulated by any game effect during on_cover resolution.
+ */
+export function isCardCommitted(state: GameState, cardId: string | undefined): boolean {
+    if (!cardId) return false;
+    const committedCardId = (state as any)._committedCardId;
+    return committedCardId === cardId;
+}
+
+/**
+ * Calculate if a card at a given index in a lane is "uncovered" (considering committed cards).
+ * Use this when iterating over lanes to check each card's uncovered status.
+ */
+export function isCardAtIndexUncovered(state: GameState, lane: PlayedCard[], cardIndex: number): boolean {
+    if (lane.length === 0 || cardIndex < 0 || cardIndex >= lane.length) return false;
+
+    const committedCardId = (state as any)._committedCardId;
+
+    // Determine the effective top index (ignoring committed card if it's on top)
+    let effectiveTopIndex = lane.length - 1;
+    if (committedCardId && lane.length >= 2 && lane[lane.length - 1].id === committedCardId) {
+        // The top card is committed - the card below it is effectively "uncovered"
+        effectiveTopIndex = lane.length - 2;
+    }
+
+    return cardIndex === effectiveTopIndex;
 }
 
 /**

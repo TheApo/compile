@@ -13,7 +13,7 @@
  */
 
 import { GameState, ActionRequired, AIAction, Player, PlayedCard, TargetFilter, EffectScope, DestinationRestriction } from '../../types';
-import { findCardOnBoard } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../game/helpers/actionUtils';
 import { handleControlRearrange } from './controlMechanicLogic';
 import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
@@ -62,9 +62,15 @@ function getValidTargets(
             if (currentLaneIndex !== undefined && scope?.type === 'this_lane' && laneIdx !== currentLaneIndex) continue;
 
             const lane = state[playerKey].lanes[laneIdx];
+
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const card = lane[cardIdx];
-                const isUncovered = cardIdx === lane.length - 1;
+
+                // CRITICAL: Exclude committed card (card being played that triggered on_cover)
+                if (isCardCommitted(state, card.id)) continue;
+
+                // CRITICAL: Use central helper for uncovered calculation
+                const isUncovered = isCardAtIndexUncovered(state, lane, cardIdx);
 
                 // Position filter (default: uncovered)
                 if (position === 'uncovered' && !isUncovered) continue;
