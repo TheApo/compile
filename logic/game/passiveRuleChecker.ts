@@ -123,7 +123,8 @@ export function canPlayCard(
     player: Player,
     laneIndex: number,
     isFaceUp: boolean,
-    cardProtocol: string
+    cardProtocol: string,
+    card?: PlayedCard  // Optional: pass the card to check its own passive rules
 ): { allowed: boolean; reason?: string } {
     const rules = getActivePassiveRules(state);
     const opponent = player === 'player' ? 'opponent' : 'player';
@@ -131,6 +132,22 @@ export function canPlayCard(
     const playerProtocol = state[player].protocols[laneIndex];
     const opponentProtocol = state[opponent].protocols[laneIndex];
     const protocolMatches = cardProtocol === playerProtocol || cardProtocol === opponentProtocol;
+
+    // CRITICAL: Check if the CARD ITSELF has allow_play_on_opponent_side rule
+    // Cards with this rule can play face-up on ANY lane (like allow_any_protocol_play)
+    // Note: This rule can be in top, middle, OR bottom box - check all three
+    let cardHasPlayAnywhereRule = false;
+    if (card) {
+        const customCard = card as any;
+        const allEffects = [
+            ...(customCard.customEffects?.topEffects || []),
+            ...(customCard.customEffects?.middleEffects || []),
+            ...(customCard.customEffects?.bottomEffects || [])
+        ];
+        cardHasPlayAnywhereRule = allEffects.some((effect: any) =>
+            effect.params?.action === 'passive_rule' && effect.params?.rule?.type === 'allow_play_on_opponent_side'
+        );
+    }
 
     for (const { rule, cardOwner, laneIndex: ruleLaneIndex } of rules) {
         const appliesToLane = rule.scope === 'global' || ruleLaneIndex === laneIndex;
@@ -202,7 +219,8 @@ export function canPlayCard(
     // BASE RULE: Face-up play requires matching protocol (unless bypassed by passive rule)
     // EXCEPTION: If require_non_matching_protocol is active, the rule is INVERTED
     // (non-matching is required, which was already checked above in the switch)
-    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule) {
+    // EXCEPTION: Cards with allow_play_on_opponent_side can play face-up on ANY lane
+    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule && !cardHasPlayAnywhereRule) {
         return { allowed: false, reason: `Face-up play requires matching protocol` };
     }
 

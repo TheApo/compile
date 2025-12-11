@@ -21,7 +21,7 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // NEW: Check passive rule restrictions (Metal-2, Plague-0, Psychic-1, etc.)
     // Skip some checks when playing on opponent's side
     if (targetOwner === player) {
-        const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol);
+        const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol, cardToPlay);
         if (!passiveRuleCheck.allowed) {
             console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} - ${passiveRuleCheck.reason}`);
             return { newState: prevState };
