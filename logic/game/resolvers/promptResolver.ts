@@ -234,9 +234,33 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         // CRITICAL: Handle conditional follow-up effects (if_executed)
         if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
 
-            // If the effect created an actionRequired (user needs to select something),
-            // we need to attach the followUp to it so it executes AFTER the action completes
+            // If the effect created an actionRequired, check if it's from the SAME card
             if (result.newState.actionRequired) {
+                const actionSourceId = (result.newState.actionRequired as any).sourceCardId;
+
+                // CRITICAL: If actionRequired is from a DIFFERENT card (e.g., Spirit-3's after_draw
+                // interrupted Death-1's draw), queue the followUp instead of attaching to foreign action.
+                // This prevents the followUp from being lost when the interrupt completes.
+                if (actionSourceId && actionSourceId !== sourceCardId) {
+                    const followUpAction: any = {
+                        type: 'execute_conditional_followup',
+                        sourceCardId: sourceCardId,
+                        laneIndex: laneIndex,
+                        followUpEffect: effectDef.conditional.thenEffect,
+                        context: context,
+                        actor: actor,
+                    };
+                    const stateWithQueue = {
+                        ...result.newState,
+                        queuedActions: [
+                            ...(result.newState.queuedActions || []),
+                            followUpAction
+                        ]
+                    };
+                    return stateWithQueue;
+                }
+
+                // SAME card's action - attach followUp as before
                 const stateWithFollowUp = {
                     ...result.newState,
                     actionRequired: {

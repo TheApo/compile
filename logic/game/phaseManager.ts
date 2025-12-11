@@ -382,6 +382,62 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved (or cancelled), move to next in queue
         }
 
+        // GENERIC: Auto-resolve execute_conditional_followup actions
+        // This handles conditional.thenEffect that was queued because a reactive effect (like after_draw)
+        // interrupted the original effect with a DIFFERENT card's actionRequired.
+        // Example: Death-1's "draw, if you do delete other then delete self" gets interrupted by Spirit-3's after_draw
+        if (nextAction.type === 'execute_conditional_followup') {
+            const { sourceCardId, laneIndex, followUpEffect, context, actor } = nextAction as any;
+
+            // Find the source card
+            const sourceCard = [...mutableState.player.lanes.flat(), ...mutableState.opponent.lanes.flat()]
+                .find(c => c.id === sourceCardId);
+
+            if (!sourceCard) {
+                // Card no longer exists (was deleted) - skip the followUp
+                mutableState = log(mutableState, actor, `Conditional follow-up effect skipped: source card no longer exists.`);
+                continue;
+            }
+
+            // CRITICAL: Check if the source card is still face-up
+            // If it was flipped face-down, the conditional effect should be cancelled
+            if (!sourceCard.isFaceUp) {
+                const cardName = `${sourceCard.protocol}-${sourceCard.value}`;
+                mutableState = log(mutableState, actor, `Conditional follow-up effect from ${cardName} cancelled: card was flipped face-down.`);
+                continue;
+            }
+
+            // Execute the followUp effect
+            const result = executeCustomEffect(sourceCard, laneIndex, mutableState, context, followUpEffect);
+            mutableState = recalculateAllLaneValues(result.newState);
+
+            // If followUp created actionRequired, return it
+            if (mutableState.actionRequired) {
+                // If followUp has its own nested conditional, attach it
+                if (followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
+                    mutableState.actionRequired = {
+                        ...mutableState.actionRequired,
+                        followUpEffect: followUpEffect.conditional.thenEffect,
+                        conditionalType: followUpEffect.conditional.type,
+                    } as any;
+                }
+                mutableState = { ...mutableState, queuedActions };
+                return mutableState;
+            }
+
+            // If followUp has its own conditional.thenEffect and completed immediately, execute it recursively
+            if (followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
+                const nestedResult = executeCustomEffect(sourceCard, laneIndex, mutableState, context, followUpEffect.conditional.thenEffect);
+                mutableState = recalculateAllLaneValues(nestedResult.newState);
+                if (mutableState.actionRequired) {
+                    mutableState = { ...mutableState, queuedActions };
+                    return mutableState;
+                }
+            }
+
+            continue; // Action resolved, move to next in queue
+        }
+
         // Internal queue action type for executing remaining custom effects
         if ((nextAction as any).type === 'execute_remaining_custom_effects') {
             const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
