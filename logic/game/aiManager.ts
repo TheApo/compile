@@ -101,14 +101,17 @@ const handleAIPlayCard = (
 
             if (onCoverAnims && onCoverAnims.length > 0) {
                 processAnimationQueue(onCoverAnims, () => setGameState(s2 => {
-                    if (isDuringOpponentTurn && s2.actionRequired) {
-                        runOpponentTurn(s2, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                        return s2;
+                    // CRITICAL: Ensure animationState is cleared
+                    const cleanState = { ...s2, animationState: null };
+                    if (isDuringOpponentTurn && cleanState.actionRequired) {
+                        runOpponentTurn(cleanState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                        return cleanState;
                     }
-                    if (s2.actionRequired && s2.actionRequired.actor === 'opponent') {
-                        return s2;
+                    if (cleanState.actionRequired && cleanState.actionRequired.actor === 'opponent') {
+                        return cleanState;
                     }
-                    return endActionForPhase(s2, phaseManager);
+                    const result = endActionForPhase(cleanState, phaseManager);
+                    return { ...result, animationState: null };
                 }));
                 return stateToProcess;
             }
@@ -262,12 +265,15 @@ export const resolveRequiredOpponentAction = (
                 const wasStartPhase = state.phase === 'start';
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
-                        const finalState = requiresAnimation.onCompleteCallback(s, s2 => s2);
+                        // CRITICAL: Ensure animationState is cleared before processing
+                        const stateWithoutAnimation = { ...s, animationState: null };
+                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, s2 => s2);
                         if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
-                            return finalState;
+                            return { ...finalState, animationState: null };
                         }
                         // Use saved phase info since state might have changed
-                        return wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        const resultState = wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        return { ...resultState, animationState: null };
                     });
                 });
                 return nextState;
@@ -283,12 +289,15 @@ export const resolveRequiredOpponentAction = (
                 const wasStartPhase = state.phase === 'start';
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
-                        const finalState = requiresAnimation.onCompleteCallback(s, s2 => s2);
+                        // CRITICAL: Ensure animationState is cleared before processing
+                        const stateWithoutAnimation = { ...s, animationState: null };
+                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, s2 => s2);
                         if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
-                            return finalState;
+                            return { ...finalState, animationState: null };
                         }
                         // Use saved phase info since state might have changed
-                        return wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        const resultState = wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        return { ...resultState, animationState: null };
                     });
                 });
                 return nextState;
@@ -503,23 +512,29 @@ const handleRequiredAction = (
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
             processAnimationQueue(animationRequests, () => {
-                setGameState(s => onCompleteCallback(s, (finalState) => {
-                    const stateAfterAction = state.phase === 'start'
-                        ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
-                        : phaseManager.processEndOfAction(finalState);
-                    // Schedule continuation after animated action completes
-                    if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
-                        setTimeout(() => {
-                            runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-                        }, 500);
-                    } else if (stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent') {
-                        // There's another action to handle
-                        setTimeout(() => {
-                            runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-                        }, 300);
-                    }
-                    return stateAfterAction;
-                }));
+                setGameState(s => {
+                    // CRITICAL: Clear animationState before processing to prevent softlock
+                    const stateWithoutAnim = { ...s, animationState: null };
+                    return onCompleteCallback(stateWithoutAnim, (finalState) => {
+                        const cleanState = { ...finalState, animationState: null };
+                        const stateAfterAction = state.phase === 'start'
+                            ? phaseManager.continueTurnAfterStartPhaseAction(cleanState)
+                            : phaseManager.processEndOfAction(cleanState);
+                        const cleanAfterAction = { ...stateAfterAction, animationState: null };
+                        // Schedule continuation after animated action completes
+                        if (!cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent' && !cleanAfterAction.winner) {
+                            setTimeout(() => {
+                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                            }, 500);
+                        } else if (cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent') {
+                            // There's another action to handle
+                            setTimeout(() => {
+                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                            }, 300);
+                        }
+                        return cleanAfterAction;
+                    });
+                });
             });
             return nextState;
         }
@@ -532,34 +547,43 @@ const handleRequiredAction = (
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
             processAnimationQueue(animationRequests, () => {
-                setGameState(s => onCompleteCallback(s, (finalState) => {
-                    // CRITICAL FIX: Check for queuedActions BEFORE checking actionRequired
-                    // Otherwise Gravity-2's shift gets skipped and AI plays another card
-                    if (finalState.queuedActions && finalState.queuedActions.length > 0) {
-                        const stateAfterQueue = phaseManager.processEndOfAction(finalState);
-                        if (stateAfterQueue.actionRequired) {
-                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                            return stateAfterQueue;
+                setGameState(s => {
+                    // CRITICAL: Clear animationState before processing to prevent softlock
+                    const stateWithoutAnim = { ...s, animationState: null };
+                    return onCompleteCallback(stateWithoutAnim, (finalState) => {
+                        // Ensure animationState stays null through all paths
+                        const cleanState = { ...finalState, animationState: null };
+
+                        // CRITICAL FIX: Check for queuedActions BEFORE checking actionRequired
+                        // Otherwise Gravity-2's shift gets skipped and AI plays another card
+                        if (cleanState.queuedActions && cleanState.queuedActions.length > 0) {
+                            const stateAfterQueue = phaseManager.processEndOfAction(cleanState);
+                            if (stateAfterQueue.actionRequired) {
+                                runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                return { ...stateAfterQueue, animationState: null };
+                            }
+                            return { ...stateAfterQueue, animationState: null };
                         }
-                        return stateAfterQueue;
-                    }
-                    if (finalState.actionRequired) {
-                        runOpponentTurn(finalState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                        return finalState;
-                    }
-                    if (finalState.phase === 'start') {
-                        const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(finalState);
-                        // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
-                        if (!stateAfterAction.actionRequired && stateAfterAction.turn === 'opponent' && !stateAfterAction.winner) {
-                            setTimeout(() => {
-                                runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
-                            }, 500);
+                        if (cleanState.actionRequired) {
+                            runOpponentTurn(cleanState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                            return cleanState;
                         }
-                        return stateAfterAction;
-                    } else {
-                        return phaseManager.processEndOfAction(finalState);
-                    }
-                }));
+                        if (cleanState.phase === 'start') {
+                            const stateAfterAction = phaseManager.continueTurnAfterStartPhaseAction(cleanState);
+                            const cleanAfterAction = { ...stateAfterAction, animationState: null };
+                            // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
+                            if (!cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent' && !cleanAfterAction.winner) {
+                                setTimeout(() => {
+                                    runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                                }, 500);
+                            }
+                            return cleanAfterAction;
+                        } else {
+                            const result = phaseManager.processEndOfAction(cleanState);
+                            return { ...result, animationState: null };
+                        }
+                    });
+                });
             });
             return nextState;
         }

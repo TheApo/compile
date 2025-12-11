@@ -162,6 +162,7 @@ export const advancePhase = (state: GameState): GameState => {
         }
 
         case 'end': {
+
             // Clear end phase snapshot at the beginning of end phase processing
             // (it will be recreated if needed by executeEndPhaseEffects)
             const stateBeforeEffects = { ...nextState };
@@ -594,23 +595,29 @@ export const processEndOfAction = (state: GameState): GameState => {
                 restoredState = processQueuedActions(restoredState);
             }
             // If queued actions were processed and no new actionRequired was created,
-            // AND we're in end phase, we need to end the turn now (even if animation is playing).
+            // AND we're in end phase, check for remaining end effects FIRST before ending the turn.
             if (!restoredState.actionRequired && originalPhase === 'end') {
-                // End the turn: switch turn and reset to start phase
-                const nextTurn: Player = restoredState.turn === 'player' ? 'opponent' : 'player';
-                const endingPlayerState = {...restoredState[restoredState.turn], cannotCompile: false};
+                // CRITICAL FIX: Re-check for remaining END phase effects before ending turn
+                const stateAfterEndRecheck = executeEndPhaseEffects(restoredState).newState;
+                if (stateAfterEndRecheck.actionRequired) {
+                    return stateAfterEndRecheck;
+                }
+
+                // No more end effects - NOW end the turn
+                const nextTurn: Player = stateAfterEndRecheck.turn === 'player' ? 'opponent' : 'player';
+                const endingPlayerState = {...stateAfterEndRecheck[stateAfterEndRecheck.turn], cannotCompile: false};
 
                 // CRITICAL: Clear ALL context before transitioning to the next turn
-                restoredState = setLogSource(restoredState, undefined);
-                restoredState = setLogPhase(restoredState, undefined);
-                restoredState = { ...restoredState, _logIndentLevel: 0 };
+                let finalState = setLogSource(stateAfterEndRecheck, undefined);
+                finalState = setLogPhase(finalState, undefined);
+                finalState = { ...finalState, _logIndentLevel: 0 };
 
                 // CRITICAL: Recalculate ALL lane values at the start of a new turn
-                restoredState = recalculateAllLaneValues(restoredState);
+                finalState = recalculateAllLaneValues(finalState);
 
                 return {
-                    ...restoredState,
-                    [restoredState.turn]: endingPlayerState,
+                    ...finalState,
+                    [stateAfterEndRecheck.turn]: endingPlayerState,
                     turn: nextTurn,
                     phase: 'start',
                     processedStartEffectIds: [],
@@ -625,6 +632,22 @@ export const processEndOfAction = (state: GameState): GameState => {
                     _interruptedPhase: undefined,
                 };
             }
+
+            // CRITICAL FIX: For START phase interrupts, continue the original player's turn properly.
+            // When an interrupt happens during Start phase (e.g., opponent's Death-1 deletes a card,
+            // uncovering player's Speed-3 which triggers its middle effect), after the interrupt
+            // completes, we must continue OPPONENT's turn through their remaining phases.
+            if (originalPhase === 'start' && !restoredState.actionRequired) {
+                // Re-check for remaining start effects for the restored player
+                const stateAfterStartRecheck = executeStartPhaseEffects(restoredState).newState;
+                if (stateAfterStartRecheck.actionRequired) {
+                    return stateAfterStartRecheck;
+                }
+                // No more start effects - continue through remaining phases (control → compile → action → ...)
+                let nextState = { ...stateAfterStartRecheck, phase: 'control' as GamePhase };
+                return continueTurnProgression(nextState);
+            }
+
             return restoredState;
         }
 
@@ -858,12 +881,22 @@ export const continueTurnProgression = (state: GameState): GameState => {
             break;
         }
     }
-    return nextState;
+    // CRITICAL: Clear animationState when progressing to a new phase/state
+    // Animation should never persist across phase transitions
+    return { ...nextState, animationState: null };
 };
 
 export const continueTurnAfterStartPhaseAction = (state: GameState): GameState => {
     // The previous action has been resolved, clear it.
     let stateAfterAction = { ...state, actionRequired: null };
+
+    // CRITICAL FIX: If there's an active interrupt, delegate to processEndOfAction.
+    // This ensures the turn is properly restored to the original player before continuing.
+    // Example: Opponent's Start phase triggers Death-1 delete → Player's Speed-3 uncovered →
+    // Speed-3 middle effect executes → After completion, turn must return to OPPONENT, not stay with PLAYER.
+    if (stateAfterAction._interruptedTurn) {
+        return processEndOfAction(stateAfterAction);
+    }
 
     // CRITICAL FIX: Process queuedActions FIRST before continuing the turn.
     // This handles cases like Life-1's "Flip 1 card. Flip 1 card." where the second flip

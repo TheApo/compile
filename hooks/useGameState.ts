@@ -618,17 +618,13 @@ export const useGameState = (
             }
 
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            console.log('[DEBUG useGameState resolveRearrangeProtocols] Before resolvers.resolveRearrangeProtocols, hand:', prev.opponent.hand.length);
             const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
-            console.log('[DEBUG useGameState resolveRearrangeProtocols] After resolvers.resolveRearrangeProtocols, hand:', nextState.opponent.hand.length);
 
             if (nextState.winner) {
                 return nextState;
             }
 
-            const finalState = turnProgressionCb(nextState);
-            console.log('[DEBUG useGameState resolveRearrangeProtocols] After turnProgressionCb, hand:', finalState.opponent.hand.length);
-            return finalState;
+            return turnProgressionCb(nextState);
         });
     }, [getTurnProgressionCallback, onEndGame, trackPlayerRearrange]);
     

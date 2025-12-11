@@ -232,6 +232,13 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     return null;
   }, [gameState.actionRequired?.sourceCardId, gameState.player.lanes, gameState.opponent.lanes]);
 
+  // Clear hoveredCard when sourceCardId changes so the active effect's card is shown in preview
+  useEffect(() => {
+    if (gameState.actionRequired?.sourceCardId) {
+      setHoveredCard(null);
+    }
+  }, [gameState.actionRequired?.sourceCardId]);
+
   // Priority: 1) User hover, 2) Effect source card, 3) Last played card
   const previewState = hoveredCard || sourceCardInfo || lastPlayedCardInfo;
 

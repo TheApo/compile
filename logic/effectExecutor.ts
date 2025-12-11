@@ -429,7 +429,6 @@ function processTriggeredEffects(
     const snapshotKey = isStartPhase ? '_startPhaseEffectSnapshot' : '_endPhaseEffectSnapshot';
     const selectedEffectIdKey = isStartPhase ? '_selectedStartEffectId' : '_selectedEndEffectId';
 
-
     // Check if there's a selected effect waiting to be executed
     // This is set by the cardResolver when the player chooses which effect to run first
     const selectedEffectId = (newState as any)[selectedEffectIdKey] as string | undefined;
