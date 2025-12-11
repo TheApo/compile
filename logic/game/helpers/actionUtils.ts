@@ -26,12 +26,14 @@ export function findCardOnBoard(state: GameState, cardId: string | undefined): {
 }
 
 /**
- * Check if a card is UNCOVERED (top card in its lane).
+ * Check if a card is UNCOVERED (top card in its lane) for TARGETING purposes.
  * Returns true only if the card is on top of its lane (not covered by another card).
  *
  * CRITICAL: If there's a "committed" card (being played but not yet landed),
  * that card doesn't count for coverage. Per rules: committed cards have not yet
  * landed, so the card below them is effectively "uncovered" for targeting purposes.
+ *
+ * Use this for: selecting targets for flip/delete/shift/return effects
  */
 export function isCardUncovered(state: GameState, cardId: string | undefined): boolean {
     if (!cardId) return false;
@@ -54,6 +56,34 @@ export function isCardUncovered(state: GameState, cardId: string | undefined): b
         }
     }
     return false; // Card not found or is covered
+}
+
+/**
+ * Check if a card is PHYSICALLY uncovered (ignoring committed status).
+ * This is for checking if a card's effects should continue executing.
+ *
+ * CRITICAL DIFFERENCE from isCardUncovered:
+ * - isCardUncovered: For targeting - committed cards don't count as covering
+ * - isCardPhysicallyUncovered: For effect execution - committed cards DO count as covering
+ *
+ * Per rules: "The remainder of darkness 0 effect to shift one of opponents cards does NOT
+ * trigger as its middle text is now covered by spirit 3" - even though Spirit-3 is committed,
+ * it physically covers Darkness-0 and stops its remaining effects.
+ */
+export function isCardPhysicallyUncovered(state: GameState, cardId: string | undefined): boolean {
+    if (!cardId) return false;
+
+    for (const p of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[p].lanes) {
+            if (lane.length === 0) continue;
+
+            // Simply check if the card is the top card - no committed card exception
+            if (lane[lane.length - 1].id === cardId) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /**
@@ -617,6 +647,11 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         ? lanesAfterRemoval[targetLaneIndex][lanesAfterRemoval[targetLaneIndex].length - 1]
         : null;
 
+    // CRITICAL: Mark the card as "committed" BEFORE adding to target lane
+    // Per rules: "When cards move between zones... they first leave their current zone and get 'committed' to the new zone"
+    // While committed, the card cannot trigger reactive effects (e.g., Spirit-3's after_draw)
+    let stateWithCommitted: GameState = { ...state, [cardOwner]: { ...ownerState, lanes: lanesAfterRemoval } };
+    (stateWithCommitted as any)._committedCardId = cardToShiftId;
 
     // Create another new lanes array with the card added to the target lane.
     const lanesAfterAddition = lanesAfterRemoval.map((lane, index) => {
@@ -625,9 +660,9 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
         }
         return lane;
     });
-    
+
     const newOwnerState = { ...ownerState, lanes: lanesAfterAddition };
-    let newState = { ...state, [cardOwner]: newOwnerState };
+    let newState = { ...stateWithCommitted, [cardOwner]: newOwnerState };
 
     // IMPORTANT: Only clear effect context if there is NO active effect
     // If we have an active effect (sourceCard + phase), keep it for the shift log
@@ -692,14 +727,27 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
             allAnimations.push(...uncoverTargetResult.animationRequests);
         }
 
+        // CRITICAL: Clear committed card ID if no further actions are pending
+        // The card has officially "landed" when all triggered effects are resolved
+        let finalState = uncoverTargetResult.newState;
+        if (!finalState.actionRequired && (!finalState.queuedActions || finalState.queuedActions.length === 0)) {
+            (finalState as any)._committedCardId = undefined;
+        }
+
         return {
-            newState: uncoverTargetResult.newState,
+            newState: finalState,
             animationRequests: allAnimations.length > 0 ? allAnimations : undefined,
         };
     }
 
+    // CRITICAL: Clear committed card ID if no further actions are pending
+    let finalState = stateAfterOriginalLaneUncover;
+    if (!finalState.actionRequired && (!finalState.queuedActions || finalState.queuedActions.length === 0)) {
+        (finalState as any)._committedCardId = undefined;
+    }
+
     return {
-        newState: stateAfterOriginalLaneUncover,
+        newState: finalState,
         animationRequests: allAnimations.length > 0 ? allAnimations : undefined,
     };
 }

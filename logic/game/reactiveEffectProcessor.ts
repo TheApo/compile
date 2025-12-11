@@ -60,6 +60,12 @@ export function processReactiveEffects(
             lane.forEach((card, cardIndex) => {
                 if (!card.isFaceUp) return;
 
+                // CRITICAL: Committed cards cannot trigger reactive effects
+                // Per rules: "While a card is committed... it cannot be manipulated in any way by another game effect"
+                // This also means the committed card's own effects don't trigger until it lands
+                const committedCardId = (newState as any)._committedCardId;
+                if (committedCardId && card.id === committedCardId) return;
+
                 const customCard = card as any;
                 if (!customCard.customEffects) return;
 

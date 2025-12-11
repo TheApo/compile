@@ -6,7 +6,7 @@
 import { GameState, Player, GamePhase, PlayedCard, ActionRequired, EffectContext } from '../../types';
 import { executeStartPhaseEffects, executeEndPhaseEffects, executeOnPlayEffect } from '../effectExecutor';
 import { calculateCompilableLanes, recalculateAllLaneValues } from './stateManager';
-import { findCardOnBoard, isCardUncovered, internalShiftCard, handleUncoverEffect } from './helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, isCardPhysicallyUncovered, internalShiftCard, handleUncoverEffect } from './helpers/actionUtils';
 import { drawForPlayer, findAndFlipCards } from '../../utils/gameStateModifiers';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../utils/log';
 // NOTE: handleAnarchyConditionalDraw removed - old Anarchy-0 code is no longer used, custom protocol handles this
@@ -455,8 +455,12 @@ export const processQueuedActions = (state: GameState): GameState => {
                 continue;
             }
 
-            // Check if source card is still uncovered (required for middle/bottom box effects)
-            const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
+            // Check if source card is still PHYSICALLY uncovered (required for middle/bottom box effects)
+            // CRITICAL: Use isCardPhysicallyUncovered here, NOT isCardUncovered!
+            // Even if a committed card is on top (which isCardUncovered would ignore),
+            // the source card's remaining effects should be cancelled because it IS covered.
+            // Per rules: "The remainder of darkness 0 effect... does NOT trigger as its middle text is now covered by spirit 3"
+            const sourceIsUncovered = isCardPhysicallyUncovered(mutableState, sourceCardId);
             if (!sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, context.cardOwner, `Remaining effects from ${cardName} cancelled because it is now covered.`);

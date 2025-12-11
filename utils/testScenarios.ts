@@ -3594,10 +3594,13 @@ export const scenario68_CommittedCardPlayground: TestScenario = {
         newState = placeCard(newState, 'player', 0, createCard('Spirit', 0, true));  // 
 		newState = placeCard(newState, 'player', 0, createCard('Spirit', 3, true));  // 
 
+		newState = placeCard(newState, 'opponent', 0, createCard('Light', 1, true));  // 
+		newState = placeCard(newState, 'opponent', 0, createCard('Light', 2, true));  // 
+
 
         // Opponent needs hand for discard tests
         newState.opponent.hand = [
-            createCard('Light', 1, true),
+            createCard('Light', 5, true),
             createCard('Water', 2, true),
             createCard('Darkness', 3, true),
         ];
