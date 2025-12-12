@@ -393,23 +393,27 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Cards Played</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{cardsPlayedTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{cardsPlayedPlayer}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Von Hand</span><span className="detail-value">{d.cardsPlayed.playerFromHand}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Effekt</span><span className="detail-value">{d.cardsPlayed.playerFromEffect}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(cardsPlayedPlayer)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Hand</span><span className="detail-value">{d.cardsPlayed.playerFromHand}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Effect</span><span className="detail-value">{d.cardsPlayed.playerFromEffect}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Face-Up</span><span className="detail-value">{d.cardsPlayed.playerFaceUp}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Face-Down</span><span className="detail-value">{d.cardsPlayed.playerFaceDown}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(cardsPlayedPlayer)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{cardsPlayedAi}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Von Hand</span><span className="detail-value">{d.cardsPlayed.aiFromHand}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Effekt</span><span className="detail-value">{d.cardsPlayed.aiFromEffect}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(cardsPlayedAi)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Hand</span><span className="detail-value">{d.cardsPlayed.aiFromHand}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Effect</span><span className="detail-value">{d.cardsPlayed.aiFromEffect}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Face-Up</span><span className="detail-value">{d.cardsPlayed.aiFaceUp}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Face-Down</span><span className="detail-value">{d.cardsPlayed.aiFaceDown}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(cardsPlayedAi)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -419,23 +423,23 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Cards Drawn</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{cardsDrawnTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{cardsDrawnPlayer}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Refresh</span><span className="detail-value">{d.cardsDrawn.playerFromRefresh}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Effekt</span><span className="detail-value">{d.cardsDrawn.playerFromEffect}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(cardsDrawnPlayer)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Refresh</span><span className="detail-value">{d.cardsDrawn.playerFromRefresh}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Effect</span><span className="detail-value">{d.cardsDrawn.playerFromEffect}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(cardsDrawnPlayer)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{cardsDrawnAi}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Refresh</span><span className="detail-value">{d.cardsDrawn.aiFromRefresh}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Durch Effekt</span><span className="detail-value">{d.cardsDrawn.aiFromEffect}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(cardsDrawnAi)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Refresh</span><span className="detail-value">{d.cardsDrawn.aiFromRefresh}</span></div>
+                                    <div className="detail-row"><span className="detail-label">From Effect</span><span className="detail-value">{d.cardsDrawn.aiFromEffect}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(cardsDrawnAi)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -445,19 +449,19 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Discards</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{discardsTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.discards.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.discards.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.discards.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.discards.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.discards.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.discards.ai)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -467,19 +471,19 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Deletes</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{deletesTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.deletes.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.deletes.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.deletes.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.deletes.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.deletes.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.deletes.ai)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -489,19 +493,19 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Flips</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{flipsTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.flips.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.flips.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.flips.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.flips.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.flips.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.flips.ai)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -511,19 +515,19 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Shifts</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{shiftsTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.shifts.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.shifts.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.shifts.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.shifts.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.shifts.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.shifts.ai)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -533,19 +537,19 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Returns</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{returnsTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.returns.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.returns.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.returns.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.returns.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.returns.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.returns.ai)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -555,7 +559,7 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Compiles</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{compilesTotal}</span>
                             </div>
                             <div className="action-details-columns">
@@ -564,14 +568,14 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{compilesPlayer}</span></div>
                                     <div className="detail-row"><span className="detail-label">First-Compile</span><span className="detail-value">{d.compiles.playerFirstCompile}</span></div>
                                     <div className="detail-row"><span className="detail-label">Re-Compile</span><span className="detail-value">{d.compiles.playerRecompile}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(compilesPlayer)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(compilesPlayer)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{compilesAi}</span></div>
                                     <div className="detail-row"><span className="detail-label">First-Compile</span><span className="detail-value">{d.compiles.aiFirstCompile}</span></div>
                                     <div className="detail-row"><span className="detail-label">Re-Compile</span><span className="detail-value">{d.compiles.aiRecompile}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(compilesAi)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(compilesAi)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -581,21 +585,21 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         <div className="action-details-section">
                             <h3 className="section-title">Refreshes</h3>
                             <div className="action-details-total">
-                                <span className="detail-label">Gesamt</span>
+                                <span className="detail-label">Total</span>
                                 <span className="detail-value">{refreshesTotal}</span>
                             </div>
                             <div className="action-details-columns">
                                 <div className="action-details-column player">
                                     <div className="column-header">Player</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.refreshes.player}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Karten / Refresh</span><span className="detail-value">{avgCardsPerRefresh(d.refreshes.playerCardsDrawn, d.refreshes.player)}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.refreshes.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Cards / Refresh</span><span className="detail-value">{avgCardsPerRefresh(d.refreshes.playerCardsDrawn, d.refreshes.player)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.refreshes.player)}</span></div>
                                 </div>
                                 <div className="action-details-column ai">
                                     <div className="column-header">AI</div>
                                     <div className="detail-row"><span className="detail-label">Total</span><span className="detail-value">{d.refreshes.ai}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Karten / Refresh</span><span className="detail-value">{avgCardsPerRefresh(d.refreshes.aiCardsDrawn, d.refreshes.ai)}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Avg / Spiel</span><span className="detail-value">{avgPerGame(d.refreshes.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Cards / Refresh</span><span className="detail-value">{avgCardsPerRefresh(d.refreshes.aiCardsDrawn, d.refreshes.ai)}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Avg / Game</span><span className="detail-value">{avgPerGame(d.refreshes.ai)}</span></div>
                                 </div>
                             </div>
                         </div>

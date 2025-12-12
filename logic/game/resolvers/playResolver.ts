@@ -162,12 +162,17 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     };
 
     // Update detailed game stats for cards played from hand
+    const fromHandKey = player === 'player' ? 'playerFromHand' : 'aiFromHand';
+    const faceKey = player === 'player'
+        ? (isFaceUp ? 'playerFaceUp' : 'playerFaceDown')
+        : (isFaceUp ? 'aiFaceUp' : 'aiFaceDown');
+
     const updatedDetailedStats = stateAfterOnCover.detailedGameStats ? {
         ...stateAfterOnCover.detailedGameStats,
         cardsPlayed: {
             ...stateAfterOnCover.detailedGameStats.cardsPlayed,
-            [player === 'player' ? 'playerFromHand' : 'aiFromHand']:
-                stateAfterOnCover.detailedGameStats.cardsPlayed[player === 'player' ? 'playerFromHand' : 'aiFromHand'] + 1
+            [fromHandKey]: stateAfterOnCover.detailedGameStats.cardsPlayed[fromHandKey] + 1,
+            [faceKey]: stateAfterOnCover.detailedGameStats.cardsPlayed[faceKey] + 1
         }
     } : undefined;
 

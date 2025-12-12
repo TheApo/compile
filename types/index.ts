@@ -63,6 +63,10 @@ export interface DetailedGameStats {
         playerFromEffect: number;
         aiFromHand: number;
         aiFromEffect: number;
+        playerFaceUp: number;
+        playerFaceDown: number;
+        aiFaceUp: number;
+        aiFaceDown: number;
     };
     cardsDrawn: {
         playerFromRefresh: number;

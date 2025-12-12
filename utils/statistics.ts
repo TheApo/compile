@@ -79,6 +79,10 @@ export interface GameStatistics {
                 playerFromEffect: number;
                 aiFromHand: number;
                 aiFromEffect: number;
+                playerFaceUp: number;
+                playerFaceDown: number;
+                aiFaceUp: number;
+                aiFaceDown: number;
             };
             cardsDrawn: {
                 total: number;
@@ -193,7 +197,7 @@ export function initializeStatistics(): GameStatistics {
             totalRefreshes: 0,
             totalReturns: 0,
             detailedStats: {
-                cardsPlayed: { total: 0, player: 0, ai: 0, playerFromHand: 0, playerFromEffect: 0, aiFromHand: 0, aiFromEffect: 0 },
+                cardsPlayed: { total: 0, player: 0, ai: 0, playerFromHand: 0, playerFromEffect: 0, aiFromHand: 0, aiFromEffect: 0, playerFaceUp: 0, playerFaceDown: 0, aiFaceUp: 0, aiFaceDown: 0 },
                 cardsDrawn: { total: 0, player: 0, ai: 0, playerFromRefresh: 0, playerFromEffect: 0, aiFromRefresh: 0, aiFromEffect: 0 },
                 discards: { total: 0, player: 0, ai: 0 },
                 deletes: { total: 0, player: 0, ai: 0 },
@@ -276,6 +280,10 @@ export function loadStatistics(): GameStatistics {
                         playerFromEffect: parsed.actions?.detailedStats?.cardsPlayed?.playerFromEffect || 0,
                         aiFromHand: parsed.actions?.detailedStats?.cardsPlayed?.aiFromHand || 0,
                         aiFromEffect: parsed.actions?.detailedStats?.cardsPlayed?.aiFromEffect || 0,
+                        playerFaceUp: parsed.actions?.detailedStats?.cardsPlayed?.playerFaceUp || 0,
+                        playerFaceDown: parsed.actions?.detailedStats?.cardsPlayed?.playerFaceDown || 0,
+                        aiFaceUp: parsed.actions?.detailedStats?.cardsPlayed?.aiFaceUp || 0,
+                        aiFaceDown: parsed.actions?.detailedStats?.cardsPlayed?.aiFaceDown || 0,
                     },
                     cardsDrawn: {
                         total: parsed.actions?.detailedStats?.cardsDrawn?.total || 0,
@@ -369,7 +377,7 @@ export function resetStatistics(): void {
 }
 
 export interface DetailedGameStatsInput {
-    cardsPlayed?: { playerFromHand: number; playerFromEffect: number; aiFromHand: number; aiFromEffect: number };
+    cardsPlayed?: { playerFromHand: number; playerFromEffect: number; aiFromHand: number; aiFromEffect: number; playerFaceUp: number; playerFaceDown: number; aiFaceUp: number; aiFaceDown: number };
     cardsDrawn?: { playerFromRefresh: number; playerFromEffect: number; aiFromRefresh: number; aiFromEffect: number };
     compiles?: { playerFirstCompile: number; playerRecompile: number; aiFirstCompile: number; aiRecompile: number };
     refreshes?: { playerCardsDrawn: number; aiCardsDrawn: number };
@@ -557,6 +565,10 @@ export function updateStatisticsOnGameEnd(
             newDetailedStats.cardsPlayed.playerFromEffect += detailedGameStats.cardsPlayed.playerFromEffect;
             newDetailedStats.cardsPlayed.aiFromHand += detailedGameStats.cardsPlayed.aiFromHand;
             newDetailedStats.cardsPlayed.aiFromEffect += detailedGameStats.cardsPlayed.aiFromEffect;
+            newDetailedStats.cardsPlayed.playerFaceUp += detailedGameStats.cardsPlayed.playerFaceUp;
+            newDetailedStats.cardsPlayed.playerFaceDown += detailedGameStats.cardsPlayed.playerFaceDown;
+            newDetailedStats.cardsPlayed.aiFaceUp += detailedGameStats.cardsPlayed.aiFaceUp;
+            newDetailedStats.cardsPlayed.aiFaceDown += detailedGameStats.cardsPlayed.aiFaceDown;
         }
         if (detailedGameStats.cardsDrawn) {
             newDetailedStats.cardsDrawn.playerFromRefresh += detailedGameStats.cardsDrawn.playerFromRefresh;

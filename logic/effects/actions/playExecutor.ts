@@ -94,16 +94,18 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
-        // Update detailed game stats for cards played from effect
+        // Update detailed game stats for cards played from effect (face-down)
         if (newState.detailedGameStats && drawnCards.length > 0) {
-            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const fromEffectKey = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const faceDownKey = actor === 'player' ? 'playerFaceDown' : 'aiFaceDown';
             newState = {
                 ...newState,
                 detailedGameStats: {
                     ...newState.detailedGameStats,
                     cardsPlayed: {
                         ...newState.detailedGameStats.cardsPlayed,
-                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                        [fromEffectKey]: newState.detailedGameStats.cardsPlayed[fromEffectKey] + drawnCards.length,
+                        [faceDownKey]: newState.detailedGameStats.cardsPlayed[faceDownKey] + drawnCards.length
                     }
                 }
             };
@@ -230,16 +232,18 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
-        // Update detailed game stats for cards played from effect
+        // Update detailed game stats for cards played from effect (face-down)
         if (newState.detailedGameStats && drawnCards.length > 0) {
-            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const fromEffectKey = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const faceDownKey = actor === 'player' ? 'playerFaceDown' : 'aiFaceDown';
             newState = {
                 ...newState,
                 detailedGameStats: {
                     ...newState.detailedGameStats,
                     cardsPlayed: {
                         ...newState.detailedGameStats.cardsPlayed,
-                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                        [fromEffectKey]: newState.detailedGameStats.cardsPlayed[fromEffectKey] + drawnCards.length,
+                        [faceDownKey]: newState.detailedGameStats.cardsPlayed[faceDownKey] + drawnCards.length
                     }
                 }
             };
@@ -347,16 +351,18 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
-        // Update detailed game stats for cards played from effect (Gravity-0)
+        // Update detailed game stats for cards played from effect (Gravity-0, face-down)
         if (newState.detailedGameStats && drawnCards.length > 0) {
-            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const fromEffectKey = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const faceDownKey = actor === 'player' ? 'playerFaceDown' : 'aiFaceDown';
             newState = {
                 ...newState,
                 detailedGameStats: {
                     ...newState.detailedGameStats,
                     cardsPlayed: {
                         ...newState.detailedGameStats.cardsPlayed,
-                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                        [fromEffectKey]: newState.detailedGameStats.cardsPlayed[fromEffectKey] + drawnCards.length,
+                        [faceDownKey]: newState.detailedGameStats.cardsPlayed[faceDownKey] + drawnCards.length
                     }
                 }
             };
@@ -417,14 +423,18 @@ export function executePlayEffect(
 
         // Update detailed game stats for cards played from effect (Gravity-6)
         if (newState.detailedGameStats && drawnCards.length > 0) {
-            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const fromEffectKey = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const faceKey = actor === 'player'
+                ? (faceDown ? 'playerFaceDown' : 'playerFaceUp')
+                : (faceDown ? 'aiFaceDown' : 'aiFaceUp');
             newState = {
                 ...newState,
                 detailedGameStats: {
                     ...newState.detailedGameStats,
                     cardsPlayed: {
                         ...newState.detailedGameStats.cardsPlayed,
-                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                        [fromEffectKey]: newState.detailedGameStats.cardsPlayed[fromEffectKey] + drawnCards.length,
+                        [faceKey]: newState.detailedGameStats.cardsPlayed[faceKey] + drawnCards.length
                     }
                 }
             };
