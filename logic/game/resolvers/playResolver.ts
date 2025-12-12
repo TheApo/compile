@@ -161,6 +161,16 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         cardsPlayed: playerStateAfterOnCover.stats.cardsPlayed + 1,
     };
 
+    // Update detailed game stats for cards played from hand
+    const updatedDetailedStats = stateAfterOnCover.detailedGameStats ? {
+        ...stateAfterOnCover.detailedGameStats,
+        cardsPlayed: {
+            ...stateAfterOnCover.detailedGameStats.cardsPlayed,
+            [player === 'player' ? 'playerFromHand' : 'aiFromHand']:
+                stateAfterOnCover.detailedGameStats.cardsPlayed[player === 'player' ? 'playerFromHand' : 'aiFromHand'] + 1
+        }
+    } : undefined;
+
     let stateAfterMove: GameState;
 
     if (targetOwner === player) {
@@ -179,7 +189,8 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             stats: {
                 ...stateAfterOnCover.stats,
                 [player]: newPlayerStats
-            }
+            },
+            detailedGameStats: updatedDetailedStats
         };
     } else {
         // Special case: card goes to opponent's lane (Corruption-0)
@@ -204,7 +215,8 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             stats: {
                 ...stateAfterOnCover.stats,
                 [player]: newPlayerStats
-            }
+            },
+            detailedGameStats: updatedDetailedStats
         };
     }
 

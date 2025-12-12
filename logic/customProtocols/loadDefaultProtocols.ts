@@ -30,6 +30,31 @@ import fearCustomData from '../../custom_protocols/fear_custom_protocol.json';
 import iceCustomData from '../../custom_protocols/ice_custom_protocol.json';
 
 /**
+ * All default custom protocol data for statistics tracking
+ * Each protocol has a 'name' field that represents the protocol name
+ */
+const allDefaultCustomProtocolData = [
+    anarchyCustomData, apathyCustomData, chaosCustomData, darknessCustomData,
+    deathCustomData, fireCustomData, frostCustomData, hateCustomData,
+    waterCustomData, spiritCustomData, gravityCustomData, lifeCustomData,
+    lightCustomData, speedCustomData, metalCustomData, plagueCustomData,
+    loveCustomData, psychicCustomData, smokeCustomData, clarityCustomData,
+    corruptionCustomData, courageCustomData, fearCustomData, iceCustomData
+];
+
+/**
+ * Export all custom protocol names for statistics tracking
+ * Returns the base protocol name (without "_custom" suffix)
+ */
+export const getCustomProtocolNames = (): string[] => {
+    return allDefaultCustomProtocolData.map((data: any) => {
+        // Extract base name: "Ice_custom" -> "Ice"
+        const name = data.name as string;
+        return name.replace(/_custom$/i, '');
+    });
+};
+
+/**
  * Load default custom protocols (like Anarchy_custom and Apathy_custom for testing)
  * This runs once when the app starts
  */

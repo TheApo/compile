@@ -104,7 +104,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     // Count compiles
     const compilesCount = finalState.player.compiled.filter(c => c).length;
 
-    endGame(winner, finalState.stats.player, compilesCount);
+    // Pass both player and opponent stats, plus detailed game stats if available
+    endGame(
+      winner,
+      finalState.stats.player,
+      compilesCount,
+      finalState.stats.opponent,
+      finalState.detailedGameStats
+    );
     onEndGame(winner, finalState);
   }, [endGame, onEndGame]);
 

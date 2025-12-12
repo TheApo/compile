@@ -14,7 +14,9 @@ import {
     trackCardDeleted,
     trackCoinFlip,
     trackRearrange,
+    DetailedGameStatsInput,
 } from '../utils/statistics';
+import { DetailedGameStats } from '../types';
 
 export function useStatistics(
     playerProtocols: string[],
@@ -68,7 +70,13 @@ export function useStatistics(
     }, []);
 
     // End game and update statistics
-    const endGame = useCallback((winner: Player, playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; handsRefreshed: number }, compilesCount?: number) => {
+    const endGame = useCallback((
+        winner: Player,
+        playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; cardsReturned?: number; handsRefreshed: number },
+        compilesCount?: number,
+        opponentStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; cardsReturned?: number; handsRefreshed: number },
+        detailedGameStats?: DetailedGameStatsInput
+    ) => {
         if (gameStartTimeRef.current === null) return;
 
         const gameDurationSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
@@ -82,7 +90,9 @@ export function useStatistics(
                 gameDurationSeconds,
                 useControl,
                 playerStats,
-                compilesCount
+                compilesCount,
+                opponentStats,
+                detailedGameStats
             );
             saveStatistics(newStats);
             return newStats;

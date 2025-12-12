@@ -50,15 +50,20 @@ export function drawCards(deck: Card[], discard: Card[], count: number): { drawn
  * @param count - The number of cards to draw.
  * @returns The new GameState.
  */
-export function drawForPlayer(state: GameState, player: Player, count: number): GameState {
+export function drawForPlayer(
+    state: GameState,
+    player: Player,
+    count: number,
+    source: 'refresh' | 'effect' = 'effect'
+): GameState {
     const playerState = state[player];
     const { drawnCards, remainingDeck, newDiscard, reshuffled } = drawCards(playerState.deck, playerState.discard, count);
-    
+
     if (drawnCards.length === 0) return state;
 
     const newHandCards = drawnCards.map(c => ({...c, id: uuidv4(), isFaceUp: true}));
     const drawnCardIds = newHandCards.map(c => c.id);
-    
+
     const newStats = {
         ...playerState.stats,
         cardsDrawn: playerState.stats.cardsDrawn + drawnCards.length,
@@ -72,14 +77,32 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         stats: newStats,
     };
 
-    let newState: GameState = { 
-        ...state, 
+    let newState: GameState = {
+        ...state,
         [player]: newPlayerState,
         stats: {
             ...state.stats,
             [player]: newStats,
         }
     };
+
+    // Update detailed game stats for cards drawn (Player vs AI, Refresh vs Effect)
+    if (newState.detailedGameStats && drawnCards.length > 0) {
+        const isRefresh = source === 'refresh';
+        const keyDrawn = player === 'player'
+            ? (isRefresh ? 'playerFromRefresh' : 'playerFromEffect')
+            : (isRefresh ? 'aiFromRefresh' : 'aiFromEffect');
+        newState = {
+            ...newState,
+            detailedGameStats: {
+                ...newState.detailedGameStats,
+                cardsDrawn: {
+                    ...newState.detailedGameStats.cardsDrawn,
+                    [keyDrawn]: newState.detailedGameStats.cardsDrawn[keyDrawn] + drawnCards.length
+                }
+            }
+        };
+    }
 
     if (drawnCardIds.length > 0) {
         newState.animationState = { type: 'drawCard', owner: player, cardIds: drawnCardIds };
@@ -151,6 +174,21 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
             newState = log(newState, drawingPlayer, `${opponentName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
         }
 
+        // Update detailed game stats for cards drawn from opponent deck (always 'effect' source)
+        if (newState.detailedGameStats && drawnCards.length > 0) {
+            const keyDrawn = drawingPlayer === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsDrawn: {
+                        ...newState.detailedGameStats.cardsDrawn,
+                        [keyDrawn]: newState.detailedGameStats.cardsDrawn[keyDrawn] + drawnCards.length
+                    }
+                }
+            };
+        }
+
         // NOTE: Spirit-3 after_draw trigger is now handled by custom protocol reactive effects
     }
 
@@ -166,7 +204,8 @@ export function refreshHandForPlayer(state: GameState, player: Player): GameStat
     if (cardsToDraw <= 0) return state;
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
-    let newState = drawForPlayer(state, player, cardsToDraw);
+    // Pass 'refresh' as source to track cards drawn from refresh separately
+    let newState = drawForPlayer(state, player, cardsToDraw, 'refresh');
 
     // Track refresh in stats
     const newPlayerState = {
@@ -185,6 +224,21 @@ export function refreshHandForPlayer(state: GameState, player: Player): GameStat
             [player]: newPlayerState.stats,
         }
     };
+
+    // Track cards drawn per refresh in detailed stats (for "Karten pro Refresh" average)
+    if (newState.detailedGameStats) {
+        const key = player === 'player' ? 'playerCardsDrawn' : 'aiCardsDrawn';
+        newState = {
+            ...newState,
+            detailedGameStats: {
+                ...newState.detailedGameStats,
+                refreshes: {
+                    ...newState.detailedGameStats.refreshes,
+                    [key]: newState.detailedGameStats.refreshes[key] + cardsToDraw
+                }
+            }
+        };
+    }
 
     return log(newState, player, `${playerName} refreshes their hand, drawing ${cardsToDraw} card(s).`);
 }

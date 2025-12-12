@@ -45,8 +45,14 @@ export function isCardUncovered(state: GameState, cardId: string | undefined): b
 
             // Determine the effective top card (ignoring committed card if it's on top)
             let effectiveTopIndex = lane.length - 1;
-            if (committedCardId && lane.length >= 2 && lane[lane.length - 1].id === committedCardId) {
+            const topCardId = lane[lane.length - 1].id;
+
+            // CRITICAL FIX: Only treat committed card as "not yet landed" if we're checking
+            // for the CARD BELOW it (the previously uncovered card).
+            // If we're checking the committed card ITSELF, it IS uncovered (it's on top).
+            if (committedCardId && lane.length >= 2 && topCardId === committedCardId && cardId !== committedCardId) {
                 // The top card is committed - the card below it is effectively "uncovered"
+                // But ONLY if we're NOT checking the committed card itself
                 effectiveTopIndex = lane.length - 2;
             }
 
@@ -584,6 +590,11 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
 
     // CRITICAL: Queue pending custom effects before clearing actionRequired
     newState = queuePendingCustomEffects(newState);
+
+    // Track return stat for the actor who performed the return
+    const newStats = { ...newState.stats[actor], cardsReturned: newState.stats[actor].cardsReturned + 1 };
+    const newActorState = { ...newState[actor], stats: newStats };
+    newState = { ...newState, [actor]: newActorState };
 
     newState.actionRequired = null;
     const stateAfterRecalc = recalculateAllLaneValues(newState);

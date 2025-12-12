@@ -20,6 +20,7 @@ export const createInitialPlayerState = (protocols: string[]): PlayerState => {
         cardsFlipped: 0,
         cardsShifted: 0,
         cardsDrawn: drawnCards.length, // Initial draw
+        cardsReturned: 0,
         handsRefreshed: 0,
     };
 
@@ -60,6 +61,13 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
         stats: {
             player: playerState.stats,
             opponent: opponentState.stats,
+        },
+        // Initialize detailed game stats for breakdown tracking
+        detailedGameStats: {
+            cardsPlayed: { playerFromHand: 0, playerFromEffect: 0, aiFromHand: 0, aiFromEffect: 0 },
+            cardsDrawn: { playerFromRefresh: 0, playerFromEffect: 0, aiFromRefresh: 0, aiFromEffect: 0 },
+            compiles: { playerFirstCompile: 0, playerRecompile: 0, aiFirstCompile: 0, aiRecompile: 0 },
+            refreshes: { playerCardsDrawn: 0, aiCardsDrawn: 0 },
         }
     };
 

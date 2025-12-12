@@ -52,7 +52,34 @@ export interface PlayerStats {
     cardsFlipped: number;
     cardsShifted: number;
     cardsDrawn: number;
+    cardsReturned: number;  // NEW: Track returned cards
     handsRefreshed: number;
+}
+
+/** Detailed game statistics tracked during gameplay for permanent storage */
+export interface DetailedGameStats {
+    cardsPlayed: {
+        playerFromHand: number;
+        playerFromEffect: number;
+        aiFromHand: number;
+        aiFromEffect: number;
+    };
+    cardsDrawn: {
+        playerFromRefresh: number;
+        playerFromEffect: number;
+        aiFromRefresh: number;
+        aiFromEffect: number;
+    };
+    compiles: {
+        playerFirstCompile: number;
+        playerRecompile: number;
+        aiFirstCompile: number;
+        aiRecompile: number;
+    };
+    refreshes: {
+        playerCardsDrawn: number;   // Sum of all cards drawn in player refreshes
+        aiCardsDrawn: number;       // Sum of all cards drawn in AI refreshes
+    };
 }
 
 export interface PlayerState {
@@ -505,7 +532,11 @@ export interface GameState {
     stats: {
         player: PlayerStats,
         opponent: PlayerStats,
-    }
+    };
+    /** Detailed stats tracked during gameplay for breakdown (player vs AI, source, etc.) */
+    detailedGameStats?: DetailedGameStats;
+    /** Card that is currently committed (being played, not yet landed) - for rules compliance */
+    _committedCardId?: string;
 }
 
 // =============================================================================

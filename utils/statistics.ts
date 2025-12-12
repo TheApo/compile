@@ -5,8 +5,22 @@
 
 import { Player, Difficulty, GameState } from '../types';
 import { uniqueProtocols } from '../data/cards';
+import { getCustomProtocolNames } from '../logic/customProtocols/loadDefaultProtocols';
 
 const STATS_KEY = 'compile_game_statistics';
+
+/**
+ * Get all protocol names (hardcoded + custom)
+ * This ensures custom protocols like Ice, Corruption, etc. appear in statistics
+ */
+const getAllProtocolNames = (): string[] => {
+    const hardcodedProtocols = uniqueProtocols;
+    const customProtocols = getCustomProtocolNames();
+
+    // Combine and deduplicate (some protocols exist in both)
+    const allProtocols = new Set([...hardcodedProtocols, ...customProtocols]);
+    return Array.from(allProtocols).sort();
+};
 const STATS_VERSION = 1;
 
 export interface GameStatistics {
@@ -53,6 +67,70 @@ export interface GameStatistics {
         totalFlips: number;
         totalCompiles: number;
         totalRefreshes: number;
+        totalReturns: number;  // NEW: Track total returns
+
+        // Detailed breakdown by player/AI
+        detailedStats: {
+            cardsPlayed: {
+                total: number;
+                player: number;
+                ai: number;
+                playerFromHand: number;
+                playerFromEffect: number;
+                aiFromHand: number;
+                aiFromEffect: number;
+            };
+            cardsDrawn: {
+                total: number;
+                player: number;
+                ai: number;
+                playerFromRefresh: number;
+                playerFromEffect: number;
+                aiFromRefresh: number;
+                aiFromEffect: number;
+            };
+            discards: {
+                total: number;
+                player: number;
+                ai: number;
+            };
+            deletes: {
+                total: number;
+                player: number;
+                ai: number;
+            };
+            flips: {
+                total: number;
+                player: number;
+                ai: number;
+            };
+            shifts: {
+                total: number;
+                player: number;
+                ai: number;
+            };
+            returns: {
+                total: number;
+                player: number;
+                ai: number;
+            };
+            compiles: {
+                total: number;
+                player: number;
+                ai: number;
+                playerFirstCompile: number;
+                playerRecompile: number;
+                aiFirstCompile: number;
+                aiRecompile: number;
+            };
+            refreshes: {
+                total: number;
+                player: number;
+                ai: number;
+                playerCardsDrawn: number;   // Sum of all cards drawn in player refreshes
+                aiCardsDrawn: number;       // Sum of all cards drawn in AI refreshes
+            };
+        };
     };
 
     control: {
@@ -72,8 +150,8 @@ export interface GameStatistics {
 }
 
 export function initializeStatistics(): GameStatistics {
-    // Initialize ALL protocols dynamically from cards.ts with 0 usage so they appear in "Least Used Protocols"
-    const allProtocols = uniqueProtocols; // Dynamically loaded from cards.ts
+    // Initialize ALL protocols (hardcoded + custom) with 0 usage so they appear in "Least Used Protocols"
+    const allProtocols = getAllProtocolNames(); // Includes both hardcoded and custom protocols
 
     const initialProtocols: { [key: string]: { timesUsed: number; wins: number; losses: number } } = {};
     allProtocols.forEach(protocol => {
@@ -113,6 +191,18 @@ export function initializeStatistics(): GameStatistics {
             totalFlips: 0,
             totalCompiles: 0,
             totalRefreshes: 0,
+            totalReturns: 0,
+            detailedStats: {
+                cardsPlayed: { total: 0, player: 0, ai: 0, playerFromHand: 0, playerFromEffect: 0, aiFromHand: 0, aiFromEffect: 0 },
+                cardsDrawn: { total: 0, player: 0, ai: 0, playerFromRefresh: 0, playerFromEffect: 0, aiFromRefresh: 0, aiFromEffect: 0 },
+                discards: { total: 0, player: 0, ai: 0 },
+                deletes: { total: 0, player: 0, ai: 0 },
+                flips: { total: 0, player: 0, ai: 0 },
+                shifts: { total: 0, player: 0, ai: 0 },
+                returns: { total: 0, player: 0, ai: 0 },
+                compiles: { total: 0, player: 0, ai: 0, playerFirstCompile: 0, playerRecompile: 0, aiFirstCompile: 0, aiRecompile: 0 },
+                refreshes: { total: 0, player: 0, ai: 0, playerCardsDrawn: 0, aiCardsDrawn: 0 },
+            },
         },
         control: {
             gamesWithControl: 0,
@@ -138,8 +228,8 @@ export function loadStatistics(): GameStatistics {
         }
         const parsed = JSON.parse(stored) as any;
 
-        // Ensure ALL protocols exist (migration for existing stats) - dynamically loaded from cards.ts
-        const allProtocols = uniqueProtocols; // Automatically includes Anarchy and any future protocols
+        // Ensure ALL protocols exist (migration for existing stats) - includes both hardcoded and custom
+        const allProtocols = getAllProtocolNames(); // Automatically includes Ice, Corruption, etc.
 
         const migratedProtocols = { ...(parsed.protocols || {}) };
         allProtocols.forEach(protocol => {
@@ -175,6 +265,69 @@ export function loadStatistics(): GameStatistics {
                 ...parsed.actions,
                 totalCompiles: parsed.actions?.totalCompiles || 0,
                 totalRefreshes: parsed.actions?.totalRefreshes || 0,
+                totalReturns: parsed.actions?.totalReturns || 0,
+                // Migrate detailedStats with defaults for new fields
+                detailedStats: {
+                    cardsPlayed: {
+                        total: parsed.actions?.detailedStats?.cardsPlayed?.total || 0,
+                        player: parsed.actions?.detailedStats?.cardsPlayed?.player || 0,
+                        ai: parsed.actions?.detailedStats?.cardsPlayed?.ai || 0,
+                        playerFromHand: parsed.actions?.detailedStats?.cardsPlayed?.playerFromHand || 0,
+                        playerFromEffect: parsed.actions?.detailedStats?.cardsPlayed?.playerFromEffect || 0,
+                        aiFromHand: parsed.actions?.detailedStats?.cardsPlayed?.aiFromHand || 0,
+                        aiFromEffect: parsed.actions?.detailedStats?.cardsPlayed?.aiFromEffect || 0,
+                    },
+                    cardsDrawn: {
+                        total: parsed.actions?.detailedStats?.cardsDrawn?.total || 0,
+                        player: parsed.actions?.detailedStats?.cardsDrawn?.player || 0,
+                        ai: parsed.actions?.detailedStats?.cardsDrawn?.ai || 0,
+                        playerFromRefresh: parsed.actions?.detailedStats?.cardsDrawn?.playerFromRefresh || 0,
+                        playerFromEffect: parsed.actions?.detailedStats?.cardsDrawn?.playerFromEffect || 0,
+                        aiFromRefresh: parsed.actions?.detailedStats?.cardsDrawn?.aiFromRefresh || 0,
+                        aiFromEffect: parsed.actions?.detailedStats?.cardsDrawn?.aiFromEffect || 0,
+                    },
+                    discards: {
+                        total: parsed.actions?.detailedStats?.discards?.total || 0,
+                        player: parsed.actions?.detailedStats?.discards?.player || 0,
+                        ai: parsed.actions?.detailedStats?.discards?.ai || 0,
+                    },
+                    deletes: {
+                        total: parsed.actions?.detailedStats?.deletes?.total || 0,
+                        player: parsed.actions?.detailedStats?.deletes?.player || 0,
+                        ai: parsed.actions?.detailedStats?.deletes?.ai || 0,
+                    },
+                    flips: {
+                        total: parsed.actions?.detailedStats?.flips?.total || 0,
+                        player: parsed.actions?.detailedStats?.flips?.player || 0,
+                        ai: parsed.actions?.detailedStats?.flips?.ai || 0,
+                    },
+                    shifts: {
+                        total: parsed.actions?.detailedStats?.shifts?.total || 0,
+                        player: parsed.actions?.detailedStats?.shifts?.player || 0,
+                        ai: parsed.actions?.detailedStats?.shifts?.ai || 0,
+                    },
+                    returns: {
+                        total: parsed.actions?.detailedStats?.returns?.total || 0,
+                        player: parsed.actions?.detailedStats?.returns?.player || 0,
+                        ai: parsed.actions?.detailedStats?.returns?.ai || 0,
+                    },
+                    compiles: {
+                        total: parsed.actions?.detailedStats?.compiles?.total || 0,
+                        player: parsed.actions?.detailedStats?.compiles?.player || 0,
+                        ai: parsed.actions?.detailedStats?.compiles?.ai || 0,
+                        playerFirstCompile: parsed.actions?.detailedStats?.compiles?.playerFirstCompile || 0,
+                        playerRecompile: parsed.actions?.detailedStats?.compiles?.playerRecompile || 0,
+                        aiFirstCompile: parsed.actions?.detailedStats?.compiles?.aiFirstCompile || 0,
+                        aiRecompile: parsed.actions?.detailedStats?.compiles?.aiRecompile || 0,
+                    },
+                    refreshes: {
+                        total: parsed.actions?.detailedStats?.refreshes?.total || 0,
+                        player: parsed.actions?.detailedStats?.refreshes?.player || 0,
+                        ai: parsed.actions?.detailedStats?.refreshes?.ai || 0,
+                        playerCardsDrawn: parsed.actions?.detailedStats?.refreshes?.playerCardsDrawn || 0,
+                        aiCardsDrawn: parsed.actions?.detailedStats?.refreshes?.aiCardsDrawn || 0,
+                    },
+                },
             },
         };
 
@@ -182,6 +335,7 @@ export function loadStatistics(): GameStatistics {
         const needsMigration = !parsed.control?.playerRearranges ||
                                !parsed.coinFlip ||
                                !parsed.actions?.totalCompiles ||
+                               !parsed.actions?.detailedStats ||
                                Object.keys(migratedProtocols).length !== Object.keys(parsed.protocols || {}).length;
 
         if (needsMigration) {
@@ -203,6 +357,13 @@ export function saveStatistics(stats: GameStatistics): void {
     }
 }
 
+export interface DetailedGameStatsInput {
+    cardsPlayed?: { playerFromHand: number; playerFromEffect: number; aiFromHand: number; aiFromEffect: number };
+    cardsDrawn?: { playerFromRefresh: number; playerFromEffect: number; aiFromRefresh: number; aiFromEffect: number };
+    compiles?: { playerFirstCompile: number; playerRecompile: number; aiFirstCompile: number; aiRecompile: number };
+    refreshes?: { playerCardsDrawn: number; aiCardsDrawn: number };
+}
+
 export function updateStatisticsOnGameEnd(
     stats: GameStatistics,
     winner: Player,
@@ -210,8 +371,10 @@ export function updateStatisticsOnGameEnd(
     difficulty: Difficulty,
     gameDurationSeconds: number,
     useControl: boolean = false,
-    playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; handsRefreshed: number },
-    compilesCount?: number
+    playerStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; cardsReturned?: number; handsRefreshed: number },
+    compilesCount?: number,
+    opponentStats?: { cardsPlayed: number; cardsDrawn: number; cardsDiscarded: number; cardsDeleted: number; cardsFlipped: number; cardsShifted: number; cardsReturned?: number; handsRefreshed: number },
+    detailedGameStats?: DetailedGameStatsInput
 ): GameStatistics {
     const playerWon = winner === 'player';
 
@@ -303,6 +466,19 @@ export function updateStatisticsOnGameEnd(
         newControl.gamesWithoutControl++;
     }
 
+    // Deep copy detailedStats
+    const newDetailedStats = {
+        cardsPlayed: { ...stats.actions.detailedStats.cardsPlayed },
+        cardsDrawn: { ...stats.actions.detailedStats.cardsDrawn },
+        discards: { ...stats.actions.detailedStats.discards },
+        deletes: { ...stats.actions.detailedStats.deletes },
+        flips: { ...stats.actions.detailedStats.flips },
+        shifts: { ...stats.actions.detailedStats.shifts },
+        returns: { ...stats.actions.detailedStats.returns },
+        compiles: { ...stats.actions.detailedStats.compiles },
+        refreshes: { ...stats.actions.detailedStats.refreshes },
+    };
+
     // Update action stats from game stats
     if (playerStats) {
         newActions.totalCardsPlayed += playerStats.cardsPlayed;
@@ -312,11 +488,96 @@ export function updateStatisticsOnGameEnd(
         newActions.totalFlips += playerStats.cardsFlipped;
         newActions.totalShifts += playerStats.cardsShifted;
         newActions.totalRefreshes += playerStats.handsRefreshed;
+        newActions.totalReturns += playerStats.cardsReturned || 0;
+
+        // Update detailed stats - player totals
+        newDetailedStats.cardsPlayed.total += playerStats.cardsPlayed;
+        newDetailedStats.cardsPlayed.player += playerStats.cardsPlayed;
+        newDetailedStats.cardsDrawn.total += playerStats.cardsDrawn;
+        newDetailedStats.cardsDrawn.player += playerStats.cardsDrawn;
+        newDetailedStats.discards.total += playerStats.cardsDiscarded;
+        newDetailedStats.discards.player += playerStats.cardsDiscarded;
+        newDetailedStats.deletes.total += playerStats.cardsDeleted;
+        newDetailedStats.deletes.player += playerStats.cardsDeleted;
+        newDetailedStats.flips.total += playerStats.cardsFlipped;
+        newDetailedStats.flips.player += playerStats.cardsFlipped;
+        newDetailedStats.shifts.total += playerStats.cardsShifted;
+        newDetailedStats.shifts.player += playerStats.cardsShifted;
+        newDetailedStats.returns.total += playerStats.cardsReturned || 0;
+        newDetailedStats.returns.player += playerStats.cardsReturned || 0;
+        newDetailedStats.refreshes.total += playerStats.handsRefreshed;
+        newDetailedStats.refreshes.player += playerStats.handsRefreshed;
+    }
+
+    // Update AI stats
+    if (opponentStats) {
+        newActions.totalCardsPlayed += opponentStats.cardsPlayed;
+        newActions.totalCardsDrawn += opponentStats.cardsDrawn;
+        newActions.totalDiscards += opponentStats.cardsDiscarded;
+        newActions.totalDeletes += opponentStats.cardsDeleted;
+        newActions.totalFlips += opponentStats.cardsFlipped;
+        newActions.totalShifts += opponentStats.cardsShifted;
+        newActions.totalRefreshes += opponentStats.handsRefreshed;
+        newActions.totalReturns += opponentStats.cardsReturned || 0;
+
+        // Update detailed stats - AI totals
+        newDetailedStats.cardsPlayed.total += opponentStats.cardsPlayed;
+        newDetailedStats.cardsPlayed.ai += opponentStats.cardsPlayed;
+        newDetailedStats.cardsDrawn.total += opponentStats.cardsDrawn;
+        newDetailedStats.cardsDrawn.ai += opponentStats.cardsDrawn;
+        newDetailedStats.discards.total += opponentStats.cardsDiscarded;
+        newDetailedStats.discards.ai += opponentStats.cardsDiscarded;
+        newDetailedStats.deletes.total += opponentStats.cardsDeleted;
+        newDetailedStats.deletes.ai += opponentStats.cardsDeleted;
+        newDetailedStats.flips.total += opponentStats.cardsFlipped;
+        newDetailedStats.flips.ai += opponentStats.cardsFlipped;
+        newDetailedStats.shifts.total += opponentStats.cardsShifted;
+        newDetailedStats.shifts.ai += opponentStats.cardsShifted;
+        newDetailedStats.returns.total += opponentStats.cardsReturned || 0;
+        newDetailedStats.returns.ai += opponentStats.cardsReturned || 0;
+        newDetailedStats.refreshes.total += opponentStats.handsRefreshed;
+        newDetailedStats.refreshes.ai += opponentStats.handsRefreshed;
+    }
+
+    // Update detailed source breakdown (from hand vs from effect, etc.)
+    if (detailedGameStats) {
+        if (detailedGameStats.cardsPlayed) {
+            newDetailedStats.cardsPlayed.playerFromHand += detailedGameStats.cardsPlayed.playerFromHand;
+            newDetailedStats.cardsPlayed.playerFromEffect += detailedGameStats.cardsPlayed.playerFromEffect;
+            newDetailedStats.cardsPlayed.aiFromHand += detailedGameStats.cardsPlayed.aiFromHand;
+            newDetailedStats.cardsPlayed.aiFromEffect += detailedGameStats.cardsPlayed.aiFromEffect;
+        }
+        if (detailedGameStats.cardsDrawn) {
+            newDetailedStats.cardsDrawn.playerFromRefresh += detailedGameStats.cardsDrawn.playerFromRefresh;
+            newDetailedStats.cardsDrawn.playerFromEffect += detailedGameStats.cardsDrawn.playerFromEffect;
+            newDetailedStats.cardsDrawn.aiFromRefresh += detailedGameStats.cardsDrawn.aiFromRefresh;
+            newDetailedStats.cardsDrawn.aiFromEffect += detailedGameStats.cardsDrawn.aiFromEffect;
+        }
+        if (detailedGameStats.compiles) {
+            newDetailedStats.compiles.playerFirstCompile += detailedGameStats.compiles.playerFirstCompile;
+            newDetailedStats.compiles.playerRecompile += detailedGameStats.compiles.playerRecompile;
+            newDetailedStats.compiles.aiFirstCompile += detailedGameStats.compiles.aiFirstCompile;
+            newDetailedStats.compiles.aiRecompile += detailedGameStats.compiles.aiRecompile;
+            // Calculate player/ai totals from firstCompile + recompile
+            newDetailedStats.compiles.player += detailedGameStats.compiles.playerFirstCompile + detailedGameStats.compiles.playerRecompile;
+            newDetailedStats.compiles.ai += detailedGameStats.compiles.aiFirstCompile + detailedGameStats.compiles.aiRecompile;
+            // Calculate total from player + ai
+            newDetailedStats.compiles.total += detailedGameStats.compiles.playerFirstCompile + detailedGameStats.compiles.playerRecompile +
+                                               detailedGameStats.compiles.aiFirstCompile + detailedGameStats.compiles.aiRecompile;
+        }
+        if (detailedGameStats.refreshes) {
+            newDetailedStats.refreshes.playerCardsDrawn += detailedGameStats.refreshes.playerCardsDrawn;
+            newDetailedStats.refreshes.aiCardsDrawn += detailedGameStats.refreshes.aiCardsDrawn;
+        }
     }
 
     if (compilesCount !== undefined) {
         newActions.totalCompiles += compilesCount;
+        // NOTE: detailedStats.compiles.total is now calculated from firstCompile + recompile above
     }
+
+    // Assign updated detailedStats to newActions
+    newActions.detailedStats = newDetailedStats;
 
     // Return new stats with all updated nested objects
     return {

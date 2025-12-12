@@ -94,6 +94,21 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
+        // Update detailed game stats for cards played from effect
+        if (newState.detailedGameStats && drawnCards.length > 0) {
+            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsPlayed: {
+                        ...newState.detailedGameStats.cardsPlayed,
+                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                    }
+                }
+            };
+        }
+
         // Generic log message (not card-specific!)
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
@@ -215,6 +230,21 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
+        // Update detailed game stats for cards played from effect
+        if (newState.detailedGameStats && drawnCards.length > 0) {
+            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsPlayed: {
+                        ...newState.detailedGameStats.cardsPlayed,
+                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                    }
+                }
+            };
+        }
+
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
@@ -317,6 +347,21 @@ export function executePlayEffect(
             [actor]: updatedPlayerState
         };
 
+        // Update detailed game stats for cards played from effect (Gravity-0)
+        if (newState.detailedGameStats && drawnCards.length > 0) {
+            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsPlayed: {
+                        ...newState.detailedGameStats.cardsPlayed,
+                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                    }
+                }
+            };
+        }
+
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
@@ -369,6 +414,21 @@ export function executePlayEffect(
             ...state,
             [actor]: updatedPlayerState
         };
+
+        // Update detailed game stats for cards played from effect (Gravity-6)
+        if (newState.detailedGameStats && drawnCards.length > 0) {
+            const key = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsPlayed: {
+                        ...newState.detailedGameStats.cardsPlayed,
+                        [key]: newState.detailedGameStats.cardsPlayed[key] + drawnCards.length
+                    }
+                }
+            };
+        }
 
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);

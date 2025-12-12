@@ -42,7 +42,8 @@ function createTestState(): GameState {
             deck: [createCard('Fire', 4), createCard('Water', 5)],
             discard: [],
             stats: { cardsPlayed: 0, cardsDeleted: 0, compiledLanes: [] },
-            laneValues: [0, 0, 0], // Legacy support for normal.ts
+            laneValues: [0, 0, 0],
+            compiled: [false, false, false],
         },
         opponent: {
             protocols: ['Fire', 'Water', 'Hate'],
@@ -51,7 +52,8 @@ function createTestState(): GameState {
             deck: [createCard('Hate', 4), createCard('Fire', 5)],
             discard: [],
             stats: { cardsPlayed: 0, cardsDeleted: 0, compiledLanes: [] },
-            laneValues: [0, 0, 0], // Legacy support for normal.ts
+            laneValues: [0, 0, 0],
+            compiled: [false, false, false],
         },
         turn: 'opponent',
         phase: 'play',
@@ -437,7 +439,7 @@ describe('AI targetFilter Tests - Full Filter Support', () => {
             } as any;
 
             const action = normalAI(state, state.actionRequired);
-            expect(action.type).toBe('deleteCard'); // select_card_to_shift returns deleteCard type
+            expect(action.type).toBe('shiftCard');
             expect(action.cardId).toBe(card1.id);
         });
     });

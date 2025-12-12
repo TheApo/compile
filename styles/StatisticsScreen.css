@@ -238,3 +238,162 @@
 .stats-content::-webkit-scrollbar-thumb:hover {
     background: var(--secondary-color);
 }
+
+/* Actions container with grid layout for clickable items */
+.actions-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+/* Clickable stat items */
+.stat-item.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.stat-item.clickable:hover {
+    background-color: rgba(100, 200, 255, 0.15);
+    border-color: var(--primary-color);
+}
+
+.stat-item.clickable.expanded {
+    background-color: rgba(100, 200, 255, 0.25);
+    border-color: var(--primary-color);
+}
+
+/* Action details panel - appears below the Actions section */
+.action-details-section {
+    background-color: var(--surface-color);
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    animation: slideDown 0.2s ease-out;
+}
+
+.action-details-section .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.2rem;
+    color: var(--primary-color);
+    text-transform: uppercase;
+    margin: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+/* Gesamt row at top */
+.action-details-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--primary-color);
+}
+
+.action-details-total .detail-label {
+    font-family: 'Poppins', sans-serif;
+    color: var(--secondary-color);
+    font-size: 1rem;
+}
+
+.action-details-total .detail-value {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--text-color);
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+/* Two column layout for Player / AI */
+.action-details-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.action-details-column {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    padding: 1rem;
+}
+
+.action-details-column.player {
+    border-left: 3px solid var(--primary-color);
+}
+
+.action-details-column.ai {
+    border-left: 3px solid var(--danger-color);
+}
+
+.column-header {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    color: var(--primary-color);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.action-details-column.ai .column-header {
+    color: var(--danger-color);
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.85rem;
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-row .detail-label {
+    color: var(--secondary-color);
+}
+
+.detail-row .detail-value {
+    color: var(--text-color);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: bold;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive for action details */
+@media (max-width: 768px) {
+    .action-details-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Responsive adjustments for actions */
+@media (max-width: 1200px) {
+    .actions-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .actions-container {
+        grid-template-columns: 1fr;
+    }
+}

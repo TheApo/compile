@@ -3609,6 +3609,39 @@ export const scenario68_CommittedCardPlayground: TestScenario = {
     }
 };
 
+export const scenario69_fear0shiftCardPlayground: TestScenario = {
+    name: 'Fear 0 prob Test',
+    description: 'Bla bla',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Chaos', 'Fear', 'Psychic'];
+        const opponentProtocols = ['Light', 'Water', 'Fire'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Chaos', 2, true),
+            createCard('Fear', 3, true),
+        ];
+
+        // Board setup for testing:
+        newState = placeCard(newState, 'player', 1, createCard('Fear', 2, true));  // 
+		newState = placeCard(newState, 'player', 1, createCard('Fear', 0, true));  // 
+
+		newState = placeCard(newState, 'opponent', 1, createCard('Water', 5, true));  // 
+		newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 2, false));  // 
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Light', 5, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3678,4 +3711,5 @@ export const allScenarios: TestScenario[] = [
 	scenario66_endPhasePlayground,
 	scenario67_startPhasePlayground,
 	scenario68_CommittedCardPlayground,
+	scenario69_fear0shiftCardPlayground,
 ];

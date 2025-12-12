@@ -155,12 +155,30 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     newCompiled[laneIndex] = true;
     compilerState.compiled = newCompiled;
 
-    newState = { 
-        ...newState, 
-        [compiler]: compilerState, 
+    newState = {
+        ...newState,
+        [compiler]: compilerState,
         [nonCompiler]: nonCompilerState,
         stats: { ...newState.stats, [compiler]: newCompilerStats, [nonCompiler]: newNonCompilerStats }
     };
+
+    // Track compile type in detailed stats (First-Compile vs Re-Compile, Player vs AI)
+    if (newState.detailedGameStats) {
+        const isRecompile = wasAlreadyCompiled;
+        const compileKey = compiler === 'player'
+            ? (isRecompile ? 'playerRecompile' : 'playerFirstCompile')
+            : (isRecompile ? 'aiRecompile' : 'aiFirstCompile');
+        newState = {
+            ...newState,
+            detailedGameStats: {
+                ...newState.detailedGameStats,
+                compiles: {
+                    ...newState.detailedGameStats.compiles,
+                    [compileKey]: newState.detailedGameStats.compiles[compileKey] + 1
+                }
+            }
+        };
+    }
 
     // IMPORTANT: Clear effect context before compile log
     // Compile is not part of a card effect, it's a phase action

@@ -362,7 +362,8 @@ export function shouldIgnoreMiddleCommand(
     cardOwnerToCheck?: Player
 ): boolean {
     const rules = getActivePassiveRules(state);
-    const currentPlayer = state.currentPlayer;
+    // FIX: Use state.turn instead of non-existent state.currentPlayer
+    const currentPlayer = state.turn;
 
     return rules.some(({ rule, cardOwner, laneIndex: ruleLaneIndex }) => {
         if (rule.type !== 'ignore_middle_commands') return false;
