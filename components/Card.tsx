@@ -79,7 +79,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, onPointerDown, onPoin
       <div className={`card-inner ${!isFaceUp ? 'is-flipped' : ''}`}>
         <div className="card-face card-front">
           <div className="card-header">
-            <span className={`card-protocol ${card.protocol.length <= 8 ? 'short-protocol' : ''}`}>{card.protocol.slice(0, 8)}</span>
+            <span className={`card-protocol ${card.protocol.length <= 10 ? 'short-protocol' : ''}`}>{card.protocol.slice(0, 10)}</span>
             <span className="card-value">{card.value}</span>
           </div>
           <div className="card-body">

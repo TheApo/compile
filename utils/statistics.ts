@@ -357,6 +357,17 @@ export function saveStatistics(stats: GameStatistics): void {
     }
 }
 
+/**
+ * Reset all statistics to default values
+ */
+export function resetStatistics(): void {
+    try {
+        localStorage.removeItem(STATS_KEY);
+    } catch (error) {
+        console.error('Failed to reset statistics:', error);
+    }
+}
+
 export interface DetailedGameStatsInput {
     cardsPlayed?: { playerFromHand: number; playerFromEffect: number; aiFromHand: number; aiFromEffect: number };
     cardsDrawn?: { playerFromRefresh: number; playerFromEffect: number; aiFromRefresh: number; aiFromEffect: number };

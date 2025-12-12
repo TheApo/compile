@@ -129,6 +129,21 @@ export function executeDrawEffect(
             hand: drawnCards,
         };
 
+        // Track cards drawn from effect in detailed stats (conditional path)
+        if (newState.detailedGameStats && newCards.length > 0) {
+            const keyDrawn = drawingPlayer === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            newState = {
+                ...newState,
+                detailedGameStats: {
+                    ...newState.detailedGameStats,
+                    cardsDrawn: {
+                        ...newState.detailedGameStats.cardsDrawn,
+                        [keyDrawn]: newState.detailedGameStats.cardsDrawn[keyDrawn] + newCards.length
+                    }
+                }
+            };
+        }
+
         const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
         // Generate log text based on conditional type
         let reasonText = '';
@@ -405,6 +420,21 @@ export function executeDrawEffect(
         ...newState[drawingPlayer],
         hand: drawnCards,
     };
+
+    // Track cards drawn from effect in detailed stats
+    if (newState.detailedGameStats && newCards.length > 0) {
+        const keyDrawn = drawingPlayer === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+        newState = {
+            ...newState,
+            detailedGameStats: {
+                ...newState.detailedGameStats,
+                cardsDrawn: {
+                    ...newState.detailedGameStats.cardsDrawn,
+                    [keyDrawn]: newState.detailedGameStats.cardsDrawn[keyDrawn] + newCards.length
+                }
+            }
+        };
+    }
 
     const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
 

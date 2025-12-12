@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Header } from '../components/Header';
 import {
     loadStatistics,
+    resetStatistics,
     getWinRate,
     getFavoriteProtocols,
     getBestWinRateProtocols,
@@ -25,7 +26,9 @@ interface StatisticsScreenProps {
 }
 
 export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
-    const stats = loadStatistics();
+    const [stats, setStats] = useState(() => loadStatistics());
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+
     const winRate = getWinRate(stats);
     const averageGameDuration = getAverageGameDuration(stats);
     const favoriteProtocols = getFavoriteProtocols(stats);
@@ -35,6 +38,12 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
     const mostDeletedCards = getMostDeletedCards(stats);
 
     const [expandedAction, setExpandedAction] = useState<ActionType>(null);
+
+    const handleResetStats = () => {
+        resetStatistics();
+        setStats(loadStatistics());
+        setShowResetConfirm(false);
+    };
 
     const toggleAction = (action: ActionType) => {
         setExpandedAction(prev => prev === action ? null : action);
@@ -592,7 +601,35 @@ export function StatisticsScreen({ onBack }: StatisticsScreenProps) {
                         </div>
                     )}
                 </section>
+
+                {/* Reset Statistics Button */}
+                <section className="stats-section reset-section">
+                    <button
+                        className="reset-stats-button"
+                        onClick={() => setShowResetConfirm(true)}
+                    >
+                        Reset All Statistics
+                    </button>
+                </section>
             </div>
+
+            {/* Reset Confirmation Modal */}
+            {showResetConfirm && (
+                <div className="reset-modal-overlay" onClick={() => setShowResetConfirm(false)}>
+                    <div className="reset-modal" onClick={e => e.stopPropagation()}>
+                        <h3>Reset Statistics?</h3>
+                        <p>This will permanently delete all your statistics. This action cannot be undone.</p>
+                        <div className="reset-modal-buttons">
+                            <button className="cancel-button" onClick={() => setShowResetConfirm(false)}>
+                                Cancel
+                            </button>
+                            <button className="confirm-reset-button" onClick={handleResetStats}>
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
