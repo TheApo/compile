@@ -24,6 +24,8 @@ export function executeReturnEffect(
     params: any
 ): EffectResult {
     const { cardOwner, opponent } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     const count = params.count === 'all' ? 99 : (params.count || 1);
     const owner = params.targetFilter?.owner || 'any';
     const position = params.targetFilter?.position || 'uncovered';
@@ -53,6 +55,9 @@ export function executeReturnEffect(
             actor: cardOwner,
             count: params.count,
             targetFilter: params.targetFilter,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -104,6 +109,9 @@ export function executeReturnEffect(
         actor: cardOwner,
         targetOwner: owner, // Pass owner filter to UI
         targetFilter: params.targetFilter, // Pass full targetFilter including position
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
     } as any;
 
     return { newState };

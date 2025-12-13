@@ -36,7 +36,12 @@ export function executeCustomEffect(
     effectDef: EffectDefinition,
     allEffects?: EffectDefinition[]  // NEW: Pass all effects to check for chains
 ): EffectResult {
-    const params = effectDef.params as any;
+    // CRITICAL: Include conditional info in params for ALL effects
+    // This enables "If you do" patterns like Death-1, Speed-3, etc.
+    const params = {
+        ...effectDef.params as any,
+        _conditional: effectDef.conditional  // Pass conditional for followUpEffect handling
+    };
     const action = params.action;
 
     // CRITICAL: Validate that the source card is still active before executing any effect

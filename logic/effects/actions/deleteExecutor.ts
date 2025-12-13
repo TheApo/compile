@@ -24,6 +24,8 @@ export function executeDeleteEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     let count = params.count || 1;
 
     // Advanced Conditional Checks - skip effect if condition not met
@@ -420,6 +422,9 @@ export function executeDeleteEffect(
             // Pass validLanes for Courage-1 (lanes where opponent has higher value)
             validLanes: validLaneIndices.length < 3 ? validLaneIndices : undefined,
             laneCondition: params.laneCondition,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -486,6 +491,9 @@ export function executeDeleteEffect(
             scope: params.scope,
             protocolMatching: params.protocolMatching,
             params: params,  // Store params for continuation
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -513,6 +521,9 @@ export function executeDeleteEffect(
             count: countToDelete,
             actor,
             targetFilter: params.targetFilter,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -527,6 +538,9 @@ export function executeDeleteEffect(
         actor,
         actorChooses,  // NEW: Pass actorChooses so AI knows if opponent selects their own cards
         disallowedIds: params.excludeSelf ? [card.id] : [],
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
         allowedIds: filteredTargets.length < validTargets.length ? filteredTargets : undefined, // NEW: Restrict to filtered targets if calculation was applied
         targetFilter: params.targetFilter,      // Pass filter to resolver/UI
         scope: params.scope,                     // Pass scope to resolver/UI

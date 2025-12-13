@@ -46,6 +46,8 @@ export function executeDrawEffect(
     context: EffectContext,
     params: any
 ): EffectResult {
+    // Extract conditional info from params (set by effectInterpreter)
+    const conditional = params._conditional;
     const { cardOwner } = context;
     const target = params.target || 'self';
     const drawingPlayer = target === 'opponent' ? context.opponent : cardOwner;
@@ -309,6 +311,9 @@ export function executeDrawEffect(
             actor: cardOwner,
             count,
             drawingPlayer,
+            // CRITICAL: Pass conditional info for "If you do" effects (Death-1)
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };

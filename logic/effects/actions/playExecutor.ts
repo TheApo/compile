@@ -27,6 +27,8 @@ export function executePlayEffect(
     params: any
 ): EffectResult {
     const { cardOwner, opponent } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     const count = params.count || 1;
     const source = params.source || 'hand';
     // CRITICAL: Only set faceDown if explicitly defined in params
@@ -296,6 +298,9 @@ export function executePlayEffect(
             excludeCurrentLane: true,  // Life-3: Can't select the current lane
             currentLaneIndex: laneIndex,  // Track which lane to exclude
             source: params.source,  // 'deck'
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -506,6 +511,9 @@ export function executePlayEffect(
             source: 'hand',
             validLanes,  // Pass to lane selection step
             cardFilter,  // Pass filter for UI/AI reference
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -537,6 +545,9 @@ export function executePlayEffect(
             source: 'hand',
             valueFilter: targetValue,  // Pass the value filter to UI/AI
             selectableCardIds: matchingCards.map(c => c.id),  // Only these cards can be selected
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -565,6 +576,9 @@ export function executePlayEffect(
         disallowedLaneIndex, // Converted from destinationRule
         destinationRule: params.destinationRule, // Keep original for future use
         condition: params.condition, // For conditional play (Gravity-0, Life-0)
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
     } as any;
 
     return { newState };

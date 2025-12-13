@@ -25,6 +25,8 @@ export function executeFlipEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
 
 
     // NEW: Generic useCardFromPreviousEffect support
@@ -134,6 +136,9 @@ export function executeFlipEffect(
             remainingLanes: remainingLanes,  // Optional: Lanes to process after this one
             targetFilter: params.targetFilter,  // CRITICAL: Pass targetFilter directly for targeting.ts
             params: params,  // Store params for continuation
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -343,6 +348,9 @@ export function executeFlipEffect(
         optional: params.optional || false,
         scope: params.scope, // NEW: Pass scope for lane filtering
         laneIndex: params.scope === 'this_lane' ? laneIndex : undefined, // NEW: Pass lane index
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
     } as any;
 
     return { newState };

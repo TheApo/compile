@@ -22,6 +22,8 @@ export function executeRevealGiveEffect(
     params: any
 ): EffectResult {
     const { cardOwner, opponent } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     const count = params.count || 1;
     const action = params.action;
     const source = params.source || 'own_hand';
@@ -77,6 +79,9 @@ export function executeRevealGiveEffect(
             targetFilter,  // CRITICAL: Pass targetFilter to UI for card highlighting
             followUpAction,
             optional,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -168,6 +173,9 @@ export function executeRevealGiveEffect(
             count,
             sourceCardId: card.id,
             actor: cardOwner,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
     } else if (action === 'give') {
         newState.actionRequired = {
@@ -175,6 +183,9 @@ export function executeRevealGiveEffect(
             count,
             sourceCardId: card.id,
             actor: cardOwner,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
     }
 

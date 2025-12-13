@@ -26,6 +26,8 @@ export function executeShuffleTrashEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     const cardName = `${card.protocol}-${card.value}`;
     const isOptional = params.optional !== false;
 
@@ -43,6 +45,9 @@ export function executeShuffleTrashEffect(
             sourceCardId: card.id,
             actor: cardOwner,
             trashCount: state[cardOwner].discard.length,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
         return { newState };
     }

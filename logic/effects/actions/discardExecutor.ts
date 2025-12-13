@@ -22,6 +22,8 @@ export function executeDiscardEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     const actor = params.actor === 'opponent' ? context.opponent : cardOwner;
 
     // NEW: Handle useCardFromPreviousEffect (Clarity-1: discard the revealed deck top card)
@@ -241,6 +243,9 @@ export function executeDiscardEffect(
         sourceCardId: card.id,
         variableCount: params.variableCount || false, // For Fire-4, Plague-2 first discard
         previousHandSize: state[actor].hand.length, // Store hand size before discard for context propagation
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
     } as any;
 
     return { newState };

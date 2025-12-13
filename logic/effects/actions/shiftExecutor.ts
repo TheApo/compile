@@ -25,6 +25,8 @@ export function executeShiftEffect(
     params: any
 ): EffectResult {
     const { cardOwner } = context;
+    // Extract conditional info for "If you do" effects
+    const conditional = params._conditional;
     let newState = { ...state };
 
     // Advanced Conditional Checks - skip effect if condition not met
@@ -118,6 +120,9 @@ export function executeShiftEffect(
             sourceCardId: card.id,
             actor: cardOwner,
             destinationRestriction: destinationRestriction,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
         return { newState };
     }
@@ -178,6 +183,9 @@ export function executeShiftEffect(
             sourceCardId: card.id,
             optional: params.optional || false,
             actor: cardOwner,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
         return { newState };
     }
@@ -218,6 +226,9 @@ export function executeShiftEffect(
                         validLanes: filteredLanes,
                         destinationRestriction: params.destinationRestriction,
                         optional: true,
+                        // CRITICAL: Pass conditional info for "If you do" effects
+                        followUpEffect: conditional?.thenEffect,
+                        conditionalType: conditional?.type,
                     } as any;
                     return { newState };
                 }
@@ -239,6 +250,9 @@ export function executeShiftEffect(
                 validLanes: filteredLanes,
                 destinationRestriction: params.destinationRestriction,
                 optional: params.optional || false,
+                // CRITICAL: Pass conditional info for "If you do" effects
+                followUpEffect: conditional?.thenEffect,
+                conditionalType: conditional?.type,
             } as any;
             return { newState };
         }
@@ -251,6 +265,9 @@ export function executeShiftEffect(
             optional: params.optional || false,
             actor: cardOwner,
             allowCovered: params.allowCoveredSelf || false,  // Speed-2: can shift even if covered
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
         return { newState };
     }
@@ -275,6 +292,9 @@ export function executeShiftEffect(
             sourceCardId: card.id,
             optional: params.optional || false,
             actor: cardOwner,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
         return { newState };
     }
@@ -371,6 +391,9 @@ export function executeShiftEffect(
             cardsToShift: potentialTargets.map(t => ({ cardId: t.card.id, owner: t.owner })),
             validDestinationLanes,
             sourceLaneIndex: laneIndex,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
         } as any;
 
         return { newState };
@@ -470,6 +493,9 @@ export function executeShiftEffect(
         sourceLaneIndex: laneIndex,  // NEW: Store source lane for validation
         targetLaneIndex: fixedTargetLane,  // NEW: Fixed destination (like Gravity-4)
         scope: params.scope,  // NEW: For 'this_lane' restriction (Fear-3)
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect: conditional?.thenEffect,
+        conditionalType: conditional?.type,
     } as any;
 
     return { newState };
