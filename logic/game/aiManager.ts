@@ -807,10 +807,13 @@ export const runOpponentTurn = (
                                     }
                                     if (s_after_all_anims.actionRequired) {
                                         runOpponentTurn(s_after_all_anims, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                        return s_after_all_anims;
                                     } else {
-                                        setGameState(phaseManager.processEndOfAction(s_after_all_anims));
+                                        // CRITICAL FIX: Return the phase-advanced state directly instead of
+                                        // calling nested setGameState. This prevents race conditions where
+                                        // the old state (still in 'action' phase) triggers another AI turn.
+                                        return phaseManager.processEndOfAction(s_after_all_anims);
                                     }
-                                    return s_after_all_anims;
                                 });
                             };
 
@@ -828,10 +831,13 @@ export const runOpponentTurn = (
                                 }
                                 if (stateAfterOnPlayLogic.actionRequired) {
                                     runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                    return stateAfterOnPlayLogic;
                                 } else {
-                                    setGameState(phaseManager.processEndOfAction(stateAfterOnPlayLogic));
+                                    // CRITICAL FIX: Return the phase-advanced state directly instead of
+                                    // calling nested setGameState. This prevents race conditions where
+                                    // the old state (still in 'action' phase) triggers another AI turn.
+                                    return phaseManager.processEndOfAction(stateAfterOnPlayLogic);
                                 }
-                                return stateAfterOnPlayLogic;
                             }
                         });
                     };

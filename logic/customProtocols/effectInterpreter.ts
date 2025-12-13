@@ -297,7 +297,9 @@ export function executeCustomEffect(
     switch (action) {
         case 'refresh': {
             // Spirit-0: Refresh hand to 5 cards
-            const actor = context.actor;
+            // FIX: Check params.target to determine who refreshes (Test-3: "your opponent refreshes")
+            const target = params.target || 'self';
+            const actor = target === 'opponent' ? context.opponent : context.actor;
 
             // NEW: Check if player can draw (Ice-6: block_draw_conditional)
             // Refresh is a form of drawing, so the same restriction applies

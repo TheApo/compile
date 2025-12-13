@@ -418,8 +418,7 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
 
         newState = log(newState, owner, `${uncoveredCard.protocol}-${uncoveredCard.value} is uncovered and its effects are re-triggered.`);
 
-        // Increase indent for nested uncover effects
-        newState = increaseLogIndent(newState);
+        // NOTE: Don't increase indent here - executeOnPlayEffect already does it
 
         // Mark this event as processed before executing the effect.
         newState.processedUncoverEventIds = [...(newState.processedUncoverEventIds || []), eventId];

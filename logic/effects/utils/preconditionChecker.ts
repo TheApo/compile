@@ -194,11 +194,15 @@ function checkShiftPrecondition(
     }
 
     const targetFilter = params.targetFilter || {};
+    // CRITICAL FIX: Pass scopeLaneIndex when scope is 'this_lane' (Light-3)
+    // Otherwise precondition checks all lanes but executor only checks current lane
+    const scopeLaneIndex = params.scope === 'this_lane' ? laneIndex : undefined;
     const findOptions = {
         state,
         filter: targetFilter,
         sourceCardId: card.id,
-        actor: cardOwner
+        actor: cardOwner,
+        scopeLaneIndex
     };
 
     if (!hasValidTargets(findOptions)) {

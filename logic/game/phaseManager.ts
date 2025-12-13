@@ -748,7 +748,12 @@ export const processEndOfAction = (state: GameState): GameState => {
     // CRITICAL FIX: Process queued actions BEFORE checking for interrupts.
     // This ensures actions like gravity_2_shift_after_flip are processed even when
     // there's no interrupt (e.g., opponent flips their own card, triggering their own discard).
-    if (state.queuedActions && state.queuedActions.length > 0) {
+    // CRITICAL FIX #2: Also check for _deferredParentEffects stack - this handles cases where:
+    // - Water-0 flips Water-4 → Water-4's return completes with NO queuedActions
+    // - But _deferredParentEffects still has Water-0's flip_self waiting!
+    // Without this check, parent effects in the deferred stack would never execute.
+    const hasDeferredParentEffects = (state as any)._deferredParentEffects && (state as any)._deferredParentEffects.length > 0;
+    if ((state.queuedActions && state.queuedActions.length > 0) || hasDeferredParentEffects) {
         const stateAfterQueue = processQueuedActions(state);
         // If queued actions created a new actionRequired, return immediately
         if (stateAfterQueue.actionRequired) {
@@ -1091,7 +1096,9 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
     // This handles cases like Life-1's "Flip 1 card. Flip 1 card." where the second flip
     // is queued in queuedActions after the first flip completes during start phase.
     // Without this, the queued actions would be lost and cause a softlock.
-    if (stateAfterAction.queuedActions && stateAfterAction.queuedActions.length > 0) {
+    // CRITICAL FIX #2: Also check for _deferredParentEffects (same as in processEndOfAction)
+    const hasDeferredStartPhase = (stateAfterAction as any)._deferredParentEffects && (stateAfterAction as any)._deferredParentEffects.length > 0;
+    if ((stateAfterAction.queuedActions && stateAfterAction.queuedActions.length > 0) || hasDeferredStartPhase) {
         const stateAfterQueue = processQueuedActions(stateAfterAction);
         if (stateAfterQueue.actionRequired) {
             return stateAfterQueue;

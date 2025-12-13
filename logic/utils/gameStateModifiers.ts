@@ -163,8 +163,11 @@ export function refreshHandForPlayer(state: GameState, player: Player): GameStat
     if (cardsToDraw <= 0) return state;
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
-    let newState = drawForPlayer(state, player, cardsToDraw);
-    return log(newState, player, `${playerName} refreshes their hand, drawing ${cardsToDraw} card(s).`);
+    // CRITICAL: Log BEFORE drawing, because drawForPlayer may trigger reactive effects
+    // (like Spirit-3's after_draw) that change the log context. Logging after would
+    // incorrectly show the reactive effect's context instead of the refresh context.
+    let newState = log(state, player, `${playerName} refreshes their hand, drawing ${cardsToDraw} card(s).`);
+    return drawForPlayer(newState, player, cardsToDraw);
 }
 
 
