@@ -198,6 +198,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
     switch (prev.actionRequired.type) {
         // Generic flip handler - all legacy types now use select_card_to_flip with targetFilter
         case 'select_card_to_flip': {
+            // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+            const { logSource, logPhase, logIndentLevel } = prev.actionRequired as any;
+            if (logSource !== undefined) newState = setLogSource(newState, logSource);
+            if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
             // CRITICAL: Validate that the card is not "committed" (being played but not yet landed)
             // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
             const committedCardId = (prev as any)._committedCardId;
@@ -349,6 +355,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
         // Generic shift handler - all legacy types now use select_card_to_shift with parameters
         case 'select_card_to_shift': {
+            // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+            const { logSource, logPhase, logIndentLevel } = prev.actionRequired as any;
+            if (logSource !== undefined) newState = setLogSource(newState, logSource);
+            if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
             // Optional shift actions validate source card in phaseManager
             const { sourceCardId, optional } = prev.actionRequired;
             if (optional && sourceCardId) {
@@ -447,16 +459,26 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         // REMOVED: select_card_to_delete_for_death_1 - Death-1 now uses custom protocol with delete_self followUp
         case 'delete_self': {
             // NEW: Composable self-delete (Death-1: "then delete this card")
-            const { sourceCardId, cardToDeleteId, actor } = prev.actionRequired as any;
+            const { sourceCardId, cardToDeleteId, actor, logSource, logPhase, logIndentLevel } = prev.actionRequired as any;
+
+            // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+            if (logSource !== undefined) newState = setLogSource(newState, logSource);
+            if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
             const cardInfo = findCardOnBoard(prev, cardToDeleteId);
 
             if (!cardInfo) {
-                newState = log(prev, actor, `Card no longer on board. Delete skipped.`);
+                newState = log(newState, actor, `Card no longer on board. Delete skipped.`);
                 newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 requiresTurnEnd = true;
                 break;
             }
+
+            // Log the self-delete
+            const cardName = `${cardInfo.card.protocol}-${cardInfo.card.value}`;
+            newState = log(newState, actor, `Deleting ${cardName}.`);
 
             const { owner, laneIndex } = cardInfo;
             const wasTopCard = prev[owner].lanes[laneIndex][prev[owner].lanes[laneIndex].length - 1].id === cardToDeleteId;
@@ -496,10 +518,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             // REMOVED: select_card_to_delete_for_anarchy_2 - now uses generic protocolMatching
             // Rule: An effect is cancelled if its source card is no longer active (face-up on the board).
             const { sourceCardId, actor } = prev.actionRequired;
+
+            // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+            const { logSource, logPhase, logIndentLevel } = prev.actionRequired as any;
+            if (logSource !== undefined) newState = setLogSource(newState, logSource);
+            if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
             const sourceCardInfoCheck = findCardOnBoard(prev, sourceCardId);
             if (!sourceCardInfoCheck || !sourceCardInfoCheck.card.isFaceUp) {
                 const cardName = sourceCardInfoCheck ? `${sourceCardInfoCheck.card.protocol}-${sourceCardInfoCheck.card.value}` : 'the source card';
-                newState = log(prev, actor, `Effect from ${cardName} was cancelled because the source is no longer active.`);
+                newState = log(newState, actor, `Effect from ${cardName} was cancelled because the source is no longer active.`);
                 newState = phaseManager.queuePendingCustomEffects(newState);
                 newState.actionRequired = null;
                 requiresTurnEnd = true;
@@ -739,10 +768,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                 laneIndex: queueLaneIndex,
                                 effects: [followUpEffect],  // Use effects array format
                                 context: queueContext,
-                                // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte
-                                logSource: stateAfterTriggers._currentEffectSource,
-                                logPhase: stateAfterTriggers._currentPhaseContext,
-                                logIndentLevel: stateAfterTriggers._logIndentLevel || 0
+                                // CRITICAL FIX: Use log context from originalAction, NOT current state!
+                                // This ensures Death-1's delete_self uses Death-1's context, not Speed-3's
+                                logSource: (originalAction as any).logSource,
+                                logPhase: (originalAction as any).logPhase,
+                                logIndentLevel: (originalAction as any).logIndentLevel ?? 1
                             };
 
                             stateAfterTriggers.queuedActions = [
@@ -766,10 +796,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                     triggerType: 'start' as const
                                 };
 
-                                // CRITICAL: Restore log context for followUpEffect
+                                // CRITICAL: Restore log context for followUpEffect from originalAction
+                                // This ensures Death-1's delete_self uses Death-1's context, not Speed-3's
                                 const sourceCardName = `${sourceCardForFollowUp.card.protocol}-${sourceCardForFollowUp.card.value}`;
-                                stateAfterTriggers = setLogSource(stateAfterTriggers, sourceCardName);
-                                stateAfterTriggers = setLogPhase(stateAfterTriggers, 'start');
+                                stateAfterTriggers = setLogSource(stateAfterTriggers, (originalAction as any).logSource || sourceCardName);
+                                stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
+                                stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
                                 const followUpResult = executeCustomEffect(
                                     sourceCardForFollowUp.card,
@@ -784,13 +816,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                 stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
                             } else {
                                 // Source card not found - create synthetic context for delete_self
-
                                 // For deleteSelf effects, we need to find the card by sourceCardId
                                 // It might have been moved or we need to execute directly
                                 if (followUpEffect.params?.deleteSelf) {
-                                    // CRITICAL: Restore log context before delete
-                                    stateAfterTriggers = setLogSource(stateAfterTriggers, 'the source card');
-                                    stateAfterTriggers = setLogPhase(stateAfterTriggers, 'start');
+                                    // CRITICAL: Restore log context from originalAction before delete
+                                    stateAfterTriggers = setLogSource(stateAfterTriggers, (originalAction as any).logSource || 'the source card');
+                                    stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
+                                    stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
                                     // Execute delete_self directly
                                     const deleteResult = internalDeleteCard(stateAfterTriggers, originalAction.sourceCardId);
@@ -993,6 +1025,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
         // REMOVED: select_own_highest_card_to_delete_for_hate_2 - Hate-2 now uses custom protocol with calculation: 'highest_value'
         // REMOVED: select_opponent_highest_card_to_delete_for_hate_2 - now uses generic select_cards_to_delete
         case 'select_card_to_return': {
+            // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+            const { logSource, logPhase, logIndentLevel } = prev.actionRequired as any;
+            if (logSource !== undefined) newState = setLogSource(newState, logSource);
+            if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
             const { sourceCardId, actor } = prev.actionRequired;
             const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
             const conditionalType = (prev.actionRequired as any)?.conditionalType;

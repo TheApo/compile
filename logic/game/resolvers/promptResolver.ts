@@ -21,14 +21,20 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
         return prevState;
     }
 
-    const { sourceCardId, actor, count, drawingPlayer } = prevState.actionRequired as any;
+    const { sourceCardId, actor, count, drawingPlayer, logSource, logPhase, logIndentLevel } = prevState.actionRequired as any;
     const actorName = actor.charAt(0).toUpperCase() + actor.slice(1);
     let newState = { ...prevState };
 
+    // CRITICAL: Restore log context from actionRequired for proper indentation/phase
+    if (logSource !== undefined) newState = setLogSource(newState, logSource);
+    if (logPhase !== undefined) newState = setLogPhase(newState, logPhase);
+    if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
     if (accept) {
-        newState = log(newState, actor, `${actorName} chooses to draw ${count} card${count !== 1 ? 's' : ''}.`);
+        newState = log(newState, actor, `${actorName} chooses to execute the optional draw effect.`);
         // Execute the draw
         newState = drawForPlayer(newState, drawingPlayer || actor, count);
+        newState = log(newState, actor, `${actorName} draws ${count} card${count !== 1 ? 's' : ''}.`);
 
         // Check if there's a follow-up effect from conditional chaining (if_executed)
         const followUpEffect = (prevState.actionRequired as any).followUpEffect;
@@ -48,6 +54,7 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                     opponent,
                     triggerType: 'start' as const
                 };
+                // CRITICAL: Log context is already set on newState from above, so followUpEffect will use it
                 const result = executeCustomEffect(sourceCard.card, laneIndex, newState, context, followUpEffect);
                 newState = result.newState;
 

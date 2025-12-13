@@ -314,6 +314,10 @@ export function executeDrawEffect(
             // CRITICAL: Pass conditional info for "If you do" effects (Death-1)
             followUpEffect: conditional?.thenEffect,
             conditionalType: conditional?.type,
+            // CRITICAL: Store log context for proper indentation/phase in follow-up effects
+            logSource: state._currentEffectSource,
+            logPhase: state._currentPhaseContext,
+            logIndentLevel: state._logIndentLevel || 0,
         } as any;
 
         return { newState };

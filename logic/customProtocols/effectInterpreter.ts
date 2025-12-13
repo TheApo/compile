@@ -287,6 +287,13 @@ export function executeCustomEffect(
 
     let result: EffectResult;
 
+    // Store current log context for later propagation to actionRequired
+    const currentLogContext = {
+        logSource: state._currentEffectSource,
+        logPhase: state._currentPhaseContext,
+        logIndentLevel: state._logIndentLevel || 0,
+    };
+
     switch (action) {
         case 'refresh': {
             // Spirit-0: Refresh hand to 5 cards
@@ -501,6 +508,23 @@ export function executeCustomEffect(
             console.error(`[Custom Effect] Unknown action: ${action}`);
             result = { newState: state };
             break;
+    }
+
+    // CRITICAL: Propagate log context to actionRequired for proper indentation/phase in resolvers
+    // This ensures that when a user action is resolved, the log context can be restored
+    if (result.newState.actionRequired && !result.newState.actionRequired.logSource) {
+        result = {
+            ...result,
+            newState: {
+                ...result.newState,
+                actionRequired: {
+                    ...result.newState.actionRequired,
+                    logSource: currentLogContext.logSource,
+                    logPhase: currentLogContext.logPhase,
+                    logIndentLevel: currentLogContext.logIndentLevel,
+                }
+            }
+        };
     }
 
     // Handle conditional follow-up effects
