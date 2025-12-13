@@ -76,6 +76,10 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                 actor: existingPendingEffects.context.cardOwner,
                 // CRITICAL: Pass the target card ID for "shift THAT card" effects
                 selectedCardFromPreviousEffect: savedTargetCardId || existingPendingEffects.selectedCardFromPreviousEffect,
+                // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte nach Interrupts
+                logSource: existingPendingEffects.logSource,
+                logPhase: existingPendingEffects.logPhase,
+                logIndentLevel: existingPendingEffects.logIndentLevel
             };
 
             currentState = {
@@ -106,7 +110,11 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                     sourceCardId: card.id,
                     laneIndex,
                     context,
-                    effects: remainingEffects
+                    effects: remainingEffects,
+                    // Log-Kontext mitspeichern für korrekte Einrückung/Quellkarte nach Interrupts
+                    logSource: currentState._currentEffectSource,
+                    logPhase: currentState._currentPhaseContext,
+                    logIndentLevel: currentState._logIndentLevel || 0
                 };
             }
 
@@ -195,7 +203,8 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
         if (onCoverEffects.length > 0) {
             const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
             let stateWithContext = setLogSource(state, cardName);
-            stateWithContext = setLogPhase(stateWithContext, undefined);
+            // Phase 'oncover' setzen für [OnCover] Label im GameLog
+            stateWithContext = setLogPhase(stateWithContext, 'oncover');
 
             let currentState = stateWithContext;
             const allAnimationRequests: any[] = [];
@@ -211,17 +220,17 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
                 }
 
                 // If an action is required, stop and return
+                // NOTE: Indent wird in playResolver.ts gesteuert, nicht hier
                 if (currentState.actionRequired) {
-                    let finalState = increaseLogIndent(currentState);
                     return {
-                        newState: recalculateAllLaneValues(finalState),
+                        newState: recalculateAllLaneValues(currentState),
                         animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
                     };
                 }
             }
 
-            let finalState = increaseLogIndent(currentState);
-            const stateWithRecalculatedValues = recalculateAllLaneValues(finalState);
+            // NOTE: Indent wird in playResolver.ts gesteuert, nicht hier
+            const stateWithRecalculatedValues = recalculateAllLaneValues(currentState);
             return {
                 newState: stateWithRecalculatedValues,
                 animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
@@ -234,23 +243,15 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
     const execute = effectRegistryOnCover[effectKey];
 
     if (execute) {
-        // Set logging context: card name and NO phase marker
-        // On-cover effects are bottom box (triggered) effects, not middle effects
+        // Set logging context: card name and phase 'oncover' for [OnCover] label
         const cardName = `${coveredCard.protocol}-${coveredCard.value}`;
         let stateWithContext = setLogSource(state, cardName);
-        stateWithContext = setLogPhase(stateWithContext, undefined); // No phase marker for on-cover
+        stateWithContext = setLogPhase(stateWithContext, 'oncover');
 
-        // NOTE: Do NOT increase indent before executing the on-cover effect itself
-        // The effect's first log should be at the current level
+        // NOTE: Indent wird in playResolver.ts gesteuert, nicht hier
         const result = execute(coveredCard, laneIndex, stateWithContext, context);
 
-        // IMPORTANT: Increase indent AFTER the on-cover effect for any subsequent effects (like uncover)
-        let finalState = increaseLogIndent(result.newState);
-
-        // NOTE: We don't decrease indent here because on-cover effects might trigger
-        // deletes/shifts that cause uncover events, which need to stay indented
-
-        const stateWithRecalculatedValues = recalculateAllLaneValues(finalState);
+        const stateWithRecalculatedValues = recalculateAllLaneValues(result.newState);
         return {
             ...result,
             newState: stateWithRecalculatedValues,
@@ -582,7 +583,11 @@ function processTriggeredEffects(
                             sourceCardId: card.id,
                             laneIndex: cardLaneIndex,
                             context,
-                            effects: remainingEffects
+                            effects: remainingEffects,
+                            // Log-Kontext mitspeichern für korrekte Einrückung/Quellkarte nach Interrupts
+                            logSource: newState._currentEffectSource,
+                            logPhase: newState._currentPhaseContext,
+                            logIndentLevel: newState._logIndentLevel || 0
                         };
                     }
                     // Mark as processed before returning

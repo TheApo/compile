@@ -322,6 +322,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                             effects: pendingEffects.effects,
                                             context: pendingEffects.context,
                                             actor: actor,
+                                            // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte
+                                            logSource: pendingEffects.logSource,
+                                            logPhase: pendingEffects.logPhase,
+                                            logIndentLevel: pendingEffects.logIndentLevel
                                         };
                                         finalState.queuedActions = [
                                             ...(finalState.queuedActions || []),

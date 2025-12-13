@@ -402,6 +402,15 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             return { newState: state }; // This specific event has already been processed in this action chain.
         }
 
+        // CRITICAL: Speichere den vorherigen Log-Kontext für spätere Wiederherstellung
+        // Dies ist wichtig für mehrteilige Effekte wie "Flip 1. Shift THAT card."
+        // Wenn ein Uncover-Interrupt passiert, muss der ursprüngliche Kontext wiederhergestellt werden
+        const previousLogContext = {
+            source: state._currentEffectSource,
+            phase: state._currentPhaseContext,
+            indentLevel: state._logIndentLevel || 0
+        };
+
         // Set logging context for uncover
         const cardName = `${uncoveredCard.protocol}-${uncoveredCard.value}`;
         let newState = setLogSource(state, cardName);
@@ -425,12 +434,17 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
         };
         const result = executeOnPlayEffect(uncoveredCard, laneIndex, newState, uncoverContext);
 
-        // IMPORTANT: Only decrease indent and clear context if there's NO actionRequired
-        // If an action is pending, keep the indent and context active until the action completes
+        // IMPORTANT: Only restore log context if there's NO actionRequired
+        // If an action is pending, keep the current context until the action completes
         if (!result.newState.actionRequired) {
-            result.newState = decreaseLogIndent(result.newState);
-            result.newState = setLogSource(result.newState, undefined);
-            result.newState = setLogPhase(result.newState, undefined);
+            // CRITICAL: Stelle den vorherigen Log-Kontext wieder her statt auf undefined zu setzen
+            // Dies ermöglicht korrekte Einrückung für nachfolgende Effekte (z.B. zweiter Flip bei "Flip 1. Flip 1.")
+            result.newState = {
+                ...result.newState,
+                _currentEffectSource: previousLogContext.source,
+                _currentPhaseContext: previousLogContext.phase,
+                _logIndentLevel: previousLogContext.indentLevel
+            };
         }
 
         if (result.newState.actionRequired) {

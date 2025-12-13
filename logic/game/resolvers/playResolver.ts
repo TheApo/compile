@@ -119,6 +119,36 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     // Per rules: "the committed card IS NOT a valid selection" during on_cover effects
     let stateWithCommitted: GameState = { ...prevState, _committedCardId: cardId };
 
+    // LOG "plays card" ZUERST, VOR dem OnCover-Effekt
+    // Clear effect context before logging non-effect actions
+    stateWithCommitted = setLogSource(stateWithCommitted, undefined);
+    stateWithCommitted = setLogPhase(stateWithCommitted, undefined);
+    stateWithCommitted = { ...stateWithCommitted, _logIndentLevel: 0 };
+
+    const playerName = player === 'player' ? 'Player' : 'Opponent';
+    const protocolName = stateWithCommitted[targetOwner].protocols[laneIndex];
+    let logMessage: string;
+
+    if (player === 'opponent' && !isFaceUp) {
+        logMessage = `${playerName} plays a face-down card into Protocol ${protocolName}.`;
+    } else {
+        const cardNameForLog = `${cardToPlay.protocol}-${cardToPlay.value}`;
+        logMessage = `${playerName} plays ${cardNameForLog}`;
+        if (!isFaceUp) {
+            logMessage += ' face-down';
+        }
+        if (targetOwner !== player) {
+            const targetSideName = targetOwner === 'player' ? "Player's" : "Opponent's";
+            logMessage += ` into ${targetSideName} Protocol ${protocolName}.`;
+        } else {
+            logMessage += ` into Protocol ${protocolName}.`;
+        }
+    }
+    stateWithCommitted = log(stateWithCommitted, player, logMessage);
+
+    // Indent erhöhen für nachfolgende OnCover-Effekte
+    stateWithCommitted = increaseLogIndent(stateWithCommitted);
+
     let onCoverResult: EffectResult = { newState: stateWithCommitted };
     const targetLaneBeforePlay = stateWithCommitted[targetOwner].lanes[laneIndex];
     if (targetLaneBeforePlay.length > 0) {
@@ -250,34 +280,11 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
     stateAfterMove = recalculateAllLaneValues(stateAfterMove);
 
-    // 3. Log the play action.
-    // IMPORTANT: Clear effect context before logging non-effect actions
-    stateAfterMove = setLogSource(stateAfterMove, undefined);
-    stateAfterMove = setLogPhase(stateAfterMove, undefined);
-    // CRITICAL: Reset log indent level for the play log - ensures it appears at level 0
-    stateAfterMove = { ...stateAfterMove, _logIndentLevel: 0 };
-
-    const playerName = player === 'player' ? 'Player' : 'Opponent';
-    const protocolName = stateAfterMove[targetOwner].protocols[laneIndex];
-    let logMessage: string;
-
-    if (player === 'opponent' && !isFaceUp) {
-        logMessage = `${playerName} plays a face-down card into Protocol ${protocolName}.`;
-    } else {
-        const cardName = `${cardToPlay.protocol}-${cardToPlay.value}`;
-        logMessage = `${playerName} plays ${cardName}`;
-        if (!isFaceUp) {
-            logMessage += ' face-down';
-        }
-        // Indicate if playing on opponent's side
-        if (targetOwner !== player) {
-            const targetSideName = targetOwner === 'player' ? "Player's" : "Opponent's";
-            logMessage += ` into ${targetSideName} Protocol ${protocolName}.`;
-        } else {
-            logMessage += ` into Protocol ${protocolName}.`;
-        }
+    // "plays card" Log wurde bereits VOR dem OnCover-Effekt erstellt
+    // Indent zurücksetzen für nachfolgende Effekte (falls kein actionRequired von OnCover)
+    if (!stateAfterOnCover.actionRequired) {
+        stateAfterMove = { ...stateAfterMove, _logIndentLevel: 0 };
     }
-    stateAfterMove = log(stateAfterMove, player, logMessage);
 
     // NEW: Trigger reactive effects after play (with laneIndex for reactiveScope filtering)
     const reactivePlayResult = processReactiveEffects(stateAfterMove, 'after_play', { player, cardId: newCardOnBoard.id, laneIndex });

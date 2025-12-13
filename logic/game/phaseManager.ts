@@ -258,6 +258,10 @@ export function queuePendingCustomEffects(state: GameState): GameState {
         context: pendingEffects.context,
         actor: pendingEffects.context.cardOwner,
         selectedCardFromPreviousEffect: pendingEffects.selectedCardFromPreviousEffect,
+        // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte nach Interrupts
+        logSource: pendingEffects.logSource,
+        logPhase: pendingEffects.logPhase,
+        logIndentLevel: pendingEffects.logIndentLevel
     };
 
     // Queue the pending effects
@@ -440,7 +444,29 @@ export const processQueuedActions = (state: GameState): GameState => {
 
         // Internal queue action type for executing remaining custom effects
         if ((nextAction as any).type === 'execute_remaining_custom_effects') {
-            const { sourceCardId, laneIndex, effects, context, selectedCardFromPreviousEffect } = nextAction as any;
+            const {
+                sourceCardId,
+                laneIndex,
+                effects,
+                context,
+                selectedCardFromPreviousEffect,
+                // Log-Kontext aus Action extrahieren
+                logSource,
+                logPhase,
+                logIndentLevel
+            } = nextAction as any;
+
+            // Log-Kontext wiederherstellen VOR der Effekt-Ausführung
+            if (logSource !== undefined) {
+                mutableState = { ...mutableState, _currentEffectSource: logSource };
+            }
+            if (logPhase !== undefined) {
+                mutableState = { ...mutableState, _currentPhaseContext: logPhase };
+            }
+            if (logIndentLevel !== undefined) {
+                mutableState = { ...mutableState, _logIndentLevel: logIndentLevel };
+            }
+
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
 
             // CRITICAL: Check if source card still exists and is active
@@ -496,6 +522,10 @@ export const processQueuedActions = (state: GameState): GameState => {
                             effects: remainingEffects,
                             context,
                             actor: context.cardOwner,
+                            // Log-Kontext mitspeichern für korrekte Einrückung/Quellkarte
+                            logSource: mutableState._currentEffectSource,
+                            logPhase: mutableState._currentPhaseContext,
+                            logIndentLevel: mutableState._logIndentLevel || 0
                         };
                         mutableState.queuedActions = [nextAction, ...(queuedActions || [])];
                     } else {
@@ -540,7 +570,11 @@ export const processQueuedActions = (state: GameState): GameState => {
                             sourceCardId,
                             laneIndex,
                             context,
-                            effects: remainingEffects
+                            effects: remainingEffects,
+                            // Log-Kontext mitspeichern für korrekte Einrückung/Quellkarte
+                            logSource: mutableState._currentEffectSource,
+                            logPhase: mutableState._currentPhaseContext,
+                            logIndentLevel: mutableState._logIndentLevel || 0
                         };
                     }
 

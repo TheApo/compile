@@ -452,6 +452,10 @@ export const resolveRearrangeProtocols = (
             effects: pendingEffects.effects,
             context: pendingEffects.context,
             actor: actor,
+            // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte
+            logSource: pendingEffects.logSource,
+            logPhase: pendingEffects.logPhase,
+            logIndentLevel: pendingEffects.logIndentLevel
         };
 
         // Queue the pending effects
@@ -558,6 +562,10 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
             effects: pendingEffects.effects,
             context: pendingEffects.context,
             actor: actor,
+            // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte
+            logSource: pendingEffects.logSource,
+            logPhase: pendingEffects.logPhase,
+            logIndentLevel: pendingEffects.logIndentLevel
         };
 
         // Queue the pending effects

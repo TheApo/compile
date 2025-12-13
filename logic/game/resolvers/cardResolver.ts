@@ -272,6 +272,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                     actor: pendingEffects.context.cardOwner,  // CRITICAL: Use cardOwner from context, NOT flipActor (which could be from an uncover interrupt)
                     // Store the flipped card ID if needed for "that card" effects
                     selectedCardFromPreviousEffect: pendingEffects.effects[0].useCardFromPreviousEffect ? targetCardId : undefined,
+                    // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte nach Interrupts
+                    logSource: pendingEffects.logSource,
+                    logPhase: pendingEffects.logPhase,
+                    logIndentLevel: pendingEffects.logIndentLevel
                 } as any;
 
 
@@ -710,7 +714,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                 actor: originalAction.actor,
                                 laneIndex: queueLaneIndex,
                                 effects: [followUpEffect],  // Use effects array format
-                                context: queueContext
+                                context: queueContext,
+                                // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte
+                                logSource: stateAfterTriggers._currentEffectSource,
+                                logPhase: stateAfterTriggers._currentPhaseContext,
+                                logIndentLevel: stateAfterTriggers._logIndentLevel || 0
                             };
 
                             stateAfterTriggers.queuedActions = [

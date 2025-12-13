@@ -486,7 +486,7 @@ export interface LogEntry {
     message: string;
     indentLevel?: number;
     sourceCard?: string;
-    phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile';
+    phase?: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover';
     sourceCardRef?: LogCardRef;
     targetCardRefs?: LogCardRef[];
 }
@@ -530,7 +530,7 @@ export interface GameState {
     _interruptedPhase?: GamePhase;
     _logIndentLevel?: number;
     _currentEffectSource?: string;
-    _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile';
+    _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover';
     /** Clean effect chain management - replaces scattered followUpEffect/outerSourceCardId/etc. */
     effectChain?: import('../logic/effectChain').EffectChain;
     stats: {
