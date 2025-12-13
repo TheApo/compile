@@ -63,12 +63,19 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
         let currentState = stateWithContext;
 
+        console.log('[executeOnPlayEffect] START Card:', cardName, 'pendingEffects:', (currentState as any)._pendingCustomEffects?.sourceCardId, 'Stack:', (currentState as any)._deferredParentEffects?.map((e: any) => e.sourceCardId));
 
-        // CRITICAL: If there are pending effects from a DIFFERENT card (e.g., Darkness-1's shift effect
-        // still pending while Spirit-2 is being uncovered), we must queue them to execute AFTER this card
-        // finishes. We must do this BEFORE clearing lastCustomEffectTargetCardId!
+        // CRITICAL FIX: If there are pending effects from a DIFFERENT card (e.g., Smoke-1's shift effect
+        // still pending while Test-1's effects are executing), we must DEFER them to execute AFTER this card
+        // (the child) finishes ALL its effects. This ensures correct effect chain order:
+        // Parent starts → Child completes ALL effects → Parent resumes
+        //
+        // We use a STACK (_deferredParentEffects) instead of queuedActions because queuedActions gets
+        // processed too early (during actionRequired handling), which would cause parent effects to
+        // execute in the middle of child effects.
         const existingPendingEffects = (currentState as any)._pendingCustomEffects;
         if (existingPendingEffects && existingPendingEffects.sourceCardId !== card.id) {
+            console.log('[executeOnPlayEffect] PUSHING to stack:', existingPendingEffects.sourceCardId);
 
             // CRITICAL: Preserve the lastCustomEffectTargetCardId for "Flip X. Shift THAT card" chains
             // When Darkness-1 flips Fire-2, the shift should target Fire-2
@@ -84,15 +91,22 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                 actor: existingPendingEffects.context.cardOwner,
                 // CRITICAL: Pass the target card ID for "shift THAT card" effects
                 selectedCardFromPreviousEffect: savedTargetCardId || existingPendingEffects.selectedCardFromPreviousEffect,
+                // CRITICAL FIX: Save lastCustomEffectTargetCardId so it can be restored when this
+                // parent effect resumes. Without this, 3+ level nesting breaks because grandchild
+                // effects overwrite the target ID that the parent needs for "shift THAT card".
+                savedLastCustomEffectTargetCardId: currentState.lastCustomEffectTargetCardId,
                 // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte nach Interrupts
                 logSource: existingPendingEffects.logSource,
                 logPhase: existingPendingEffects.logPhase,
                 logIndentLevel: existingPendingEffects.logIndentLevel
             };
 
+            // CRITICAL FIX: Push parent effects onto a STACK instead of queuedActions
+            // This ensures child effects complete BEFORE parent effects resume
+            const deferredStack = (currentState as any)._deferredParentEffects || [];
             currentState = {
                 ...currentState,
-                queuedActions: [...(currentState.queuedActions || []), pendingAction]
+                _deferredParentEffects: [...deferredStack, pendingAction]
             };
             delete (currentState as any)._pendingCustomEffects;
         }
@@ -113,7 +127,8 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
             // This ensures that if a reactive effect (like Spirit-3 after_draw) interrupts,
             // the remaining effects are already saved and can be queued
             const remainingEffects = customCard.customEffects.middleEffects.slice(i + 1);
-            if (remainingEffects.length > 0) {
+            const storedPendingThisIteration = remainingEffects.length > 0;
+            if (storedPendingThisIteration) {
                 (currentState as any)._pendingCustomEffects = {
                     sourceCardId: card.id,
                     laneIndex,
@@ -134,11 +149,52 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
                 return { newState: recalculateAllLaneValues(currentState) };
             }
 
-            // Effect completed without actionRequired - clear pending effects if this was the last effect
-            // (they'll be re-stored at the start of the next iteration if there are more effects)
-            if ((currentState as any)._pendingCustomEffects) {
+            // Effect completed without actionRequired - clear pending effects ONLY if:
+            // 1. We stored them in THIS iteration (storedPendingThisIteration)
+            // 2. AND they still belong to THIS card (not restored from deferred stack by a child)
+            // CRITICAL FIX: A child card (Test-1) may have popped parent effects (Smoke-1's shift)
+            // from _deferredParentEffects back to _pendingCustomEffects. We must NOT delete those!
+            const pendingEffects = (currentState as any)._pendingCustomEffects;
+            if (pendingEffects && storedPendingThisIteration && pendingEffects.sourceCardId === card.id) {
+                // Only delete if the effects are the same as what we stored (same sourceCardId)
+                // If a child restored different effects, this check will fail and we keep them
                 delete (currentState as any)._pendingCustomEffects;
             }
+        }
+
+        // CRITICAL FIX: After ALL effects of this card (child) are done, pop parent effects from the stack
+        // This ensures the correct effect chain order: Child completes ALL effects → Parent resumes
+        // Example: Smoke-1 (flip + shift) flips Test-1 (delete + delete + flip)
+        //   1. Smoke-1 starts, stores "shift" in _pendingCustomEffects
+        //   2. Smoke-1 flips Test-1 → Test-1's effects start
+        //   3. Smoke-1's "shift" goes to _deferredParentEffects (not queuedActions!)
+        //   4. Test-1 executes ALL its effects (delete, delete, flip)
+        //   5. Test-1 is done → pop Smoke-1's "shift" from stack back to _pendingCustomEffects
+        //   6. Smoke-1's "shift" executes
+        const deferredStack = (currentState as any)._deferredParentEffects;
+        if (deferredStack && deferredStack.length > 0) {
+            // Pop the last (most recent) parent from the stack (LIFO order)
+            const parentEffect = deferredStack[deferredStack.length - 1];
+            const remainingStack = deferredStack.slice(0, -1);
+
+            currentState = {
+                ...currentState,
+                _deferredParentEffects: remainingStack.length > 0 ? remainingStack : undefined,
+                // CRITICAL FIX: Restore lastCustomEffectTargetCardId so "shift THAT card" works correctly
+                // Without this, 3+ level nesting fails because grandchild effects overwrite the target ID
+                lastCustomEffectTargetCardId: parentEffect.savedLastCustomEffectTargetCardId || parentEffect.selectedCardFromPreviousEffect,
+                // Move parent effect to _pendingCustomEffects so it executes next via queuePendingCustomEffects
+                _pendingCustomEffects: {
+                    sourceCardId: parentEffect.sourceCardId,
+                    laneIndex: parentEffect.laneIndex,
+                    context: parentEffect.context,
+                    effects: parentEffect.effects,
+                    selectedCardFromPreviousEffect: parentEffect.selectedCardFromPreviousEffect,
+                    logSource: parentEffect.logSource,
+                    logPhase: parentEffect.logPhase,
+                    logIndentLevel: parentEffect.logIndentLevel
+                }
+            };
         }
 
         const stateWithRecalculatedValues = recalculateAllLaneValues(currentState);

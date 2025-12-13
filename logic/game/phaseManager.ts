@@ -230,6 +230,7 @@ export const advancePhase = (state: GameState): GameState => {
  */
 export function queuePendingCustomEffects(state: GameState): GameState {
     const pendingEffects = (state as any)._pendingCustomEffects;
+
     if (!pendingEffects || pendingEffects.effects.length === 0) {
         return state; // No pending effects, nothing to do
     }
@@ -250,6 +251,12 @@ export function queuePendingCustomEffects(state: GameState): GameState {
         return newState;
     }
 
+    // CRITICAL FIX: Capture lastCustomEffectTargetCardId for "Flip X. Shift THAT card" effects
+    // The target card ID is set when the user selects a card, and must be preserved
+    // for the remaining effects that use useCardFromPreviousEffect
+    const targetCardId = pendingEffects.selectedCardFromPreviousEffect || state.lastCustomEffectTargetCardId;
+    console.log('[queuePendingCustomEffects] sourceCardId:', pendingEffects.sourceCardId, 'selectedCardFromPreviousEffect:', pendingEffects.selectedCardFromPreviousEffect, 'lastCustomEffectTargetCardId:', state.lastCustomEffectTargetCardId, 'FINAL targetCardId:', targetCardId);
+
     const pendingAction: any = {
         type: 'execute_remaining_custom_effects',
         sourceCardId: pendingEffects.sourceCardId,
@@ -257,7 +264,7 @@ export function queuePendingCustomEffects(state: GameState): GameState {
         effects: pendingEffects.effects,
         context: pendingEffects.context,
         actor: pendingEffects.context.cardOwner,
-        selectedCardFromPreviousEffect: pendingEffects.selectedCardFromPreviousEffect,
+        selectedCardFromPreviousEffect: targetCardId,
         // Log-Kontext weitergeben für korrekte Einrückung/Quellkarte nach Interrupts
         logSource: pendingEffects.logSource,
         logPhase: pendingEffects.logPhase,
@@ -265,11 +272,12 @@ export function queuePendingCustomEffects(state: GameState): GameState {
     };
 
     // Queue the pending effects
+    // CRITICAL FIX: Add at BEGINNING for LIFO order - child effects must complete before parent effects
     const newState = {
         ...state,
         queuedActions: [
-            ...(state.queuedActions || []),
-            pendingAction
+            pendingAction,
+            ...(state.queuedActions || [])
         ]
     };
 
@@ -289,6 +297,42 @@ export const processQueuedActions = (state: GameState): GameState => {
 
     // Check for a queued ACTION first.
     if (!mutableState.queuedActions || mutableState.queuedActions.length === 0) {
+        // CRITICAL FIX: If queue is empty but there ARE deferred parent effects on the stack,
+        // we need to pop the top parent effect and process it.
+        // This handles 3+ level nesting where a grandchild (Light-5) finishes with actionRequired
+        // but has no remaining effects, so there's no execute_remaining_custom_effects queued.
+        // Example: Smoke-1 → Test-1 → Light-5 (discard) - after Light-5 finishes, Test-1 must continue!
+        const deferredStack = (mutableState as any)._deferredParentEffects;
+        console.log('[processQueuedActions] Queue empty. Stack:', deferredStack?.map((e: any) => e.sourceCardId), 'actionRequired:', mutableState.actionRequired?.type);
+        if (deferredStack && deferredStack.length > 0 && !mutableState.actionRequired) {
+            console.log('[processQueuedActions] POPPING from stack:', deferredStack[deferredStack.length - 1].sourceCardId);
+            // Pop the last (most recent) parent from the stack (LIFO order)
+            const parentEffect = deferredStack[deferredStack.length - 1];
+            const remainingStack = deferredStack.slice(0, -1);
+
+            // Create a queued action for the parent's remaining effects
+            const parentAction: any = {
+                type: 'execute_remaining_custom_effects',
+                sourceCardId: parentEffect.sourceCardId,
+                laneIndex: parentEffect.laneIndex,
+                effects: parentEffect.effects,
+                context: parentEffect.context,
+                actor: parentEffect.actor || parentEffect.context?.cardOwner,
+                selectedCardFromPreviousEffect: parentEffect.selectedCardFromPreviousEffect,
+                savedLastCustomEffectTargetCardId: parentEffect.savedLastCustomEffectTargetCardId,
+                logSource: parentEffect.logSource,
+                logPhase: parentEffect.logPhase,
+                logIndentLevel: parentEffect.logIndentLevel
+            };
+
+            // Recursively process the parent's remaining effects
+            return processQueuedActions({
+                ...mutableState,
+                _deferredParentEffects: remainingStack.length > 0 ? remainingStack : undefined,
+                lastCustomEffectTargetCardId: parentEffect.savedLastCustomEffectTargetCardId || parentEffect.selectedCardFromPreviousEffect,
+                queuedActions: [parentAction]
+            });
+        }
         return mutableState;
     }
 
@@ -493,12 +537,22 @@ export const processQueuedActions = (state: GameState): GameState => {
                 continue;
             }
 
+            // CRITICAL FIX: Restore lastCustomEffectTargetCardId from savedLastCustomEffectTargetCardId
+            // This is needed for 3+ level nesting where grandchild effects overwrite the target ID
+            const savedTargetId = (nextAction as any).savedLastCustomEffectTargetCardId;
+            if (savedTargetId) {
+                mutableState.lastCustomEffectTargetCardId = savedTargetId;
+            }
+
             // If we have a selected card from previous effect (e.g., "Flip 1 card. Shift THAT card"), store it
             if (selectedCardFromPreviousEffect) {
                 (mutableState as any)._selectedCardFromPreviousEffect = selectedCardFromPreviousEffect;
                 // CRITICAL: Also set lastCustomEffectTargetCardId so that useCardFromPreviousEffect works
                 // This is needed because the shift effect checks lastCustomEffectTargetCardId first
-                mutableState.lastCustomEffectTargetCardId = selectedCardFromPreviousEffect;
+                // Only set if not already set by savedLastCustomEffectTargetCardId above
+                if (!savedTargetId) {
+                    mutableState.lastCustomEffectTargetCardId = selectedCardFromPreviousEffect;
+                }
             }
 
             // Execute remaining effects sequentially
@@ -592,6 +646,43 @@ export const processQueuedActions = (state: GameState): GameState => {
                     mutableState.queuedActions = queuedActions; // Save remaining queue
                     return mutableState;
                 }
+            }
+
+            // CRITICAL FIX: After ALL effects of this card (child) are done via execute_remaining_custom_effects,
+            // pop parent effects from the deferred stack and QUEUE them to execute next.
+            // This ensures correct effect chain order: Child completes ALL effects → Parent resumes
+            const deferredStack = (mutableState as any)._deferredParentEffects;
+            if (deferredStack && deferredStack.length > 0) {
+                // Pop the last (most recent) parent from the stack (LIFO order)
+                const parentEffect = deferredStack[deferredStack.length - 1];
+                const remainingStack = deferredStack.slice(0, -1);
+
+                // CRITICAL: Create a queued action for the parent's remaining effects
+                // and add it to the FRONT of the queue so it executes next
+                const parentAction: any = {
+                    type: 'execute_remaining_custom_effects',
+                    sourceCardId: parentEffect.sourceCardId,
+                    laneIndex: parentEffect.laneIndex,
+                    effects: parentEffect.effects,
+                    context: parentEffect.context,
+                    actor: parentEffect.actor || parentEffect.context?.cardOwner,
+                    selectedCardFromPreviousEffect: parentEffect.selectedCardFromPreviousEffect,
+                    // CRITICAL FIX: Pass through savedLastCustomEffectTargetCardId for 3+ level nesting
+                    savedLastCustomEffectTargetCardId: parentEffect.savedLastCustomEffectTargetCardId,
+                    logSource: parentEffect.logSource,
+                    logPhase: parentEffect.logPhase,
+                    logIndentLevel: parentEffect.logIndentLevel
+                };
+
+                // Add parent action to the FRONT of remaining queue so it executes next
+                queuedActions = [parentAction, ...(queuedActions || [])];
+
+                mutableState = {
+                    ...mutableState,
+                    _deferredParentEffects: remainingStack.length > 0 ? remainingStack : undefined,
+                    // CRITICAL FIX: Restore lastCustomEffectTargetCardId so "shift THAT card" works correctly
+                    lastCustomEffectTargetCardId: parentEffect.savedLastCustomEffectTargetCardId || parentEffect.selectedCardFromPreviousEffect
+                };
             }
 
             continue; // Action resolved, move to next in queue

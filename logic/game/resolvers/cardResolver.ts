@@ -220,6 +220,30 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const savedTargetCardId = targetCardId;
             newState.lastCustomEffectTargetCardId = savedTargetCardId;
 
+            // CRITICAL FIX: Update any already-queued execute_remaining_custom_effects actions
+            // with the target card ID. This handles the case where Smoke-1's shift effect was
+            // queued by handleUncoverEffect BEFORE the user selected which card to flip.
+            // Now that we know the target (targetCardId), we need to update the queued action.
+            const sourceCardIdForFlip = (prev.actionRequired as any)?.sourceCardId;
+            if (sourceCardIdForFlip && newState.queuedActions) {
+                newState.queuedActions = newState.queuedActions.map((action: any) => {
+                    if (action.type === 'execute_remaining_custom_effects' &&
+                        action.sourceCardId === sourceCardIdForFlip &&
+                        !action.selectedCardFromPreviousEffect) {
+                        // Check if any effect in this action needs the previous target
+                        const needsTarget = action.effects?.some((e: any) => e.useCardFromPreviousEffect);
+                        if (needsTarget) {
+                            console.log('[cardResolver] UPDATING queued action for', sourceCardIdForFlip, 'with target:', targetCardId);
+                            return {
+                                ...action,
+                                selectedCardFromPreviousEffect: targetCardId
+                            };
+                        }
+                    }
+                    return action;
+                });
+            }
+
             if (draws && draws > 0) {
                 const { actor, sourceCardId } = prev.actionRequired as { actor: Player, sourceCardId: string };
                 const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
@@ -281,9 +305,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                 // ALWAYS queue the pending effects, never set as actionRequired!
                 // execute_remaining_custom_effects is an internal action, not a user action
+                // CRITICAL FIX: Add at BEGINNING for LIFO order - child effects must complete before parent effects
                 newState.queuedActions = [
-                    ...(newState.queuedActions || []),
-                    pendingAction
+                    pendingAction,
+                    ...(newState.queuedActions || [])
                 ];
 
 

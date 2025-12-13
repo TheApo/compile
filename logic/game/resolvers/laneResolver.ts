@@ -327,9 +327,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                             logPhase: pendingEffects.logPhase,
                                             logIndentLevel: pendingEffects.logIndentLevel
                                         };
+                                        // CRITICAL FIX: Add at BEGINNING for LIFO order - child effects must complete before parent effects
                                         finalState.queuedActions = [
-                                            ...(finalState.queuedActions || []),
-                                            pendingAction
+                                            pendingAction,
+                                            ...(finalState.queuedActions || [])
                                         ];
                                     }
                                 }

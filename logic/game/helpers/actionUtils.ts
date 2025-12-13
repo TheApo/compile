@@ -177,6 +177,7 @@ export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: stri
 
 export function handleChainedEffectsOnDiscard(state: GameState, player: Player, sourceEffect?: 'fire_1' | 'fire_2' | 'fire_3' | 'spirit_1_start', sourceCardId?: string): GameState {
     let newState = { ...state };
+    console.log('[handleChainedEffectsOnDiscard] sourceCardId:', sourceCardId, 'Stack:', (state as any)._deferredParentEffects?.map((e: any) => e.sourceCardId), 'pendingEffects:', (state as any)._pendingCustomEffects?.sourceCardId);
 
     // Save followUpEffect from custom effects before clearing actionRequired
     const followUpEffect = (state.actionRequired as any)?.followUpEffect;
@@ -185,6 +186,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     // CRITICAL: Queue pending custom effects BEFORE clearing actionRequired
     // This handles multi-effect cards like Hate-1: "Discard 3. Delete 1. Delete 1."
     newState = queuePendingCustomEffects(newState);
+    console.log('[handleChainedEffectsOnDiscard] After queuePendingCustomEffects - Stack:', (newState as any)._deferredParentEffects?.map((e: any) => e.sourceCardId), 'queuedActions:', newState.queuedActions?.map((a: any) => a.type + ':' + a.sourceCardId));
 
     // CRITICAL FIX: Always clear actionRequired after discard completes, even if there's no chained effect
     newState.actionRequired = null;
@@ -390,6 +392,7 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
     }
 
     const uncoveredCard = lane[lane.length - 1];
+    console.log('[handleUncoverEffect] Card:', `${uncoveredCard.protocol}-${uncoveredCard.value}`, 'Stack:', (state as any)._deferredParentEffects?.map((e: any) => e.sourceCardId));
 
     // CRITICAL: The effect only triggers if the card is BOTH face-up AND still uncovered.
     // Check again that the card is still on top (it might have been covered again by subsequent effects).
@@ -808,15 +811,38 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
     const laneIndex = state[owner].lanes.findIndex(l => l.some(c => c.id === card.id));
     if (laneIndex === -1) return { newState: state };
 
+    // CRITICAL FIX: Before the flipped card's effects execute, save the flipped card ID
+    // in any pending effects from the PARENT card (e.g., Smoke-1's shift effect).
+    // This ensures "Flip X. Shift THAT card" works correctly even when the flipped card
+    // triggers nested effects that clear lastCustomEffectTargetCardId.
+    let stateForExecution = state;
+    const pendingEffects = (state as any)._pendingCustomEffects;
+    console.log('[handleOnFlipToFaceUp] cardId:', cardId, 'pendingEffects:', pendingEffects?.sourceCardId, 'effects:', pendingEffects?.effects?.map((e: any) => e.type));
+    if (pendingEffects && pendingEffects.effects?.length > 0) {
+        // Check if any remaining effect uses the previous target
+        const needsTarget = pendingEffects.effects.some((e: any) => e.useCardFromPreviousEffect);
+        console.log('[handleOnFlipToFaceUp] needsTarget:', needsTarget);
+        if (needsTarget) {
+            stateForExecution = {
+                ...state,
+                _pendingCustomEffects: {
+                    ...pendingEffects,
+                    selectedCardFromPreviousEffect: cardId  // The flipped card is the target!
+                }
+            };
+            console.log('[handleOnFlipToFaceUp] SET selectedCardFromPreviousEffect:', cardId);
+        }
+    }
+
     // executeOnPlayEffect internally handles the "uncovered" check
     const flipContext: EffectContext = {
         cardOwner: owner,
         actor: owner,
-        currentTurn: state.turn,
+        currentTurn: stateForExecution.turn,
         opponent: owner === 'player' ? 'opponent' : 'player',
         triggerType: 'flip'
     };
-    const result = executeOnPlayEffect(card, laneIndex, state, flipContext);
+    const result = executeOnPlayEffect(card, laneIndex, stateForExecution, flipContext);
 
     if (result.newState.actionRequired) {
         // CRITICAL FIX: Queue pending custom effects before handling interrupts

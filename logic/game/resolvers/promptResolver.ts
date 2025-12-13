@@ -459,9 +459,10 @@ export const resolveRearrangeProtocols = (
         };
 
         // Queue the pending effects
+        // CRITICAL FIX: Add at BEGINNING for LIFO order - child effects must complete before parent effects
         newState.queuedActions = [
-            ...(newState.queuedActions || []),
-            pendingAction
+            pendingAction,
+            ...(newState.queuedActions || [])
         ];
 
         // Clear from state after queueing
@@ -569,9 +570,10 @@ export const resolveSwapProtocols = (prevState: GameState, indices: [number, num
         };
 
         // Queue the pending effects
+        // CRITICAL FIX: Add at BEGINNING for LIFO order - child effects must complete before parent effects
         newState.queuedActions = [
-            ...(newState.queuedActions || []),
-            pendingAction
+            pendingAction,
+            ...(newState.queuedActions || [])
         ];
 
         // Clear from state after queueing

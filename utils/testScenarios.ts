@@ -3642,6 +3642,38 @@ export const scenario69_fear0shiftCardPlayground: TestScenario = {
     }
 };
 
+export const scenario70_multiChainCardPlayground: TestScenario = {
+    name: 'MultiChain Test',
+    description: 'Multi Chain test',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Chaos', 'Smoke', 'Test'];
+        const opponentProtocols = ['Light', 'Water', 'Fire'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Smoke', 1, true),
+            createCard('Chaos', 3, true),
+        ];
+
+        // Board setup for testing:
+        newState = placeCard(newState, 'player', 2, createCard('Test', 1, false));  // 
+
+		newState = placeCard(newState, 'opponent', 1, createCard('Water', 5, true));  // 
+		newState = placeCard(newState, 'opponent', 2, createCard('Darkness', 2, false));  // 
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Light', 5, true),
+            createCard('Water', 2, true),
+            createCard('Darkness', 3, true),
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3712,4 +3744,5 @@ export const allScenarios: TestScenario[] = [
 	scenario67_startPhasePlayground,
 	scenario68_CommittedCardPlayground,
 	scenario69_fear0shiftCardPlayground,
+	scenario70_multiChainCardPlayground,
 ];
