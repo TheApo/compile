@@ -81,7 +81,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             newState = currentState;
             newState = queuePendingCustomEffects(newState);
-            newState.actionRequired = null;
+
+            // CRITICAL FIX: Only clear actionRequired if it's still the original select_lane_for_shift_all
+            // If an uncover effect (e.g., Chaos-2's shift effect) set a NEW actionRequired, preserve it!
+            if (!newState.actionRequired || newState.actionRequired.type === 'select_lane_for_shift_all') {
+                newState.actionRequired = null;
+            }
 
             if (animationRequests.length > 0) {
                 // NEW: Extract followUpEffect for if_executed conditionals

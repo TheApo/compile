@@ -63,8 +63,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
         let currentState = stateWithContext;
 
-        console.log('[executeOnPlayEffect] START Card:', cardName, 'pendingEffects:', (currentState as any)._pendingCustomEffects?.sourceCardId, 'Stack:', (currentState as any)._deferredParentEffects?.map((e: any) => e.sourceCardId));
-
         // CRITICAL FIX: If there are pending effects from a DIFFERENT card (e.g., Smoke-1's shift effect
         // still pending while Test-1's effects are executing), we must DEFER them to execute AFTER this card
         // (the child) finishes ALL its effects. This ensures correct effect chain order:
@@ -75,7 +73,6 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         // execute in the middle of child effects.
         const existingPendingEffects = (currentState as any)._pendingCustomEffects;
         if (existingPendingEffects && existingPendingEffects.sourceCardId !== card.id) {
-            console.log('[executeOnPlayEffect] PUSHING to stack:', existingPendingEffects.sourceCardId);
 
             // CRITICAL: Preserve the lastCustomEffectTargetCardId for "Flip X. Shift THAT card" chains
             // When Darkness-1 flips Fire-2, the shift should target Fire-2

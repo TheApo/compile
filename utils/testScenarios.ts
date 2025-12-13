@@ -3674,6 +3674,35 @@ export const scenario70_multiChainCardPlayground: TestScenario = {
     }
 };
 
+export const scenario71_Light3ProblemPlayground: TestScenario = {
+    name: 'Light3-Uncover Test',
+    description: 'Light3-Uncover_actionType Test',
+    setup: (state: GameState): GameState => {
+        const playerProtocols = ['Chaos', 'Smoke', 'Test'];
+        const opponentProtocols = ['Light', 'Water', 'Fire'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand - all Ice cards
+        newState.player.hand = [
+            createCard('Smoke', 1, true),
+            createCard('Chaos', 3, true),
+        ];
+
+        // Board setup for testing:
+        newState = placeCard(newState, 'player', 0, createCard('Chaos', 3, true));  // 
+		newState = placeCard(newState, 'player', 0, createCard('Chaos', 2, true));  // 
+		newState = placeCard(newState, 'player', 0, createCard('Test', 1, false));  // 
+
+        // Opponent needs hand for discard tests
+        newState.opponent.hand = [
+            createCard('Light', 3, true)
+        ];
+
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3745,4 +3774,5 @@ export const allScenarios: TestScenario[] = [
 	scenario68_CommittedCardPlayground,
 	scenario69_fear0shiftCardPlayground,
 	scenario70_multiChainCardPlayground,
+	scenario71_Light3ProblemPlayground,
 ];

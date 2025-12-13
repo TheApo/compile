@@ -255,7 +255,6 @@ export function queuePendingCustomEffects(state: GameState): GameState {
     // The target card ID is set when the user selects a card, and must be preserved
     // for the remaining effects that use useCardFromPreviousEffect
     const targetCardId = pendingEffects.selectedCardFromPreviousEffect || state.lastCustomEffectTargetCardId;
-    console.log('[queuePendingCustomEffects] sourceCardId:', pendingEffects.sourceCardId, 'selectedCardFromPreviousEffect:', pendingEffects.selectedCardFromPreviousEffect, 'lastCustomEffectTargetCardId:', state.lastCustomEffectTargetCardId, 'FINAL targetCardId:', targetCardId);
 
     const pendingAction: any = {
         type: 'execute_remaining_custom_effects',
@@ -303,9 +302,7 @@ export const processQueuedActions = (state: GameState): GameState => {
         // but has no remaining effects, so there's no execute_remaining_custom_effects queued.
         // Example: Smoke-1 → Test-1 → Light-5 (discard) - after Light-5 finishes, Test-1 must continue!
         const deferredStack = (mutableState as any)._deferredParentEffects;
-        console.log('[processQueuedActions] Queue empty. Stack:', deferredStack?.map((e: any) => e.sourceCardId), 'actionRequired:', mutableState.actionRequired?.type);
         if (deferredStack && deferredStack.length > 0 && !mutableState.actionRequired) {
-            console.log('[processQueuedActions] POPPING from stack:', deferredStack[deferredStack.length - 1].sourceCardId);
             // Pop the last (most recent) parent from the stack (LIFO order)
             const parentEffect = deferredStack[deferredStack.length - 1];
             const remainingStack = deferredStack.slice(0, -1);

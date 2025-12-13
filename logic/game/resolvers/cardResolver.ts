@@ -233,7 +233,6 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         // Check if any effect in this action needs the previous target
                         const needsTarget = action.effects?.some((e: any) => e.useCardFromPreviousEffect);
                         if (needsTarget) {
-                            console.log('[cardResolver] UPDATING queued action for', sourceCardIdForFlip, 'with target:', targetCardId);
                             return {
                                 ...action,
                                 selectedCardFromPreviousEffect: targetCardId
