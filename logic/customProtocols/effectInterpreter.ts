@@ -608,7 +608,7 @@ function executeProtocolEffect(
         return { newState };
     }
 
-    let newState = log(state, cardOwner, `[Custom Protocol effect - ${action} for ${targetPlayer}]`);
+    let newState = { ...state };
 
     // NEW: Resolve 'current' lane index to actual lane number (Anarchy-3)
     let disallowedProtocolForLane: { laneIndex: number; protocol: string } | undefined = undefined;
@@ -748,7 +748,7 @@ function executeChoiceEffect(
         return { newState: state };
     }
 
-    let newState = log(state, cardOwner, `[Custom Choice effect - choose one of two options]`);
+    let newState = { ...state };
 
     // Set actionRequired for player to choose
     newState.actionRequired = {

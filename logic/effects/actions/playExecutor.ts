@@ -61,7 +61,8 @@ export function executePlayEffect(
 
         // Check if deck has enough cards
         if (playerState.deck.length === 0 && playerState.discard.length === 0) {
-            let newState = log(state, cardOwner, `[Custom Play effect] ${actor} has no cards in deck/discard - skipping.`);
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            let newState = log(state, cardOwner, `${actorName} has no cards in deck/discard - effect skipped.`);
             return { newState };
         }
 
@@ -165,7 +166,8 @@ export function executePlayEffect(
 
         // Check if deck has enough cards
         if (playerState.deck.length === 0 && playerState.discard.length === 0) {
-            let newState = log(state, cardOwner, `[Custom Play effect] ${actor} has no cards in deck/discard - skipping.`);
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            let newState = log(state, cardOwner, `${actorName} has no cards in deck/discard - effect skipped.`);
             return { newState };
         }
 
@@ -284,7 +286,7 @@ export function executePlayEffect(
         }
 
         // CRITICAL: Prompt user to select a lane (not automatic!)
-        let newState = log(state, cardOwner, `[Custom Play effect - select another line to play]`);
+        let newState = { ...state };
         newState.actionRequired = {
             type: 'select_lane_for_play',
             sourceCardId: card.id,
@@ -391,7 +393,8 @@ export function executePlayEffect(
 
         // Check if deck has enough cards
         if (playerState.deck.length === 0 && playerState.discard.length === 0) {
-            let newState = log(state, cardOwner, `[Custom Play effect] ${actor} has no cards in deck/discard - skipping.`);
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            let newState = log(state, cardOwner, `${actorName} has no cards in deck/discard - effect skipped.`);
             return { newState };
         }
 
@@ -493,7 +496,7 @@ export function executePlayEffect(
         }
 
         // FIXED: First select card from hand, THEN select lane
-        let newState = log(state, cardOwner, `[Custom Play effect - select a card to play in a lane with a face-down card]`);
+        let newState = { ...state };
         newState.actionRequired = {
             type: 'select_card_from_hand_to_play',
             sourceCardId: card.id,
@@ -524,7 +527,7 @@ export function executePlayEffect(
         }
 
         // Prompt user to select a card from hand with the matching value, then a lane
-        let newState = log(state, cardOwner, `[Custom Play effect - select a card with value ${targetValue} from hand to play]`);
+        let newState = { ...state };
         newState.actionRequired = {
             type: 'select_card_from_hand_to_play',
             sourceCardId: card.id,
@@ -544,7 +547,7 @@ export function executePlayEffect(
         return { newState: state };
     }
 
-    let newState = log(state, cardOwner, `[Custom Play effect - playing ${count} card(s) ${faceDown ? 'face-down' : 'face-up'} from ${source}]`);
+    let newState = { ...state };
 
     // Convert destinationRule to disallowedLaneIndex for compatibility with existing UI logic
     let disallowedLaneIndex: number | undefined = undefined;

@@ -14,7 +14,7 @@ const effectRegistryEnd: Record<string, any> = {};
 const effectRegistryOnCover: Record<string, any> = {};
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from "./utils/log";
 import { executeCustomEffect } from "./customProtocols/effectInterpreter";
-import { shouldIgnoreMiddleCommand } from "./game/passiveRuleChecker";
+import { getMiddleCommandBlocker } from "./game/passiveRuleChecker";
 
 // --- ON-PLAY EFFECTS (MIDDLE BOX) ---
 
@@ -22,13 +22,17 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     // Rule: A card's middle effect only triggers if it is uncovered.
     // This applies whether it was just played or just flipped face-up.
     const { cardOwner, opponent, triggerType } = context;
+
     const lane = state[cardOwner].lanes[laneIndex];
     const cardInLane = lane.find(c => c.id === card.id);
     if (!cardInLane) {
         // This can happen if the card was deleted by a chained effect before its own effect could resolve.
         return { newState: state };
     }
-    const isUncovered = lane.length > 0 && lane[lane.length - 1].id === card.id;
+    // CRITICAL FIX: For 'uncover' triggerType, handleUncoverEffect has already verified
+    // the card is uncovered using isCardUncovered() which handles _committedCardId correctly.
+    // We skip this check for uncover to prevent false negatives.
+    const isUncovered = triggerType === 'uncover' || (lane.length > 0 && lane[lane.length - 1].id === card.id);
 
     if (!isUncovered) {
         return { newState: state }; // Card is covered, do not trigger middle effect.
@@ -36,18 +40,22 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
 
     // Check passive rules for ignore middle command
     // Pass cardOwner so rules like "opponent's cards do not have middle commands" work correctly
-    if (shouldIgnoreMiddleCommand(state, laneIndex, cardOwner)) {
-        return { newState: state }; // Middle effects are ignored in this line
+    const blockingCard = getMiddleCommandBlocker(state, laneIndex, cardOwner);
+    if (blockingCard) {
+        // Log that the effect was blocked by a passive rule
+        const cardName = `${card.protocol}-${card.value}`;
+        const blockerName = `${blockingCard.protocol}-${blockingCard.value}`;
+        let newState = log(state, cardOwner, `${cardName}: Effect blocked by ${blockerName}.`);
+        return { newState }; // Middle effects are ignored in this line
     }
 
     // Check if this is a custom protocol card with custom effects
     const customCard = card as any;
+
     if (customCard.customEffects && customCard.customEffects.middleEffects && customCard.customEffects.middleEffects.length > 0) {
         // Execute custom effects
-        let stateWithContext = state;
-        if (triggerType === 'middle' || triggerType === 'play') {
-            stateWithContext = increaseLogIndent(stateWithContext);
-        }
+        // Always increase indent - effects triggered by other effects should be nested
+        let stateWithContext = increaseLogIndent(state);
 
         const cardName = `${card.protocol}-${card.value}`;
         stateWithContext = setLogSource(stateWithContext, cardName);
@@ -142,12 +150,9 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
     const execute = effectRegistry[effectKey];
 
     if (execute) {
-        // IMPORTANT: For middle effects (triggered by playing a card), increase indent FIRST
-        // so that ALL logs from the effect (including the first one) are indented
-        let stateWithContext = state;
-        if (triggerType === 'middle' || triggerType === 'play') {
-            stateWithContext = increaseLogIndent(stateWithContext);
-        }
+        // IMPORTANT: Always increase indent FIRST so that ALL logs from the effect are indented
+        // Effects triggered by other effects should be nested
+        let stateWithContext = increaseLogIndent(state);
 
         // Set logging context: card name and phase
         const cardName = `${card.protocol}-${card.value}`;

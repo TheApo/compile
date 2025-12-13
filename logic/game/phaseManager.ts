@@ -781,14 +781,18 @@ export const processEndOfAction = (state: GameState): GameState => {
 
         if (cardLocation) {
             const { card: cardOnBoard, owner: cardOwner } = cardLocation;
+            // CRITICAL: Reset indent level before executing queued effect
+            // The queued effect (middle command of played card) should be at indent 1
+            // (directly under "plays card" log, not nested under any interrupt chain)
+            let stateForQueuedEffect = { ...stateWithoutQueue, _logIndentLevel: 0 };
             const queuedEffectContext: EffectContext = {
                 cardOwner: cardOwner,
                 actor: cardOwner,
-                currentTurn: stateWithoutQueue.turn,
+                currentTurn: stateForQueuedEffect.turn,
                 opponent: cardOwner === 'player' ? 'opponent' : 'player',
                 triggerType: 'play'
             };
-            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateWithoutQueue, queuedEffectContext);
+            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateForQueuedEffect, queuedEffectContext);
             if (newState.actionRequired) {
                 // The queued effect produced an action. Return this new state and wait.
                 return newState;

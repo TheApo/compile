@@ -361,36 +361,66 @@ export function shouldIgnoreMiddleCommand(
     laneIndex: number,
     cardOwnerToCheck?: Player
 ): boolean {
+    return getMiddleCommandBlocker(state, laneIndex, cardOwnerToCheck) !== null;
+}
+
+/**
+ * Get the card that is blocking middle commands in a lane
+ * Returns the blocking card, or null if no block is active
+ * @param state - Current game state
+ * @param laneIndex - Lane to check
+ * @param cardOwnerToCheck - Optional: only check if the card owner's middle commands should be ignored
+ */
+export function getMiddleCommandBlocker(
+    state: GameState,
+    laneIndex: number,
+    cardOwnerToCheck?: Player
+): PlayedCard | null {
     const rules = getActivePassiveRules(state);
     // FIX: Use state.turn instead of non-existent state.currentPlayer
     const currentPlayer = state.turn;
 
-    return rules.some(({ rule, cardOwner, laneIndex: ruleLaneIndex }) => {
-        if (rule.type !== 'ignore_middle_commands') return false;
+    for (const { rule, cardOwner, laneIndex: ruleLaneIndex, sourceCardId } of rules) {
+        if (rule.type !== 'ignore_middle_commands') continue;
 
         // Check if rule applies to this lane
         const appliesToLane = rule.scope === 'global' || ruleLaneIndex === laneIndex;
-        if (!appliesToLane) return false;
+        if (!appliesToLane) continue;
 
         // Check onlyDuringYourTurn: rule only applies if it's the rule owner's turn
         if (rule.onlyDuringYourTurn && currentPlayer !== cardOwner) {
-            return false;
+            continue;
         }
 
         // Check target: if rule targets 'opponent', only apply to opponent's cards
         if (cardOwnerToCheck !== undefined) {
             const opponent = cardOwner === 'player' ? 'opponent' : 'player';
             if (rule.target === 'opponent' && cardOwnerToCheck !== opponent) {
-                return false;
+                continue;
             }
             if (rule.target === 'self' && cardOwnerToCheck !== cardOwner) {
-                return false;
+                continue;
             }
             // 'all' target applies to everyone
         }
 
-        return true;
-    });
+        // Find the card that has this rule
+        if (sourceCardId) {
+            for (const player of ['player', 'opponent'] as Player[]) {
+                for (const lane of state[player].lanes) {
+                    const card = lane.find(c => c.id === sourceCardId);
+                    if (card) {
+                        return card;
+                    }
+                }
+            }
+        }
+
+        // Fallback: couldn't find specific card
+        return null;
+    }
+
+    return null;
 }
 
 /**
