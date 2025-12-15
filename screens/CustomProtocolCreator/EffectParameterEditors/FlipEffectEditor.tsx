@@ -106,6 +106,18 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 </small>
             </label>
 
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.skipMiddleCommand || false}
+                    onChange={e => onChange({ ...params, skipMiddleCommand: e.target.checked })}
+                />
+                Skip Middle Command
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Flip the card but ignore its middle commands.
+                </small>
+            </label>
+
             <h5>Advanced Conditional</h5>
 
             <label>

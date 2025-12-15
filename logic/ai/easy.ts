@@ -852,6 +852,63 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             return { type: 'flipCard', cardId: selectedEffect.cardId };
         }
+
+        // =========================================================================
+        // STATE NUMBER - Choose a number (0-5) for Luck-0 effect
+        // =========================================================================
+        case 'state_number': {
+            // Easy AI: Pick a random number from 0-5
+            const randomNumber = Math.floor(Math.random() * 6);
+            return { type: 'stateNumber', number: randomNumber };
+        }
+
+        // =========================================================================
+        // STATE PROTOCOL - Choose a protocol from opponent's cards (Luck-3)
+        // =========================================================================
+        case 'state_protocol': {
+            const protocolAction = action as any;
+            const availableProtocols = protocolAction.availableProtocols || [];
+
+            if (availableProtocols.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Easy AI: Pick a random protocol from the available list
+            const randomIndex = Math.floor(Math.random() * availableProtocols.length);
+            return { type: 'stateProtocol', protocol: availableProtocols[randomIndex] };
+        }
+
+        // =========================================================================
+        // SELECT FROM DRAWN TO REVEAL - Choose which drawn card to reveal
+        // =========================================================================
+        case 'select_from_drawn_to_reveal': {
+            const revealAction = action as any;
+            const eligibleCardIds = revealAction.eligibleCardIds || [];
+
+            if (eligibleCardIds.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Easy AI: Pick a random card from the eligible drawn cards
+            const randomIndex = Math.floor(Math.random() * eligibleCardIds.length);
+            return { type: 'selectFromDrawnToReveal', cardId: eligibleCardIds[randomIndex] };
+        }
+
+        // =========================================================================
+        // CONFIRM DECK DISCARD - Acknowledge discarded card from top of deck
+        // =========================================================================
+        case 'confirm_deck_discard': {
+            // AI just confirms/acknowledges the discarded card info
+            return { type: 'confirmDeckDiscard' };
+        }
+
+        // =========================================================================
+        // CONFIRM DECK PLAY PREVIEW - Acknowledge card from deck before playing
+        // =========================================================================
+        case 'confirm_deck_play_preview': {
+            // AI just confirms and proceeds to lane selection
+            return { type: 'confirmDeckPlayPreview' };
+        }
     }
 
     // Fallback for any unhandled cases

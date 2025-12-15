@@ -24,6 +24,8 @@ import { ValueModifierEditor } from './EffectParameterEditors/ValueModifierEdito
 import { BlockCompileEffectEditor } from './EffectParameterEditors/BlockCompileEffectEditor';
 import { DeleteAllInLaneEffectEditor } from './EffectParameterEditors/DeleteAllInLaneEffectEditor';
 import { ShuffleTrashEffectEditor, ShuffleDeckEffectEditor } from './EffectParameterEditors/ShuffleEffectEditor';
+import { StateNumberEffectEditor } from './EffectParameterEditors/StateNumberEffectEditor';
+import { StateProtocolEffectEditor } from './EffectParameterEditors/StateProtocolEffectEditor';
 import { generateEffectText } from '../../logic/customProtocols/cardFactory';
 
 interface EffectEditorProps {
@@ -98,6 +100,10 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'shuffle_deck' };
         case 'redirect_return_to_deck':
             return { action: 'redirect_return_to_deck', faceDown: true };
+        case 'state_number':
+            return { action: 'state_number', numberSource: 'own_protocol_values' };
+        case 'state_protocol':
+            return { action: 'state_protocol', protocolSource: 'opponent_cards' };
         default:
             return {};
     }
@@ -302,6 +308,10 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 return <ShuffleTrashEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'shuffle_deck':
                 return <ShuffleDeckEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'state_number':
+                return <StateNumberEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'state_protocol':
+                return <StateProtocolEffectEditor params={effectToRender.params} onChange={onChange} />;
             default:
                 return <div>Unknown effect type: {effectToRender.params.action}</div>;
         }
@@ -571,6 +581,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="block_compile">Block Compile</option>
                                 <option value="shuffle_trash">Shuffle Trash into Deck</option>
                                 <option value="shuffle_deck">Shuffle Deck</option>
+                                <option value="state_number">State a Number</option>
+                                <option value="state_protocol">State a Protocol</option>
                             </select>
                         </label>
 
@@ -655,6 +667,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                             <option value="block_compile">Block Compile</option>
                                             <option value="shuffle_trash">Shuffle Trash into Deck</option>
                                             <option value="shuffle_deck">Shuffle Deck</option>
+                                            <option value="state_number">State a Number</option>
+                                            <option value="state_protocol">State a Protocol</option>
                                         </select>
                                     </label>
 

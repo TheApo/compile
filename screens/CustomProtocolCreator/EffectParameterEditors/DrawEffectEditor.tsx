@@ -103,6 +103,86 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
             <label>
                 <input
                     type="checkbox"
+                    checked={params.revealFromDrawn !== undefined}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, revealFromDrawn: { valueSource: 'stated_number' } });
+                        } else {
+                            const { revealFromDrawn, ...rest } = params;
+                            onChange(rest as DrawEffectParams);
+                        }
+                    }}
+                />
+                Reveal from Drawn Cards
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    After drawing, reveal cards from the drawn pile (optionally filtered by value).
+                </small>
+            </label>
+
+            {params.revealFromDrawn && (
+                <>
+                    <label>
+                        Reveal Count
+                        <select
+                            value={params.revealFromDrawn.count === 'all' ? 'all' : (params.revealFromDrawn.count || 1).toString()}
+                            onChange={e => {
+                                const val = e.target.value;
+                                onChange({
+                                    ...params,
+                                    revealFromDrawn: {
+                                        ...params.revealFromDrawn,
+                                        count: val === 'all' ? 'all' : parseInt(val)
+                                    }
+                                });
+                            }}
+                        >
+                            <option value="1">1 card</option>
+                            <option value="2">2 cards</option>
+                            <option value="3">3 cards</option>
+                            <option value="all">All matching cards</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Value Filter
+                        <select
+                            value={params.revealFromDrawn.valueSource || 'stated_number'}
+                            onChange={e => onChange({
+                                ...params,
+                                revealFromDrawn: { ...params.revealFromDrawn, valueSource: e.target.value as any }
+                            })}
+                        >
+                            <option value="stated_number">Stated Number (requires state_number before)</option>
+                            <option value="any">Any (no filter)</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        After Reveal
+                        <select
+                            value={params.revealFromDrawn.thenAction || ''}
+                            onChange={e => {
+                                if (e.target.value === '') {
+                                    const { thenAction, ...rest } = params.revealFromDrawn!;
+                                    onChange({ ...params, revealFromDrawn: rest });
+                                } else {
+                                    onChange({
+                                        ...params,
+                                        revealFromDrawn: { ...params.revealFromDrawn, thenAction: e.target.value as any }
+                                    });
+                                }
+                            }}
+                        >
+                            <option value="">None</option>
+                            <option value="may_play">May Play ("You may play it")</option>
+                        </select>
+                    </label>
+                </>
+            )}
+
+            <label>
+                <input
+                    type="checkbox"
                     checked={params.valueFilter !== undefined}
                     onChange={e => {
                         if (e.target.checked) {

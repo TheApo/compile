@@ -24,6 +24,8 @@ import { executeReturnEffect } from '../effects/actions/returnExecutor';
 import { executePlayEffect } from '../effects/actions/playExecutor';
 import { executeRevealGiveEffect } from '../effects/actions/revealGiveExecutor';
 import { executeShuffleTrashEffect, executeShuffleDeckEffect } from '../effects/actions/shuffleExecutor';
+import { executeStateNumberEffect } from '../effects/actions/stateNumberExecutor';
+import { executeStateProtocolEffect } from '../effects/actions/stateProtocolExecutor';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -445,7 +447,11 @@ export function executeCustomEffect(
             break;
 
         case 'flip':
-            result = executeFlipEffect(card, laneIndex, state, context, params);
+            // CRITICAL: Pass useCardFromPreviousEffect from effectDef (it's not in params!)
+            result = executeFlipEffect(card, laneIndex, state, context, {
+                ...params,
+                useCardFromPreviousEffect: effectDef.useCardFromPreviousEffect
+            });
             break;
 
         case 'delete':
@@ -504,6 +510,14 @@ export function executeCustomEffect(
 
         case 'shuffle_deck':
             result = executeShuffleDeckEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'state_number':
+            result = executeStateNumberEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'state_protocol':
+            result = executeStateProtocolEffect(card, laneIndex, state, context, params);
             break;
 
         default:
@@ -566,6 +580,28 @@ export function executeCustomEffect(
                     result = { newState };
                     return result;
                 }
+            }
+
+            // NEW: For "if_protocol_matches_stated" conditionals (Luck-3)
+            // Check if the discarded card's protocol matches the stated protocol
+            if (effectDef.conditional.type === 'if_protocol_matches_stated') {
+                const discardContext = (newState as any)._discardContext;
+                const discardedCardProtocol = discardContext?.discardedCardProtocol;
+                const statedProtocol = newState.lastStatedProtocol;
+
+                if (!statedProtocol || !discardedCardProtocol || discardedCardProtocol !== statedProtocol) {
+                    // Protocol doesn't match - skip the follow-up effect
+                    let skipState = log(newState, context.cardOwner, `Discarded card does not match stated protocol "${statedProtocol || 'none'}". Effect skipped.`);
+                    // Clean up
+                    delete (skipState as any)._discardContext;
+                    result = { newState: skipState };
+                    return result;
+                }
+
+                // Protocol matches! Log and continue to execute the thenEffect
+                let matchState = log(newState, context.cardOwner, `Discarded card matches stated protocol "${statedProtocol}"!`);
+                delete (matchState as any)._discardContext;
+                result = { newState: matchState };
             }
 
             // NEW: For 'optional' conditionals, create a prompt instead of executing immediately

@@ -84,6 +84,61 @@ export function executeDiscardEffect(
         return { newState };
     }
 
+    // Handle discard from top of deck
+    const source = params.source || 'hand';
+    if (source === 'top_deck_own' || source === 'top_deck_opponent') {
+        const deckOwner = source === 'top_deck_own' ? cardOwner : context.opponent;
+        let newState = { ...state };
+        const deckOwnerState = { ...newState[deckOwner] };
+        const possessiveOwner = deckOwner === cardOwner ? 'your' : "opponent's";
+
+        // Check if deck has cards
+        if (deckOwnerState.deck.length === 0) {
+            newState = log(newState, cardOwner, `No cards in ${possessiveOwner} deck - effect skipped.`);
+            (newState as any)._effectSkippedNoTargets = true;
+            (newState as any)._discardContext = { discardedCount: 0 };
+            return { newState };
+        }
+
+        // Take top card from deck
+        const newDeck = [...deckOwnerState.deck];
+        const discardedCard = newDeck.shift()!;  // Remove from top (index 0)
+        deckOwnerState.deck = newDeck;
+        deckOwnerState.discard = [...deckOwnerState.discard, discardedCard];
+        newState[deckOwner] = deckOwnerState;
+
+        // Log the discard with revealed card info
+        newState = log(newState, cardOwner, `Discard the top card of ${possessiveOwner} deck: ${discardedCard.protocol}-${discardedCard.value}.`);
+
+        // CRITICAL: Store the card ID AND value for follow-up effects
+        newState.lastCustomEffectTargetCardId = discardedCard.id;
+        newState.lastCustomEffectTargetValue = discardedCard.value;
+
+        // Store context for follow-up effects
+        (newState as any)._discardContext = {
+            actor: deckOwner,
+            discardedCount: 1,
+            sourceCardId: card.id,
+            discardedCardValue: discardedCard.value,
+            discardedCardProtocol: discardedCard.protocol,
+        };
+
+        // Show modal to display the discarded card (pass full card for proper display)
+        newState.actionRequired = {
+            type: 'confirm_deck_discard',
+            actor: cardOwner,  // The player who triggered the effect
+            sourceCardId: card.id,
+            discardedCard: discardedCard,  // Pass full card object for CardComponent
+            deckOwner: source === 'top_deck_own' ? 'own' : 'opponent',
+            // CRITICAL: Pass conditional info for follow-up effects (e.g., Luck-2: draw cards)
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
+            laneIndex,  // Needed for executing follow-up effect
+        } as any;
+
+        return { newState };
+    }
+
     // NEW: Handle dynamic discard count (Plague-2)
     let count = params.count || 1;
     const countType = params.countType || 'fixed';

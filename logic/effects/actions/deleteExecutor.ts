@@ -190,6 +190,11 @@ export function executeDeleteEffect(
                     const { min, max } = targetFilter.valueRange;
                     if (c.value < min || c.value > max) continue;
                 }
+                // NEW: Check valueSource (Luck-4: "card that shares a value with the discarded card")
+                if (targetFilter.valueSource === 'previous_effect_card') {
+                    const targetValue = state.lastCustomEffectTargetValue;
+                    if (targetValue === undefined || c.value !== targetValue) continue;
+                }
                 // Check protocolMatching
                 if (params.protocolMatching) {
                     const playerProtocolAtLane = state.player.protocols[laneIdx];
@@ -529,6 +534,13 @@ export function executeDeleteEffect(
         return { newState };
     }
 
+    // CRITICAL: When valueSource filter is applied, pass validTargets as allowedIds
+    // This ensures the UI/resolver can validate the selection (Luck-4: same value as discarded card)
+    const hasValueSourceFilter = targetFilter.valueSource === 'previous_effect_card';
+    const allowedIds = (filteredTargets.length < validTargets.length) || hasValueSourceFilter
+        ? filteredTargets
+        : undefined;
+
     // Set actionRequired for player to select cards
     // FLEXIBLE: Pass actorChooses so AI can determine who selects targets
     newState.actionRequired = {
@@ -541,7 +553,7 @@ export function executeDeleteEffect(
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,
-        allowedIds: filteredTargets.length < validTargets.length ? filteredTargets : undefined, // NEW: Restrict to filtered targets if calculation was applied
+        allowedIds, // Restrict to filtered targets when any filter was applied
         targetFilter: params.targetFilter,      // Pass filter to resolver/UI
         scope: params.scope,                     // Pass scope to resolver/UI
         protocolMatching: params.protocolMatching, // Pass protocol matching rule

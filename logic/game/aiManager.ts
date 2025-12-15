@@ -314,6 +314,42 @@ export const resolveRequiredOpponentAction = (
             return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, false);
         }
 
+        // --- Luck Protocol Handlers (during interrupts) ---
+        // State a number
+        if (aiDecision.type === 'stateNumber' && action.type === 'state_number') {
+            const newState = resolvers.resolveStateNumberAction(state, aiDecision.number);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        // State a protocol
+        if (aiDecision.type === 'stateProtocol' && action.type === 'state_protocol') {
+            const newState = resolvers.resolveStateProtocolAction(state, aiDecision.protocol);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        // Select from drawn cards to reveal
+        if (aiDecision.type === 'selectFromDrawnToReveal' && action.type === 'select_from_drawn_to_reveal') {
+            const newState = resolvers.resolveSelectFromDrawnToReveal(state, aiDecision.cardId);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        // Confirm deck discard (informational modal)
+        if (aiDecision.type === 'confirmDeckDiscard' && action.type === 'confirm_deck_discard') {
+            const newState = resolvers.resolveConfirmDeckDiscard(state);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        // Confirm deck play preview (transitions to lane selection)
+        if (aiDecision.type === 'confirmDeckPlayPreview' && action.type === 'confirm_deck_play_preview') {
+            const newState = resolvers.resolveConfirmDeckPlayPreview(state);
+            if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
         console.warn(`AI has no logic for mandatory action during player turn, clearing it: ${action.type}, aiDecision: ${JSON.stringify(aiDecision)}`);
         const stateWithClearedAction = { ...state, actionRequired: null };
         return endActionForPhase(stateWithClearedAction, phaseManager);
@@ -634,6 +670,41 @@ const handleRequiredAction = (
     // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
     if (aiDecision.type === 'selectRevealedDeckCard' && action.type === 'select_card_from_revealed_deck') {
         const newState = resolvers.resolveSelectRevealedDeckCard(state, aiDecision.cardId);
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Luck-0: "State a number"
+    if (aiDecision.type === 'stateNumber' && action.type === 'state_number') {
+        const newState = resolvers.resolveStateNumberAction(state, aiDecision.number);
+        if (newState.actionRequired) return newState; // Follow-up action (draw with reveal)
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Luck-3: "State a protocol"
+    if (aiDecision.type === 'stateProtocol' && action.type === 'state_protocol') {
+        const newState = resolvers.resolveStateProtocolAction(state, aiDecision.protocol);
+        if (newState.actionRequired) return newState; // Follow-up action (discard from deck)
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Luck-0: "Reveal 1 card drawn with the stated number"
+    if (aiDecision.type === 'selectFromDrawnToReveal' && action.type === 'select_from_drawn_to_reveal') {
+        const newState = resolvers.resolveSelectFromDrawnToReveal(state, aiDecision.cardId);
+        if (newState.actionRequired) return newState; // Follow-up action (may play it)
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Luck-2/3/4: Confirm deck discard (informational modal)
+    if (aiDecision.type === 'confirmDeckDiscard' && action.type === 'confirm_deck_discard') {
+        const newState = resolvers.resolveConfirmDeckDiscard(state);
+        if (newState.actionRequired) return newState; // Follow-up effects
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Luck-1: Confirm deck play preview (transitions to lane selection)
+    if (aiDecision.type === 'confirmDeckPlayPreview' && action.type === 'confirm_deck_play_preview') {
+        const newState = resolvers.resolveConfirmDeckPlayPreview(state);
+        if (newState.actionRequired) return newState; // Transitions to select_lane_for_play
         return endActionForPhase(newState, phaseManager);
     }
 

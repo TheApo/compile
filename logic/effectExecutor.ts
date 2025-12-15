@@ -49,6 +49,16 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         return { newState }; // Middle effects are ignored in this line
     }
 
+    // NEW: Check if this card's middle command should be skipped (Luck-1: "ignoring its middle commands")
+    if (state.skipNextMiddleCommand === card.id) {
+        const cardName = `${card.protocol}-${card.value}`;
+        let newState = { ...state };
+        // Clear the skip flag - it only applies to this specific flip
+        delete newState.skipNextMiddleCommand;
+        newState = log(newState, cardOwner, `${cardName}: Middle commands ignored.`);
+        return { newState };
+    }
+
     // Check if this is a custom protocol card with custom effects
     const customCard = card as any;
 

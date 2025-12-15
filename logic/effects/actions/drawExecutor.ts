@@ -187,22 +187,30 @@ export function executeDrawEffect(
     switch (countType) {
         case 'equal_to_card_value': {
             // Light-0: "Flip 1 card. Draw cards equal to that card's value"
-            // Use lastCustomEffectTargetCardId from state (set by previous effect)
+            // Luck-2: "Discard top of deck. Draw cards equal to that card's value"
+            // Use lastCustomEffectTargetCardId/Value from state (set by previous effect)
             const targetCardId = state.lastCustomEffectTargetCardId;
 
             if (targetCardId) {
                 const targetCardInfo = findCardOnBoard(state, targetCardId);
 
                 if (targetCardInfo) {
+                    // Card is on board - use its effective value
                     const targetOwner = targetCardInfo.owner;
                     const laneContext = state[targetOwner].lanes.find(l => l.some(c => c.id === targetCardId)) || [];
                     count = getEffectiveCardValue(targetCardInfo.card, laneContext);
+                } else if (state.lastCustomEffectTargetValue !== undefined) {
+                    // Card was discarded/removed but value was stored (e.g., Luck-2 deck discard)
+                    count = state.lastCustomEffectTargetValue;
                 } else {
-                    // Card was removed from board (e.g., Water-4 returned to hand after flip)
+                    // Card was removed and no value stored
                     count = 0;
-                    let newState = log(state, cardOwner, `Cannot draw cards - referenced card is no longer on board (was returned/deleted).`);
+                    let newState = log(state, cardOwner, `Cannot draw cards - referenced card is no longer available.`);
                     return { newState };
                 }
+            } else if (state.lastCustomEffectTargetValue !== undefined) {
+                // No card ID but value was stored directly
+                count = state.lastCustomEffectTargetValue;
             } else {
                 count = context.referencedCardValue || 0;
             }
@@ -463,6 +471,46 @@ export function executeDrawEffect(
     if (drawnCards.length > 0) {
         const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: drawnCards.length });
         newState = reactiveResult.newState;
+    }
+
+    // Reveal from drawn cards - flexible based on parameters
+    if (params.revealFromDrawn && newCards.length > 0) {
+        const valueSource = params.revealFromDrawn.valueSource || 'stated_number';
+        const revealCount = params.revealFromDrawn.count || 1;
+
+        // Determine which cards can be revealed based on valueSource
+        let eligibleCards = newCards;
+        let filterDescription = '';
+
+        if (valueSource === 'stated_number') {
+            const statedNumber = newState.lastStatedNumber;
+            if (statedNumber === undefined) {
+                newState = log(newState, drawingPlayer, `No number was stated. Cannot filter drawn cards.`);
+            } else {
+                eligibleCards = newCards.filter(c => c.value === statedNumber);
+                filterDescription = ` (stated value: ${statedNumber})`;
+            }
+        }
+        // valueSource === 'any' means no filter, use all drawn cards
+
+        // ALWAYS show the modal so player can see all drawn cards
+        // Even if no cards match or only 1 matches, the player wants to see what was drawn
+        const actualRevealCount = revealCount === 'all'
+            ? eligibleCards.length
+            : Math.min(revealCount, eligibleCards.length);
+
+        newState.actionRequired = {
+            type: 'select_from_drawn_to_reveal',
+            actor: drawingPlayer,
+            sourceCardId: card.id,
+            allDrawnCardIds: newCards.map(c => c.id),  // All drawn cards for display
+            eligibleCardIds: eligibleCards.map(c => c.id),  // Only these can be selected (may be empty)
+            revealCount: actualRevealCount,
+            statedNumber: valueSource === 'stated_number' ? newState.lastStatedNumber : undefined,
+            thenAction: params.revealFromDrawn.thenAction,
+        } as any;
+
+        return { newState };
     }
 
     // TEMPORARY FIX: Don't return animation for custom protocol draws to avoid blocking hand interactions

@@ -670,6 +670,71 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
+    // Luck-0: "State a number"
+    const resolveStateNumber = useCallback((number: number) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveStateNumberAction(prev, number);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
+    // Luck-3: "State a protocol"
+    const resolveStateProtocol = useCallback((protocol: string) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveStateProtocolAction(prev, protocol);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
+    // Luck-0: "Select from drawn cards to reveal"
+    const resolveSelectFromDrawnToReveal = useCallback((cardId: string) => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveSelectFromDrawnToReveal(prev, cardId);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
+    // Confirm deck discard modal
+    const resolveConfirmDeckDiscard = useCallback(() => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveConfirmDeckDiscard(prev);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
+    // Confirm deck play preview modal (Luck-1: show card before lane selection)
+    const resolveConfirmDeckPlayPreview = useCallback(() => {
+        setGameState(prev => {
+            // Don't use turnProgressionCb - this transitions to another action (lane selection)
+            const nextState = resolvers.resolveConfirmDeckPlayPreview(prev);
+            return nextState;
+        });
+    }, []);
+
     const setupTestScenario = useCallback((scenarioOrFunction: string | ((state: GameState) => GameState)) => {
         // CRITICAL: Clear the processing lock when switching scenarios
         // This prevents old setTimeout callbacks from interfering with the new scenario
@@ -1091,6 +1156,8 @@ export const useGameState = (
         resolvePlague4Flip, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveRevealBoardCardPrompt,
         resolveRearrangeProtocols, resolveOptionalDrawPrompt, resolveSwapProtocols,
         resolveControlMechanicPrompt, resolveCustomChoice, resolveSelectRevealedDeckCard,
+        resolveStateNumber, resolveStateProtocol, resolveSelectFromDrawnToReveal,
+        resolveConfirmDeckDiscard, resolveConfirmDeckPlayPreview,
         setupTestScenario,
         // REMOVED: resolveFire3Prompt, resolveDeath1Prompt, resolveLove1Prompt, resolvePsychic4Prompt, resolveSpirit1Prompt
     };

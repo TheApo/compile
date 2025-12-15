@@ -538,6 +538,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfo = findCardOnBoard(prev, targetCardId);
             if (!cardInfo) return { nextState: prev };
 
+            // CRITICAL: Validate that card is in allowedIds if provided (Luck-4: same value filter)
+            const allowedIds = (prev.actionRequired as any).allowedIds;
+            if (allowedIds && !allowedIds.includes(targetCardId)) {
+                console.error(`Illegal delete: Card ${targetCardId} is not in allowedIds - value filter not met`);
+                return { nextState: prev }; // Block the illegal delete
+            }
+
             // GENERIC VALIDATION for protocolMatching (custom protocols)
             if ((prev.actionRequired as any).protocolMatching) {
                 const protocolMatching = (prev.actionRequired as any).protocolMatching;

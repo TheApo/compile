@@ -734,22 +734,40 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 return { nextState: prev, requiresTurnEnd: false }; // Silently reject
             }
 
-            // NEW: Life-3 - play from deck to selected lane
+            // Play from deck to selected lane (Life-3, Luck-1, etc.)
             if (source === 'deck') {
+                // Extract followUpEffect for conditional effects (e.g., Luck-1: "then flip that card")
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
+                const preDrawnCard = (prev.actionRequired as any)?.preDrawnCard;
+
                 const stateBeforePlay = { ...prev, actionRequired: null };
                 const playerState = stateBeforePlay[actor];
 
-                // Draw ONE card from deck
-                const { drawnCards, remainingDeck, newDiscard } = drawCardsUtil(playerState.deck, playerState.discard, 1);
+                let newCardToPlay: PlayedCard;
+                let remainingDeck = playerState.deck;
+                let newDiscard = playerState.discard;
 
-                if (drawnCards.length === 0) {
-                    console.error("No cards in deck/discard to play");
-                    newState = stateBeforePlay;
-                    break;
+                // CRITICAL: Use pre-drawn card if available (from preview modal)
+                if (preDrawnCard) {
+                    // Card was already drawn in playExecutor and shown in preview
+                    newCardToPlay = { ...preDrawnCard, isFaceUp: !isFaceDown };
+                } else {
+                    // Fallback: Draw ONE card from deck (for Life-3 without preview)
+                    const drawResult = drawCardsUtil(playerState.deck, playerState.discard, 1);
+                    remainingDeck = drawResult.remainingDeck;
+                    newDiscard = drawResult.newDiscard;
+
+                    if (drawResult.drawnCards.length === 0) {
+                        console.error("No cards in deck/discard to play");
+                        newState = stateBeforePlay;
+                        break;
+                    }
+
+                    // Create new card to play
+                    newCardToPlay = { ...drawResult.drawnCards[0], id: uuidv4(), isFaceUp: !isFaceDown };
                 }
-
-                // Create new card to play
-                const newCardToPlay = { ...drawnCards[0], id: uuidv4(), isFaceUp: !isFaceDown };
 
                 // Add card to the chosen lane
                 const newPlayerLanes = [...playerState.lanes];
@@ -764,10 +782,17 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
                 newState = {
                     ...stateBeforePlay,
-                    [actor]: updatedPlayerState
+                    [actor]: updatedPlayerState,
+                    // Store the played card ID for useCardFromPreviousEffect (e.g., Luck-1 flip)
+                    lastCustomEffectTargetCardId: newCardToPlay.id
                 };
 
-                // Add play animation
+                // Log the play
+                const actorName = actor === 'player' ? 'Player' : 'Opponent';
+                const faceText = isFaceDown ? 'face-down' : 'face-up';
+                newState = log(newState, actor, `${actorName} plays ${newCardToPlay.protocol}-${newCardToPlay.value} ${faceText} from deck.`);
+
+                // Add play animation with followUpEffect handling
                 requiresAnimation = {
                     animationRequests: [{
                         type: 'play',
@@ -776,7 +801,34 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         laneIndex: effectiveLaneIndex,
                         isFaceUp: newCardToPlay.isFaceUp
                     }],
-                    onCompleteCallback: (s, endTurnCb) => endTurnCb(s)
+                    onCompleteCallback: (s, endTurnCb) => {
+                        let finalState = s;
+
+                        // Handle followUpEffect (e.g., Luck-1: "then flip that card, ignoring its middle commands")
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || true; // Play succeeded
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                    if (finalState.actionRequired) {
+                                        return finalState;
+                                    }
+                                }
+                            }
+                        }
+
+                        return endTurnCb(finalState);
+                    }
                 };
 
                 break;

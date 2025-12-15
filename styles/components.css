@@ -1516,3 +1516,235 @@
   text-align: center;
   font-size: 0.95rem;
 }
+
+/* State Number Modal (Luck-0) */
+.state-number-modal .number-selection {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.state-number-modal .number-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--surface-color);
+  border: 2px solid var(--border-color);
+  color: var(--text-color);
+}
+
+.state-number-modal .number-button:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 10px var(--primary-color);
+}
+
+.state-number-modal .number-button.selected {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--background-color);
+  box-shadow: 0 0 15px var(--primary-color);
+}
+
+/* State Protocol Modal (Luck-3) */
+.state-protocol-modal .protocol-selection {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.state-protocol-modal .protocol-button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--surface-color);
+  border: 2px solid var(--border-color);
+  color: var(--text-color);
+}
+
+.state-protocol-modal .protocol-button:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px var(--primary-color);
+}
+
+.state-protocol-modal .protocol-button.selected {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--background-color);
+  box-shadow: 0 0 12px var(--primary-color);
+}
+
+/* Select From Drawn Modal */
+.select-from-drawn-modal .stated-info {
+  text-align: center;
+  color: var(--secondary-color);
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.select-from-drawn-modal .stated-info strong {
+  color: var(--primary-color);
+  font-size: 1.2rem;
+}
+
+.select-from-drawn-modal .drawn-cards-display {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.select-from-drawn-modal .drawn-card-display {
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background-color: var(--surface-color);
+  border: 2px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  min-width: 100px;
+}
+
+/* Eligible cards - can be clicked */
+.select-from-drawn-modal .drawn-card-display.eligible {
+  cursor: pointer;
+  border-color: #4CAF50;
+}
+
+.select-from-drawn-modal .drawn-card-display.eligible:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px var(--primary-color);
+}
+
+/* Not eligible cards - greyed out */
+.select-from-drawn-modal .drawn-card-display.not-eligible {
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: #555;
+}
+
+.select-from-drawn-modal .drawn-card-display.not-eligible .card-protocol,
+.select-from-drawn-modal .drawn-card-display.not-eligible .card-value {
+  color: #888;
+}
+
+/* Selected card */
+.select-from-drawn-modal .drawn-card-display.selected {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 12px var(--primary-color);
+}
+
+.select-from-drawn-modal .drawn-card-display.selected .card-info {
+  color: var(--background-color);
+}
+
+.select-from-drawn-modal .drawn-card-display.selected .card-value {
+  color: var(--background-color);
+}
+
+/* Match indicator */
+.select-from-drawn-modal .match-indicator {
+  font-size: 0.75rem;
+  color: #4CAF50;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.select-from-drawn-modal .drawn-card-display.selected .match-indicator {
+  color: var(--background-color);
+}
+
+.select-from-drawn-modal .card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.select-from-drawn-modal .card-protocol {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.select-from-drawn-modal .card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+/* Status messages */
+.select-from-drawn-modal .selection-info {
+  text-align: center;
+  color: var(--text-color);
+  margin-bottom: 1rem;
+}
+
+.select-from-drawn-modal .no-match-info {
+  text-align: center;
+  color: #f44336;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+/* Deck Discard Modal */
+.deck-discard-modal {
+  min-width: 300px;
+  text-align: center;
+}
+
+.deck-discard-modal h2 {
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+}
+
+.deck-discard-modal p {
+  margin-bottom: 1rem;
+}
+
+.deck-discard-preview-content {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+.deck-discard-preview-card {
+  transform: scale(0.85);
+}
+
+/* Deck Play Preview Modal */
+.deck-play-preview-modal {
+  min-width: 300px;
+  text-align: center;
+}
+
+.deck-play-preview-modal h2 {
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+}
+
+.deck-play-preview-modal p {
+  margin-bottom: 1rem;
+}
+
+.deck-play-preview-content {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+.deck-play-preview-card {
+  transform: scale(0.85);
+}

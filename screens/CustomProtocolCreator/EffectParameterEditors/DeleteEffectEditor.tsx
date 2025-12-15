@@ -149,6 +149,31 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                 </select>
             </label>
 
+            <label>
+                Value Source (dynamic value from previous effect)
+                <select
+                    value={targetFilter.valueSource || 'none'}
+                    onChange={e => {
+                        const val = e.target.value;
+                        const newFilter = { ...targetFilter };
+                        if (val === 'none') {
+                            delete newFilter.valueSource;
+                        } else {
+                            newFilter.valueSource = val as any;
+                        }
+                        onChange({ ...params, targetFilter: newFilter });
+                    }}
+                >
+                    <option value="none">None (use value range above)</option>
+                    <option value="previous_effect_card">Previous Effect Card Value</option>
+                </select>
+                {targetFilter.valueSource === 'previous_effect_card' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Delete cards that share the value with the card from the previous effect.
+                    </small>
+                )}
+            </label>
+
             <h5>Scope</h5>
 
             <label>

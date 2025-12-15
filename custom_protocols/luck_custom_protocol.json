@@ -1,0 +1,189 @@
+{
+  "id": "luck-custom-001",
+  "name": "Luck",
+  "description": "Gamble with fate. State numbers and protocols to manipulate the top of decks.",
+  "author": "System",
+  "createdAt": "2025-01-15T00:00:00.000Z",
+  "color": "#FFD700",
+  "pattern": "chaos",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-0-state-number",
+          "params": {
+            "action": "state_number",
+            "numberSource": "own_protocol_values"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "luck-0-draw-and-reveal",
+          "params": {
+            "action": "draw",
+            "count": 3,
+            "target": "self",
+            "source": "own_deck",
+            "revealFromDrawn": {
+              "valueSource": "stated_number",
+              "thenAction": "may_play"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-1-play-deck-top",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "another_line"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "luck-1-flip-skip-middle",
+              "params": {
+                "action": "flip",
+                "skipMiddleCommand": true
+              },
+              "useCardFromPreviousEffect": true
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-2-discard-deck-top",
+          "params": {
+            "action": "discard",
+            "source": "top_deck_own",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "luck-2-draw-equal-value",
+              "params": {
+                "action": "draw",
+                "countType": "equal_to_card_value",
+                "target": "self",
+                "source": "own_deck"
+              },
+              "useCardFromPreviousEffect": true
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-3-state-protocol",
+          "params": {
+            "action": "state_protocol",
+            "protocolSource": "opponent_cards"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "luck-3-discard-opponent-deck",
+          "params": {
+            "action": "discard",
+            "source": "top_deck_opponent",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "if_protocol_matches_stated",
+            "thenEffect": {
+              "id": "luck-3-delete",
+              "params": {
+                "action": "delete",
+                "count": 1
+              }
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-4-discard-deck-top",
+          "params": {
+            "action": "discard",
+            "source": "top_deck_own",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "luck-4-delete-same-value",
+              "params": {
+                "action": "delete",
+                "count": 1,
+                "targetFilter": {
+                  "position": "any",
+                  "valueSource": "previous_effect_card"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "luck-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

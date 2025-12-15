@@ -51,9 +51,16 @@ export function executeFlipEffect(
             const cardToFlip = lane.find(c => c.id === targetCardId);
 
             if (cardToFlip) {
+                // NEW: Luck-1 - If skipMiddleCommand is true, set the flag to skip middle command
+                if (params.skipMiddleCommand && !cardToFlip.isFaceUp) {
+                    // Card is face-down and will be flipped face-up - skip its middle command
+                    newState.skipNextMiddleCommand = targetCardId;
+                }
+
                 cardToFlip.isFaceUp = !cardToFlip.isFaceUp;
                 const direction = cardToFlip.isFaceUp ? 'face-up' : 'face-down';
-                newState = log(newState, cardOwner, `Flips that card ${direction}.`);
+                const skipText = params.skipMiddleCommand && cardToFlip.isFaceUp ? ', ignoring its middle commands' : '';
+                newState = log(newState, cardOwner, `Flips that card ${direction}${skipText}.`);
             }
         }
 

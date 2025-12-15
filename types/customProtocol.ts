@@ -31,7 +31,9 @@ export type EffectActionType =
     | 'block_compile'
     | 'delete_all_in_lane'
     | 'shuffle_trash'  // Clarity-4: Shuffle trash into deck
-    | 'shuffle_deck';  // Clarity-2/3: Shuffle deck after reveal
+    | 'shuffle_deck'   // Clarity-2/3: Shuffle deck after reveal
+    | 'state_number'   // Luck-0: Player states a number (0-5)
+    | 'state_protocol';  // Luck-3: Player states a protocol
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 
@@ -91,6 +93,12 @@ export interface DrawEffectParams {
     // NEW: If true, player must SELECT from revealed deck (Clarity-2/3: "revealed this way")
     fromRevealed?: boolean;
     optional?: boolean;  // "You may draw..."
+    // Reveal from drawn cards with optional value filter and follow-up action
+    revealFromDrawn?: {
+        count?: number | 'all';  // How many cards to reveal (default: 1, 'all' = all matching)
+        valueSource?: 'stated_number' | 'any';  // Filter: 'stated_number' = only matching, 'any' = no filter
+        thenAction?: 'may_play';  // After reveal: optionally play the card
+    };
 }
 
 /**
@@ -114,6 +122,8 @@ export interface FlipEffectParams {
         type: 'protocol_match' | 'opponent_higher_value_in_lane';  // Anarchy-6, Courage-6
         protocol?: string;  // For 'protocol_match'
     };
+    // NEW: Luck-1 - Flip the card but ignore its middle command (one-time skip, not passive rule)
+    skipMiddleCommand?: boolean;
 }
 
 /**
@@ -154,6 +164,8 @@ export interface DeleteEffectParams {
         valueRange?: { min: number; max: number };  // e.g., values 0-1
         calculation?: 'highest_value' | 'lowest_value';
         owner?: 'own' | 'opponent';  // which player's cards
+        // NEW: Luck-4 - Dynamic value filter based on previous effect's card value
+        valueSource?: 'previous_effect_card';  // Delete cards with same value as discarded card
     };
     scope?: {
         type: 'anywhere' | 'other_lanes' | 'specific_lane' | 'this_line' | 'each_lane';
@@ -195,6 +207,8 @@ export interface DiscardEffectParams {
     countOffset?: number;  // For Plague-2: "discard count + 1" → offset = 1
     // NEW: Random selection - opponent can't choose which card to discard (Fear-4)
     random?: boolean;
+    // NEW: Luck - Source of the card to discard (default: 'hand')
+    source?: 'hand' | 'top_deck_own' | 'top_deck_opponent';
 }
 
 /**
@@ -386,6 +400,24 @@ export interface ShuffleDeckEffectParams {
 }
 
 /**
+ * State a Number Effect Parameters (Luck-0)
+ * Player states a number (0-5) which can be used by subsequent effects
+ */
+export interface StateNumberEffectParams {
+    action: 'state_number';
+    numberSource: 'own_protocol_values';  // Flexibel: Zahlen aus eigenen Protokoll-Karten (0-5)
+}
+
+/**
+ * State a Protocol Effect Parameters (Luck-3)
+ * Player states a protocol which can be used by subsequent effects
+ */
+export interface StateProtocolEffectParams {
+    action: 'state_protocol';
+    protocolSource: 'opponent_cards';  // Flexibel: unique Protokolle aus Gegner-Karten
+}
+
+/**
  * Union of all effect parameter types
  */
 export type EffectParams =
@@ -403,7 +435,9 @@ export type EffectParams =
     | PassiveRuleParams
     | ValueModifierParams
     | ShuffleTrashEffectParams
-    | ShuffleDeckEffectParams;
+    | ShuffleDeckEffectParams
+    | StateNumberEffectParams
+    | StateProtocolEffectParams;
 
 /**
  * Effect Definition - Single effect with parameters
@@ -414,7 +448,7 @@ export interface EffectDefinition {
     position: EffectPosition;
     trigger: EffectTrigger;
     conditional?: {
-        type: 'if_you_do' | 'if_executed' | 'then';
+        type: 'if_you_do' | 'if_executed' | 'then' | 'if_protocol_matches_stated';  // Luck-3: conditional on protocol match
         thenEffect: EffectDefinition;  // Chained effect
     };
     // NEW: Reference card from previous effect in chain

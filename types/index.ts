@@ -310,6 +310,31 @@ export type ActionRequired =
 }
 
 // -----------------------------------------------------------------------------
+// STATE NUMBER/PROTOCOL (Luck Protocol)
+// -----------------------------------------------------------------------------
+| {
+    type: 'state_number';
+    actor: Player;
+    sourceCardId: string;
+    numberSource: 'own_protocol_values';  // Flexibel: Zahlen 0-5
+}
+| {
+    type: 'state_protocol';
+    actor: Player;
+    sourceCardId: string;
+    protocolSource: 'opponent_cards';  // Flexibel: Protokolle aus Gegner-Karten
+    availableProtocols: string[];      // Vorberechnete Liste der wählbaren Protokolle
+}
+| {
+    type: 'select_from_drawn_to_reveal';
+    actor: Player;
+    sourceCardId: string;
+    drawnCardIds: string[];            // IDs der gezogenen Karten die den stated number Wert haben
+    statedNumber: number;              // Der angesagte Wert
+    thenAction?: 'may_play';           // Nach Reveal: optional spielen
+}
+
+// -----------------------------------------------------------------------------
 // FLIP SELF (generic - no card-specific naming)
 // -----------------------------------------------------------------------------
 | {
@@ -526,6 +551,14 @@ export interface GameState {
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
     lastCustomEffectTargetCardId?: string | null;
+    /** Luck Protocol: Value of the last effect's target card (for dynamic value filters) */
+    lastCustomEffectTargetValue?: number;
+    /** Luck Protocol: The number stated by the player (0-5) */
+    lastStatedNumber?: number;
+    /** Luck Protocol: The protocol stated by the player */
+    lastStatedProtocol?: string;
+    /** Luck Protocol: Skip middle command for the next flip of this card ID */
+    skipNextMiddleCommand?: string;
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
     _logIndentLevel?: number;
@@ -572,7 +605,13 @@ export type AIAction =
     | { type: 'resolveOptionalDiscardCustomPrompt', accept: boolean }
     | { type: 'resolveCustomChoice', optionIndex: number }
     | { type: 'resolveRevealBoardCardPrompt', choice: 'shift' | 'flip' | 'skip' }
-    | { type: 'resolvePrompt', accept: boolean };  // Generic prompt resolution
+    | { type: 'resolvePrompt', accept: boolean }  // Generic prompt resolution
+    // Luck Protocol actions
+    | { type: 'stateNumber', number: number }
+    | { type: 'stateProtocol', protocol: string }
+    | { type: 'selectFromDrawnToReveal', cardId: string }
+    | { type: 'confirmDeckDiscard' }
+    | { type: 'confirmDeckPlayPreview' };
 
 // =============================================================================
 // ANIMATION REQUEST TYPES

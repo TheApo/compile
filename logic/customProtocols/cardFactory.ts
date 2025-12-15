@@ -44,6 +44,34 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // Handle revealFromDrawn - generic text generation based on parameters
+            if (params.revealFromDrawn) {
+                const drawCount = params.count || 3;
+                const drawCardWord = drawCount === 1 ? 'card' : 'cards';
+                let text = `Draw ${drawCount} ${drawCardWord}.`;
+
+                // Reveal count
+                const revealCount = params.revealFromDrawn.count || 1;
+                const revealCountText = revealCount === 'all' ? 'all cards' :
+                    (revealCount === 1 ? '1 card' : `${revealCount} cards`);
+
+                // Value filter
+                const valueSource = params.revealFromDrawn.valueSource || 'stated_number';
+                if (valueSource === 'stated_number') {
+                    text += ` Reveal ${revealCountText} drawn with the face-up value of your stated number.`;
+                } else {
+                    // 'any' - no filter, just reveal from drawn
+                    text += ` Reveal ${revealCountText} drawn.`;
+                }
+
+                if (params.revealFromDrawn.thenAction === 'may_play') {
+                    text += ' You may play it.';
+                }
+
+                mainText = text;
+                break;
+            }
+
             // NEW: Handle countType (Frost-0: count_face_down)
             if (params.countType === 'count_face_down') {
                 mainText = 'Draw 1 card for each face-down card.';
@@ -140,7 +168,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 const mayFlip = params.optional ? 'May flip' : 'Flip';
-                mainText = `${mayFlip} that card.`;
+                const skipMiddle = params.skipMiddleCommand ? ', ignoring its middle commands' : '';
+                mainText = `${mayFlip} that card${skipMiddle}.`;
                 break;
             }
 
@@ -518,11 +547,26 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += ' from each other line';
             }
 
+            // NEW: Handle valueSource (Luck-4: "that shares a value with the discarded card")
+            if (params.targetFilter?.valueSource === 'previous_effect_card') {
+                text += ' that shares a value with the discarded card';
+            }
+
             mainText = text + '.';
             break;
         }
 
         case 'discard': {
+            // NEW: Handle discard from top of deck (Luck-2, Luck-3, Luck-4)
+            if (params.source === 'top_deck_own') {
+                mainText = 'Discard the top card of your deck.';
+                break;
+            }
+            if (params.source === 'top_deck_opponent') {
+                mainText = "Discard the top card of your opponent's deck.";
+                break;
+            }
+
             // If referencing card from previous effect, use "that card"
             if (params.useCardFromPreviousEffect) {
                 if (params.actor === 'opponent') {
@@ -1115,6 +1159,18 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'state_number': {
+            // Luck-0: "State a number"
+            mainText = 'State a number.';
+            break;
+        }
+
+        case 'state_protocol': {
+            // Luck-3: "State a protocol"
+            mainText = 'State a protocol.';
+            break;
+        }
+
         default:
             mainText = 'Effect';
             break;
@@ -1139,6 +1195,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // Clarity-1: "Reveal the top card of your deck. You may discard that card."
             const firstPart = mainText.endsWith('.') ? mainText.slice(0, -1) : mainText;
             mainText = `${firstPart}. You may ${followUpText.toLowerCase()}`;
+        } else if (effect.conditional.type === 'if_protocol_matches_stated') {
+            // Luck-3: "If the discarded card matches the stated protocol, delete 1 card."
+            mainText = `${mainText} If the discarded card matches the stated protocol, ${followUpText.toLowerCase()}`;
         } else {
             // "If you do" format (if_executed)
             mainText = `${mainText} If you do, ${followUpText.toLowerCase()}`;

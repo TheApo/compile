@@ -2732,6 +2732,130 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: selectedEffect.cardId };
         }
 
+        // =========================================================================
+        // STATE NUMBER - Choose a number (0-5) for Luck-0 effect
+        // =========================================================================
+        case 'state_number': {
+            // Normal AI: Pick a number based on likelihood of matching drawn cards
+            // Look at the values of cards in our hand and deck to pick most common value
+            const valueCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+            // Count values in hand
+            state.opponent.hand.forEach(card => {
+                if (card.value >= 0 && card.value <= 5) {
+                    valueCounts[card.value]++;
+                }
+            });
+
+            // Count values in deck (approximation - deck cards are unknown but AI knows its own protocols)
+            // Weight towards middle values (2, 3) since they're most common statistically
+            valueCounts[2] += 2;
+            valueCounts[3] += 2;
+
+            // Find the value with highest count
+            let bestValue = 0;
+            let bestCount = valueCounts[0];
+            for (let i = 1; i <= 5; i++) {
+                if (valueCounts[i] > bestCount) {
+                    bestCount = valueCounts[i];
+                    bestValue = i;
+                }
+            }
+
+            // 20% chance to pick randomly for unpredictability
+            if (Math.random() < 0.2) {
+                bestValue = Math.floor(Math.random() * 6);
+            }
+
+            return { type: 'stateNumber', number: bestValue };
+        }
+
+        // =========================================================================
+        // STATE PROTOCOL - Choose a protocol from opponent's cards (Luck-3)
+        // =========================================================================
+        case 'state_protocol': {
+            const protocolAction = action as any;
+            const availableProtocols = protocolAction.availableProtocols || [];
+
+            if (availableProtocols.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Normal AI: Pick the protocol most likely to be in opponent's deck
+            // Prioritize opponent's assigned protocols
+            const opponentProtocols = state.player.protocols; // Player is the opponent from AI's perspective
+
+            // Score each protocol - higher score for opponent's assigned protocols
+            const scoredProtocols = availableProtocols.map((protocol: string) => {
+                let score = 0;
+
+                // Major bonus if it's one of opponent's assigned protocols
+                if (opponentProtocols.includes(protocol)) {
+                    score += 50;
+                }
+
+                // Add some randomness
+                score += Math.random() * 20;
+
+                return { protocol, score };
+            });
+
+            // Sort by score descending
+            scoredProtocols.sort((a: any, b: any) => b.score - a.score);
+
+            return { type: 'stateProtocol', protocol: scoredProtocols[0].protocol };
+        }
+
+        // =========================================================================
+        // SELECT FROM DRAWN TO REVEAL - Choose which drawn card to reveal
+        // =========================================================================
+        case 'select_from_drawn_to_reveal': {
+            const revealAction = action as any;
+            const eligibleCardIds = revealAction.eligibleCardIds || [];
+
+            if (eligibleCardIds.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Normal AI: Pick the card that would be most valuable to play
+            // Find the cards in hand and score them
+            const hand = state.opponent.hand;
+            const scoredCards = eligibleCardIds.map((cardId: string) => {
+                const card = hand.find((c: any) => c.id === cardId);
+                if (!card) return { cardId, score: 0 };
+
+                let score = card.value; // Base score is the card value
+
+                // Bonus for cards matching AI's protocols (easier to play)
+                if (state.opponent.protocols.includes(card.protocol)) {
+                    score += 10;
+                }
+
+                return { cardId, score };
+            });
+
+            // Sort by score descending
+            scoredCards.sort((a: any, b: any) => b.score - a.score);
+
+            return { type: 'selectFromDrawnToReveal', cardId: scoredCards[0].cardId };
+        }
+
+        // =========================================================================
+        // CONFIRM DECK DISCARD - Acknowledge discarded card from top of deck
+        // =========================================================================
+        case 'confirm_deck_discard': {
+            // AI just confirms/acknowledges the discarded card info
+            return { type: 'confirmDeckDiscard' };
+        }
+
+        // =========================================================================
+        // CONFIRM DECK PLAY PREVIEW - Acknowledge card from deck before playing
+        // =========================================================================
+        case 'confirm_deck_play_preview': {
+            // AI just confirms and proceeds to lane selection
+            return { type: 'confirmDeckPlayPreview' };
+        }
+
         // Fallback for other actions - use simple random/first selection
         default: {
             // Generic handlers for unimplemented actions

@@ -25,6 +25,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'life_custom_1',
     'light_custom_1',
     'love_custom_v1',
+    'luck-custom-001',
     'metal_custom_1',
     'plague-custom-001',
     'psychic_custom_v1',

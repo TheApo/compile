@@ -17,8 +17,13 @@ import { isCardTargetable } from '../utils/targeting';
 import { Toaster } from '../components/Toaster';
 import { RearrangeProtocolsModal } from '../components/RearrangeProtocolsModal';
 import { SwapProtocolsModal } from '../components/SwapProtocolsModal';
+import { StateNumberModal } from '../components/StateNumberModal';
+import { StateProtocolModal } from '../components/StateProtocolModal';
+import { SelectFromDrawnModal } from '../components/SelectFromDrawnModal';
 import { RevealedDeckModal } from '../components/RevealedDeckModal';
 import { RevealedDeckTopModal } from '../components/RevealedDeckTopModal';
+import { DeckDiscardModal } from '../components/DeckDiscardModal';
+import { DeckPlayPreviewModal } from '../components/DeckPlayPreviewModal';
 import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
@@ -150,6 +155,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveControlMechanicPrompt,
     resolveCustomChoice,
     resolveSelectRevealedDeckCard,
+    resolveStateNumber,
+    resolveStateProtocol,
+    resolveSelectFromDrawnToReveal,
+    resolveConfirmDeckDiscard,
+    resolveConfirmDeckPlayPreview,
     setupTestScenario,
   } = useGameState(
     playerProtocols,
@@ -667,6 +677,47 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 gameState={gameState}
                 onAccept={() => resolveOptionalEffectPrompt(true)}
                 onDecline={() => resolveOptionalEffectPrompt(false)}
+            />
+        )}
+        {gameState.actionRequired?.type === 'state_number' && gameState.actionRequired.actor === 'player' && (
+            <StateNumberModal
+                gameState={gameState}
+                onConfirm={(number) => resolveStateNumber(number)}
+            />
+        )}
+        {gameState.actionRequired?.type === 'state_protocol' && gameState.actionRequired.actor === 'player' && (
+            <StateProtocolModal
+                gameState={gameState}
+                availableProtocols={(gameState.actionRequired as any).availableProtocols || []}
+                onConfirm={(protocol) => resolveStateProtocol(protocol)}
+            />
+        )}
+        {gameState.actionRequired?.type === 'select_from_drawn_to_reveal' && gameState.actionRequired.actor === 'player' && (
+            <SelectFromDrawnModal
+                gameState={gameState}
+                allDrawnCardIds={(gameState.actionRequired as any).allDrawnCardIds || []}
+                eligibleCardIds={(gameState.actionRequired as any).eligibleCardIds || []}
+                statedNumber={(gameState.actionRequired as any).statedNumber}
+                revealCount={(gameState.actionRequired as any).revealCount}
+                onConfirm={(cardId) => resolveSelectFromDrawnToReveal(cardId)}
+                onClose={() => {
+                    // No eligible cards - call resolver with empty string to clear action
+                    resolveSelectFromDrawnToReveal('');
+                }}
+            />
+        )}
+        {gameState.actionRequired?.type === 'confirm_deck_discard' && gameState.actionRequired.actor === 'player' && (
+            <DeckDiscardModal
+                discardedCard={(gameState.actionRequired as any).discardedCard}
+                deckOwner={(gameState.actionRequired as any).deckOwner}
+                onConfirm={() => resolveConfirmDeckDiscard()}
+            />
+        )}
+        {gameState.actionRequired?.type === 'confirm_deck_play_preview' && gameState.actionRequired.actor === 'player' && (
+            <DeckPlayPreviewModal
+                card={(gameState.actionRequired as any).drawnCard}
+                isFaceDown={(gameState.actionRequired as any).isFaceDown}
+                onConfirm={() => resolveConfirmDeckPlayPreview()}
             />
         )}
         <div className="toaster-container">

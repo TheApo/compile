@@ -15,24 +15,47 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
     const isVariable = (params as any).variableCount;
     const showOffset = countType === 'equal_to_discarded';
 
+    const source = params.source || 'hand';
+
     return (
         <div className="param-editor">
             <h4>Discard Effect</h4>
 
-            {/* Count Type */}
+            {/* Source */}
             <label>
-                Count Type
+                Source
                 <select
-                    value={countType}
-                    onChange={e => onChange({ ...params, countType: e.target.value as any })}
+                    value={source}
+                    onChange={e => onChange({ ...params, source: e.target.value as any })}
                 >
-                    <option value="fixed">Fixed Count</option>
-                    <option value="equal_to_discarded">Equal to Previously Discarded (Plague-2)</option>
+                    <option value="hand">From Hand</option>
+                    <option value="top_deck_own">Top of Own Deck (automatic)</option>
+                    <option value="top_deck_opponent">Top of Opponent's Deck (automatic)</option>
                 </select>
+                {(source === 'top_deck_own' || source === 'top_deck_opponent') && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Deck discard is automatic - no player choice needed.
+                        The discarded card's value is saved for follow-up effects.
+                    </small>
+                )}
             </label>
 
-            {/* Fixed Count Options */}
-            {countType === 'fixed' && (
+            {/* Count Type - only for hand discard */}
+            {source === 'hand' && (
+                <label>
+                    Count Type
+                    <select
+                        value={countType}
+                        onChange={e => onChange({ ...params, countType: e.target.value as any })}
+                    >
+                        <option value="fixed">Fixed Count</option>
+                        <option value="equal_to_discarded">Equal to Previously Discarded (Plague-2)</option>
+                    </select>
+                </label>
+            )}
+
+            {/* Fixed Count Options - only for hand discard */}
+            {source === 'hand' && countType === 'fixed' && (
                 <label>
                     Count
                     <select
@@ -59,8 +82,8 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                 </label>
             )}
 
-            {/* Offset for Dynamic Count */}
-            {showOffset && (
+            {/* Offset for Dynamic Count - only for hand discard */}
+            {source === 'hand' && showOffset && (
                 <label>
                     Offset (add to count)
                     <input
@@ -73,16 +96,19 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                 </label>
             )}
 
-            <label>
-                Actor
-                <select value={params.actor} onChange={e => onChange({ ...params, actor: e.target.value as any })}>
-                    <option value="self">Self</option>
-                    <option value="opponent">Opponent</option>
-                </select>
-            </label>
+            {/* Actor - only for hand discard */}
+            {source === 'hand' && (
+                <label>
+                    Actor
+                    <select value={params.actor} onChange={e => onChange({ ...params, actor: e.target.value as any })}>
+                        <option value="self">Self</option>
+                        <option value="opponent">Opponent</option>
+                    </select>
+                </label>
+            )}
 
-            {/* Random selection - only available when actor is opponent */}
-            {params.actor === 'opponent' && (
+            {/* Random selection - only available when actor is opponent and source is hand */}
+            {source === 'hand' && params.actor === 'opponent' && (
                 <label>
                     <input
                         type="checkbox"

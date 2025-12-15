@@ -280,24 +280,53 @@ export function executePlayEffect(
         };
     }
 
-    // NEW: Life-3 logic - Prompt user to select "another line" to play from deck
+    // NEW: Life-3/Luck-1 logic - Play from deck to "another line"
+    // Step 1: Draw the card and show preview modal
+    // Step 2: After confirmation, select lane
     if (source === 'deck' && params.destinationRule?.type === 'another_line') {
         const otherLaneIndices = [0, 1, 2].filter(i => i !== laneIndex);
         if (otherLaneIndices.length === 0) {
             return { newState: state };
         }
 
-        // CRITICAL: Prompt user to select a lane (not automatic!)
-        let newState = { ...state };
+        const playerState = state[actor];
+
+        // Check if deck has cards
+        if (playerState.deck.length === 0 && playerState.discard.length === 0) {
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            let newState = log(state, cardOwner, `${actorName} has no cards in deck/discard - effect skipped.`);
+            return { newState };
+        }
+
+        // Draw ONE card from deck (with auto-reshuffle if needed)
+        const { drawnCards, remainingDeck, newDiscard } = drawCards(playerState.deck, playerState.discard, 1);
+
+        if (drawnCards.length === 0) {
+            return { newState: state };
+        }
+
+        // Create the card that will be played
+        const drawnCard = { ...drawnCards[0], id: uuidv4(), isFaceUp: true };
+
+        // Update state with remaining deck
+        let newState = {
+            ...state,
+            [actor]: {
+                ...playerState,
+                deck: remainingDeck,
+                discard: newDiscard
+            }
+        };
+
+        // Show preview modal first (before lane selection)
         newState.actionRequired = {
-            type: 'select_lane_for_play',
+            type: 'confirm_deck_play_preview',
             sourceCardId: card.id,
             actor,
-            count: params.count || 1,
-            isFaceDown: params.faceDown,  // CRITICAL: Must be isFaceDown, not faceDown!
-            excludeCurrentLane: true,  // Life-3: Can't select the current lane
-            currentLaneIndex: laneIndex,  // Track which lane to exclude
-            source: params.source,  // 'deck'
+            drawnCard,  // The card that was drawn
+            isFaceDown: params.faceDown,
+            excludeCurrentLane: true,
+            currentLaneIndex: laneIndex,
             // CRITICAL: Pass conditional info for "If you do" effects
             followUpEffect: conditional?.thenEffect,
             conditionalType: conditional?.type,
@@ -566,6 +595,23 @@ export function executePlayEffect(
         disallowedLaneIndex = laneIndex;
     }
 
+    // CRITICAL: Handle useCardFromPreviousEffect for "may play" the revealed card
+    // This restricts the playable cards to ONLY the revealed/target card
+    let selectableCardIds: string[] | undefined = undefined;
+    if (params.useCardFromPreviousEffect && source === 'hand') {
+        const targetCardId = state.lastCustomEffectTargetCardId;
+        if (targetCardId) {
+            // Only allow playing the specific card that was revealed/targeted
+            selectableCardIds = [targetCardId];
+            // Verify the card is actually in the actor's hand
+            const cardInHand = state[actor].hand.find(c => c.id === targetCardId);
+            if (!cardInHand) {
+                // Card is not in hand (somehow) - skip the effect
+                return { newState: state };
+            }
+        }
+    }
+
     newState.actionRequired = {
         type: 'select_card_from_hand_to_play',
         count,
@@ -576,6 +622,7 @@ export function executePlayEffect(
         disallowedLaneIndex, // Converted from destinationRule
         destinationRule: params.destinationRule, // Keep original for future use
         condition: params.condition, // For conditional play (Gravity-0, Life-0)
+        selectableCardIds, // CRITICAL: Restrict to specific card(s) for "may play" effects
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,

@@ -3703,6 +3703,110 @@ export const scenario71_Light3ProblemPlayground: TestScenario = {
     }
 };
 
+/**
+ * Szenario 72: Luck Test Playground
+ *
+ * Test all Luck cards (values 0-5) - GAMBLE, DECK DISCARD
+ * - Luck-0: State a number. Draw 3 cards. Reveal 1 card drawn with the face-up value of your stated number. You may play it.
+ * - Luck-1: Play the top card of your deck face-down. Flip that card, ignoring its middle commands.
+ * - Luck-2: Discard the top card of your deck. Draw cards equal to the value of the discarded card.
+ * - Luck-3: State a protocol. Discard the top card of your opponent's deck. If the discarded card matches the stated protocol, delete 1 card.
+ * - Luck-4: Discard the top card of your deck. Delete 1 covered or uncovered card that shares a value with the discarded card.
+ * - Luck-5: You discard 1 card.
+ */
+export const scenario72_LuckCustomPlayground: TestScenario = {
+    name: "Luck Test Playground",
+    description: "🆕 All Luck cards on hand - gamble with fate!",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Luck', 'Fire', 'Water'],
+            ['Death', 'Life', 'Gravity'],
+            'player',
+            'action'
+        );
+
+        // Player: All Luck cards in hand (0-5)
+        newState.player.hand = [
+            createCard('Luck', 0, true),
+            createCard('Luck', 1, true),
+            createCard('Luck', 2, true),
+            createCard('Luck', 3, true),
+            createCard('Luck', 4, true),
+            createCard('Luck', 5, true),
+        ];
+
+        // Setup for Luck-3 testing (opponent needs cards with different protocols)
+        // Lane 0: Death cards for protocol matching
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, false));  // Covered face-down
+
+        // Lane 1: Life cards
+        newState = placeCard(newState, 'opponent', 1, createCard('Life', 2, true));
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 3, true));
+
+        // Lane 2: Mixed - for Luck-4 value matching delete tests
+        newState = placeCard(newState, 'opponent', 2, createCard('Gravity', 4, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 3, true));  // Value 3 for potential match
+
+        // Player needs some cards in deck for Luck-1 (play from deck) - handled by finalizeScenario
+        // Opponent needs cards in deck for Luck-3 (discard opponent's top deck) - handled by finalizeScenario
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 73: Luck AI Test
+ *
+ * Test AI playing Luck cards
+ * Setup: AI has all Luck cards in hand and Luck protocol
+ * - Opponent's Turn (AI plays)
+ */
+export const scenario73_LuckAITest: TestScenario = {
+    name: "Luck AI Test",
+    description: "🆕 AI spielt Luck Karten - test all Luck card effects with AI",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Luck', 'Death', 'Life'],
+            'opponent',  // AI's turn
+            'action'
+        );
+
+        // Opponent (AI): All Luck cards in hand (0-5)
+        newState.opponent.hand = [
+            createCard('Luck', 0, true),
+            createCard('Luck', 1, true),
+            createCard('Luck', 2, true),
+            createCard('Luck', 3, true),
+            createCard('Luck', 4, true),
+            createCard('Luck', 5, true),
+        ];
+
+        // Setup for AI Luck-3 testing (player needs cards with different protocols)
+        // Lane 0: Fire cards for AI to target protocols
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, true));
+
+        // Lane 1: Water cards
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, false));  // Covered face-down
+
+        // Lane 2: Spirit cards for value matching tests
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 3, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Life', 4, true));
+
+        // AI needs cards in deck for Luck-1 (play from deck) - handled by finalizeScenario
+        // Player needs cards in deck for AI Luck-3 (discard opponent's top deck) - handled by finalizeScenario
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3775,4 +3879,6 @@ export const allScenarios: TestScenario[] = [
 	scenario69_fear0shiftCardPlayground,
 	scenario70_multiChainCardPlayground,
 	scenario71_Light3ProblemPlayground,
+    scenario72_LuckCustomPlayground,
+    scenario73_LuckAITest,
 ];

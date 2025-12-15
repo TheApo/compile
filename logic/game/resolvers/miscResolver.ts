@@ -13,6 +13,9 @@ import { findCardOnBoard, internalReturnCard, internalResolveTargetedFlip } from
 import { performFillHand } from './playResolver';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { queuePendingCustomEffects } from '../phaseManager';
+import { resolveStateNumber } from '../../effects/actions/stateNumberExecutor';
+import { resolveStateProtocol } from '../../effects/actions/stateProtocolExecutor';
+import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
 /**
  * CompileResult includes animation requests for deleted cards
@@ -389,6 +392,199 @@ export const resolveSelectRevealedDeckCard = (prevState: GameState, selectedCard
 
     // CRITICAL: Queue any pending effects from the source card (Clarity-2 has shuffle_deck and play effects after draw)
     newState = queuePendingCustomEffects(newState);
+
+    return newState;
+};
+
+/**
+ * Luck-0: "State a number" - Player selects a number (0-5)
+ */
+export const resolveStateNumberAction = (prevState: GameState, selectedNumber: number): GameState => {
+    if (prevState.actionRequired?.type !== 'state_number') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+
+    // Resolve the state_number action
+    let newState = resolveStateNumber(prevState, actor, selectedNumber);
+
+    // CRITICAL: Queue any pending effects from the source card
+    newState = queuePendingCustomEffects(newState);
+
+    return newState;
+};
+
+/**
+ * Luck-3: "State a protocol" - Player selects a protocol from opponent's cards
+ */
+export const resolveStateProtocolAction = (prevState: GameState, selectedProtocol: string): GameState => {
+    if (prevState.actionRequired?.type !== 'state_protocol') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+
+    // Resolve the state_protocol action
+    let newState = resolveStateProtocol(prevState, actor, selectedProtocol);
+
+    // CRITICAL: Queue any pending effects from the source card
+    newState = queuePendingCustomEffects(newState);
+
+    return newState;
+};
+
+/**
+ * Select from drawn cards to reveal - Player selects which card to reveal
+ */
+export const resolveSelectFromDrawnToReveal = (prevState: GameState, selectedCardId: string): GameState => {
+    if (prevState.actionRequired?.type !== 'select_from_drawn_to_reveal') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
+    const statedNumber = action.statedNumber;
+    const thenAction = action.thenAction;
+
+    let newState = { ...prevState };
+
+    // Find the selected card in the player's hand
+    const hand = newState[actor].hand;
+    const selectedCard = hand.find((c: any) => c.id === selectedCardId);
+
+    if (!selectedCard) {
+        // No card selected (empty string) or card not found - skip reveal, continue chain
+        newState.actionRequired = null;
+        // Queue any pending custom effects to continue the chain
+        newState = queuePendingCustomEffects(newState);
+        return newState;
+    }
+
+    // Log the reveal with appropriate context
+    const filterContext = statedNumber !== undefined ? ` (stated value: ${statedNumber})` : '';
+    newState = log(newState, actor, `${actorName} reveals ${selectedCard.protocol}-${selectedCard.value}${filterContext}.`);
+
+    // Store the revealed card ID for the optional play
+    newState.lastCustomEffectTargetCardId = selectedCardId;
+    newState.actionRequired = null;
+
+    // If thenAction is 'may_play', prompt for optional play
+    if (thenAction === 'may_play') {
+        newState.actionRequired = {
+            type: 'prompt_optional_effect',
+            actor: actor,
+            sourceCardId: action.sourceCardId,
+            effectDef: {
+                params: {
+                    action: 'play',
+                    source: 'hand',
+                    useCardFromPreviousEffect: true,
+                }
+            },
+            optional: true,
+        } as any;
+    }
+
+    return newState;
+};
+
+/**
+ * Confirm deck discard - User acknowledged the discarded card from deck
+ * Execute follow-up effect if present (e.g., Luck-2: draw cards equal to value)
+ */
+export const resolveConfirmDeckDiscard = (prevState: GameState): GameState => {
+    if (prevState.actionRequired?.type !== 'confirm_deck_discard') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const {
+        sourceCardId,
+        followUpEffect,
+        conditionalType,
+        laneIndex,
+        actor,
+        discardedCard
+    } = action;
+
+    let newState = { ...prevState };
+    newState.actionRequired = null;
+
+    // Execute follow-up effect if present (e.g., Luck-2: "draw cards equal to value")
+    if (followUpEffect && sourceCardId) {
+        const sourceCard = findCardOnBoard(newState, sourceCardId);
+        if (sourceCard && sourceCard.card.isFaceUp) {
+            const context = {
+                cardOwner: sourceCard.owner,
+                opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+            };
+            const effectLaneIndex = laneIndex !== undefined ? laneIndex :
+                newState[sourceCard.owner].lanes.findIndex(l => l.some(c => c.id === sourceCardId));
+
+            // CRITICAL: Check conditional type BEFORE executing follow-up (Luck-3: if_protocol_matches_stated)
+            if (conditionalType === 'if_protocol_matches_stated') {
+                const discardedProtocol = discardedCard?.protocol;
+                const statedProtocol = newState.lastStatedProtocol;
+
+                if (!statedProtocol || !discardedProtocol || discardedProtocol !== statedProtocol) {
+                    // Protocol doesn't match - skip the follow-up effect
+                    newState = log(newState, sourceCard.owner, `Discarded card (${discardedProtocol}) does not match stated protocol "${statedProtocol || 'none'}". Effect skipped.`);
+                    newState = queuePendingCustomEffects(newState);
+                    return newState;
+                }
+
+                // Protocol matches! Log and continue
+                newState = log(newState, sourceCard.owner, `Discarded card matches stated protocol "${statedProtocol}"!`);
+            }
+
+            const result = executeCustomEffect(sourceCard.card, effectLaneIndex, newState, context, followUpEffect);
+            newState = result.newState;
+
+            // If follow-up created a new action, return that state
+            if (newState.actionRequired) {
+                return newState;
+            }
+        }
+    }
+
+    // Queue any pending custom effects to continue the chain
+    newState = queuePendingCustomEffects(newState);
+
+    return newState;
+};
+
+/**
+ * Confirm deck play preview - User saw the card being drawn from deck, now select lane
+ * Transitions from preview modal to lane selection
+ */
+export const resolveConfirmDeckPlayPreview = (prevState: GameState): GameState => {
+    if (prevState.actionRequired?.type !== 'confirm_deck_play_preview') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const {
+        sourceCardId,
+        actor,
+        drawnCard,
+        isFaceDown,
+        excludeCurrentLane,
+        currentLaneIndex,
+        followUpEffect,
+        conditionalType
+    } = action;
+
+    let newState = { ...prevState };
+
+    // Transition to lane selection with the pre-drawn card
+    newState.actionRequired = {
+        type: 'select_lane_for_play',
+        sourceCardId,
+        actor,
+        count: 1,
+        isFaceDown,
+        excludeCurrentLane,
+        currentLaneIndex,
+        source: 'deck',
+        preDrawnCard: drawnCard,  // The card is already drawn!
+        // CRITICAL: Pass conditional info for "If you do" effects
+        followUpEffect,
+        conditionalType,
+    } as any;
 
     return newState;
 };
