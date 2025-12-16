@@ -137,11 +137,11 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         return true;
     });
 
-    const newCompilerStats = { ...compilerState.stats, cardsDeleted: compilerState.stats.cardsDeleted + compilerDeletedCards.length };
-    const newNonCompilerStats = { ...nonCompilerState.stats, cardsDeleted: nonCompilerState.stats.cardsDeleted + nonCompilerDeletedCards.length };
-
-    compilerState.stats = newCompilerStats;
-    nonCompilerState.stats = newNonCompilerStats;
+    // NOTE: Compile deletes are NOT counted in cardsDeleted stats
+    // Only effect-based deletes (delete 1 card, delete all cards with value X, etc.) should be counted
+    // Stats remain unchanged for cardsDeleted during compile
+    const newCompilerStats = { ...compilerState.stats };
+    const newNonCompilerStats = { ...nonCompilerState.stats };
 
     compilerState.discard = [...compilerState.discard, ...compilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];
     nonCompilerState.discard = [...nonCompilerState.discard, ...nonCompilerDeletedCards.map(({ id, isFaceUp, ...card }) => card)];

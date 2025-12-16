@@ -327,15 +327,15 @@ const getBestMove = (state: GameState): AIAction => {
                 !state.player.compiled[i];
 
             if (playerCanCompileHere) {
-                // Can ANY of our plays overtake them?
+                // Can ANY of our plays block them? (equal value also blocks - neither can compile!)
                 const maxValueWeCanAdd = Math.max(
                     playCheckFaceUp.allowed ? card.value : 0,
                     playCheckFaceDown.allowed ? getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]) : 0
                 );
 
                 const ourPotentialValue = state.opponent.laneValues[i] + maxValueWeCanAdd;
-                if (ourPotentialValue <= state.player.laneValues[i]) {
-                    // We can't block - SKIP this lane entirely for this card
+                if (ourPotentialValue < state.player.laneValues[i]) {
+                    // We can't block (can't even reach equal) - SKIP this lane entirely for this card
                     // (unless we want to try disruption effects, which we evaluate later)
                     if (!DISRUPTION_KEYWORDS.some(kw => card.keywords[kw])) {
                         continue;
@@ -597,10 +597,11 @@ const getBestMove = (state: GameState): AIAction => {
                 let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i}`;
 
                 // EMERGENCY 1: Must block player compile
+                // Equal value also blocks - neither can compile with equal values!
                 if (canPlayerCompileThisLane) {
-                    if (resultingValue > state.player.laneValues[i]) {
+                    if (resultingValue >= state.player.laneValues[i]) {
                         score = 150; // OK to block, but face-up blocking is better
-                        reason += ` [Blocks compile]`;
+                        reason += ` [Blocks compile: ${resultingValue} vs ${state.player.laneValues[i]}]`;
                     } else {
                         score = -200; // Can't even block - terrible
                         reason += ` [Fails to block]`;
@@ -2158,27 +2159,86 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_face_down_card_to_shift_for_gravity_4': {
             const { targetLaneIndex } = action;
-            const validTargets: PlayedCard[] = [];
+            const validTargets: { card: PlayedCard; owner: Player; laneIndex: number }[] = [];
             for (const p of ['player', 'opponent'] as const) {
                 for (let i = 0; i < state[p].lanes.length; i++) {
-                    if (i === targetLaneIndex) continue; // Cannot shift from the target lane to itself.
-                    for (const card of state[p].lanes[i]) {
-                        if (!card.isFaceUp) {
-                            validTargets.push(card);
-                        }
+                    if (i === targetLaneIndex) continue; // Cannot shift from the target lane to itself
+                    const lane = state[p].lanes[i];
+                    if (lane.length === 0) continue;
+                    // Only UNCOVERED (top) card can be shifted
+                    const topCard = lane[lane.length - 1];
+                    if (!topCard.isFaceUp) {
+                        validTargets.push({ card: topCard, owner: p, laneIndex: i });
                     }
                 }
             }
 
-            if (validTargets.length > 0) {
-                // Easy AI: Pick a random valid target.
-                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
-                // Use 'deleteCard' as the vehicle type for the AIAction. It triggers the generic card resolver.
-                return { type: 'deleteCard', cardId: randomTarget.id };
-            }
+            if (validTargets.length === 0) return { type: 'skip' };
 
-            // If no valid targets, which shouldn't happen if the action was created correctly, skip.
-            return { type: 'skip' };
+            // Score each target based on strategic value
+            const scoredTargets = validTargets.map(t => {
+                let score = 0;
+                const faceDownValue = 2; // Face-down cards have value 2
+
+                if (t.owner === 'opponent') {
+                    // Shifting own (AI's) card TO targetLane
+                    const currentLaneValue = state.opponent.laneValues[t.laneIndex];
+                    const targetLaneValue = state.opponent.laneValues[targetLaneIndex];
+                    const targetLaneCompiled = state.opponent.compiled[targetLaneIndex];
+                    const currentLaneCompiled = state.opponent.compiled[t.laneIndex];
+
+                    // Good: Move card to uncompiled lane that needs value to reach 10
+                    if (!targetLaneCompiled && targetLaneValue < 10) {
+                        const newTargetValue = targetLaneValue + faceDownValue;
+                        if (newTargetValue >= 10 && newTargetValue > state.player.laneValues[targetLaneIndex]) {
+                            score += 100; // Could compile after shift!
+                        } else if (newTargetValue > state.player.laneValues[targetLaneIndex]) {
+                            score += 30; // Getting closer to compile
+                        }
+                    }
+
+                    // Okay: Move from compiled lane (doesn't hurt us)
+                    if (currentLaneCompiled) {
+                        score += 10;
+                    }
+                } else {
+                    // Shifting player's card TO targetLane (AI's lane)
+                    // WARNING: This uncovers the card below, which could trigger powerful middle effects!
+                    const playerLane = state.player.lanes[t.laneIndex];
+                    const playerLaneValue = state.player.laneValues[t.laneIndex];
+                    const playerLaneCompiled = state.player.compiled[t.laneIndex];
+                    const aiTargetCompiled = state.opponent.compiled[targetLaneIndex];
+
+                    // RISK: Check if there's a card below that would become uncovered
+                    const hasCardBelow = playerLane.length > 1;
+                    if (hasCardBelow) {
+                        const cardBelow = playerLane[playerLane.length - 2];
+                        if (cardBelow.isFaceUp) {
+                            // Face-up card below = middle effect could trigger = RISKY
+                            score -= 30;
+                        }
+                    }
+
+                    // Only good if it prevents player from compiling
+                    const playerValueAfterShift = playerLaneValue - faceDownValue;
+                    if (!playerLaneCompiled && playerLaneValue >= 10 && playerValueAfterShift < 10) {
+                        score += 40; // Prevented compile - worth the risk
+                    }
+
+                    // Slightly good: Shift to AI's already compiled lane (card is "wasted" there)
+                    if (aiTargetCompiled) {
+                        score += 10;
+                    }
+
+                    // Base score is low - shifting own cards is usually better
+                    score += 5;
+                }
+
+                return { ...t, score };
+            });
+
+            scoredTargets.sort((a, b) => b.score - a.score);
+            return { type: 'shiftCard', cardId: scoredTargets[0].card.id };
         }
 
         case 'select_face_down_card_to_shift_for_darkness_4': {
