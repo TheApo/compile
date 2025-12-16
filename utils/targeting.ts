@@ -133,6 +133,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const flipCheck = canFlipSpecificCard(gameState, card.id);
             if (!flipCheck.allowed) return false;
 
+            // NEW: Check valueMinGreaterThanHandSize - target must have value > hand size
+            if (targetFilter.valueMinGreaterThanHandSize) {
+                const handSize = gameState[actionRequired.actor].hand.length;
+                if (card.value <= handSize) return false;
+            }
+
             return true;
         }
 

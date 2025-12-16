@@ -538,6 +538,26 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 </div>
             )}
 
+            {/* Only During Opponent's Turn (Peace-4) */}
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip') && (
+                <div style={{ marginTop: '15px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={(effect as any).onlyDuringOpponentTurn || false}
+                            onChange={(e) => onChange({ ...effect, onlyDuringOpponentTurn: e.target.checked })}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        Only During Opponent's Turn
+                    </label>
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        {(effect as any).onlyDuringOpponentTurn
+                            ? "Effect only triggers during your opponent's turn."
+                            : 'Effect triggers during any turn.'}
+                    </small>
+                </div>
+            )}
+
             {/* Conditional Follow-Up */}
             <div className="conditional-section" style={{ marginTop: '20px', borderTop: '1px solid #2c1d63', paddingTop: '15px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>

@@ -175,6 +175,17 @@ export function executeFlipEffect(
             }
         }
 
+        // NEW: Check hand_size_greater_than (Peace-6)
+        if (params.advancedConditional?.type === 'hand_size_greater_than') {
+            const threshold = params.advancedConditional.threshold ?? 0;
+            const handSize = state[cardOwner].hand.length;
+
+            if (handSize <= threshold) {
+                // Hand size is NOT greater than threshold - skip effect
+                return { newState: state };
+            }
+        }
+
         // Flip this card
         let newState = { ...state };
         const lane = newState[cardOwner].lanes[laneIndex];
@@ -333,6 +344,12 @@ export function executeFlipEffect(
                 const specificCardCheck = canFlipSpecificCard(state, c.id);
                 if (!specificCardCheck.allowed) continue;
 
+                // NEW: Check valueMinGreaterThanHandSize - target must have value > hand size
+                if (targetFilter.valueMinGreaterThanHandSize) {
+                    const handSize = state[cardOwner].hand.length;
+                    if (c.value <= handSize) continue;
+                }
+
                 validTargets.push(c.id);
             }
         }
@@ -340,13 +357,29 @@ export function executeFlipEffect(
 
     // If no valid targets, skip the effect (both optional and non-optional)
     if (validTargets.length === 0) {
-        let newState = log(state, cardOwner, `No valid cards to flip. Effect skipped.`);
+        let newState = state;
+        // Provide specific reason when valueMinGreaterThanHandSize filter caused no targets
+        if (targetFilter.valueMinGreaterThanHandSize) {
+            const handSize = state[cardOwner].hand.length;
+            const minValue = handSize + 1;
+            newState = log(newState, cardOwner, `Hand size: ${handSize} cards. No cards with value ${minValue} or higher available. Effect skipped.`);
+        } else {
+            newState = log(newState, cardOwner, `No valid cards to flip. Effect skipped.`);
+        }
         // CRITICAL: Mark that the effect was NOT executed (for if_executed conditionals)
         (newState as any)._effectSkippedNoTargets = true;
         return { newState };
     }
 
     let newState = { ...state };
+
+    // NEW: Log hand size info for valueMinGreaterThanHandSize filter
+    if (targetFilter.valueMinGreaterThanHandSize) {
+        const handSize = state[cardOwner].hand.length;
+        const minValue = handSize + 1;
+        const countText = count === 'all' ? 'all cards' : count === 1 ? '1 card' : `${count} cards`;
+        newState = log(newState, cardOwner, `Hand size: ${handSize} cards. Flip ${countText} with value ${minValue} or higher.`);
+    }
 
     // Set actionRequired for player to select cards - use generic type
     newState.actionRequired = {

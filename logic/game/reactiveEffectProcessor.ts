@@ -224,6 +224,15 @@ export function processReactiveEffects(
                 }
             }
 
+            // NEW: Check onlyDuringOpponentTurn (Peace-4)
+            // This card should only trigger during opponent's turn
+            if ((effect as any).onlyDuringOpponentTurn) {
+                // owner = card owner, newState.turn = whose turn it currently is
+                if (newState.turn === owner) {
+                    return false;  // Skip - it's the card owner's turn, not opponent's
+                }
+            }
+
             return true;
         });
 

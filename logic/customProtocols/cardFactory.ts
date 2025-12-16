@@ -173,11 +173,19 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            // NEW: Handle flipSelf mode (Anarchy-6, Courage-6)
+            // NEW: Handle flipSelf mode (Anarchy-6, Courage-6, Peace-6)
             if (params.flipSelf) {
                 // NEW: Courage-6 - Opponent higher value conditional
                 if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
                     mainText = 'If your opponent has a higher value in this line than you do, flip this card.';
+                    break;
+                }
+
+                // NEW: Peace-6 - Hand size conditional
+                if (params.advancedConditional?.type === 'hand_size_greater_than') {
+                    const threshold = params.advancedConditional.threshold ?? 0;
+                    const cardWord = threshold === 1 ? 'card' : 'cards';
+                    mainText = `If you have more than ${threshold} ${cardWord} in your hand, flip this card.`;
                     break;
                 }
 
@@ -253,6 +261,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // NEW: Mirror-3 - sameLaneAsFirst constraint for follow-up flips
             if (params.sameLaneAsFirst) {
                 text += ' in the same line';
+            }
+
+            // NEW: valueMinGreaterThanHandSize - target must have value > hand size
+            if (params.targetFilter?.valueMinGreaterThanHandSize) {
+                text += ' that has a value greater than the number of cards in your hand';
             }
 
             text += '.';
@@ -622,6 +635,17 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // Plague-2: variableCount uses "Discard" without "You" prefix
             const mayPrefix = params.optional ? 'You may discard' :
                               (params.count === 'all' || isVariable) ? 'Discard' : 'You discard';
+
+            // NEW: Handle 'both' actor (Peace-1: "Both players discard their hand")
+            if (params.actor === 'both') {
+                if (params.count === 'all') {
+                    mainText = 'Both players discard their hand.';
+                } else {
+                    const cardWord = params.count === 1 ? 'card' : 'cards';
+                    mainText = `Both players discard ${params.count} ${cardWord}.`;
+                }
+                break;
+            }
 
             if (params.actor === 'opponent') {
                 if (params.count === 'all') {
@@ -1299,7 +1323,9 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
                 actionText = 'clear cache';
             }
 
-            const prefixText = triggerActor === 'any' ? `After ${actorText} ${actionText}` : `After ${actorText} ${actionText}`;
+            // NEW: Peace-4 - "during your opponent's turn" modifier
+            const turnModifier = (effect as any).onlyDuringOpponentTurn ? " during your opponent's turn" : '';
+            const prefixText = `After ${actorText} ${actionText}${turnModifier}`;
             return `<div><span class='emphasis'>${prefixText}:</span> ${summary}</div>`;
         }
 

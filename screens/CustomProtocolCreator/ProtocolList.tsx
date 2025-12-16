@@ -27,13 +27,14 @@ const SYSTEM_PROTOCOL_IDS = [
     'love_custom_v1',
     'luck-custom-001',
     'metal_custom_1',
+    'mirror-custom-001',
+    'peace-custom-001',
     'plague-custom-001',
     'psychic_custom_v1',
     'smoke-custom-001',
     'speed_custom_1',
     'spirit_custom_1',
     'water_custom_1',
-    'mirror-custom-001',
 ];
 
 export const isSystemProtocol = (protocol: CustomProtocolDefinition): boolean => {

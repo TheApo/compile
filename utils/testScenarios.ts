@@ -3922,6 +3922,157 @@ export const scenario75_MirrorAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 76: Peace Playground
+ * Test all Peace effects:
+ * - Peace-1: Middle: Both players discard their hand. Bottom (End): If your hand is empty, draw 1 card.
+ * - Peace-2: Middle: Draw 1 card. Play 1 card face-down.
+ * - Peace-3: Middle: You may discard 1 card. If you do, flip 1 card with value > hand size.
+ * - Peace-4: Top (Reactive): After you discard during opponent's turn, draw 1 card.
+ * - Peace-5: Middle: Discard 1 card.
+ * - Peace-6: Middle: If you have more than 1 card in your hand, flip this card.
+ */
+export const scenario76_PeaceCustomPlayground: TestScenario = {
+    name: "Peace Test Playground",
+    description: "☮️ All Peace cards on hand - harmony, balance, sacrifice",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Peace', 'Fire', 'Water'],
+            ['Death', 'Metal', 'Spirit'],
+            'player',
+            'action'
+        );
+
+        // Player: All Peace cards in hand (1,2,3,4,5,6)
+        newState.player.hand = [
+            createCard('Peace', 1, true),
+            createCard('Peace', 2, true),
+            createCard('Peace', 3, true),
+            createCard('Peace', 4, true),
+            createCard('Peace', 5, true),
+            createCard('Peace', 6, true),
+        ];
+
+        // Setup for Peace-3 testing (need cards with high values for flip target)
+        // Player has 6 cards, so needs to flip cards with value > 6 (or discard first to reduce hand)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 5, true));
+
+        // Opponent cards for flip targets (high values)
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 5, false));
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 6, true));  // Highest value
+        newState = placeCard(newState, 'opponent', 2, createCard('Spirit', 4, true));
+
+        // Opponent hand for discard effects
+        newState.opponent.hand = [
+            createCard('Metal', 1, true),
+            createCard('Spirit', 4, true),
+            createCard('Death', 0, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 77: Peace AI Test
+ *
+ * Test AI playing Peace cards
+ * Setup: AI has all Peace cards in hand and Peace protocol
+ * - Opponent's Turn (AI plays)
+ */
+export const scenario77_PeaceAITest: TestScenario = {
+    name: "Peace AI Test",
+    description: "☮️ AI spielt Peace Karten - test all Peace card effects with AI",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Peace', 'Death', 'Life'],
+            'opponent',  // AI's turn
+            'action'
+        );
+
+        // Opponent (AI): All Peace cards in hand (1,2,3,4,5,6)
+        newState.opponent.hand = [
+            createCard('Peace', 1, true),
+            createCard('Peace', 2, true),
+            createCard('Peace', 3, true),
+            createCard('Peace', 4, true),
+            createCard('Peace', 5, true),
+            createCard('Peace', 6, true),
+        ];
+
+        // Setup board for AI testing
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 5, true));  // High value for Peace-3
+
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Life', 3, true));
+
+        // Player hand for AI Peace-1 (both discard)
+        newState.player.hand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 3, true),
+            createCard('Spirit', 4, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 78: Peace-4 Reactive Test
+ *
+ * Test Peace-4 reactive trigger: "After you discard during opponent's turn: Draw 1 card"
+ * Setup:
+ * - Player has Peace-4 face-up on board
+ * - Opponent's turn with Plague cards (force player to discard)
+ * - When AI plays Plague, player discards -> Peace-4 triggers -> player draws
+ */
+export const scenario78_Peace4ReactiveTest: TestScenario = {
+    name: "Peace-4 Reactive Test",
+    description: "☮️ Test Peace-4: AI spielt Plague → du discardest → Peace-4 triggert → du ziehst",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Peace', 'Fire', 'Water'],  // Player has Peace protocol
+            ['Plague', 'Death', 'Life'], // AI has Plague protocol
+            'opponent',  // AI's turn!
+            'action'
+        );
+
+        // Player: Peace-4 face-up on board (reactive trigger ready)
+        newState = placeCard(newState, 'player', 0, createCard('Peace', 4, true));  // Peace-4 face-up!
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 2, true));
+
+        // Opponent (AI): Plague cards to force player discard
+        newState.opponent.hand = [
+            createCard('Plague', 0, true),  // "Opponent discards 1 card"
+            createCard('Plague', 1, true),  // "Opponent discards 1 card"
+        ];
+
+        // AI board
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 5, true));
+
+        // Player hand - cards to discard when Plague triggers
+        newState.player.hand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 3, true),
+            createCard('Peace', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3998,4 +4149,7 @@ export const allScenarios: TestScenario[] = [
     scenario73_LuckAITest,
     scenario74_MirrorCustomPlayground,
     scenario75_MirrorAITest,
+    scenario76_PeaceCustomPlayground,
+    scenario77_PeaceAITest,
+    scenario78_Peace4ReactiveTest,
 ];

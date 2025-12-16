@@ -96,6 +96,12 @@ function getValidTargets(
                 // Exclude self
                 if (filter.excludeSelf && sourceCardId && card.id === sourceCardId) continue;
 
+                // NEW: valueMinGreaterThanHandSize - target must have value > hand size
+                if (filter.valueMinGreaterThanHandSize) {
+                    const handSize = state[actor].hand.length;
+                    if (card.value <= handSize) continue;
+                }
+
                 validTargets.push(card);
             }
         }

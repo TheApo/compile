@@ -103,7 +103,13 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                     <select value={params.actor} onChange={e => onChange({ ...params, actor: e.target.value as any })}>
                         <option value="self">Self</option>
                         <option value="opponent">Opponent</option>
+                        <option value="both">Both Players</option>
                     </select>
+                    {params.actor === 'both' && (
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Both players discard simultaneously (automatic, no selection needed).
+                        </small>
+                    )}
                 </label>
             )}
 

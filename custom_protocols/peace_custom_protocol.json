@@ -1,0 +1,169 @@
+{
+  "id": "peace-custom-001",
+  "name": "Peace",
+  "description": "Harmony and balance. Sacrifice to achieve equilibrium.",
+  "author": "System",
+  "createdAt": "2025-01-16T00:00:00.000Z",
+  "color": "#87CEEB",
+  "pattern": "radial",
+  "category": "Main 2",
+  "cards": [
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "peace-1-both-discard",
+          "params": {
+            "action": "discard",
+            "actor": "both",
+            "count": "all"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "peace-1-end-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck",
+            "advancedConditional": {
+              "type": "empty_hand"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "peace-2-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "peace-2-play",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "faceDown": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "peace-3-discard-flip",
+          "params": {
+            "action": "discard",
+            "actor": "self",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "optional": true,
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "peace-3-flip",
+              "params": {
+                "action": "flip",
+                "count": 1,
+                "targetFilter": {
+                  "owner": "any",
+                  "position": "uncovered",
+                  "faceState": "any",
+                  "excludeSelf": false,
+                  "valueMinGreaterThanHandSize": true
+                },
+                "optional": false
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [
+        {
+          "id": "peace-4-reactive-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top",
+          "trigger": "after_discard",
+          "reactiveTriggerActor": "self",
+          "onlyDuringOpponentTurn": true
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "peace-5-discard",
+          "params": {
+            "action": "discard",
+            "actor": "self",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "peace-6-flip-self",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "flipSelf": true,
+            "advancedConditional": {
+              "type": "hand_size_greater_than",
+              "threshold": 1
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

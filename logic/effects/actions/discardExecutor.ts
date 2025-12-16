@@ -24,6 +24,57 @@ export function executeDiscardEffect(
     const { cardOwner } = context;
     // Extract conditional info for "If you do" effects
     const conditional = params._conditional;
+
+    // NEW: Handle 'both' actor (Peace-1: "Both players discard their hand")
+    if (params.actor === 'both') {
+        let newState = { ...state };
+
+        // Helper function to discard a player's hand
+        const discardHand = (player: Player): { discardedCount: number; discardedCards: any[] } => {
+            const hand = newState[player].hand;
+            if (hand.length === 0) {
+                return { discardedCount: 0, discardedCards: [] };
+            }
+            const discardedCards = hand.map(({ id, isFaceUp, ...c }: any) => c);
+            newState[player] = {
+                ...newState[player],
+                hand: [],
+                discard: [...newState[player].discard, ...discardedCards],
+                stats: { ...newState[player].stats, cardsDiscarded: newState[player].stats.cardsDiscarded + discardedCards.length }
+            };
+            return { discardedCount: discardedCards.length, discardedCards };
+        };
+
+        // First: Card owner discards
+        const ownerResult = discardHand(cardOwner);
+        const ownerName = cardOwner === 'player' ? 'Player' : 'Opponent';
+        if (ownerResult.discardedCount > 0) {
+            const cardNames = ownerResult.discardedCards.map((c: any) => `${c.protocol}-${c.value}`).join(', ');
+            newState = log(newState, cardOwner, `${ownerName} discards their hand (${ownerResult.discardedCount} cards: ${cardNames}).`);
+        } else {
+            newState = log(newState, cardOwner, `${ownerName} has no cards to discard.`);
+        }
+
+        // Then: Opponent discards
+        const oppResult = discardHand(context.opponent);
+        const oppName = context.opponent === 'player' ? 'Player' : 'Opponent';
+        if (oppResult.discardedCount > 0) {
+            const cardNames = oppResult.discardedCards.map((c: any) => `${c.protocol}-${c.value}`).join(', ');
+            newState = log(newState, context.opponent, `${oppName} discards their hand (${oppResult.discardedCount} cards: ${cardNames}).`);
+        } else {
+            newState = log(newState, context.opponent, `${oppName} has no cards to discard.`);
+        }
+
+        // Store context for follow-up effects
+        (newState as any)._discardContext = {
+            actor: 'both',
+            discardedCount: ownerResult.discardedCount + oppResult.discardedCount,
+            sourceCardId: card.id,
+        };
+
+        return { newState };
+    }
+
     const actor = params.actor === 'opponent' ? context.opponent : cardOwner;
 
     // NEW: Handle useCardFromPreviousEffect (Clarity-1: discard the revealed deck top card)

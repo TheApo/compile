@@ -115,6 +115,7 @@ export interface FlipEffectParams {
         position: TargetPosition;
         faceState: TargetFaceState;
         excludeSelf: boolean;
+        valueMinGreaterThanHandSize?: boolean;  // Peace-3: Target must have value > hand size
     };
     optional: boolean;  // "may flip" vs "flip"
     selfFlipAfter?: boolean;  // Flip this card after target flip
@@ -122,8 +123,9 @@ export interface FlipEffectParams {
     scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane (Chaos-0)
     // NEW: Advanced conditionals
     advancedConditional?: {
-        type: 'protocol_match' | 'opponent_higher_value_in_lane';  // Anarchy-6, Courage-6
+        type: 'protocol_match' | 'opponent_higher_value_in_lane' | 'hand_size_greater_than';  // Anarchy-6, Courage-6, Peace-6
         protocol?: string;  // For 'protocol_match'
+        threshold?: number;  // For 'hand_size_greater_than' - effect only if hand size > threshold
     };
     // NEW: Luck-1 - Flip the card but ignore its middle command (one-time skip, not passive rule)
     skipMiddleCommand?: boolean;
@@ -200,8 +202,8 @@ export interface DeleteEffectParams {
  */
 export interface DiscardEffectParams {
     action: 'discard';
-    count: number;  // 1-6 (only used if countType is 'fixed')
-    actor: 'self' | 'opponent';
+    count: number | 'all';  // 1-6 or 'all' for entire hand
+    actor: 'self' | 'opponent' | 'both';  // 'both' = both players discard
     variableCount?: boolean;  // "Discard 1 or more cards" (Fire-4, Plague-2)
     conditional?: boolean;  // If part of "if you do" chain
     choice?: {
@@ -489,6 +491,8 @@ export interface EffectDefinition {
     // - 'global': Trigger regardless of which lane the action happened in (default)
     // - 'this_lane': Only trigger if the action happened in this card's lane
     reactiveScope?: 'global' | 'this_lane';
+    // NEW: For reactive triggers - only trigger during opponent's turn (Peace-4)
+    onlyDuringOpponentTurn?: boolean;
 }
 
 /**

@@ -2364,6 +2364,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         // Additional position check for 'covered_in_this_line'
                         if ((targetFilter as any).position === 'covered_in_this_line' && isTopCard) continue;
 
+                        // NEW: Check valueMinGreaterThanHandSize - target must have value > hand size
+                        if (targetFilter.valueMinGreaterThanHandSize) {
+                            const handSize = state[cardOwner].hand.length;
+                            if (card.value <= handSize) continue;
+                        }
+
                         validTargets.push({ card, owner: playerKey, laneIndex: laneIdx });
                     }
                 }

@@ -145,6 +145,11 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                                 ...params,
                                 advancedConditional: { type: 'protocol_match', protocol: '' }
                             });
+                        } else if (e.target.value === 'hand_size_greater_than') {
+                            onChange({
+                                ...params,
+                                advancedConditional: { type: 'hand_size_greater_than', threshold: 1 }
+                            });
                         } else {
                             onChange({
                                 ...params,
@@ -156,6 +161,7 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     <option value="">None</option>
                     <option value="protocol_match">Only if in specific protocol line</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                    <option value="hand_size_greater_than">Only if hand size greater than X</option>
                 </select>
             </label>
 
@@ -176,6 +182,30 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                         }
                         placeholder="e.g., Anarchy, Fire, Death"
                     />
+                </label>
+            )}
+
+            {params.advancedConditional?.type === 'hand_size_greater_than' && (
+                <label>
+                    Hand Size Threshold (more than X cards)
+                    <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={params.advancedConditional.threshold ?? 1}
+                        onChange={e =>
+                            onChange({
+                                ...params,
+                                advancedConditional: {
+                                    ...params.advancedConditional!,
+                                    threshold: parseInt(e.target.value) || 0
+                                }
+                            })
+                        }
+                    />
+                    <small style={{ display: 'block', color: '#8A79E8' }}>
+                        Effect only triggers if you have MORE than this many cards in hand.
+                    </small>
                 </label>
             )}
 
@@ -233,6 +263,20 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     }
                 />
                 Exclude self ("other cards")
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={targetFilter.valueMinGreaterThanHandSize || false}
+                    onChange={e =>
+                        onChange({ ...params, targetFilter: { ...targetFilter, valueMinGreaterThanHandSize: e.target.checked } })
+                    }
+                />
+                Value Greater Than Hand Size
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Target must have value greater than the number of cards in your hand.
+                </small>
             </label>
 
         </div>
