@@ -77,6 +77,15 @@
     font-size: 1.0em;
     line-height: 1.35;
 }
+/* Dynamic font sizing for long text on cards */
+.preview-card-area .card-rule-box.long-text {
+    font-size: 0.95em;
+    line-height: 1.2;
+}
+.preview-card-area .card-rule-box.very-long-text {
+    font-size: 0.75em;
+    line-height: 1.15;
+}
 
 .game-main-area {
     flex-grow: 1;
