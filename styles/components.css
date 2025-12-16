@@ -1520,34 +1520,45 @@
 /* State Number Modal (Luck-0) */
 .state-number-modal .number-selection {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
   margin: 2rem 0;
 }
 
 .state-number-modal .number-button {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  font-size: 1.5rem;
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  font-size: 2rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
   background-color: var(--surface-color);
-  border: 2px solid var(--border-color);
+  border: 3px solid var(--primary-color);
   color: var(--text-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.state-number-modal .number-button:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 10px var(--primary-color);
+.state-number-modal .number-button:hover,
+.state-number-modal .number-button:focus {
+  background-color: hsla(var(--primary-hue, 188), 100%, 69%, 0.15);
+  box-shadow: 0 0 12px var(--primary-color), 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: scale(1.05);
+}
+
+.state-number-modal .number-button:active {
+  transform: scale(0.95);
 }
 
 .state-number-modal .number-button.selected {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
   color: var(--background-color);
-  box-shadow: 0 0 15px var(--primary-color);
+  box-shadow: 0 0 20px var(--primary-color), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.05);
 }
 
 /* State Protocol Modal (Luck-3) */
@@ -1555,32 +1566,44 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 1rem;
   margin: 1.5rem 0;
 }
 
 .state-protocol-modal .protocol-button {
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 1rem 1.75rem;
+  min-width: 120px;
+  min-height: 50px;
+  border-radius: 12px;
+  font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   background-color: var(--surface-color);
-  border: 2px solid var(--border-color);
+  border: 3px solid var(--primary-color);
   color: var(--text-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.state-protocol-modal .protocol-button:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 8px var(--primary-color);
+.state-protocol-modal .protocol-button:hover,
+.state-protocol-modal .protocol-button:focus {
+  background-color: hsla(var(--primary-hue, 188), 100%, 69%, 0.15);
+  box-shadow: 0 0 12px var(--primary-color), 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: scale(1.03);
+}
+
+.state-protocol-modal .protocol-button:active {
+  transform: scale(0.97);
 }
 
 .state-protocol-modal .protocol-button.selected {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
   color: var(--background-color);
-  box-shadow: 0 0 12px var(--primary-color);
+  box-shadow: 0 0 20px var(--primary-color), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.03);
 }
 
 /* Select From Drawn Modal */

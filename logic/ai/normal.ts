@@ -1191,6 +1191,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                                 score += 100;
                             }
 
+                            // PRIORITY: Block player's compilation attempt (face-up is even better - get effect too!)
+                            const playerValue = state.player.laneValues[laneIndex];
+                            const playerCompiled = state.player.compiled[laneIndex];
+                            const aiCompiled = state.opponent.compiled[laneIndex];
+                            const currentAiValue = state.opponent.laneValues[laneIndex];
+
+                            if (!playerCompiled && !aiCompiled && playerValue >= 10 && playerValue > currentAiValue && resultingValue >= playerValue) {
+                                score += 160; // Higher than face-down (150) because we also get the effect
+                            }
+
                             scoredPlays.push({ cardId: card.id, laneIndex, isFaceUp: true, score });
                         }
                     }
@@ -1206,6 +1216,17 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
                         if (resultingValue >= 10 && resultingValue > state.player.laneValues[laneIndex]) {
                             score += 80;
+                        }
+
+                        // PRIORITY: Block player's compilation attempt
+                        // Player can compile if: value >= 10 AND value > AI value AND lane not compiled
+                        const playerValue = state.player.laneValues[laneIndex];
+                        const playerCompiled = state.player.compiled[laneIndex];
+                        const aiCompiled = state.opponent.compiled[laneIndex];
+                        const currentAiValue = state.opponent.laneValues[laneIndex];
+
+                        if (!playerCompiled && !aiCompiled && playerValue >= 10 && playerValue > currentAiValue && resultingValue >= playerValue) {
+                            score += 150; // High priority to block compilation
                         }
 
                         scoredPlays.push({ cardId: card.id, laneIndex, isFaceUp: false, score });
@@ -1309,6 +1330,32 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (playableLanes.length === 0) return { type: 'skip' };
 
+            // PRIORITY: Check if player is about to compile and we can block it
+            // Player can compile if: value >= 10 AND value > AI value AND not yet compiled
+            // Face-down card adds value 2, so we can block if AI value + 2 >= player value
+            const blockableLanes = playableLanes.filter((laneIndex: number) => {
+                const playerValue = state.player.laneValues[laneIndex];
+                const aiValue = state.opponent.laneValues[laneIndex];
+                const playerCompiled = state.player.compiled[laneIndex];
+                const aiCompiled = state.opponent.compiled[laneIndex];
+
+                // Player can compile this lane
+                const playerCanCompile = !playerCompiled && playerValue >= 10 && playerValue > aiValue;
+                // AI can block by playing face-down (value 2)
+                const aiCanBlock = aiValue + 2 >= playerValue;
+
+                return playerCanCompile && aiCanBlock && !aiCompiled;
+            });
+
+            if (blockableLanes.length > 0) {
+                // Sort by how close player is to compiling (higher value = more urgent to block)
+                blockableLanes.sort((a: number, b: number) =>
+                    state.player.laneValues[b] - state.player.laneValues[a]
+                );
+                return { type: 'selectLane', laneIndex: blockableLanes[0] };
+            }
+
+            // Normal logic: play in weakest lane
             const scoredLanes = playableLanes.map(laneIndex => {
                 const lead = state.opponent.laneValues[laneIndex] - state.player.laneValues[laneIndex];
                 return { laneIndex, score: -lead }; // Play in weakest lane

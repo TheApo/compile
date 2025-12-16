@@ -13,25 +13,37 @@ import { log } from '../../utils/log';
 
 /**
  * Get unique protocols from all of a player's cards (deck, hand, lanes, discard)
+ * Returns protocols in lane order first (matching game board display), then others
  */
 function getUniqueProtocolsFromPlayer(state: GameState, player: Player): string[] {
-    const protocols = new Set<string>();
+    const allProtocols = new Set<string>();
 
-    // From deck
-    state[player].deck.forEach(card => protocols.add(card.protocol));
-
-    // From hand
-    state[player].hand.forEach(card => protocols.add(card.protocol));
-
-    // From lanes
+    // Collect all unique protocols
+    state[player].deck.forEach(card => allProtocols.add(card.protocol));
+    state[player].hand.forEach(card => allProtocols.add(card.protocol));
     state[player].lanes.forEach(lane => {
-        lane.forEach(card => protocols.add(card.protocol));
+        lane.forEach(card => allProtocols.add(card.protocol));
     });
+    state[player].discard.forEach(card => allProtocols.add(card.protocol));
 
-    // From discard
-    state[player].discard.forEach(card => protocols.add(card.protocol));
+    // Build result: lane protocols first (in lane order), then remaining protocols
+    const result: string[] = [];
+    const laneProtocols = state[player].protocols;
 
-    return Array.from(protocols).sort();
+    // Add lane protocols in order (lane 0, 1, 2) if they exist in allProtocols
+    for (const protocol of laneProtocols) {
+        if (allProtocols.has(protocol) && !result.includes(protocol)) {
+            result.push(protocol);
+        }
+    }
+
+    // Add remaining protocols (sorted for consistency)
+    const remaining = Array.from(allProtocols)
+        .filter(p => !result.includes(p))
+        .sort();
+    result.push(...remaining);
+
+    return result;
 }
 
 /**
