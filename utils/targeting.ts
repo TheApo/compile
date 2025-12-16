@@ -99,12 +99,16 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const currentLaneIndex = (actionRequired as any).currentLaneIndex;
             const scopedLaneIndex = (actionRequired as any).laneIndex; // For scope: 'this_lane'
             const scope = (actionRequired as any).scope;
+            const restrictedLaneIndex = (actionRequired as any).restrictedLaneIndex; // Mirror-3: sameLaneAsFirst
 
             // NEW: If currentLaneIndex is set (scope: 'each_lane'), only cards in that lane are targetable
             if (currentLaneIndex !== undefined && laneIndex !== currentLaneIndex) return false;
 
             // NEW: If scope is 'this_lane', only cards in the source card's lane are targetable (Darkness-2)
             if (scope === 'this_lane' && scopedLaneIndex !== undefined && laneIndex !== scopedLaneIndex) return false;
+
+            // NEW: Mirror-3 - sameLaneAsFirst: only cards in the restricted lane are targetable
+            if (restrictedLaneIndex !== undefined && laneIndex !== restrictedLaneIndex) return false;
 
             // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
             // This matches the game rules: "flip 1 card" means "flip 1 uncovered card"
