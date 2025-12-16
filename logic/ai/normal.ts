@@ -1103,25 +1103,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'discardCards', cardIds: [sortedHand[0].id] };
         }
 
-        case 'select_cards_from_hand_to_discard_for_fire_4': {
-            // Fire-4: Discard up to 3 weak cards
-            const maxDiscard = Math.min(3, state.opponent.hand.length);
-            if (maxDiscard === 0) return { type: 'skip' };
-
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            const toDiscard = sortedHand.slice(0, maxDiscard);
-            return { type: 'discardCards', cardIds: toDiscard.map(c => c.id) };
-        }
-
-        case 'select_cards_from_hand_to_discard_for_hate_1': {
-            // Hate-1: Discard specified number of cards
-            const maxDiscard = Math.min((action as any).count || 1, state.opponent.hand.length);
-            if (maxDiscard === 0) return { type: 'skip' };
-
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            const toDiscard = sortedHand.slice(0, maxDiscard);
-            return { type: 'discardCards', cardIds: toDiscard.map(c => c.id) };
-        }
+        // REMOVED: Legacy handlers 'select_cards_from_hand_to_discard_for_fire_4' and
+        // 'select_cards_from_hand_to_discard_for_hate_1' - now using generic 'discard' with variableCount
 
         case 'select_card_from_hand_to_play': {
             // Speed-0 or Darkness-3: Play another card
@@ -2116,150 +2099,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        // REMOVED: select_own_card_to_return_for_water_4 - Water-4 now uses generic select_card_to_return
-
-        case 'select_card_to_shift_for_anarchy_0': {
-            // Anarchy-0: "Shift 1 card" - NO restrictions
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) {
-                const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
-                return { type: 'shiftCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
-
-        case 'select_card_to_shift_for_anarchy_1': {
-            // Anarchy-1: "Shift 1 other card to a line without a matching protocol"
-            // RESTRICTION: Cannot shift the Anarchy-1 card itself, and must shift to non-matching lane
-            const { sourceCardId } = action;
-            const allOtherCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
-                .filter(c => c.id !== sourceCardId);
-
-            if (allOtherCards.length > 0) {
-                // Normal AI: Pick a random card and let laneResolver validate destination
-                const randomCard = allOtherCards[Math.floor(Math.random() * allOtherCards.length)];
-                return { type: 'shiftCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
-
-        case 'select_card_to_shift_for_gravity_1': {
-            // Gravity-1: "Shift 1 card either to or from this line"
-            // RESTRICTION: The shift must involve the Gravity-1's lane
-            // Normal AI doesn't optimize for this, just picks random (laneResolver validates)
-            const allCards = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()];
-            if (allCards.length > 0) {
-                const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
-                return { type: 'shiftCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
-
-        // REMOVED: select_card_to_flip_and_shift_for_gravity_2 - Gravity-2 now uses generic select_card_to_flip
-
-        case 'select_face_down_card_to_shift_for_gravity_4': {
-            const { targetLaneIndex } = action;
-            const validTargets: { card: PlayedCard; owner: Player; laneIndex: number }[] = [];
-            for (const p of ['player', 'opponent'] as const) {
-                for (let i = 0; i < state[p].lanes.length; i++) {
-                    if (i === targetLaneIndex) continue; // Cannot shift from the target lane to itself
-                    const lane = state[p].lanes[i];
-                    if (lane.length === 0) continue;
-                    // Only UNCOVERED (top) card can be shifted
-                    const topCard = lane[lane.length - 1];
-                    if (!topCard.isFaceUp) {
-                        validTargets.push({ card: topCard, owner: p, laneIndex: i });
-                    }
-                }
-            }
-
-            if (validTargets.length === 0) return { type: 'skip' };
-
-            // Score each target based on strategic value
-            const scoredTargets = validTargets.map(t => {
-                let score = 0;
-                const faceDownValue = 2; // Face-down cards have value 2
-
-                if (t.owner === 'opponent') {
-                    // Shifting own (AI's) card TO targetLane
-                    const currentLaneValue = state.opponent.laneValues[t.laneIndex];
-                    const targetLaneValue = state.opponent.laneValues[targetLaneIndex];
-                    const targetLaneCompiled = state.opponent.compiled[targetLaneIndex];
-                    const currentLaneCompiled = state.opponent.compiled[t.laneIndex];
-
-                    // Good: Move card to uncompiled lane that needs value to reach 10
-                    if (!targetLaneCompiled && targetLaneValue < 10) {
-                        const newTargetValue = targetLaneValue + faceDownValue;
-                        if (newTargetValue >= 10 && newTargetValue > state.player.laneValues[targetLaneIndex]) {
-                            score += 100; // Could compile after shift!
-                        } else if (newTargetValue > state.player.laneValues[targetLaneIndex]) {
-                            score += 30; // Getting closer to compile
-                        }
-                    }
-
-                    // Okay: Move from compiled lane (doesn't hurt us)
-                    if (currentLaneCompiled) {
-                        score += 10;
-                    }
-                } else {
-                    // Shifting player's card TO targetLane (AI's lane)
-                    // WARNING: This uncovers the card below, which could trigger powerful middle effects!
-                    const playerLane = state.player.lanes[t.laneIndex];
-                    const playerLaneValue = state.player.laneValues[t.laneIndex];
-                    const playerLaneCompiled = state.player.compiled[t.laneIndex];
-                    const aiTargetCompiled = state.opponent.compiled[targetLaneIndex];
-
-                    // RISK: Check if there's a card below that would become uncovered
-                    const hasCardBelow = playerLane.length > 1;
-                    if (hasCardBelow) {
-                        const cardBelow = playerLane[playerLane.length - 2];
-                        if (cardBelow.isFaceUp) {
-                            // Face-up card below = middle effect could trigger = RISKY
-                            score -= 30;
-                        }
-                    }
-
-                    // Only good if it prevents player from compiling
-                    const playerValueAfterShift = playerLaneValue - faceDownValue;
-                    if (!playerLaneCompiled && playerLaneValue >= 10 && playerValueAfterShift < 10) {
-                        score += 40; // Prevented compile - worth the risk
-                    }
-
-                    // Slightly good: Shift to AI's already compiled lane (card is "wasted" there)
-                    if (aiTargetCompiled) {
-                        score += 10;
-                    }
-
-                    // Base score is low - shifting own cards is usually better
-                    score += 5;
-                }
-
-                return { ...t, score };
-            });
-
-            scoredTargets.sort((a, b) => b.score - a.score);
-            return { type: 'shiftCard', cardId: scoredTargets[0].card.id };
-        }
-
-        case 'select_face_down_card_to_shift_for_darkness_4': {
-            const uncoveredFaceDownCards: PlayedCard[] = [];
-            for (const p of ['player', 'opponent'] as Player[]) {
-                for (const lane of state[p].lanes) {
-                    if (lane.length > 0) {
-                        const topCard = lane[lane.length - 1];
-                        if (!topCard.isFaceUp) {
-                            uncoveredFaceDownCards.push(topCard);
-                        }
-                    }
-                }
-            }
-
-            if (uncoveredFaceDownCards.length > 0) {
-                const randomCard = uncoveredFaceDownCards[Math.floor(Math.random() * uncoveredFaceDownCards.length)];
-                return { type: 'deleteCard', cardId: randomCard.id };
-            }
-            return { type: 'skip' };
-        }
+        // REMOVED: Legacy protocol-specific handlers - now using generic handlers:
+        // - select_own_card_to_return_for_water_4 -> select_card_to_return
+        // - select_card_to_shift_for_anarchy_0 -> select_card_to_shift
+        // - select_card_to_shift_for_anarchy_1 -> select_card_to_shift
+        // - select_card_to_shift_for_gravity_1 -> select_card_to_shift
+        // - select_card_to_flip_and_shift_for_gravity_2 -> select_card_to_flip
+        // - select_face_down_card_to_shift_for_gravity_4 -> select_card_to_shift
+        // - select_face_down_card_to_shift_for_darkness_4 -> select_card_to_shift
 
         case 'shift_flipped_card_optional': {
             // Darkness-1, Spirit-3: Shift the flipped card to another lane
@@ -2371,7 +2218,44 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: possibleLanes[0] };
         }
 
-        // LEGACY REMOVED: select_lane_to_shift_revealed_card_for_light_2 - now uses generic select_lane_for_shift
+        case 'select_lane_to_shift_revealed_card_for_light_2':
+        case 'select_lane_to_shift_revealed_card': {
+            // Light-2: Shift the revealed card to another lane
+            const revealedCardId = (action as any).revealedCardId;
+            const cardInfo = findCardOnBoard(state, revealedCardId);
+            if (!cardInfo) return { type: 'selectLane', laneIndex: 0 };
+
+            // Find the lane index of the card
+            let cardLaneIndex = -1;
+            for (let i = 0; i < state[cardInfo.owner].lanes.length; i++) {
+                if (state[cardInfo.owner].lanes[i].some(c => c.id === revealedCardId)) {
+                    cardLaneIndex = i;
+                    break;
+                }
+            }
+
+            // Pick lane to shift to (not the same lane)
+            const possibleLanes = [0, 1, 2].filter(l => l !== cardLaneIndex);
+            if (possibleLanes.length > 0) {
+                // Normal AI: pick strategic lane based on card owner
+                if (cardInfo.owner === 'opponent') {
+                    // AI's card - shift to lane where it helps us most
+                    possibleLanes.sort((a, b) => {
+                        const aValue = state.opponent.laneValues[a];
+                        const bValue = state.opponent.laneValues[b];
+                        // Prefer lanes closer to compile (but not compiled)
+                        if (!state.opponent.compiled[a] && state.opponent.compiled[b]) return -1;
+                        if (state.opponent.compiled[a] && !state.opponent.compiled[b]) return 1;
+                        return bValue - aValue; // Higher value = better
+                    });
+                } else {
+                    // Player's card - shift to disrupt them (lowest value lane)
+                    possibleLanes.sort((a, b) => state.player.laneValues[a] - state.player.laneValues[b]);
+                }
+                return { type: 'selectLane', laneIndex: possibleLanes[0] };
+            }
+            return { type: 'selectLane', laneIndex: 0 };
+        }
 
         case 'select_opponent_face_down_card_to_shift': { // Speed-4
             const validTargets: PlayedCard[] = [];

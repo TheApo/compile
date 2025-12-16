@@ -5,7 +5,7 @@
 
 import { CustomProtocolDefinition, CustomProtocolStorage, CustomCardDefinition } from "../../types/customProtocol";
 import { CardData } from "../../types";
-import { generateEffect } from "./effectGenerator";
+// REMOVED: generateEffect import - was never used, all effects go through effectInterpreter
 
 const STORAGE_KEY = 'custom_protocols_v1';
 const STORAGE_VERSION = 1;

@@ -942,6 +942,130 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // AI just confirms and proceeds to lane selection
             return { type: 'confirmDeckPlayPreview' };
         }
+
+        // =========================================================================
+        // MISSING HANDLERS - Added to prevent soft locks
+        // =========================================================================
+
+        // Discard completed - continue to next action
+        case 'discard_completed': {
+            return { type: 'skip' };
+        }
+
+        // Prompt for optional draw
+        case 'prompt_optional_draw': {
+            // Easy AI: Always accept draws
+            return { type: 'resolvePrompt', accept: true };
+        }
+
+        // Custom board card reveal (custom protocols)
+        case 'select_board_card_to_reveal_custom': {
+            const validTargets = getValidTargets(
+                state,
+                action.actor,
+                (action as any).targetFilter || { faceState: 'face_down', position: 'uncovered' },
+                undefined,
+                action.sourceCardId
+            );
+
+            if (validTargets.length > 0) {
+                return { type: 'revealCard', cardId: validTargets[0].id };
+            }
+            return { type: 'skip' };
+        }
+
+        // Prompt to shift or flip revealed board card (custom protocols)
+        case 'prompt_shift_or_flip_board_card_custom': {
+            // Easy AI: Default to flip (true)
+            return { type: 'resolvePrompt', accept: true };
+        }
+
+        // Select lane to shift revealed board card (custom protocols)
+        case 'select_lane_to_shift_revealed_board_card_custom': {
+            const cardInfo = findCardOnBoard(state, (action as any).revealedCardId);
+            if (!cardInfo) return { type: 'selectLane', laneIndex: 0 };
+
+            let cardLaneIndex = -1;
+            for (let i = 0; i < state[cardInfo.owner].lanes.length; i++) {
+                if (state[cardInfo.owner].lanes[i].some(c => c.id === (action as any).revealedCardId)) {
+                    cardLaneIndex = i;
+                    break;
+                }
+            }
+
+            const possibleLanes = [0, 1, 2].filter(l => l !== cardLaneIndex);
+            return { type: 'selectLane', laneIndex: possibleLanes[0] ?? 0 };
+        }
+
+        // Delete card from other lanes (Fire-1 etc.)
+        case 'select_card_from_other_lanes_to_delete': {
+            const disallowedLaneIndex = (action as any).disallowedLaneIndex;
+            const validTargets = getValidTargets(
+                state,
+                action.actor,
+                { position: 'uncovered' },
+                undefined,
+                action.sourceCardId
+            ).filter(t => {
+                // Exclude cards in the disallowed lane
+                for (let i = 0; i < state[t.owner].lanes.length; i++) {
+                    if (state[t.owner].lanes[i].some(c => c.id === t.id)) {
+                        return i !== disallowedLaneIndex;
+                    }
+                }
+                return true;
+            });
+
+            if (validTargets.length > 0) {
+                // Prefer deleting player's cards
+                const playerTargets = validTargets.filter(t => t.owner === 'player');
+                const target = playerTargets.length > 0 ? playerTargets[0] : validTargets[0];
+                return { type: 'deleteCard', cardId: target.id };
+            }
+            return { type: 'skip' };
+        }
+
+        // Select opponent card to flip
+        case 'select_opponent_card_to_flip': {
+            const validTargets = getValidTargets(
+                state,
+                action.actor,
+                { owner: 'opponent', position: 'uncovered' },
+                undefined,
+                action.sourceCardId
+            );
+
+            if (validTargets.length > 0) {
+                return { type: 'flipCard', cardId: validTargets[0].id };
+            }
+            return { type: 'skip' };
+        }
+
+        // Select opponent card to return
+        case 'select_opponent_card_to_return': {
+            const validTargets = getValidTargets(
+                state,
+                action.actor,
+                { owner: 'opponent', position: 'uncovered' },
+                undefined,
+                action.sourceCardId
+            );
+
+            if (validTargets.length > 0) {
+                // Prefer returning high-value cards
+                const sorted = validTargets.sort((a, b) => b.value - a.value);
+                return { type: 'returnCard', cardId: sorted[0].id };
+            }
+            return { type: 'skip' };
+        }
+
+        // Delete self effect
+        case 'delete_self': {
+            if (action.sourceCardId) {
+                return { type: 'deleteCard', cardId: action.sourceCardId };
+            }
+            return { type: 'skip' };
+        }
     }
 
     // Fallback for any unhandled cases
