@@ -29,6 +29,7 @@ import courageCustomData from '../../custom_protocols/courage_custom_protocol.js
 import fearCustomData from '../../custom_protocols/fear_custom_protocol.json';
 import iceCustomData from '../../custom_protocols/ice_custom_protocol.json';
 import luckCustomData from '../../custom_protocols/luck_custom_protocol.json';
+import mirrorCustomData from '../../custom_protocols/mirror_custom_protocol.json';
 
 /**
  * All default custom protocol data for statistics tracking
@@ -41,7 +42,7 @@ const allDefaultCustomProtocolData = [
     lightCustomData, speedCustomData, metalCustomData, plagueCustomData,
     loveCustomData, psychicCustomData, smokeCustomData, clarityCustomData,
     corruptionCustomData, courageCustomData, fearCustomData, iceCustomData,
-    luckCustomData
+    luckCustomData, mirrorCustomData
 ];
 
 /**
@@ -96,6 +97,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(fearCustomData as any);
         addCustomProtocol(iceCustomData as any);
         addCustomProtocol(luckCustomData as any);
+        addCustomProtocol(mirrorCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);
     }

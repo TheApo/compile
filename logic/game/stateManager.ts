@@ -229,6 +229,10 @@ function applyCustomValueModifiers(
                     } else if (condition === 'per_card_in_hand') {
                         // Clarity-0: Count cards in the card owner's hand
                         count = state[cardOwner].hand.length;
+                    } else if (condition === 'per_opponent_card_in_lane') {
+                        // Mirror-0: Count opponent's cards in this lane
+                        const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+                        count = state[opponent].lanes[lane].length;
                     }
 
                     // Apply to target

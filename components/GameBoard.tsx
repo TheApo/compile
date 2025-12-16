@@ -197,6 +197,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 const validLanes = (actionRequired as any).validLanes || [];
                 return validLanes.includes(targetLaneIndex);
             }
+            case 'select_lanes_for_swap_stacks': {
+                // Mirror-2: Swap stacks - use validLanes from actionRequired
+                const validLanes = (actionRequired as any).validLanes || [];
+                return validLanes.includes(targetLaneIndex);
+            }
             default:
                 return false;
         }

@@ -172,6 +172,11 @@ export function executeDrawEffect(
         if (count > 0) {
             const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count });
             newState = reactiveResult.newState;
+
+            // CRITICAL: Trigger after_opponent_draw for opponent's cards (Mirror-4)
+            const opponentOfDrawer = drawingPlayer === 'player' ? 'opponent' : 'player';
+            const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count });
+            newState = oppReactiveResult.newState;
         }
 
         // Add draw animation request
@@ -471,6 +476,11 @@ export function executeDrawEffect(
     if (drawnCards.length > 0) {
         const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: drawnCards.length });
         newState = reactiveResult.newState;
+
+        // CRITICAL: Trigger after_opponent_draw for opponent's cards (Mirror-4)
+        const opponentOfDrawer = drawingPlayer === 'player' ? 'opponent' : 'player';
+        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: drawnCards.length });
+        newState = oppReactiveResult.newState;
     }
 
     // Reveal from drawn cards - flexible based on parameters

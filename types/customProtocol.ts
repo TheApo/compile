@@ -33,7 +33,9 @@ export type EffectActionType =
     | 'shuffle_trash'  // Clarity-4: Shuffle trash into deck
     | 'shuffle_deck'   // Clarity-2/3: Shuffle deck after reveal
     | 'state_number'   // Luck-0: Player states a number (0-5)
-    | 'state_protocol';  // Luck-3: Player states a protocol
+    | 'state_protocol'  // Luck-3: Player states a protocol
+    | 'swap_stacks'     // Mirror-2: Swap cards between own lanes
+    | 'copy_opponent_middle';  // Mirror-1: Copy opponent's middle effect
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 
@@ -52,6 +54,7 @@ export type EffectTrigger =
     | 'after_discard'        // After you discard cards (Corruption-2)
     | 'after_opponent_discard' // After opponent discards (Plague-1)
     | 'after_draw'           // After you draw cards (Spirit-3)
+    | 'after_opponent_draw'  // After opponent draws cards (Mirror-4)
     | 'after_clear_cache'    // After you clear cache (Speed-1)
     | 'before_compile_delete' // Before this card deleted by compile (Speed-2)
     | 'after_flip'           // After cards are flipped
@@ -124,6 +127,8 @@ export interface FlipEffectParams {
     };
     // NEW: Luck-1 - Flip the card but ignore its middle command (one-time skip, not passive rule)
     skipMiddleCommand?: boolean;
+    // NEW: Mirror-3 - Follow-up flip must be in same lane as first flip
+    sameLaneAsFirst?: boolean;
 }
 
 /**
@@ -370,7 +375,8 @@ export interface ValueModifierParams {
         condition?: 'per_face_down_card'  // For add_per_condition type
                   | 'per_face_up_card'
                   | 'per_card'
-                  | 'per_card_in_hand';  // Clarity-0: +1 per card in your hand
+                  | 'per_card_in_hand'    // Clarity-0: +1 per card in your hand
+                  | 'per_opponent_card_in_lane';  // Mirror-0: +1 per opponent's card in this lane
         target: 'own_cards'               // Which cards/totals to modify
               | 'opponent_cards'
               | 'all_cards'
@@ -418,6 +424,24 @@ export interface StateProtocolEffectParams {
 }
 
 /**
+ * Swap Stacks Effect Parameters (Mirror-2)
+ * Swaps all cards between two of your own lanes
+ */
+export interface SwapStacksEffectParams {
+    action: 'swap_stacks';
+    target: 'own';  // Currently only supports own lanes (could be extended)
+}
+
+/**
+ * Copy Opponent Middle Effect Parameters (Mirror-1)
+ * Copies and executes an opponent's card's middle effects
+ */
+export interface CopyOpponentMiddleEffectParams {
+    action: 'copy_opponent_middle';
+    optional: boolean;  // "You may resolve..." vs "Resolve..."
+}
+
+/**
  * Union of all effect parameter types
  */
 export type EffectParams =
@@ -437,7 +461,9 @@ export type EffectParams =
     | ShuffleTrashEffectParams
     | ShuffleDeckEffectParams
     | StateNumberEffectParams
-    | StateProtocolEffectParams;
+    | StateProtocolEffectParams
+    | SwapStacksEffectParams
+    | CopyOpponentMiddleEffectParams;
 
 /**
  * Effect Definition - Single effect with parameters

@@ -1581,6 +1581,75 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        // =========================================================================
+        // SWAP STACKS (Mirror-2)
+        // =========================================================================
+        case 'select_lanes_for_swap_stacks': {
+            // Normal AI: Strategic selection based on lane values
+            const validLanes = action.validLanes;
+            const selectedFirstLane = (action as any).selectedFirstLane;
+
+            if (validLanes.length === 0) return { type: 'skip' };
+
+            if (selectedFirstLane === undefined) {
+                // STEP 1: Select lane with LOWEST value to potentially improve
+                const scoredLanes = validLanes.map((laneIdx: number) => {
+                    const laneValue = state.opponent.laneValues[laneIdx];
+                    return { laneIdx, score: laneValue };
+                });
+                // Pick lane with lowest value (most to gain from swap)
+                scoredLanes.sort((a, b) => a.score - b.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIdx };
+            } else {
+                // STEP 2: Select lane with HIGHEST value to swap with first lane
+                const scoredLanes = validLanes.map((laneIdx: number) => {
+                    const laneValue = state.opponent.laneValues[laneIdx];
+                    return { laneIdx, score: laneValue };
+                });
+                // Pick lane with highest value (most benefit to swap)
+                scoredLanes.sort((a, b) => b.score - a.score);
+                return { type: 'selectLane', laneIndex: scoredLanes[0].laneIdx };
+            }
+        }
+
+        // =========================================================================
+        // COPY OPPONENT MIDDLE (Mirror-1)
+        // =========================================================================
+        case 'select_card_for_copy_middle': {
+            // Normal AI: Pick best target based on effect value
+            const validTargets = (action as any).validTargetIds || [];
+            if (validTargets.length === 0) return { type: 'skip' };
+
+            // Score each target by perceived value of its middle effect
+            // For simplicity, prefer cards with draw/flip effects over others
+            const scoredTargets = validTargets.map((cardId: string) => {
+                let score = 0;
+                // Find the card
+                for (const p of ['player', 'opponent'] as Player[]) {
+                    for (const lane of state[p].lanes) {
+                        const card = lane.find(c => c.id === cardId);
+                        if (card) {
+                            const customCard = card as any;
+                            const middleEffects = customCard.customEffects?.middleEffects || [];
+                            for (const effect of middleEffects) {
+                                const action = effect.params?.action;
+                                // Prefer beneficial effects
+                                if (action === 'draw') score += 5;
+                                if (action === 'flip') score += 3;
+                                if (action === 'delete') score += 4;
+                                if (action === 'shift') score += 2;
+                                if (action === 'discard') score -= 2;  // Discard self is bad
+                            }
+                        }
+                    }
+                }
+                return { cardId, score };
+            });
+
+            scoredTargets.sort((a, b) => b.score - a.score);
+            return { type: 'selectCard', cardId: scoredTargets[0].cardId };
+        }
+
         case 'select_lane_for_return': {
             // Generic lane selection for return effects (e.g., "Return all cards with value X in 1 line")
             // CRITICAL: Calculate actual VALUE loss, not just card count!
@@ -2254,8 +2323,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // Generic flip handler for custom protocols
             // Uses targetFilter from action to determine valid targets
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (flipExecutor uses laneIndex!)
-            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Check restrictedLaneIndex, currentLaneIndex AND laneIndex
+            // Mirror-3: sameLaneAsFirst sets restrictedLaneIndex directly
+            const restrictedLaneIndex = (action as any).restrictedLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const scope = (action as any).scope;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;

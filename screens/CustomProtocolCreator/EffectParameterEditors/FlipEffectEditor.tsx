@@ -118,6 +118,18 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 </small>
             </label>
 
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.sameLaneAsFirst || false}
+                    onChange={e => onChange({ ...params, sameLaneAsFirst: e.target.checked })}
+                />
+                Same Lane as First Flip
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Follow-up flip must target the same lane as the previous flip.
+                </small>
+            </label>
+
             <h5>Advanced Conditional</h5>
 
             <label>

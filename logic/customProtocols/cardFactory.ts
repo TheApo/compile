@@ -250,6 +250,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text = `In each line, ${text.charAt(0).toLowerCase() + text.slice(1)}`;
             }
 
+            // NEW: Mirror-3 - sameLaneAsFirst constraint for follow-up flips
+            if (params.sameLaneAsFirst) {
+                text += ' in the same line';
+            }
+
             text += '.';
 
             if (params.selfFlipAfter) {
@@ -1042,23 +1047,31 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 case 'add_per_condition': {
                     const scopeText = mod.scope === 'this_lane' ? 'in this line' : '';
                     const targetText = mod.target === 'own_total' ? 'Your total value' :
-                                      mod.target === 'opponent_total' ? "Opponent's total value" :
+                                      mod.target === 'opponent_total' ? "Your opponent's total value" :
                                       'Total value';
 
                     let conditionText = '';
+                    let conditionScopeText = '';  // Extra scope text for certain conditions
                     if (mod.condition === 'per_face_down_card') {
                         conditionText = 'for each face-down card';
+                        conditionScopeText = scopeText;
                     } else if (mod.condition === 'per_face_up_card') {
                         conditionText = 'for each face-up card';
+                        conditionScopeText = scopeText;
                     } else if (mod.condition === 'per_card') {
                         conditionText = 'for each card';
+                        conditionScopeText = scopeText;
                     } else if (mod.condition === 'per_card_in_hand') {
-                        // Clarity-0: "Value +1 for each card in your hand"
                         conditionText = 'for each card in your hand';
+                        // No extra scope - hand is already specified
+                    } else if (mod.condition === 'per_opponent_card_in_lane') {
+                        conditionText = "for each of your opponent's cards";
+                        conditionScopeText = scopeText;
                     }
 
-                    const sign = mod.value >= 0 ? '+' : '';
-                    mainText = `${targetText} ${scopeText} is increased by ${sign}${mod.value} ${conditionText} ${scopeText}.`.replace(/\s+/g, ' ');
+                    const absValue = Math.abs(mod.value);
+                    const changeText = mod.value >= 0 ? 'increased' : 'reduced';
+                    mainText = `${targetText} ${scopeText} is ${changeText} by ${absValue} ${conditionText} ${conditionScopeText}.`.replace(/\s+/g, ' ').trim();
                     break;
                 }
                 case 'set_to_fixed': {
@@ -1171,6 +1184,19 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             break;
         }
 
+        case 'swap_stacks': {
+            // Mirror-2: Swap cards between own lanes
+            mainText = 'Swap all of your cards in one of your stacks with another one of your stacks.';
+            break;
+        }
+
+        case 'copy_opponent_middle': {
+            // Mirror-1: Copy opponent's middle effect
+            const optText = params.optional ? 'You may resolve' : 'Resolve';
+            mainText = `${optText} the middle command of 1 of your opponent's cards as if it were on this card.`;
+            break;
+        }
+
         default:
             mainText = 'Effect';
             break;
@@ -1280,6 +1306,11 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         // Plague-1: "After your opponent discards cards: Draw 1 card."
         if (trigger === 'after_opponent_discard') {
             return `<div><span class='emphasis'>After your opponent discards cards:</span> ${summary}</div>`;
+        }
+
+        // Mirror-4: "After your opponent draws cards: Draw 1 card."
+        if (trigger === 'after_opponent_draw') {
+            return `<div><span class='emphasis'>After your opponent draws cards:</span> ${summary}</div>`;
         }
 
         // NEW: after_play with reactiveScope (Ice-1 Bottom)

@@ -104,6 +104,10 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'state_number', numberSource: 'own_protocol_values' };
         case 'state_protocol':
             return { action: 'state_protocol', protocolSource: 'opponent_cards' };
+        case 'swap_stacks':
+            return { action: 'swap_stacks', target: 'own' };
+        case 'copy_opponent_middle':
+            return { action: 'copy_opponent_middle', optional: true };
         default:
             return {};
     }
@@ -312,6 +316,29 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 return <StateNumberEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'state_protocol':
                 return <StateProtocolEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'swap_stacks':
+                // Simple effect with no parameters to configure
+                return <div className="param-editor swap-stacks-editor">
+                    <h4>Swap Stacks</h4>
+                    <p style={{ color: '#8A79E8' }}>
+                        Swap all of your cards in one of your stacks with another one of your stacks.
+                    </p>
+                </div>;
+            case 'copy_opponent_middle':
+                return <div className="param-editor copy-opponent-middle-editor">
+                    <h4>Copy Opponent's Middle Command</h4>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={(effectToRender.params as any).optional ?? true}
+                            onChange={e => onChange({ ...effectToRender.params, optional: e.target.checked })}
+                        />
+                        Optional ("You may resolve..." instead of "Resolve...")
+                    </label>
+                    <p style={{ color: '#8A79E8', marginTop: '10px' }}>
+                        Select one of your opponent's face-up uncovered cards and execute its middle commands as if they were on this card.
+                    </p>
+                </div>;
             default:
                 return <div>Unknown effect type: {effectToRender.params.action}</div>;
         }
@@ -355,6 +382,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             'on_cover_or_flip': 'When Covered or Flipped',
             'after_clear_cache': 'After Clear Cache',
             'after_opponent_discard': 'After Opponent Discards',
+            'after_opponent_draw': 'After Opponent Draws',
             'before_compile_delete': 'Before Compile Delete',
             'when_card_returned': 'When Card Returned',
         };
@@ -404,6 +432,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="after_play">After a card is played</option>
                                 <option value="after_clear_cache">After cache is cleared</option>
                                 <option value="after_opponent_discard">After opponent discards</option>
+                                <option value="after_opponent_draw">After opponent draws</option>
                                 <option value="before_compile_delete">Before deleted by compile</option>
                                 <option value="when_card_returned">When card returned to hand</option>
                             </optgroup>
@@ -583,6 +612,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="shuffle_deck">Shuffle Deck</option>
                                 <option value="state_number">State a Number</option>
                                 <option value="state_protocol">State a Protocol</option>
+                                <option value="swap_stacks">Swap Stacks</option>
+                                <option value="copy_opponent_middle">Copy Opponent's Middle</option>
                             </select>
                         </label>
 
@@ -669,6 +700,8 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                             <option value="shuffle_deck">Shuffle Deck</option>
                                             <option value="state_number">State a Number</option>
                                             <option value="state_protocol">State a Protocol</option>
+                                            <option value="swap_stacks">Swap Stacks</option>
+                                            <option value="copy_opponent_middle">Copy Opponent's Middle</option>
                                         </select>
                                     </label>
 

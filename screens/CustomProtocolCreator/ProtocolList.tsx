@@ -33,6 +33,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'speed_custom_1',
     'spirit_custom_1',
     'water_custom_1',
+    'mirror-custom-001',
 ];
 
 export const isSystemProtocol = (protocol: CustomProtocolDefinition): boolean => {

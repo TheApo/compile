@@ -191,6 +191,16 @@ export function processReactiveEffects(
                 return true;
             }
 
+            // Special case: after_opponent_draw (Mirror-4)
+            // context.player is the OPPONENT of the drawing player (i.e., the one who should benefit)
+            // The card should trigger if its owner IS context.player (they are the opponent of the drawer)
+            if (triggerType === 'after_opponent_draw') {
+                if (context.player !== owner) {
+                    return false;
+                }
+                return true;
+            }
+
             // Check if this effect should trigger based on who performed the action
             if (triggerActor === 'self') {
                 // Only trigger if card owner performed the action

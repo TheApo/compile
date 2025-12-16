@@ -351,7 +351,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     // (e.g., Spirit-3 triggering during opponent's end phase), the player needs to act
     // even though turn might still be set to 'opponent'.
     if (actionRequired && actionRequired.actor === 'player' &&
-        ['select_lane_for_shift', 'select_lane_for_shift_all', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_delete', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_revealed_board_card_custom', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete', 'select_lane_for_delete_all', 'select_lane_for_return'].includes(actionRequired.type)) {
+        ['select_lane_for_shift', 'select_lane_for_shift_all', 'shift_flipped_card_optional', 'select_lane_for_play', 'select_lane_for_delete', 'select_lane_for_death_2', 'select_lane_for_life_3_play', 'select_lane_to_shift_revealed_card_for_light_2', 'select_lane_to_shift_revealed_board_card_custom', 'select_lane_to_shift_cards_for_light_3', 'select_lane_for_water_3', 'select_lane_for_metal_3_delete', 'select_lane_for_delete_all', 'select_lane_for_return', 'select_lanes_for_swap_stacks'].includes(actionRequired.type)) {
         resolveActionWithLane(laneIndex);
         return;
     }

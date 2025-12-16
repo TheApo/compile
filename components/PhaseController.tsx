@@ -471,6 +471,14 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a lane with 8+ cards to delete';
                 case 'select_lane_for_delete_all':
                     return 'Action: Select a lane to delete all cards';
+                case 'select_lanes_for_swap_stacks': {
+                    const selectedFirst = (actionRequired as any).selectedFirstLane;
+                    if (selectedFirst === undefined) {
+                        return 'Action: Select the first lane to swap';
+                    } else {
+                        return `Action: Select the second lane to swap with lane ${selectedFirst + 1}`;
+                    }
+                }
                 case 'select_any_other_card_to_flip_for_water_0':
                     return 'Action: Select any other card to flip';
                 case 'prompt_rearrange_protocols':

@@ -3807,6 +3807,121 @@ export const scenario73_LuckAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 74: Mirror Playground
+ * Test all Mirror effects:
+ * - Mirror-0: Top: +1 value per opponent's card in this lane
+ * - Mirror-1: Bottom (End): May copy opponent's middle effect
+ * - Mirror-2: Middle: Swap all cards between two of your stacks
+ * - Mirror-3: Middle: Flip 1 own card, then flip 1 opponent's card in same lane
+ * - Mirror-4: Top (Reactive): After opponent draws, draw 1 card
+ * - Mirror-5: Middle: Discard 1 card
+ */
+export const scenario74_MirrorCustomPlayground: TestScenario = {
+    name: "Mirror Test Playground",
+    description: "🪞 All Mirror cards on hand - copy, reflect, and swap",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Mirror', 'Fire', 'Water'],
+            ['Death', 'Metal', 'Spirit'],
+            'player',
+            'action'
+        );
+
+        // Player: All Mirror cards in hand (0,1,2,3,4,5)
+        newState.player.hand = [
+            createCard('Mirror', 0, true),
+            createCard('Mirror', 1, true),
+            createCard('Mirror', 2, true),
+            createCard('Mirror', 3, true),
+            createCard('Mirror', 4, true),
+            createCard('Mirror', 5, true),
+        ];
+
+        // Player needs cards in lanes for Mirror-2 (swap stacks) and Mirror-3 (flip own)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, false));  // Covered face-down
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));
+        newState = placeCard(newState, 'player', 2, createCard('Water', 1, true));
+
+        // Opponent needs cards for:
+        // - Mirror-0 (value per opponent card in lane)
+        // - Mirror-1 (copy opponent middle - needs face-up cards with middle effects)
+        // - Mirror-3 (flip opponent in same lane)
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 3, true));   // Has middle effects
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, false));  // Covered
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, true));   // Has middle effects
+        newState = placeCard(newState, 'opponent', 2, createCard('Spirit', 2, true));  // Has middle effects
+
+        // Opponent hand for discard effects
+        newState.opponent.hand = [
+            createCard('Metal', 1, true),
+            createCard('Spirit', 3, true),
+            createCard('Death', 4, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 75: Mirror AI Test
+ *
+ * Test AI playing Mirror cards
+ * Setup: AI has all Mirror cards in hand and Mirror protocol
+ * - Opponent's Turn (AI plays)
+ */
+export const scenario75_MirrorAITest: TestScenario = {
+    name: "Mirror AI Test",
+    description: "🪞 AI spielt Mirror Karten - test all Mirror card effects with AI",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Spirit'],
+            ['Mirror', 'Death', 'Metal'],
+            'opponent',  // AI's turn
+            'action'
+        );
+
+        // Opponent (AI): All Mirror cards in hand (0-5)
+        newState.opponent.hand = [
+            createCard('Mirror', 0, true),
+            createCard('Mirror', 1, true),
+            createCard('Mirror', 2, true),
+            createCard('Mirror', 3, true),
+            createCard('Mirror', 4, true),
+            createCard('Mirror', 5, true),
+        ];
+
+        // AI needs cards in lanes for Mirror-2 (swap stacks) and Mirror-3 (flip own)
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, false));  // Covered face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Metal', 1, true));
+
+        // Player needs cards for:
+        // - Mirror-0 (value per opponent card in lane)
+        // - Mirror-1 (AI copies player's middle effects)
+        // - Mirror-3 (AI flips player's card in same lane)
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 3, true));   // Has middle effects
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, false));  // Covered
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));  // Has middle effects
+        newState = placeCard(newState, 'player', 2, createCard('Spirit', 2, true)); // Has middle effects
+
+        // Player hand for AI to trigger draw (for Mirror-4 testing)
+        newState.player.hand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 3, true),
+            createCard('Spirit', 4, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -3881,4 +3996,6 @@ export const allScenarios: TestScenario[] = [
 	scenario71_Light3ProblemPlayground,
     scenario72_LuckCustomPlayground,
     scenario73_LuckAITest,
+    scenario74_MirrorCustomPlayground,
+    scenario75_MirrorAITest,
 ];

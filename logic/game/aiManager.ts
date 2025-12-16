@@ -282,7 +282,7 @@ export const resolveRequiredOpponentAction = (
         }
 
         // --- Generic Card Selection Handler ---
-        if (aiDecision.type === 'deleteCard' || aiDecision.type === 'flipCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard') {
+        if (aiDecision.type === 'deleteCard' || aiDecision.type === 'flipCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
             const { nextState, requiresAnimation } = resolveActionWithCard(state, aiDecision.cardId);
 
             if (requiresAnimation) {
@@ -578,7 +578,7 @@ const handleRequiredAction = (
         return endActionForPhase(nextState, phaseManager);
     }
 
-    if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard') {
+    if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
         const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(state, aiDecision.cardId);
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;

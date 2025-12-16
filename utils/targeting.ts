@@ -472,6 +472,15 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             return phaseAction.availableEffects.some(effect => effect.cardId === card.id);
         }
 
+        // =========================================================================
+        // COPY OPPONENT MIDDLE (Mirror-1)
+        // =========================================================================
+        case 'select_card_for_copy_middle': {
+            // Only cards in the validTargetIds list are targetable
+            const validTargetIds = (actionRequired as any).validTargetIds || [];
+            return validTargetIds.includes(card.id);
+        }
+
         default:
             return false;
     }

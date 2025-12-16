@@ -9,7 +9,7 @@
 ## Checkliste für jedes neue Protokoll
 
 ### 1. Analyse der Karten
-- [ ] Alle 6 Karten (Value 0-5) durchgehen
+- [ ] Alle 6 Karten (Value 0-5 oder 0-6 und es fehlt eine dazwischen, aber immer 6 Karten) durchgehen
 - [ ] Für jede Karte dokumentieren:
   - Welche Effekte hat sie (Top/Middle/Bottom)?
   - Original-Text notieren

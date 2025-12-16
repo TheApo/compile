@@ -301,6 +301,9 @@ export function executeFlipEffect(
             // NEW: If scope is 'this_lane', only check the current lane
             if (params.scope === 'this_lane' && laneIdx !== laneIndex) continue;
 
+            // NEW: Mirror-3 - sameLaneAsFirst: only check the lane from the first flip
+            if (params.sameLaneAsFirst && state.lastFlipLaneIndex !== undefined && laneIdx !== state.lastFlipLaneIndex) continue;
+
             for (let cardIdx = 0; cardIdx < lane.length; cardIdx++) {
                 const c = lane[cardIdx];
 
@@ -355,6 +358,9 @@ export function executeFlipEffect(
         optional: params.optional || false,
         scope: params.scope, // NEW: Pass scope for lane filtering
         laneIndex: params.scope === 'this_lane' ? laneIndex : undefined, // NEW: Pass lane index
+        // NEW: Mirror-3 - pass sameLaneAsFirst constraint
+        sameLaneAsFirst: params.sameLaneAsFirst || false,
+        restrictedLaneIndex: params.sameLaneAsFirst ? state.lastFlipLaneIndex : undefined,
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,

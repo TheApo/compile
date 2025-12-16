@@ -1,0 +1,143 @@
+{
+  "id": "mirror-custom-001",
+  "name": "Mirror",
+  "description": "Copy, symmetry, and reflection. Mirror your opponent's actions.",
+  "author": "System",
+  "createdAt": "2025-01-15T00:00:00.000Z",
+  "color": "#C0C0C0",
+  "pattern": "radial",
+  "category": "Main 2",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "mirror-0-value-modifier",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_per_condition",
+              "value": 1,
+              "condition": "per_opponent_card_in_lane",
+              "target": "own_total",
+              "scope": "this_lane"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "mirror-1-copy-middle",
+          "params": {
+            "action": "copy_opponent_middle",
+            "optional": true
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "mirror-2-swap-stacks",
+          "params": {
+            "action": "swap_stacks",
+            "target": "own"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "mirror-3-flip-own",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "own",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": true
+            },
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "mirror-3-flip-opponent-same-lane",
+              "params": {
+                "action": "flip",
+                "count": 1,
+                "targetFilter": {
+                  "owner": "opponent",
+                  "position": "uncovered",
+                  "faceState": "any"
+                },
+                "sameLaneAsFirst": true,
+                "optional": false
+              },
+              "position": "middle",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [
+        {
+          "id": "mirror-4-after-opponent-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top",
+          "trigger": "after_opponent_draw"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "mirror-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

@@ -1258,6 +1258,53 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
         }
         // REMOVED: select_lane_to_shift_cards_for_light_3 - Light-3 now uses generic select_lane_for_shift_all
         // REMOVED: select_lane_for_water_3 - Water-3 now uses generic select_lane_for_return with targetFilter
+
+        // =========================================================================
+        // SWAP STACKS (Mirror-2)
+        // =========================================================================
+        case 'select_lanes_for_swap_stacks': {
+            const { actor, sourceCardId, validLanes, selectedFirstLane } = prev.actionRequired;
+
+            // Validate the selected lane is valid
+            if (!validLanes.includes(targetLaneIndex)) {
+                console.error(`Illegal swap_stacks: Lane ${targetLaneIndex} is not a valid selection`);
+                return { nextState: prev };
+            }
+
+            // TWO-STEP SELECTION: First lane or second lane?
+            if (selectedFirstLane === undefined) {
+                // STEP 1: First lane selected, now wait for second lane
+                newState.actionRequired = {
+                    type: 'select_lanes_for_swap_stacks',
+                    actor,
+                    sourceCardId,
+                    validLanes: validLanes.filter(l => l !== targetLaneIndex),  // Exclude first lane
+                    selectedFirstLane: targetLaneIndex,
+                } as any;
+                newState = log(newState, actor, `Selected lane ${targetLaneIndex + 1} for swap.`);
+            } else {
+                // STEP 2: Second lane selected, perform the swap
+                const firstLane = selectedFirstLane;
+                const secondLane = targetLaneIndex;
+
+                // Swap the cards between the two lanes
+                const firstLaneCards = [...newState[actor].lanes[firstLane]];
+                const secondLaneCards = [...newState[actor].lanes[secondLane]];
+
+                newState[actor].lanes[firstLane] = secondLaneCards;
+                newState[actor].lanes[secondLane] = firstLaneCards;
+
+                // Log the swap
+                newState = log(newState, actor,
+                    `Swapped all cards between lane ${firstLane + 1} and lane ${secondLane + 1}.`
+                );
+
+                // Clear actionRequired
+                newState.actionRequired = null;
+            }
+            break;
+        }
+
         default: return { nextState: prev };
     }
 

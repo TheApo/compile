@@ -26,6 +26,8 @@ import { executeRevealGiveEffect } from '../effects/actions/revealGiveExecutor';
 import { executeShuffleTrashEffect, executeShuffleDeckEffect } from '../effects/actions/shuffleExecutor';
 import { executeStateNumberEffect } from '../effects/actions/stateNumberExecutor';
 import { executeStateProtocolEffect } from '../effects/actions/stateProtocolExecutor';
+import { executeSwapStacksEffect } from '../effects/actions/swapStacksExecutor';
+import { executeCopyOpponentMiddleEffect } from '../effects/actions/copyEffectExecutor';
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -448,9 +450,11 @@ export function executeCustomEffect(
 
         case 'flip':
             // CRITICAL: Pass useCardFromPreviousEffect from effectDef (it's not in params!)
+            // CRITICAL: Pass _conditional for follow-up effects (Mirror-3: "Flip 1 of your cards. Flip 1 opponent's in same lane")
             result = executeFlipEffect(card, laneIndex, state, context, {
                 ...params,
-                useCardFromPreviousEffect: effectDef.useCardFromPreviousEffect
+                useCardFromPreviousEffect: effectDef.useCardFromPreviousEffect,
+                _conditional: effectDef.conditional
             });
             break;
 
@@ -518,6 +522,14 @@ export function executeCustomEffect(
 
         case 'state_protocol':
             result = executeStateProtocolEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'swap_stacks':
+            result = executeSwapStacksEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'copy_opponent_middle':
+            result = executeCopyOpponentMiddleEffect(card, laneIndex, state, context, params);
             break;
 
         default:

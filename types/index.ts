@@ -282,6 +282,22 @@ export type ActionRequired =
         count?: number | 'all';
     };
 }
+| {
+    // Mirror-2: Swap stacks - select two lanes to swap cards between
+    type: 'select_lanes_for_swap_stacks';
+    actor: Player;
+    sourceCardId: string;
+    validLanes: number[];         // Lanes with cards (at least 2 required)
+    selectedFirstLane?: number;   // First lane selected (undefined until first selection)
+}
+| {
+    // Mirror-1: Select opponent's card to copy its middle effect
+    type: 'select_card_for_copy_middle';
+    actor: Player;
+    sourceCardId: string;
+    validTargetIds: string[];     // Opponent's face-up uncovered cards with middle effects
+    optional: boolean;
+}
 
 // -----------------------------------------------------------------------------
 // GENERIC PROMPT ACTIONS
@@ -557,6 +573,8 @@ export interface GameState {
     lastStatedNumber?: number;
     /** Luck Protocol: The protocol stated by the player */
     lastStatedProtocol?: string;
+    /** Mirror Protocol: Lane index of the last flipped card (for sameLaneAsFirst constraint) */
+    lastFlipLaneIndex?: number;
     /** Luck Protocol: Skip middle command for the next flip of this card ID */
     skipNextMiddleCommand?: string;
     _interruptedTurn?: Player;

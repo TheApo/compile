@@ -391,8 +391,9 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_any_card_to_flip':
         case 'select_any_card_to_flip_optional': {
             const frost1Active = isFrost1Active(state);
-            // CRITICAL: Check BOTH currentLaneIndex AND laneIndex (flipExecutor uses laneIndex!)
-            const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
+            // CRITICAL: Check restrictedLaneIndex, currentLaneIndex AND laneIndex
+            // Mirror-3: sameLaneAsFirst sets restrictedLaneIndex directly
+            const restrictedLaneIndex = (action as any).restrictedLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const validTargets = getValidTargets(
                 state,
                 action.actor,
@@ -596,6 +597,32 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'selectLane', laneIndex: action.validLanes[0] };
             }
             return { type: 'selectLane', laneIndex: 0 };
+        }
+
+        // =========================================================================
+        // SWAP STACKS (Mirror-2)
+        // =========================================================================
+        case 'select_lanes_for_swap_stacks': {
+            // Easy AI: Pick a random valid lane
+            const validLanes = action.validLanes;
+            if (validLanes.length > 0) {
+                const randomLane = validLanes[Math.floor(Math.random() * validLanes.length)];
+                return { type: 'selectLane', laneIndex: randomLane };
+            }
+            return { type: 'skip' };
+        }
+
+        // =========================================================================
+        // COPY OPPONENT MIDDLE (Mirror-1)
+        // =========================================================================
+        case 'select_card_for_copy_middle': {
+            // Easy AI: Pick a random valid target
+            const validTargets = (action as any).validTargetIds || [];
+            if (validTargets.length > 0) {
+                const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
+                return { type: 'selectCard', cardId: randomTarget };
+            }
+            return { type: 'skip' };
         }
 
         case 'select_lane_for_play': {

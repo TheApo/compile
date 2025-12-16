@@ -12,6 +12,7 @@ import * as phaseManager from '../phaseManager';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { canFlipSpecificCard } from '../passiveRuleChecker';
+import { getMiddleEffects } from '../../effects/actions/copyEffectExecutor';
 
 export type CardActionResult = {
     nextState: GameState;
@@ -226,6 +227,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const savedTargetCardId = targetCardId;
             newState.lastCustomEffectTargetCardId = savedTargetCardId;
 
+            // NEW: Mirror-3 - Store the lane index for sameLaneAsFirst follow-up flips
+            // CRITICAL: Save this to restore after handleOnFlipToFaceUp (like savedTargetCardId)
+            let savedFlipLaneIndex: number | undefined = undefined;
+            if (cardInfoBeforeFlip) {
+                const flippedCardLaneIndex = prev[cardInfoBeforeFlip.owner].lanes.findIndex(l =>
+                    l.some(c => c.id === targetCardId)
+                );
+                if (flippedCardLaneIndex !== -1) {
+                    savedFlipLaneIndex = flippedCardLaneIndex;
+                    newState.lastFlipLaneIndex = flippedCardLaneIndex;
+                }
+            }
+
             // CRITICAL FIX: Update any already-queued execute_remaining_custom_effects actions
             // with the target card ID. This handles the case where Smoke-1's shift effect was
             // queued by handleUncoverEffect BEFORE the user selected which card to flip.
@@ -262,6 +276,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 newState = result.newState;
                 // CRITICAL: Restore lastCustomEffectTargetCardId after handleOnFlipToFaceUp
                 newState.lastCustomEffectTargetCardId = savedTargetCardId;
+                // CRITICAL: Restore lastFlipLaneIndex for Mirror-3 sameLaneAsFirst follow-up
+                if (savedFlipLaneIndex !== undefined) {
+                    newState.lastFlipLaneIndex = savedFlipLaneIndex;
+                }
                 if (result.animationRequests) {
                     requiresAnimation = {
                         animationRequests: result.animationRequests,
@@ -274,10 +292,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             }
 
             // NEW: Handle custom protocol follow-up effects (e.g., "Flip 1 card. Draw cards equal to that card's value")
-            const hasFollowUpEffect = (prev.actionRequired as any)?.followUpEffect;
+            // CRITICAL: Read followUpEffect from PREV.actionRequired (not newState!) because
+            // internalResolveTargetedFlip already cleared actionRequired
+            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
             const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
-            if (hasFollowUpEffect && sourceCardId) {
-                newState = handleChainedEffectsOnFlip(newState, targetCardId, sourceCardId);
+            if (followUpEffect && sourceCardId) {
+                newState = handleChainedEffectsOnFlip(newState, targetCardId, sourceCardId, followUpEffect);
             }
 
             // NEW: Trigger reactive effects after flip
@@ -1311,6 +1331,95 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             newState.actionRequired = null;
 
             requiresTurnEnd = false; // The phase will continue
+            break;
+        }
+
+        // =========================================================================
+        // COPY OPPONENT MIDDLE (Mirror-1)
+        // =========================================================================
+        case 'select_card_for_copy_middle': {
+            const action = prev.actionRequired as {
+                type: 'select_card_for_copy_middle';
+                actor: Player;
+                sourceCardId: string;
+                validTargetIds: string[];
+                optional: boolean;
+            };
+
+            // Validate target
+            if (!action.validTargetIds.includes(targetCardId)) {
+                console.warn(`[cardResolver] Invalid copy_middle target: ${targetCardId}`);
+                return { nextState: prev };
+            }
+
+            // Find the target card
+            const targetCardInfo = findCardOnBoard(prev, targetCardId);
+            if (!targetCardInfo) {
+                console.error(`[cardResolver] Target card not found: ${targetCardId}`);
+                return { nextState: prev };
+            }
+
+            const { card: targetCard, owner: targetOwner } = targetCardInfo;
+            const targetLaneIndex = newState[targetOwner].lanes.findIndex(l =>
+                l.some(c => c.id === targetCardId)
+            );
+
+            // Get the middle effects from the target card
+            const middleEffects = getMiddleEffects(targetCard);
+
+            if (middleEffects.length === 0) {
+                newState = log(newState, action.actor, `${targetCard.protocol}-${targetCard.value} has no middle commands.`);
+                newState.actionRequired = null;
+                break;
+            }
+
+            // Log the copy
+            newState = log(newState, action.actor,
+                `Copies the middle command of ${targetCard.protocol}-${targetCard.value}.`
+            );
+
+            // Find the source card (Mirror-1) to get its lane
+            const sourceCardInfo = findCardOnBoard(prev, action.sourceCardId);
+            const sourceLaneIndex = sourceCardInfo
+                ? newState[sourceCardInfo.owner].lanes.findIndex(l => l.some(c => c.id === action.sourceCardId))
+                : 0;
+
+            // Create effect context with the Mirror-1 owner as cardOwner
+            // CRITICAL: The copied effects are executed as if they were on Mirror-1
+            const context: EffectContext = {
+                cardOwner: action.actor,
+                triggerType: 'on_play',
+            };
+
+            // Execute each middle effect from the copied card
+            let currentState = newState;
+            for (const effect of middleEffects) {
+                // Only execute effects with on_play trigger (middle effects)
+                if (effect.trigger !== 'on_play') continue;
+
+                // Find the source card again (it may have moved)
+                const sourceCard = sourceCardInfo?.card;
+                if (!sourceCard) continue;
+
+                const result = executeCustomEffect(
+                    sourceCard,
+                    sourceLaneIndex,
+                    currentState,
+                    context,
+                    effect
+                );
+
+                currentState = result.newState;
+
+                // If an action is required, stop here and let it be resolved
+                if (currentState.actionRequired) {
+                    return { nextState: currentState, requiresTurnEnd: false };
+                }
+            }
+
+            // Clear actionRequired
+            currentState.actionRequired = null;
+            newState = currentState;
             break;
         }
 

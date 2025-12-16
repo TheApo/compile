@@ -124,12 +124,13 @@ export function isCardAtIndexUncovered(state: GameState, lane: PlayedCard[], car
 /**
  * Handle follow-up effects after flip completes (similar to handleChainedEffectsOnDiscard)
  * For effects like "Flip 1 card. Draw cards equal to that card's value" (Light-0)
+ * @param followUpEffectParam - The follow-up effect to execute (MUST be passed since actionRequired is already cleared)
  */
-export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: string, sourceCardId?: string): GameState {
+export function handleChainedEffectsOnFlip(state: GameState, flippedCardId: string, sourceCardId?: string, followUpEffectParam?: any): GameState {
     let newState = { ...state };
 
-    // Save followUpEffect from custom effects before clearing actionRequired
-    const followUpEffect = (state.actionRequired as any)?.followUpEffect;
+    // CRITICAL: Use the passed parameter since actionRequired is already cleared by internalResolveTargetedFlip
+    const followUpEffect = followUpEffectParam || (state.actionRequired as any)?.followUpEffect;
 
     // Get the flipped card's value for context
     const flippedCardInfo = findCardOnBoard(newState, flippedCardId);
