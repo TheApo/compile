@@ -302,8 +302,30 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             // NEW: Trigger reactive effects after flip
             const flipActor = (prev.actionRequired as any)?.actor || prev.turn;
+
+            // CRITICAL FIX: If handleChainedEffectsOnFlip set an actionRequired, save it before running reactive effects.
+            // If a reactive effect creates a NEW actionRequired, we queue the original one to run after.
+            const chainActionRequired = newState.actionRequired;
+            if (chainActionRequired) {
+                newState.actionRequired = null;
+            }
+
             const reactiveFlipResult = processReactiveEffects(newState, 'after_flip', { player: flipActor, cardId: targetCardId });
             newState = reactiveFlipResult.newState;
+
+            // Restore or queue the chain actionRequired
+            if (chainActionRequired) {
+                if (newState.actionRequired) {
+                    // Reactive effect created actionRequired - queue the chain action
+                    newState.queuedActions = [
+                        { ...chainActionRequired, type: chainActionRequired.type } as any,
+                        ...(newState.queuedActions || []),
+                    ];
+                } else {
+                    // No reactive actionRequired - restore the chain action
+                    newState.actionRequired = chainActionRequired;
+                }
+            }
 
             // NEW: Handle pending custom effects (for "Flip 1 card. Shift THAT card" chains)
             // CRITICAL: ALWAYS queue pending effects to execute after the flipped card's on-flip effects complete

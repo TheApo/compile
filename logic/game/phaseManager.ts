@@ -723,6 +723,47 @@ export const processQueuedActions = (state: GameState): GameState => {
         // NOTE: Legacy gravity_2_shift_after_flip, select_any_opponent_card_to_shift, shift_flipped_card_optional
         // now use generic select_card_to_shift with followUpEffect parameters
 
+        // CRITICAL FIX: When dequeuing a discard action, re-check hand size.
+        // The hand size may have changed since the action was queued (e.g., War-3 reactive played a card).
+        // This prevents softlocks where player is asked to discard with 0 cards.
+        if (nextAction.type === 'discard' && nextAction.actor) {
+            const discardActor = nextAction.actor as 'player' | 'opponent';
+            const currentHandSize = mutableState[discardActor].hand.length;
+            const requiredCount = (nextAction as any).count || 1;
+
+            if (currentHandSize === 0) {
+                // Actor has no cards - skip this discard action entirely
+                const actorName = discardActor === 'player' ? 'Player' : 'Opponent';
+
+                // Set context from source card if available for proper log formatting
+                if (nextAction.sourceCardId) {
+                    const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                    if (sourceCard) {
+                        const cardName = `${sourceCard.card.protocol}-${sourceCard.card.value}`;
+                        mutableState = setLogSource(mutableState, cardName);
+                        mutableState = setLogPhase(mutableState, 'middle');
+                        // Restore saved indent level for correct nesting
+                        const savedIndent = (nextAction as any)._savedIndentLevel;
+                        if (savedIndent !== undefined) {
+                            mutableState = { ...mutableState, _logIndentLevel: savedIndent };
+                        }
+                    }
+                }
+
+                mutableState = log(mutableState, discardActor, `${actorName} has no cards to discard - effect skipped.`);
+
+                // Clear context after logging
+                mutableState = setLogSource(mutableState, undefined);
+                mutableState = setLogPhase(mutableState, undefined);
+                mutableState = { ...mutableState, _logIndentLevel: 0 };
+
+                continue; // Skip to next queued action
+            } else if (typeof requiredCount === 'number' && currentHandSize < requiredCount) {
+                // Actor has fewer cards than required - adjust count
+                (nextAction as any).count = currentHandSize;
+            }
+        }
+
         // --- If we reach here, the action is not auto-resolving and is possible ---
         mutableState.actionRequired = nextAction;
         mutableState.queuedActions = queuedActions; // Update the state with the rest of the queue
@@ -975,6 +1016,47 @@ export const processEndOfAction = (state: GameState): GameState => {
 
             // NOTE: Legacy select_any_opponent_card_to_shift and shift_flipped_card_optional removed
             // Now use generic select_card_to_shift with targetFilter parameters
+
+            // CRITICAL FIX: When dequeuing a discard action, re-check hand size.
+            // The hand size may have changed since the action was queued (e.g., War-3 reactive played a card).
+            // This prevents softlocks where player is asked to discard with 0 cards.
+            if (nextAction.type === 'discard' && nextAction.actor) {
+                const discardActor = nextAction.actor as 'player' | 'opponent';
+                const currentHandSize = mutableState[discardActor].hand.length;
+                const requiredCount = (nextAction as any).count || 1;
+
+                if (currentHandSize === 0) {
+                    // Actor has no cards - skip this discard action entirely
+                    const actorName = discardActor === 'player' ? 'Player' : 'Opponent';
+
+                    // Set context from source card if available for proper log formatting
+                    if (nextAction.sourceCardId) {
+                        const sourceCard = findCardOnBoard(mutableState, nextAction.sourceCardId);
+                        if (sourceCard) {
+                            const cardName = `${sourceCard.card.protocol}-${sourceCard.card.value}`;
+                            mutableState = setLogSource(mutableState, cardName);
+                            mutableState = setLogPhase(mutableState, 'middle');
+                            // Restore saved indent level for correct nesting
+                            const savedIndent = (nextAction as any)._savedIndentLevel;
+                            if (savedIndent !== undefined) {
+                                mutableState = { ...mutableState, _logIndentLevel: savedIndent };
+                            }
+                        }
+                    }
+
+                    mutableState = log(mutableState, discardActor, `${actorName} has no cards to discard - effect skipped.`);
+
+                    // Clear context after logging
+                    mutableState = setLogSource(mutableState, undefined);
+                    mutableState = setLogPhase(mutableState, undefined);
+                    mutableState = { ...mutableState, _logIndentLevel: 0 };
+
+                    continue; // Skip to next queued action
+                } else if (typeof requiredCount === 'number' && currentHandSize < requiredCount) {
+                    // Actor has fewer cards than required - adjust count
+                    (nextAction as any).count = currentHandSize;
+                }
+            }
 
             // --- If we reach here, the action is not auto-resolving and is possible ---
             mutableState.actionRequired = nextAction;

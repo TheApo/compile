@@ -277,6 +277,8 @@ export function executeCustomEffect(
         }
 
         let newState = { ...state };
+        // GENERIC: Create prompt_optional_effect for ALL optional actions
+        // The effectDef contains the full effect definition including any conditionals
         newState.actionRequired = {
             type: 'prompt_optional_effect',
             actor: context.cardOwner,
@@ -285,6 +287,10 @@ export function executeCustomEffect(
             effectDef: effectDef,
             // Store laneIndex for later execution
             laneIndex: laneIndex,
+            // Preserve log context for proper indentation/phase
+            logSource: state._currentEffectSource,
+            logPhase: state._currentPhaseContext,
+            logIndentLevel: state._logIndentLevel || 0,
         } as any;
         return { newState };
     }

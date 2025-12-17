@@ -120,10 +120,20 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     let stateWithCommitted: GameState = { ...prevState, _committedCardId: cardId };
 
     // LOG "plays card" ZUERST, VOR dem OnCover-Effekt
-    // Clear effect context before logging non-effect actions
-    stateWithCommitted = setLogSource(stateWithCommitted, undefined);
-    stateWithCommitted = setLogPhase(stateWithCommitted, undefined);
-    stateWithCommitted = { ...stateWithCommitted, _logIndentLevel: 0 };
+    // NEW: Check if we're playing as part of an effect (not a phase action)
+    const isEffectPlay = prevState._currentEffectSource !== undefined ||
+                         prevState._currentPhaseContext !== undefined ||
+                         (prevState._logIndentLevel !== undefined && prevState._logIndentLevel > 0);
+
+    // Only clear context for phase actions, not effect-triggered plays
+    if (!isEffectPlay) {
+        stateWithCommitted = setLogSource(stateWithCommitted, undefined);
+        stateWithCommitted = setLogPhase(stateWithCommitted, undefined);
+        stateWithCommitted = { ...stateWithCommitted, _logIndentLevel: 0 };
+    } else {
+        // For effect plays, increase indent for the play message itself
+        stateWithCommitted = increaseLogIndent(stateWithCommitted);
+    }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     const protocolName = stateWithCommitted[targetOwner].protocols[laneIndex];

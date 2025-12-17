@@ -118,6 +118,11 @@ export function drawForPlayer(
     if (drawnCards.length > 0) {
         const reactiveResult = processReactiveEffects(newState, 'after_draw', { player, count: drawnCards.length });
         newState = reactiveResult.newState;
+
+        // CRITICAL: Trigger after_opponent_draw for opponent's cards (War-0, Mirror-4)
+        const opponentOfDrawer = player === 'player' ? 'opponent' : 'player';
+        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: drawnCards.length });
+        newState = oppReactiveResult.newState;
     }
 
     return newState;
@@ -245,6 +250,15 @@ export function refreshHandForPlayer(state: GameState, player: Player): GameStat
             }
         };
     }
+
+    // Trigger reactive effects after refresh (War-0: after_refresh, War-1: after_opponent_refresh)
+    const refreshReactiveResult = processReactiveEffects(newState, 'after_refresh', { player });
+    newState = refreshReactiveResult.newState;
+
+    // Trigger after_opponent_refresh for opponent's cards (War-1)
+    const opponent: Player = player === 'player' ? 'opponent' : 'player';
+    const oppRefreshResult = processReactiveEffects(newState, 'after_opponent_refresh', { player: opponent });
+    newState = oppRefreshResult.newState;
 
     return newState;
 }

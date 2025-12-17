@@ -214,6 +214,14 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         newState = reactiveResult.newState;
     }
 
+    // Trigger reactive effects after compile (War-2: after_compile, after_opponent_compile)
+    const compileReactiveResult = processReactiveEffects(newState, 'after_compile', { player: compiler });
+    newState = compileReactiveResult.newState;
+
+    // Trigger after_opponent_compile for non-compiler's cards (War-2)
+    const oppCompileResult = processReactiveEffects(newState, 'after_opponent_compile', { player: nonCompiler });
+    newState = oppCompileResult.newState;
+
     // --- Centralized Post-Compile Logic ---
     // Handle all cards that survived compile due to before_compile_delete shift effect (Speed-2, custom cards)
     const allCardsToShift = [...compilerCardsToShift, ...nonCompilerCardsToShift];

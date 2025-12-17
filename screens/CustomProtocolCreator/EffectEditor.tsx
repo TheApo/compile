@@ -383,6 +383,10 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             'after_clear_cache': 'After Clear Cache',
             'after_opponent_discard': 'After Opponent Discards',
             'after_opponent_draw': 'After Opponent Draws',
+            'after_refresh': 'After Refresh',
+            'after_opponent_refresh': 'After Opponent Refreshes',
+            'after_compile': 'After Compile',
+            'after_opponent_compile': 'After Opponent Compiles',
             'before_compile_delete': 'Before Compile Delete',
             'when_card_returned': 'When Card Returned',
         };
@@ -431,6 +435,10 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="after_flip">After cards are flipped</option>
                                 <option value="after_play">After a card is played</option>
                                 <option value="after_clear_cache">After cache is cleared</option>
+                                <option value="after_refresh">After you refresh</option>
+                                <option value="after_opponent_refresh">After opponent refreshes</option>
+                                <option value="after_compile">After you compile</option>
+                                <option value="after_opponent_compile">After opponent compiles</option>
                                 <option value="after_opponent_discard">After opponent discards</option>
                                 <option value="after_opponent_draw">After opponent draws</option>
                                 <option value="before_compile_delete">Before deleted by compile</option>

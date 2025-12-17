@@ -1,0 +1,179 @@
+{
+  "id": "war-custom-001",
+  "name": "War",
+  "description": "CONFLICT, AGGRESSION - Punishes opponent actions with reactive effects",
+  "author": "System",
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "color": "#8B0000",
+  "pattern": "grid",
+  "category": "Main 2",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [
+        {
+          "id": "war-0-top-flip-self",
+          "params": {
+            "action": "flip",
+            "flipSelf": true,
+            "optional": true
+          },
+          "position": "top",
+          "trigger": "after_refresh"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "war-0-bottom-delete",
+          "params": {
+            "action": "delete",
+            "count": 1,
+            "optional": true,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "scope": {
+              "type": "anywhere"
+            }
+          },
+          "position": "bottom",
+          "trigger": "after_opponent_draw"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "war-1-discard-refresh",
+          "params": {
+            "action": "discard",
+            "actor": "self",
+            "variableCount": true
+          },
+          "position": "bottom",
+          "trigger": "after_opponent_refresh",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "war-1-refresh",
+              "params": {
+                "action": "refresh",
+                "target": "self"
+              },
+              "position": "bottom",
+              "trigger": "after_opponent_refresh"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "war-2-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "war-2-opponent-discard-all",
+          "params": {
+            "action": "discard",
+            "actor": "opponent",
+            "count": "all"
+          },
+          "position": "bottom",
+          "trigger": "after_opponent_compile"
+        }
+      ]
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "war-3-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "war-3-play-facedown",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "faceDown": true,
+            "optional": true,
+            "destinationRule": {
+              "type": "other_lines"
+            }
+          },
+          "position": "bottom",
+          "trigger": "after_opponent_discard"
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "war-4-opponent-discard",
+          "params": {
+            "action": "discard",
+            "actor": "opponent",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "war-5-self-discard",
+          "params": {
+            "action": "discard",
+            "actor": "self",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ]
+}

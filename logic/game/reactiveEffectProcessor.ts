@@ -201,6 +201,26 @@ export function processReactiveEffects(
                 return true;
             }
 
+            // Special case: after_opponent_refresh (War-1)
+            // context.player is the OPPONENT of the refreshing player
+            // The card should trigger if its owner IS context.player
+            if (triggerType === 'after_opponent_refresh') {
+                if (context.player !== owner) {
+                    return false;
+                }
+                return true;
+            }
+
+            // Special case: after_opponent_compile (War-2)
+            // context.player is the NON-compiler (opponent of the compiling player)
+            // The card should trigger if its owner IS context.player
+            if (triggerType === 'after_opponent_compile') {
+                if (context.player !== owner) {
+                    return false;
+                }
+                return true;
+            }
+
             // Check if this effect should trigger based on who performed the action
             if (triggerActor === 'self') {
                 // Only trigger if card owner performed the action
@@ -245,7 +265,7 @@ export function processReactiveEffects(
         const cardName = `${card.protocol}-${card.value}`;
         newState = increaseLogIndent(newState);
         newState = setLogSource(newState, cardName);
-        newState = setLogPhase(newState, undefined); // Top box effects have no phase marker
+        newState = setLogPhase(newState, 'after'); // Reactive effects get [After] prefix
 
         // Build effect context
         const opponent = owner === 'player' ? 'opponent' : 'player';
@@ -272,6 +292,14 @@ export function processReactiveEffects(
 
             // If an action is required, stop and return
             if (newState.actionRequired) {
+                // CRITICAL FIX: If the reactive effect created an action for a different player than the current turn,
+                // we need to mark this as an interrupt so the turn flow returns correctly after the action completes.
+                const actionActor = (newState.actionRequired as any).actor || owner;
+                if (actionActor !== state.turn && !newState._interruptedTurn) {
+                    newState._interruptedTurn = state.turn;
+                    newState._interruptedPhase = state.phase;
+                    newState.turn = actionActor;
+                }
 
                 // CRITICAL: If there are pending effects from the original card (e.g., Darkness-0 shift
                 // being interrupted by Spirit-3 after_draw), queue them to execute after the reactive prompt

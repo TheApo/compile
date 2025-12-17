@@ -103,6 +103,18 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             // It was a discard from a card effect. Check for chained effects FIRST.
             stateAfterDiscard = handleChainedEffectsOnDiscard(stateAfterDiscard, 'player', currentAction.sourceEffect, currentAction.sourceCardId);
 
+            // CRITICAL FIX: If handleChainedEffectsOnDiscard set an actionRequired (e.g., Plague-2's "then" effect),
+            // save it before running reactive effects. If a reactive effect (like War-3) creates a NEW actionRequired,
+            // we queue the original one to run after the reactive effect completes.
+            const chainActionRequired = stateAfterDiscard.actionRequired;
+            // Use indent level from the ORIGINAL action (saved when actionRequired was created)
+            // This preserves the correct nesting level even after user interaction
+            const savedIndentLevel = currentAction._savedIndentLevel || stateAfterDiscard._logIndentLevel || 1;
+            if (chainActionRequired) {
+                // Temporarily clear actionRequired so reactive effects can run
+                stateAfterDiscard.actionRequired = null;
+            }
+
             // THEN trigger reactive effects after self discards (for cards with after_discard trigger)
             // This must come AFTER handleChainedEffectsOnDiscard since that function clears actionRequired
             const selfDiscardResult = processReactiveEffects(stateAfterDiscard, 'after_discard', { player: 'player' });
@@ -111,6 +123,31 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             // Trigger reactive effects after opponent discards
             const reactiveOpponentResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: 'opponent' });
             stateAfterDiscard = reactiveOpponentResult.newState;
+
+            // CRITICAL: If we saved a chain actionRequired and reactive effects also created one,
+            // queue the chain action to run after the reactive effect completes
+            if (chainActionRequired) {
+                // CRITICAL FIX: Re-check hand size - reactive effects may have changed it (War-3 plays a card)
+                const chainActor = (chainActionRequired as any).actor;
+                const currentHandSize = chainActor ? stateAfterDiscard[chainActor as 'player' | 'opponent'].hand.length : 0;
+                const originalCount = (chainActionRequired as any).count || 1;
+                const adjustedCount = Math.min(originalCount, currentHandSize);
+
+                if (adjustedCount <= 0) {
+                    // Player has no cards to discard - skip the chain action entirely
+                    // Don't queue or restore - just continue
+                } else if (stateAfterDiscard.actionRequired) {
+                    // Reactive effect created actionRequired - queue the chain action with adjusted count
+                    // Include saved indent level for correct log formatting when dequeued
+                    stateAfterDiscard.queuedActions = [
+                        { ...chainActionRequired, type: chainActionRequired.type, count: adjustedCount, _savedIndentLevel: savedIndentLevel } as any,
+                        ...(stateAfterDiscard.queuedActions || []),
+                    ];
+                } else {
+                    // No reactive actionRequired - restore the chain action with adjusted count
+                    stateAfterDiscard.actionRequired = { ...chainActionRequired, count: adjustedCount };
+                }
+            }
 
             return stateAfterDiscard;
         }
@@ -221,6 +258,18 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         // CRITICAL: Handle chained effects FIRST (this clears actionRequired)
         stateAfterDiscard = handleChainedEffectsOnDiscard(stateAfterDiscard, player, action?.sourceEffect, action?.sourceCardId);
 
+        // CRITICAL FIX: If handleChainedEffectsOnDiscard set an actionRequired (e.g., Plague-2's "then" effect),
+        // save it before running reactive effects. If a reactive effect (like War-3) creates a NEW actionRequired,
+        // we queue the original one to run after the reactive effect completes.
+        const chainActionRequired = stateAfterDiscard.actionRequired;
+        // Use indent level from the ORIGINAL action (saved when actionRequired was created)
+        // This preserves the correct nesting level even after user interaction
+        const savedIndentLevel = (action as any)?._savedIndentLevel || stateAfterDiscard._logIndentLevel || 1;
+        if (chainActionRequired) {
+            // Temporarily clear actionRequired so reactive effects can run
+            stateAfterDiscard.actionRequired = null;
+        }
+
         // THEN trigger reactive effects after self discards (for cards with after_discard trigger)
         // This must come AFTER handleChainedEffectsOnDiscard since that function clears actionRequired
         const selfDiscardResult = processReactiveEffects(stateAfterDiscard, 'after_discard', { player });
@@ -230,6 +279,31 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         const opponentOfDiscarder = player === 'player' ? 'opponent' : 'player';
         const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_opponent_discard', { player: opponentOfDiscarder });
         stateAfterDiscard = reactiveResult.newState;
+
+        // CRITICAL: If we saved a chain actionRequired and reactive effects also created one,
+        // queue the chain action to run after the reactive effect completes
+        if (chainActionRequired) {
+            // CRITICAL FIX: Re-check hand size - reactive effects may have changed it (War-3 plays a card)
+            const chainActor = (chainActionRequired as any).actor;
+            const currentHandSize = chainActor ? stateAfterDiscard[chainActor as 'player' | 'opponent'].hand.length : 0;
+            const originalCount = (chainActionRequired as any).count || 1;
+            const adjustedCount = Math.min(originalCount, currentHandSize);
+
+            if (adjustedCount <= 0) {
+                // Player has no cards to discard - skip the chain action entirely
+                // Don't queue or restore - just continue
+            } else if (stateAfterDiscard.actionRequired) {
+                // Reactive effect created actionRequired - queue the chain action with adjusted count
+                // Include saved indent level for correct log formatting when dequeued
+                stateAfterDiscard.queuedActions = [
+                    { ...chainActionRequired, type: chainActionRequired.type, count: adjustedCount, _savedIndentLevel: savedIndentLevel } as any,
+                    ...(stateAfterDiscard.queuedActions || []),
+                ];
+            } else {
+                // No reactive actionRequired - restore the chain action with adjusted count
+                stateAfterDiscard.actionRequired = { ...chainActionRequired, count: adjustedCount };
+            }
+        }
 
         return stateAfterDiscard;
     };

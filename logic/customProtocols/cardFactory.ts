@@ -189,7 +189,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     break;
                 }
 
-                let text = params.optional ? 'Flip this card' : 'Flip this card';
+                let text = params.optional ? 'You may flip this card' : 'Flip this card';
 
                 // NEW: Add conditional text (Anarchy-6)
                 if (params.advancedConditional?.type === 'protocol_match') {
@@ -467,7 +467,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
-            let text = 'Delete ';
+            let text = params.optional ? 'You may delete ' : 'Delete ';
 
             // NEW: Special handling for Anarchy-2 style (covered or uncovered)
             const isCoveredOrUncovered = params.targetFilter?.position === 'any';
@@ -758,7 +758,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     cardPart = count === 1 ? `a card${valueFilterText} from their hand` : `${count} cards${valueFilterText} from their hand`;
                 }
             } else {
-                actorText = 'Play';
+                actorText = params.optional ? 'You may play' : 'Play';
                 if (params.source === 'deck') {
                     cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
                 } else {
@@ -1337,6 +1337,26 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         // Mirror-4: "After your opponent draws cards: Draw 1 card."
         if (trigger === 'after_opponent_draw') {
             return `<div><span class='emphasis'>After your opponent draws cards:</span> ${summary}</div>`;
+        }
+
+        // War-0: "After you refresh: You may flip this card."
+        if (trigger === 'after_refresh') {
+            return `<div><span class='emphasis'>After you refresh:</span> ${summary}</div>`;
+        }
+
+        // War-1: "After your opponent refreshes: Discard any number of cards. Refresh."
+        if (trigger === 'after_opponent_refresh') {
+            return `<div><span class='emphasis'>After your opponent refreshes:</span> ${summary}</div>`;
+        }
+
+        // "After you compile:" (for symmetry)
+        if (trigger === 'after_compile') {
+            return `<div><span class='emphasis'>After you compile:</span> ${summary}</div>`;
+        }
+
+        // War-2: "After your opponent compiles: Your opponent discards their hand."
+        if (trigger === 'after_opponent_compile') {
+            return `<div><span class='emphasis'>After your opponent compiles:</span> ${summary}</div>`;
         }
 
         // NEW: after_play with reactiveScope (Ice-1 Bottom)

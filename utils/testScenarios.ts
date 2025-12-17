@@ -487,6 +487,8 @@ export const scenario10_Hate1Interrupt: TestScenario = {
         // Opponent: Plague-5 (unten) + Plague-0 (oben, uncovered) auf Lane 0
         newState = placeCard(newState, 'opponent', 0, createCard('Plague', 2, true)); // UNTEN
         newState = placeCard(newState, 'opponent', 0, createCard('Plague', 0, true)); // OBEN (uncovered)
+		
+		newState = placeCard(newState, 'player', 0, createCard('War', 3, true)); // OBEN (uncovered)
 
         // Opponent: 5 Karten in Hand zum Discarden
         newState.opponent.hand = [
@@ -4073,6 +4075,114 @@ export const scenario78_Peace4ReactiveTest: TestScenario = {
     }
 };
 
+/**
+ * Szenario 79: War Custom Protocol Playground
+ *
+ * Setup:
+ * - Player hat War-Protokoll
+ * - Player hat alle 6 War-Karten (0-5) auf der Hand
+ * - War-0 (face-up) auf Lane 0 für after_refresh Test
+ *
+ * Test: Manuelle Tests aller War-Effekte
+ */
+export const scenario79_WarCustomPlayground: TestScenario = {
+    name: "War Custom Protocol Playground",
+    description: "Player has War protocol with cards on board for testing reactive triggers",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['War', 'Fire', 'Water'],
+            ['Plague', 'Death', 'Spirit'],
+            'player',
+            'action'
+        );
+
+        // Player: War cards in hand (one of each value)
+        newState.player.hand = [
+            createCard('War', 1, true),
+            createCard('War', 2, true),
+            createCard('War', 3, true),
+            createCard('War', 4, true),
+            createCard('War', 5, true),
+        ];
+
+        // Player: War-0 (face-up) on Lane 0 for testing after_refresh and after_opponent_draw
+        newState = placeCard(newState, 'player', 2, createCard('War', 0, true));
+
+        // Opponent: Some cards for targeting
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 1, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Spirit', 5, true)); // face-down
+		newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true)); // face-down
+
+        // Opponent hand for discard testing
+        newState.opponent.hand = [
+            createCard('Death', 1, true),
+            createCard('Spirit', 2, true),
+            createCard('Plague', 1, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Szenario 80: War AI Test
+ *
+ * Setup:
+ * - Opponent (AI) hat War-Protokoll
+ * - AI hat War cards auf dem Board
+ * - Player hat Karten zum Triggern der Reaktionen
+ *
+ * Test: AI handhabt War reactive triggers korrekt
+ */
+export const scenario80_WarAITest: TestScenario = {
+    name: "War AI Test",
+    description: "AI plays with War protocol - tests reactive trigger handling",
+    setup: (state: GameState) => {
+        let newState = initScenarioBase(
+            state,
+            ['Fire', 'Water', 'Death'],
+            ['War', 'Plague', 'Spirit'],
+            'player',
+            'action'
+        );
+
+        // Opponent (AI): War-0 (face-up) on Lane 0
+        // after_refresh: flip self, after_opponent_draw: delete 1
+        newState = placeCard(newState, 'opponent', 0, createCard('War', 0, true));
+
+        // Opponent (AI): War-1 (face-up) on Lane 1
+        // after_opponent_refresh: discard, then refresh
+        newState = placeCard(newState, 'opponent', 1, createCard('War', 1, true));
+
+        // Opponent (AI): War-2 (face-up) on Lane 2
+        // middle: flip 1, after_opponent_compile: opponent discards hand
+        newState = placeCard(newState, 'opponent', 2, createCard('War', 2, true));
+
+        // Player: Cards for testing and targeting
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 1, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Death', 1, true));
+
+        // Player hand - cards to draw/discard
+        newState.player.hand = [
+            createCard('Fire', 2, true),
+            createCard('Water', 3, true),
+            createCard('Death', 2, true),
+        ];
+
+        // Opponent hand - cards for discard/refresh chain
+        newState.opponent.hand = [
+            createCard('Spirit', 1, true),
+            createCard('Plague', 2, true),
+        ];
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4152,4 +4262,6 @@ export const allScenarios: TestScenario[] = [
     scenario76_PeaceCustomPlayground,
     scenario77_PeaceAITest,
     scenario78_Peace4ReactiveTest,
+    scenario79_WarCustomPlayground,
+    scenario80_WarAITest,
 ];

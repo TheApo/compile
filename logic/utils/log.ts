@@ -76,7 +76,7 @@ export const setLogSource = (state: GameState, cardName: string | undefined): Ga
 /**
  * Helper to set the current phase context
  */
-export const setLogPhase = (state: GameState, phase: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover' | undefined): GameState => {
+export const setLogPhase = (state: GameState, phase: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover' | 'after' | undefined): GameState => {
     return { ...state, _currentPhaseContext: phase };
 };
 

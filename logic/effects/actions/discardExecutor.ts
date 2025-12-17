@@ -352,6 +352,8 @@ export function executeDiscardEffect(
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,
+        // Save indent level for correct log formatting when follow-up effects are queued
+        _savedIndentLevel: state._logIndentLevel,
     } as any;
 
     return { newState };

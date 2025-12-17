@@ -62,7 +62,11 @@ export type EffectTrigger =
     | 'after_play'           // After cards are played
     | 'on_flip'              // When this card would be flipped (Metal-6)
     | 'on_cover_or_flip'     // When this card would be covered OR flipped (Metal-6)
-    | 'when_card_returned';  // When a card would be returned to a player's hand
+    | 'when_card_returned'   // When a card would be returned to a player's hand
+    | 'after_refresh'        // After you refresh (War-0)
+    | 'after_opponent_refresh'  // After opponent refreshes (War-1)
+    | 'after_compile'        // After you compile
+    | 'after_opponent_compile'; // After opponent compiles (War-2)
 
 export type TargetOwner = 'any' | 'own' | 'opponent';
 export type TargetPosition = 'any' | 'covered' | 'uncovered' | 'covered_in_this_line';

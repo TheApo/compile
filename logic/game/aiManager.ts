@@ -244,6 +244,13 @@ export const resolveRequiredOpponentAction = (
             return endActionForPhase(newState, phaseManager);
         }
 
+        // CRITICAL: Handle prompt_optional_draw during interrupts (Death-1, etc.)
+        if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_draw') {
+            const nextState = resolvers.resolveOptionalDrawPrompt(state, aiDecision.accept);
+            if (nextState.actionRequired) return nextState; // New action created (e.g., War-0 reactive)
+            return endActionForPhase(nextState, phaseManager);
+        }
+
         // GENERIC: Handle ALL optional effect prompts (Spirit-2, Spirit-3, etc. during interrupts)
         if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_effect') {
             const nextState = resolvers.resolveOptionalEffectPrompt(state, aiDecision.accept);
@@ -347,6 +354,38 @@ export const resolveRequiredOpponentAction = (
         if (aiDecision.type === 'confirmDeckPlayPreview' && action.type === 'confirm_deck_play_preview') {
             const newState = resolvers.resolveConfirmDeckPlayPreview(state);
             if (newState.actionRequired && newState.actionRequired.actor === 'opponent') return newState;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        // CRITICAL: Handle execute_conditional_followup during interrupts
+        // This happens when a reactive effect (War-0's after_opponent_draw) interrupts
+        // a conditional chain (Death-1's "if you do, delete other then delete self")
+        if (action.type === 'execute_conditional_followup') {
+            const { sourceCardId, laneIndex, followUpEffect, context: effectContext, actor, logSource, logPhase, logIndentLevel } = action as any;
+
+            // Find the source card
+            const sourceCard = findCardOnBoard(state, sourceCardId);
+
+            if (!sourceCard) {
+                // Card no longer exists (was deleted) - skip the followUp and log
+                // CRITICAL: Restore the ORIGINAL log context before logging
+                let newState = { ...state };
+                if (logSource !== undefined) newState._currentEffectSource = logSource;
+                if (logPhase !== undefined) newState._currentPhaseContext = logPhase;
+                if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+
+                newState = log(newState, actor, `Follow-up effect skipped (source no longer active).`);
+                newState.actionRequired = null;
+                return endActionForPhase(newState, phaseManager);
+            }
+
+            // Source card still exists - execute the follow-up effect
+            const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
+            let newState = { ...state, actionRequired: null };
+            const result = executeCustomEffect(sourceCard.card, laneIndex, newState, effectContext, followUpEffect);
+            newState = result.newState;
+
+            if (newState.actionRequired) return newState;
             return endActionForPhase(newState, phaseManager);
         }
 
@@ -481,6 +520,14 @@ const handleRequiredAction = (
         const nextState = actions.resolveOptionalDiscardCustomPrompt(state, aiDecision.accept);
         if (nextState.actionRequired) return nextState; // New action (discard), re-run processor
         return endActionForPhase(nextState, phaseManager); // Skipped, so end turn
+    }
+
+    // CRITICAL: Handle prompt_optional_draw specifically (Death-1, etc.)
+    // This MUST come before the generic resolveOptionalEffectPrompt handler!
+    if (aiDecision.type === 'resolveOptionalEffectPrompt' && action.type === 'prompt_optional_draw') {
+        const nextState = actions.resolveOptionalDrawPrompt(state, aiDecision.accept);
+        if (nextState.actionRequired) return nextState; // New action created (e.g., War-0 reactive)
+        return endActionForPhase(nextState, phaseManager);
     }
 
     // GENERIC: Handle ALL optional effect prompts

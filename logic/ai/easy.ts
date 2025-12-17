@@ -955,7 +955,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         // Prompt for optional draw
         case 'prompt_optional_draw': {
             // Easy AI: Always accept draws
-            return { type: 'resolvePrompt', accept: true };
+            // CRITICAL: Must use 'resolveOptionalEffectPrompt' type to match AI Manager handler
+            return { type: 'resolveOptionalEffectPrompt', accept: true };
         }
 
         // Custom board card reveal (custom protocols)

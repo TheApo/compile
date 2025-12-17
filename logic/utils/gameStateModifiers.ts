@@ -9,6 +9,7 @@ import { GameState, PlayedCard, Player, PlayerState, ActionRequired } from "../.
 import { shuffleDeck } from '../../utils/gameLogic';
 import { log } from './log';
 import { recalculateAllLaneValues } from '../game/stateManager';
+import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 
 /**
  * Draws a specified number of cards from a deck, handling reshuffling the discard pile if necessary.
@@ -89,8 +90,16 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         newState = log(newState, player, `${playerName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
     }
 
-    // NOTE: Spirit-3 after_draw trigger is now handled by custom protocol reactive effects
-    // The old checkForSpirit3Trigger call was removed to avoid double-triggering
+    // Trigger reactive effects after draw (Spirit-3 custom protocol)
+    if (drawnCards.length > 0) {
+        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player, count: drawnCards.length });
+        newState = reactiveResult.newState;
+
+        // CRITICAL: Trigger after_opponent_draw for opponent's cards (War-0, Mirror-4)
+        const opponentOfDrawer = player === 'player' ? 'opponent' : 'player';
+        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: drawnCards.length });
+        newState = oppReactiveResult.newState;
+    }
 
     return newState;
 }

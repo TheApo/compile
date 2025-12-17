@@ -61,40 +61,24 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
                 // CRITICAL: Queue pending custom effects (Death-1: nested conditionals)
                 newState = queuePendingCustomEffects(newState);
             } else {
-                // Source card not found on board - it might have been deleted or returned
-                // Still try to execute the follow-up effect with a synthetic card
-                const opponent: Player = actor === 'player' ? 'opponent' : 'player';
+                // Source card not found on board - it was deleted or returned
+                // CRITICAL: Don't execute follow-up effects for deleted source cards!
+                // This prevents turn flow corruption when e.g., War-0 deletes Death-1 during its effect chain.
+                const sourceCardName = (prevState.actionRequired as any).logSource || 'deleted card';
+                newState = log(newState, actor, `${sourceCardName}: Follow-up effect skipped (source no longer active).`);
+                newState.actionRequired = null;
 
-                // Find any lane where the actor has cards (for context)
-                let fallbackLaneIndex = 0;
-                for (let i = 0; i < 3; i++) {
-                    if (newState[actor].lanes[i].length > 0) {
-                        fallbackLaneIndex = i;
-                        break;
-                    }
+                // CRITICAL: Also clear any pending effects from this source
+                if ((newState as any)._pendingCustomEffects?.sourceCardId === sourceCardId) {
+                    delete (newState as any)._pendingCustomEffects;
                 }
 
-                // Create a minimal synthetic card for the context
-                const syntheticCard: PlayedCard = {
-                    id: sourceCardId,
-                    protocol: 'Unknown',
-                    value: 0,
-                    isFaceUp: true
-                };
-
-                const context: EffectContext = {
-                    cardOwner: actor,
-                    actor,
-                    currentTurn: newState.turn,
-                    opponent,
-                    triggerType: 'start' as const
-                };
-
-                const result = executeCustomEffect(syntheticCard, fallbackLaneIndex, newState, context, followUpEffect);
-                newState = result.newState;
-
-                // CRITICAL: Queue pending custom effects
-                newState = queuePendingCustomEffects(newState);
+                // Clear any queued actions that reference this deleted source card
+                if (newState.queuedActions && newState.queuedActions.length > 0) {
+                    newState.queuedActions = newState.queuedActions.filter(
+                        (action: any) => action.sourceCardId !== sourceCardId
+                    );
+                }
             }
         } else {
             newState.actionRequired = null;
@@ -245,7 +229,7 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             if (result.newState.actionRequired) {
                 const actionSourceId = (result.newState.actionRequired as any).sourceCardId;
 
-                // CRITICAL: If actionRequired is from a DIFFERENT card (e.g., Spirit-3's after_draw
+                // CRITICAL: If actionRequired is from a DIFFERENT card (e.g., War-0's after_opponent_draw
                 // interrupted Death-1's draw), queue the followUp instead of attaching to foreign action.
                 // This prevents the followUp from being lost when the interrupt completes.
                 if (actionSourceId && actionSourceId !== sourceCardId) {
@@ -256,6 +240,10 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
                         followUpEffect: effectDef.conditional.thenEffect,
                         context: context,
                         actor: actor,
+                        // Preserve original log context for proper formatting
+                        logSource: (prevState.actionRequired as any).logSource,
+                        logPhase: (prevState.actionRequired as any).logPhase,
+                        logIndentLevel: (prevState.actionRequired as any).logIndentLevel,
                     };
                     const stateWithQueue = {
                         ...result.newState,
@@ -280,8 +268,30 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             }
 
             // Effect completed immediately (no actionRequired), execute followUp now
+            // CRITICAL: Re-check if the source card still exists AFTER the effect executed
+            // (e.g., War-0's reactive delete during Death-1's draw may have deleted Death-1)
+            const sourceCardAfter = [...result.newState.player.lanes.flat(), ...result.newState.opponent.lanes.flat()]
+                .find(c => c.id === sourceCardId);
+
+            if (!sourceCardAfter) {
+                // Source card was deleted during the effect - skip the followUp and log
+                // CRITICAL: Restore the ORIGINAL log context (Death-1's Start) before logging,
+                // not War-0's After context
+                let newState = { ...result.newState };
+                const originalLogSource = (prevState.actionRequired as any).logSource;
+                const originalLogPhase = (prevState.actionRequired as any).logPhase;
+                const originalLogIndent = (prevState.actionRequired as any).logIndentLevel;
+
+                if (originalLogSource !== undefined) newState._currentEffectSource = originalLogSource;
+                if (originalLogPhase !== undefined) newState._currentPhaseContext = originalLogPhase;
+                if (originalLogIndent !== undefined) newState._logIndentLevel = originalLogIndent;
+
+                newState = log(newState, actor, `Follow-up effect skipped (source no longer active).`);
+                return newState;
+            }
+
             const followUpEffect = effectDef.conditional.thenEffect;
-            const followUpResult = executeCustomEffect(sourceCard, laneIndex, result.newState, context, followUpEffect);
+            const followUpResult = executeCustomEffect(sourceCardAfter, laneIndex, result.newState, context, followUpEffect);
 
             // CRITICAL: If the followUp created an actionRequired AND the followUp has its own conditional,
             // attach the nested conditional as a followUpEffect so it executes after the action completes
