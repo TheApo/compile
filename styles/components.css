@@ -185,6 +185,11 @@
     box-shadow: 0 0 15px var(--primary-color), 0 0 30px var(--primary-color);
 }
 
+.revealed-deck-card-grid .card-component.in-hand.selected-card {
+    border: 2px solid var(--primary-color);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
 .revealed-deck-card-grid .card-component.in-hand.dimmed {
     filter: grayscale(70%) brightness(0.5);
     opacity: 0.5;

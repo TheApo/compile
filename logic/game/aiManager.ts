@@ -16,6 +16,7 @@ import { performShuffleTrash } from '../effects/actions/shuffleExecutor';
 import { CardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
+import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 
 type ActionDispatchers = {
     compileLane: (s: GameState, l: number) => GameState,
@@ -195,7 +196,6 @@ export const resolveRequiredOpponentAction = (
                                 discardedCount: discardedCount,
                             };
 
-                            const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
                             const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
                             return result.newState;
                         }
@@ -380,7 +380,6 @@ export const resolveRequiredOpponentAction = (
             }
 
             // Source card still exists - execute the follow-up effect
-            const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
             let newState = { ...state, actionRequired: null };
             const result = executeCustomEffect(sourceCard.card, laneIndex, newState, effectContext, followUpEffect);
             newState = result.newState;
@@ -438,7 +437,6 @@ const handleRequiredAction = (
                             discardedCount: discardedCount,
                         };
 
-                        const { executeCustomEffect } = require('../customProtocols/effectInterpreter');
                         const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
                         return result.newState;
                     }

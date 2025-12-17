@@ -17,8 +17,14 @@ interface RevealedDeckModalProps {
  * Uses same layout pattern as DebugModal for consistency
  */
 export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModalProps) {
-    const [previewCard, setPreviewCard] = useState<any>(null);
+    // Selected card (permanent, set by click/touch)
+    const [selectedCard, setSelectedCard] = useState<any>(null);
+    // Hovered card (temporary, set by hover - ignored on touch devices)
+    const [hoveredCard, setHoveredCard] = useState<any>(null);
     const hasInitialized = useRef(false);
+
+    // Preview shows hovered card if any, otherwise selected card
+    const previewCard = hoveredCard || selectedCard;
 
     const action = gameState.actionRequired as any;
 
@@ -39,7 +45,7 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
         if (action?.type === 'select_card_from_revealed_deck' && selectableCardIds?.length > 0 && !hasInitialized.current) {
             const firstSelectableCard = deckCards.find((card: any) => selectableCardIds.includes(card.id));
             if (firstSelectableCard) {
-                setPreviewCard(firstSelectableCard);
+                setSelectedCard(firstSelectableCard);
                 hasInitialized.current = true;
             }
         }
@@ -49,7 +55,8 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
     useEffect(() => {
         if (!action || action.type !== 'select_card_from_revealed_deck') {
             hasInitialized.current = false;
-            setPreviewCard(null);
+            setSelectedCard(null);
+            setHoveredCard(null);
         }
     }, [action]);
 
@@ -65,13 +72,17 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
 
     const handleCardHover = (card: any) => {
         if (isSelectable(card.id)) {
-            setPreviewCard(card);
+            setHoveredCard(card);
         }
+    };
+
+    const handleCardLeave = () => {
+        setHoveredCard(null);
     };
 
     const handleCardClick = (card: any) => {
         if (isSelectable(card.id)) {
-            setPreviewCard(card);
+            setSelectedCard(card);
         }
     };
 
@@ -112,7 +123,9 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
                             {deckCards.length > 0 ? (
                                 deckCards.map((card: any) => {
                                     const selectable = isSelectable(card.id);
-                                    const isPreview = previewCard?.id === card.id;
+                                    const isSelected = selectedCard?.id === card.id;
+                                    const isHovered = hoveredCard?.id === card.id;
+                                    const isPreview = isHovered || isSelected;
                                     return (
                                         <div
                                             key={card.id}
@@ -121,12 +134,13 @@ export function RevealedDeckModal({ gameState, onSelectCard }: RevealedDeckModal
                                                 handleCardClick(card);
                                             }}
                                             onMouseEnter={() => handleCardHover(card)}
+                                            onMouseLeave={handleCardLeave}
                                             style={{ cursor: selectable ? 'pointer' : 'default' }}
                                         >
                                             <CardComponent
                                                 card={card}
                                                 isFaceUp={true}
-                                                additionalClassName={`in-hand ${selectable ? (isPreview ? 'highlight-selectable' : '') : 'dimmed'}`}
+                                                additionalClassName={`in-hand ${selectable ? (isPreview ? 'highlight-selectable' : '') : 'dimmed'} ${isSelected ? 'selected-card' : ''}`}
                                             />
                                         </div>
                                     );

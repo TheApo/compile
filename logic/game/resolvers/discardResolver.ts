@@ -314,6 +314,21 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             newState.actionRequired = { ...originalAction, count: remainingDiscards };
             return newState;
         } else {
+            // CRITICAL FIX: Wenn followUpEffect existiert, discard_completed zurückgeben
+            // und NICHT durch handleDiscardCompletion gehen (das verliert den followUpEffect)
+            if ((originalAction as any).followUpEffect) {
+                return {
+                    ...newState,
+                    actionRequired: {
+                        type: 'discard_completed',
+                        followUpEffect: (originalAction as any).followUpEffect,
+                        conditionalType: (originalAction as any).conditionalType,
+                        previousHandSize: (originalAction as any).previousHandSize,
+                        sourceCardId: originalAction.sourceCardId,
+                        actor: player,
+                    }
+                };
+            }
             return handleDiscardCompletion(newState, originalAction);
         }
     }
@@ -325,6 +340,20 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             newState.actionRequired = { ...directAction, count: remainingDiscards };
             return newState;
         } else {
+            // CRITICAL FIX: Wenn followUpEffect existiert, discard_completed zurückgeben
+            if ((directAction as any).followUpEffect) {
+                return {
+                    ...newState,
+                    actionRequired: {
+                        type: 'discard_completed',
+                        followUpEffect: (directAction as any).followUpEffect,
+                        conditionalType: (directAction as any).conditionalType,
+                        previousHandSize: (directAction as any).previousHandSize,
+                        sourceCardId: directAction.sourceCardId,
+                        actor: player,
+                    }
+                };
+            }
             return handleDiscardCompletion(newState, directAction);
         }
     }

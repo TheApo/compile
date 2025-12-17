@@ -377,7 +377,10 @@ export function executeDrawEffect(
             // No matching cards - log message but DON'T return, let subsequent effects (shuffle, play) continue
             const cardName = `${card.protocol}-${card.value}`;
             newState = log(newState, drawingPlayer, `${cardName}: No cards with value ${targetValue} in deck.`);
-            // Don't return - fall through to let the effect chain continue
+            // Set drawnCards to current hand (no new cards drawn)
+            drawnCards = newState[drawingPlayer].hand;
+            remainingDeck = deck;
+            newCards = [];
         } else {
             // 1 or more options - ALWAYS show modal so player can see the revealed deck
             newState.actionRequired = {

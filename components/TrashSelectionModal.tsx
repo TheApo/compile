@@ -17,9 +17,17 @@ interface TrashSelectionModalProps {
  * Uses same layout pattern as RevealedDeckModal for consistency
  */
 export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionModalProps) {
-    const [previewCard, setPreviewCard] = useState<any>(null);
-    const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+    // Selected card (permanent, set by click)
+    const [selectedCard, setSelectedCard] = useState<any>(null);
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    // Hovered card (temporary, set by hover)
+    const [hoveredCard, setHoveredCard] = useState<any>(null);
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const hasInitialized = useRef(false);
+
+    // Preview shows hovered card if any, otherwise selected card
+    const previewCard = hoveredCard || selectedCard;
+    const previewIndex = hoveredIndex !== null ? hoveredIndex : selectedIndex;
 
     const action = gameState.actionRequired as any;
 
@@ -55,8 +63,8 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
                               action?.type === 'select_card_from_trash_to_reveal';
 
         if (isTrashAction && trashCards.length > 0 && !hasInitialized.current) {
-            setPreviewCard(trashCards[0]);
-            setPreviewIndex(0);
+            setSelectedCard(trashCards[0]);
+            setSelectedIndex(0);
             hasInitialized.current = true;
         }
     }, [action?.type, trashCards]);
@@ -68,8 +76,10 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
 
         if (!action || !isTrashAction) {
             hasInitialized.current = false;
-            setPreviewCard(null);
-            setPreviewIndex(null);
+            setSelectedCard(null);
+            setSelectedIndex(null);
+            setHoveredCard(null);
+            setHoveredIndex(null);
         }
     }, [action]);
 
@@ -89,13 +99,18 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
         : `Select a card from ${ownerText} trash to reveal:`;
 
     const handleCardHover = (card: any, index: number) => {
-        setPreviewCard(card);
-        setPreviewIndex(index);
+        setHoveredCard(card);
+        setHoveredIndex(index);
+    };
+
+    const handleCardLeave = () => {
+        setHoveredCard(null);
+        setHoveredIndex(null);
     };
 
     const handleCardClick = (card: any, index: number) => {
-        setPreviewCard(card);
-        setPreviewIndex(index);
+        setSelectedCard(card);
+        setSelectedIndex(index);
     };
 
     const handleConfirmSelection = () => {
@@ -134,7 +149,9 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
                         <div className="revealed-deck-card-grid">
                             {trashCards.length > 0 ? (
                                 trashCards.map((card: any, index: number) => {
-                                    const isPreview = previewIndex === index;
+                                    const isSelected = selectedIndex === index;
+                                    const isHovered = hoveredIndex === index;
+                                    const isPreview = isHovered || isSelected;
                                     return (
                                         <div
                                             key={card.id}
@@ -143,12 +160,13 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
                                                 handleCardClick(card, index);
                                             }}
                                             onMouseEnter={() => handleCardHover(card, index)}
+                                            onMouseLeave={handleCardLeave}
                                             style={{ cursor: 'pointer' }}
                                         >
                                             <CardComponent
                                                 card={card}
                                                 isFaceUp={true}
-                                                additionalClassName={`in-hand ${isPreview ? 'highlight-selectable' : ''}`}
+                                                additionalClassName={`in-hand ${isPreview ? 'highlight-selectable' : ''} ${isSelected ? 'selected-card' : ''}`}
                                             />
                                         </div>
                                     );
