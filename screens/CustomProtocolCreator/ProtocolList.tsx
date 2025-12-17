@@ -34,6 +34,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'smoke-custom-001',
     'speed_custom_1',
     'spirit_custom_1',
+    'time-custom-001',
     'war-custom-001',
     'water_custom_1',
 ];

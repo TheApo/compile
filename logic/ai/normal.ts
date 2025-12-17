@@ -2603,6 +2603,56 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
+        // ========== TIME PROTOCOL - Trash selection handlers ==========
+
+        // Time-0: Select a card from trash to play
+        case 'select_card_from_trash_to_play': {
+            const trashCards = state.opponent.discard;
+            if (trashCards.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Normal AI: Pick highest value card from trash that would help compile
+            const sortedTrash = [...trashCards]
+                .map((card, index) => {
+                    let score = card.value * 10; // Base score from value
+
+                    // Bonus for cards that could help compile
+                    for (let i = 0; i < 3; i++) {
+                        if (state.opponent.compiled[i]) continue;
+                        const valueAfter = state.opponent.laneValues[i] + card.value;
+                        if (valueAfter >= 10 && valueAfter > state.player.laneValues[i]) {
+                            score += 100; // Can compile with this card
+                        }
+                    }
+
+                    // Bonus for cards with useful effects
+                    if (card.keywords?.flip) score += 5;
+                    if (card.keywords?.draw) score += 3;
+                    if (card.keywords?.delete) score += 5;
+
+                    return { card, index, score };
+                })
+                .sort((a, b) => b.score - a.score);
+
+            return { type: 'selectTrashCard', cardIndex: sortedTrash[0].index };
+        }
+
+        // Time-3: Select a card from trash to reveal (then play face-down)
+        case 'select_card_from_trash_to_reveal': {
+            const trashCards = state.opponent.discard;
+            if (trashCards.length === 0) {
+                return { type: 'skip' };
+            }
+
+            // Normal AI: Prefer high-value cards for face-down play (more points)
+            const sortedTrash = [...trashCards]
+                .map((card, index) => ({ card, index, value: card.value }))
+                .sort((a, b) => b.value - a.value);
+
+            return { type: 'selectTrashCard', cardIndex: sortedTrash[0].index };
+        }
+
         // ========== ADDITIONAL HANDLERS FOR CUSTOM PROTOCOLS ==========
 
         case 'select_lane_for_delete': {

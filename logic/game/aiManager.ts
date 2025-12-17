@@ -755,6 +755,20 @@ const handleRequiredAction = (
         return endActionForPhase(newState, phaseManager);
     }
 
+    // Time-0: Select card from trash to play
+    if (aiDecision.type === 'selectTrashCard' && action.type === 'select_card_from_trash_to_play') {
+        const newState = resolvers.resolveSelectTrashCardToPlay(state, aiDecision.cardIndex);
+        if (newState.actionRequired) return newState; // Transitions to select_lane_for_play
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Time-3: Select card from trash to reveal
+    if (aiDecision.type === 'selectTrashCard' && action.type === 'select_card_from_trash_to_reveal') {
+        const newState = resolvers.resolveSelectTrashCardToReveal(state, aiDecision.cardIndex);
+        if (newState.actionRequired) return newState; // Transitions to select_lane_for_play
+        return endActionForPhase(newState, phaseManager);
+    }
+
     console.warn(`AI has no logic for mandatory action, clearing it: ${action.type}`);
     const stateWithClearedAction = { ...state, actionRequired: null };
     return endActionForPhase(stateWithClearedAction, phaseManager);

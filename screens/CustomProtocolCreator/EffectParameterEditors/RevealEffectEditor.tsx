@@ -28,12 +28,13 @@ export const RevealEffectEditor: React.FC<{ params: RevealEffectParams; onChange
                     <option value="opponent_hand">Opponent's hand</option>
                     <option value="own_deck_top">Top of your deck</option>
                     <option value="own_deck">Your entire deck</option>
+                    <option value="own_trash">Your trash (discard pile)</option>
                     <option value="board">Board card</option>
                 </select>
             </label>
 
-            {/* Count only for hand-based reveals */}
-            {(params.source === 'own_hand' || params.source === 'opponent_hand' || params.source === 'board') && (
+            {/* Count only for hand-based reveals and trash */}
+            {(params.source === 'own_hand' || params.source === 'opponent_hand' || params.source === 'board' || params.source === 'own_trash') && (
                 <label>
                     Anzahl
                     <input

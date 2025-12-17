@@ -135,8 +135,42 @@ export function executeDiscardEffect(
         return { newState };
     }
 
-    // Handle discard from top of deck
+    // Handle discard from top of deck or entire deck
     const source = params.source || 'hand';
+
+    // NEW: Time-1 - Discard entire deck
+    if (source === 'entire_deck') {
+        let newState = { ...state };
+        const ownerState = { ...newState[cardOwner] };
+        const cardName = `${card.protocol}-${card.value}`;
+
+        // Check if deck has cards
+        if (ownerState.deck.length === 0) {
+            newState = log(newState, cardOwner, `${cardName}: No cards in deck - effect skipped.`);
+            (newState as any)._effectSkippedNoTargets = true;
+            (newState as any)._discardContext = { discardedCount: 0 };
+            return { newState };
+        }
+
+        // Move all cards from deck to discard
+        const discardedCount = ownerState.deck.length;
+        const discardedCards = [...ownerState.deck];
+        ownerState.discard = [...ownerState.discard, ...discardedCards];
+        ownerState.deck = [];
+        newState[cardOwner] = ownerState;
+
+        newState = log(newState, cardOwner, `${cardName}: Discards entire deck (${discardedCount} card${discardedCount !== 1 ? 's' : ''}).`);
+
+        // Store context for follow-up effects
+        (newState as any)._discardContext = {
+            actor: cardOwner,
+            discardedCount,
+            sourceCardId: card.id,
+        };
+
+        return { newState };
+    }
+
     if (source === 'top_deck_own' || source === 'top_deck_opponent') {
         const deckOwner = source === 'top_deck_own' ? cardOwner : context.opponent;
         let newState = { ...state };

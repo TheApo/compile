@@ -558,6 +558,163 @@ export const resolveConfirmDeckDiscard = (prevState: GameState): GameState => {
 };
 
 /**
+ * Time-0: Select card from trash to play
+ * Player selects a card from their discard pile to play
+ */
+export const resolveSelectTrashCardToPlay = (prevState: GameState, selectedCardIndex: number): GameState => {
+    if (prevState.actionRequired?.type !== 'select_card_from_trash_to_play') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
+    const { sourceCardId, faceDown, destinationRule, followUpEffect, conditionalType, sourceLaneIndex } = action;
+
+    let newState = { ...prevState };
+    const actorState = { ...newState[actor] };
+
+    // Validate index
+    if (selectedCardIndex < 0 || selectedCardIndex >= actorState.discard.length) {
+        console.warn(`[resolveSelectTrashCardToPlay] Invalid index ${selectedCardIndex}`);
+        newState.actionRequired = null;
+        return newState;
+    }
+
+    // Remove card from trash
+    const newDiscard = [...actorState.discard];
+    const selectedCard = newDiscard.splice(selectedCardIndex, 1)[0];
+    actorState.discard = newDiscard;
+    newState[actor] = actorState;
+
+    // Create a playable card with ID
+    // Note: isFaceUp will be determined later based on protocol matching if faceDown is not set
+    const cardToPlay = {
+        ...selectedCard,
+        id: `trash-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        // Temporarily set, will be updated by laneResolver based on protocol matching
+        isFaceUp: faceDown === true ? false : true,  // Default to true, laneResolver will check protocol
+    };
+
+    // Log the selection
+    newState = log(newState, actor, `${actorName} selects ${selectedCard.protocol}-${selectedCard.value} from trash.`);
+
+    // Determine if we should use normal play rules (protocol matching)
+    // faceDown === undefined means use normal rules
+    const useNormalPlayRules = faceDown === undefined;
+
+    // Now transition to lane selection (like playing from hand)
+    // Check if there's a destinationRule
+    if (destinationRule?.type === 'other_lines') {
+        // Exclude current lane
+        const validLanes = [0, 1, 2].filter(i => i !== sourceLaneIndex);
+        newState.actionRequired = {
+            type: 'select_lane_for_play',
+            sourceCardId,
+            actor,
+            isFaceDown: faceDown,
+            source: 'trash',
+            preDrawnCard: cardToPlay,  // Card is already selected
+            disallowedLaneIndex: sourceLaneIndex,
+            validLanes,
+            useNormalPlayRules,  // NEW: Flag to indicate protocol matching should determine face state
+            // CRITICAL: Pass conditional info for follow-up effects
+            followUpEffect,
+            conditionalType,
+        } as any;
+    } else {
+        // Any lane is valid
+        newState.actionRequired = {
+            type: 'select_lane_for_play',
+            sourceCardId,
+            actor,
+            isFaceDown: faceDown,
+            source: 'trash',
+            preDrawnCard: cardToPlay,
+            useNormalPlayRules,  // NEW: Flag to indicate protocol matching should determine face state
+            // CRITICAL: Pass conditional info for follow-up effects
+            followUpEffect,
+            conditionalType,
+        } as any;
+    }
+
+    return newState;
+};
+
+/**
+ * Time-3: Select card from trash to reveal
+ * Player selects a card from their discard pile to reveal
+ * The revealed card is then played face-down in another line
+ */
+export const resolveSelectTrashCardToReveal = (prevState: GameState, selectedCardIndex: number): GameState => {
+    if (prevState.actionRequired?.type !== 'select_card_from_trash_to_reveal') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
+    const { sourceCardId, followUpEffect, conditionalType, sourceLaneIndex } = action;
+
+    let newState = { ...prevState };
+    const actorState = { ...newState[actor] };
+
+    // Validate index
+    if (selectedCardIndex < 0 || selectedCardIndex >= actorState.discard.length) {
+        console.warn(`[resolveSelectTrashCardToReveal] Invalid index ${selectedCardIndex}`);
+        newState.actionRequired = null;
+        return newState;
+    }
+
+    // Remove card from trash
+    const newDiscard = [...actorState.discard];
+    const selectedCard = newDiscard.splice(selectedCardIndex, 1)[0];
+    actorState.discard = newDiscard;
+    newState[actor] = actorState;
+
+    // Log the reveal
+    newState = log(newState, actor, `${actorName} reveals ${selectedCard.protocol}-${selectedCard.value} from trash.`);
+
+    // Store revealed card info for follow-up play effect
+    const revealedCard = {
+        ...selectedCard,
+        id: `trash-revealed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        isFaceUp: false  // Will be played face-down
+    };
+
+    // Execute follow-up effect (Time-3: "Play it face-down in another line")
+    if (followUpEffect) {
+        const sourceCard = findCardOnBoard(newState, sourceCardId);
+        if (sourceCard && sourceCard.card.isFaceUp) {
+            // Get valid lanes (exclude current lane for "other_lines")
+            const destRule = followUpEffect.params?.destinationRule;
+            const validLanes = destRule?.type === 'other_lines'
+                ? [0, 1, 2].filter(i => i !== sourceLaneIndex)
+                : [0, 1, 2];
+
+            // Transition to lane selection with the revealed card
+            newState.actionRequired = {
+                type: 'select_lane_for_play',
+                sourceCardId,
+                actor,
+                isFaceDown: true,  // Time-3 plays face-down
+                source: 'trash',
+                preDrawnCard: revealedCard,
+                disallowedLaneIndex: destRule?.type === 'other_lines' ? sourceLaneIndex : undefined,
+                validLanes: destRule?.type === 'other_lines' ? validLanes : undefined,
+            } as any;
+        } else {
+            // Source card no longer active - skip follow-up
+            newState = log(newState, actor, `Source card no longer active. Play effect skipped.`);
+            newState.actionRequired = null;
+            newState = queuePendingCustomEffects(newState);
+        }
+    } else {
+        // No follow-up - just revealed the card
+        newState.actionRequired = null;
+        newState = queuePendingCustomEffects(newState);
+    }
+
+    return newState;
+};
+
+/**
  * Confirm deck play preview - User saw the card being drawn from deck, now select lane
  * Transitions from preview modal to lane selection
  */

@@ -136,6 +136,34 @@ export function executeRevealGiveEffect(
         return { newState };
     }
 
+    // NEW: Handle own_trash reveal (Time-3: "Reveal 1 card from your trash.")
+    if (action === 'reveal' && source === 'own_trash') {
+        let newState = { ...state };
+        const ownerState = { ...newState[cardOwner] };
+        const cardName = `${card.protocol}-${card.value}`;
+
+        if (ownerState.discard.length === 0) {
+            newState = log(newState, cardOwner, `${cardName}: No cards in trash to reveal.`);
+            // CRITICAL: Mark effect as skipped so if_executed conditionals don't trigger
+            (newState as any)._effectSkippedNoTargets = true;
+            return { newState };
+        }
+
+        // Store trash cards for selection (player needs to choose one)
+        newState.actionRequired = {
+            type: 'select_card_from_trash_to_reveal',
+            sourceCardId: card.id,
+            actor: cardOwner,
+            count: count,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
+            sourceLaneIndex: laneIndex,
+        } as any;
+
+        return { newState };
+    }
+
     // NEW: Handle own_deck reveal (Clarity-2/3: "Reveal your deck.")
     if (action === 'reveal' && source === 'own_deck') {
         let newState = { ...state };

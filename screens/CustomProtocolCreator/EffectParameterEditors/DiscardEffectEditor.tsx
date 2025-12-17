@@ -31,11 +31,17 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                     <option value="hand">From Hand</option>
                     <option value="top_deck_own">Top of Own Deck (automatic)</option>
                     <option value="top_deck_opponent">Top of Opponent's Deck (automatic)</option>
+                    <option value="entire_deck">Entire Deck (automatic)</option>
                 </select>
                 {(source === 'top_deck_own' || source === 'top_deck_opponent') && (
                     <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
                         Deck discard is automatic - no player choice needed.
                         The discarded card's value is saved for follow-up effects.
+                    </small>
+                )}
+                {source === 'entire_deck' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Discards all cards from your deck to trash automatically.
                     </small>
                 )}
             </label>

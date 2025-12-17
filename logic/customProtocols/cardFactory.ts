@@ -584,6 +584,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 mainText = "Discard the top card of your opponent's deck.";
                 break;
             }
+            // NEW: Time-1 - Discard entire deck
+            if (params.source === 'entire_deck') {
+                mainText = 'Discard your entire deck.';
+                break;
+            }
 
             // If referencing card from previous effect, use "that card"
             if (params.useCardFromPreviousEffect) {
@@ -733,7 +738,20 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // If referencing card from previous effect, use "that card"
             if (effect.useCardFromPreviousEffect) {
                 const faceState = params.faceDown === true ? 'face-down' : params.faceDown === false ? 'face-up' : '';
-                mainText = faceState ? `Play that card ${faceState}.` : 'Play that card.';
+                // Check destination rule for "in another line"
+                let destText = '';
+                if (params.destinationRule?.type === 'other_lines') {
+                    destText = ' in another line';
+                }
+                mainText = faceState ? `Play that card ${faceState}${destText}.` : `Play that card${destText}.`;
+                break;
+            }
+
+            // NEW: Time-0 - Play from trash
+            if (params.source === 'trash') {
+                const count = params.count || 1;
+                const cardWord = count === 1 ? 'card' : 'cards';
+                mainText = `Play ${count} ${cardWord} from your trash.`;
                 break;
             }
 
@@ -890,6 +908,14 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // NEW: Handle full deck reveal (Clarity-2/3)
             if (params.source === 'own_deck') {
                 mainText = 'Reveal your deck.';
+                break;
+            }
+
+            // NEW: Time-3 - Reveal from trash
+            if (params.source === 'own_trash') {
+                const count = params.count || 1;
+                const cardWord = count === 1 ? 'card' : 'cards';
+                mainText = `Reveal ${count} ${cardWord} from your trash.`;
                 break;
             }
 
@@ -1179,8 +1205,16 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
         case 'shuffle_trash': {
             // Clarity-4: "You may shuffle your trash into your deck"
+            // Time-2: "If there are any cards in your trash, you may shuffle your trash into your deck."
             const optionalText = params.optional !== false ? 'You may shuffle' : 'Shuffle';
-            mainText = `${optionalText} your trash into your deck.`;
+            let text = `${optionalText} your trash into your deck.`;
+
+            // Add conditional prefix if trash_not_empty
+            if (params.advancedConditional?.type === 'trash_not_empty') {
+                text = `If there are any cards in your trash, ${text.charAt(0).toLowerCase() + text.slice(1)}`;
+            }
+
+            mainText = text;
             break;
         }
 
@@ -1357,6 +1391,18 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
         // War-2: "After your opponent compiles: Your opponent discards their hand."
         if (trigger === 'after_opponent_compile') {
             return `<div><span class='emphasis'>After your opponent compiles:</span> ${summary}</div>`;
+        }
+
+        // NEW: Time-2 - After shuffle trigger (supports reactiveTriggerActor: self/opponent/any)
+        if (trigger === 'after_shuffle') {
+            const triggerActor = effect.reactiveTriggerActor || 'self';
+            let prefix = 'After you shuffle your deck:';
+            if (triggerActor === 'opponent') {
+                prefix = 'After your opponent shuffles their deck:';
+            } else if (triggerActor === 'any') {
+                prefix = 'After any player shuffles their deck:';
+            }
+            return `<div><span class='emphasis'>${prefix}</span> ${summary}</div>`;
         }
 
         // NEW: after_play with reactiveScope (Ice-1 Bottom)

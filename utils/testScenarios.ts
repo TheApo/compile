@@ -4183,6 +4183,123 @@ export const scenario80_WarAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 81: Time Custom Playground
+ * All Time cards on hand - manipulate trash and deck
+ */
+export const scenario81_TimeCustomPlayground: TestScenario = {
+    name: "Time Test Playground",
+    description: "⏰ All Time cards on hand - manipulate trash and deck",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Time', 'Clarity', 'Life'];
+        const opponentProtocols = ['Fire', 'Water', 'Death'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand: all Time cards
+        const playerHand = [
+            createCard('Time', 0),
+            createCard('Time', 1),
+            createCard('Time', 2),
+            createCard('Time', 3),
+            createCard('Time', 4),
+            createCard('Time', 5),
+        ];
+
+        // Populate trash for Time-0 and Time-3 effects
+        const playerDiscard = [
+            createCard('Life', 3),
+            createCard('Clarity', 2),
+            createCard('Life', 1),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+                discard: playerDiscard,
+            },
+        };
+
+        // Place some cards on board for flip targets (Time-1)
+        newState = placeCard(newState, 'player', 0, createCard('Clarity', 0, true));
+        newState = placeCard(newState, 'player', 0, createCard('Life', 0, false)); // covered, face-down
+        newState = placeCard(newState, 'opponent', 1, createCard('Fire', 2, false)); // covered
+
+        // Build remaining deck
+        const usedCards = [...playerHand, ...playerDiscard, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 82: Time AI Test
+ * AI plays with Time protocol - tests trash mechanics and after_shuffle trigger
+ */
+export const scenario82_TimeAITest: TestScenario = {
+    name: "Time AI Test",
+    description: "⏰ AI plays Time cards - test trash selection and shuffle triggers",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Fire', 'Water', 'Death'];
+        const opponentProtocols = ['Time', 'Clarity', 'Life'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // Player gets some basic cards
+        const playerHand = [
+            createCard('Fire', 2),
+            createCard('Water', 3),
+        ];
+
+        // Opponent (AI) hand: all Time cards
+        const opponentHand = [
+            createCard('Time', 0),
+            createCard('Time', 1),
+            createCard('Time', 2),
+            createCard('Time', 3),
+            createCard('Time', 4),
+            createCard('Time', 5),
+        ];
+
+        // Populate opponent's trash for Time-0 and Time-3 effects
+        const opponentDiscard = [
+            createCard('Life', 4),
+            createCard('Clarity', 3),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+            },
+            opponent: {
+                ...newState.opponent,
+                hand: opponentHand,
+                discard: opponentDiscard,
+            },
+        };
+
+        // Place some cards on board for flip targets
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 1, true));
+        newState = placeCard(newState, 'player', 0, createCard('Water', 0, false)); // covered
+        newState = placeCard(newState, 'opponent', 1, createCard('Clarity', 1, true));
+
+        // Build remaining decks
+        const usedCards = [...playerHand, ...opponentHand, ...opponentDiscard, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, usedCards);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4264,4 +4381,6 @@ export const allScenarios: TestScenario[] = [
     scenario78_Peace4ReactiveTest,
     scenario79_WarCustomPlayground,
     scenario80_WarAITest,
+    scenario81_TimeCustomPlayground,
+    scenario82_TimeAITest,
 ];

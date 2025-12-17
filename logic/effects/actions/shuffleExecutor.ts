@@ -13,6 +13,7 @@
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
 import { shuffleDeck } from '../../../utils/gameLogic';
+import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
 
 /**
  * Execute SHUFFLE_TRASH effect (Clarity-4)
@@ -30,6 +31,14 @@ export function executeShuffleTrashEffect(
     const conditional = params._conditional;
     const cardName = `${card.protocol}-${card.value}`;
     const isOptional = params.optional !== false;
+
+    // Check advancedConditional: trash_not_empty
+    if (params.advancedConditional?.type === 'trash_not_empty') {
+        if (state[cardOwner].discard.length === 0) {
+            let newState = log(state, cardOwner, `${cardName}: No cards in trash - effect skipped.`);
+            return { newState };
+        }
+    }
 
     // Check if there's anything in discard (trash)
     if (state[cardOwner].discard.length === 0) {
@@ -84,6 +93,10 @@ export function performShuffleTrash(
     newState[player] = playerState;
     newState = log(newState, player, `${cardName}: Shuffled ${trashCount} card${trashCount !== 1 ? 's' : ''} from trash into deck.`);
 
+    // Trigger reactive effects after shuffle (Time-2)
+    const shuffleResult = processReactiveEffects(newState, 'after_shuffle', { player });
+    newState = shuffleResult.newState;
+
     return { newState };
 }
 
@@ -116,6 +129,10 @@ export function executeShuffleDeckEffect(
 
     newState[cardOwner] = playerState;
     newState = log(newState, cardOwner, `${cardName}: Shuffled deck.`);
+
+    // Trigger reactive effects after shuffle (Time-2)
+    const shuffleResult = processReactiveEffects(newState, 'after_shuffle', { player: cardOwner });
+    newState = shuffleResult.newState;
 
     return { newState };
 }

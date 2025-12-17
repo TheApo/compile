@@ -39,6 +39,7 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                 <select value={params.source} onChange={e => onChange({ ...params, source: e.target.value as any })}>
                     <option value="hand">Hand</option>
                     <option value="deck">Deck</option>
+                    <option value="trash">Trash (Discard Pile)</option>
                 </select>
             </label>
             <label>

@@ -66,7 +66,8 @@ export type EffectTrigger =
     | 'after_refresh'        // After you refresh (War-0)
     | 'after_opponent_refresh'  // After opponent refreshes (War-1)
     | 'after_compile'        // After you compile
-    | 'after_opponent_compile'; // After opponent compiles (War-2)
+    | 'after_opponent_compile' // After opponent compiles (War-2)
+    | 'after_shuffle';        // After shuffle_trash or shuffle_deck (Time-2)
 
 export type TargetOwner = 'any' | 'own' | 'opponent';
 export type TargetPosition = 'any' | 'covered' | 'uncovered' | 'covered_in_this_line';
@@ -219,7 +220,7 @@ export interface DiscardEffectParams {
     // NEW: Random selection - opponent can't choose which card to discard (Fear-4)
     random?: boolean;
     // NEW: Luck - Source of the card to discard (default: 'hand')
-    source?: 'hand' | 'top_deck_own' | 'top_deck_opponent';
+    source?: 'hand' | 'top_deck_own' | 'top_deck_opponent' | 'entire_deck';  // 'entire_deck' for Time-1
 }
 
 /**
@@ -258,7 +259,7 @@ export interface RedirectReturnToDeckParams {
  */
 export interface PlayEffectParams {
     action: 'play';
-    source: 'hand' | 'deck';
+    source: 'hand' | 'deck' | 'trash';  // 'trash' for Time-0
     count: number;  // 1-6
     faceDown: boolean;
     destinationRule: {
@@ -304,7 +305,7 @@ export interface ProtocolEffectParams {
  */
 export interface RevealEffectParams {
     action: 'reveal' | 'give';
-    source: 'own_hand' | 'opponent_hand' | 'board' | 'own_deck_top' | 'own_deck';  // NEW: 'own_deck_top' for Clarity-1, 'own_deck' for Clarity-2/3
+    source: 'own_hand' | 'opponent_hand' | 'board' | 'own_deck_top' | 'own_deck' | 'own_trash';  // 'own_trash' for Time-3
     count: number;  // 1-6 (or -1 for "entire hand" or "entire deck")
     followUpAction?: 'flip' | 'shift' | 'may_discard';  // NEW: 'may_discard' for Clarity-1 deck top reveal
     // NEW: For board card reveal (Light-2: "Reveal 1 face-down card. You may shift or flip that card.")
@@ -402,6 +403,10 @@ export interface ValueModifierParams {
 export interface ShuffleTrashEffectParams {
     action: 'shuffle_trash';
     optional: boolean;  // "You may shuffle" vs "Shuffle"
+    // Advanced conditionals - effect only executes if condition is met
+    advancedConditional?: {
+        type: 'trash_not_empty';  // Time-2: Only if trash is not empty
+    };
 }
 
 /**

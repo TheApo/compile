@@ -414,11 +414,12 @@ export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard:
 };
 
 export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): GameState => {
-    // Handle both original Fire-4 and custom protocol variable discard
-    const isCustomProtocol = prevState.actionRequired?.type === 'discard' && (prevState.actionRequired as any)?.variableCount;
+    // Handle original Fire-4, custom protocol variable discard, AND batch discard (count > 1)
+    const isVariableCount = prevState.actionRequired?.type === 'discard' && (prevState.actionRequired as any)?.variableCount;
+    const isBatchDiscard = prevState.actionRequired?.type === 'discard' && prevState.actionRequired.count > 1;
     const isOriginalFire4 = prevState.actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4';
 
-    if (!isCustomProtocol && !isOriginalFire4) return prevState;
+    if (!isVariableCount && !isBatchDiscard && !isOriginalFire4) return prevState;
 
     // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
     const player = prevState.actionRequired.actor;
@@ -426,9 +427,14 @@ export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): Ga
 
     let newState = discardCards(prevState, cardIds, player);
 
-    // For custom protocols, use handleChainedEffectsOnDiscard to process followUpEffect
-    if (isCustomProtocol && sourceCardId) {
+    // For custom protocols (variable or batch), use handleChainedEffectsOnDiscard to process followUpEffect
+    if ((isVariableCount || isBatchDiscard) && sourceCardId) {
         return handleChainedEffectsOnDiscard(newState, player, undefined, sourceCardId);
+    }
+
+    // For batch discard without sourceCardId (e.g., hand limit or other), just return
+    if (isBatchDiscard && !sourceCardId) {
+        return newState;
     }
 
     // Original Fire-4 logic

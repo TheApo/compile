@@ -14,8 +14,10 @@ import { cards } from '../data/cards';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../logic/utils/log';
 import { buildDeck, shuffleDeck } from '../utils/gameLogic';
-import { handleUncoverEffect } from '../logic/game/helpers/actionUtils';
+import { handleUncoverEffect, findCardOnBoard } from '../logic/game/helpers/actionUtils';
 import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
+import { executeCustomEffect } from '../logic/customProtocols/effectInterpreter';
+import { EffectContext } from '../types';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
 export const useGameState = (
@@ -574,11 +576,12 @@ export const useGameState = (
 
     const resolveFire4Discard = useCallback((cardIds: string[]) => {
         setGameState(prev => {
-            // Support both original Fire-4 and custom protocol variable discard
+            // Support original Fire-4, custom protocol variable discard, AND batch discard (count > 1)
             const isOriginalFire4 = prev.actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4';
-            const isCustomProtocol = prev.actionRequired?.type === 'discard' && (prev.actionRequired as any)?.variableCount;
+            const isVariableCount = prev.actionRequired?.type === 'discard' && (prev.actionRequired as any)?.variableCount;
+            const isBatchDiscard = prev.actionRequired?.type === 'discard' && prev.actionRequired.count > 1;
 
-            if (!isOriginalFire4 && !isCustomProtocol) return prev;
+            if (!isOriginalFire4 && !isVariableCount && !isBatchDiscard) return prev;
 
              return {
                 ...prev,
@@ -731,6 +734,24 @@ export const useGameState = (
         setGameState(prev => {
             // Don't use turnProgressionCb - this transitions to another action (lane selection)
             const nextState = resolvers.resolveConfirmDeckPlayPreview(prev);
+            return nextState;
+        });
+    }, []);
+
+    // Time-0: Select card from trash to play
+    const resolveSelectTrashCardToPlay = useCallback((cardIndex: number) => {
+        setGameState(prev => {
+            // Don't use turnProgressionCb - this transitions to lane selection
+            const nextState = resolvers.resolveSelectTrashCardToPlay(prev, cardIndex);
+            return nextState;
+        });
+    }, []);
+
+    // Time-3: Select card from trash to reveal
+    const resolveSelectTrashCardToReveal = useCallback((cardIndex: number) => {
+        setGameState(prev => {
+            // Don't use turnProgressionCb - this transitions to lane selection or play
+            const nextState = resolvers.resolveSelectTrashCardToReveal(prev, cardIndex);
             return nextState;
         });
     }, []);
@@ -999,6 +1020,9 @@ export const useGameState = (
                         stateAfterDiscard = resolvers.resolveFire4Discard(s, cardIds);
                     } else if (originalAction.type === 'select_cards_from_hand_to_discard_for_hate_1') {
                         stateAfterDiscard = resolvers.resolveHate1Discard(s, cardIds);
+                    } else if (originalAction.type === 'discard' && (originalAction.count > 1 || (originalAction as any).variableCount)) {
+                        // Batch discard or variable count - use resolveFire4Discard for proper followUpEffect handling
+                        stateAfterDiscard = resolvers.resolveFire4Discard(s, cardIds);
                     } else {
                         stateAfterDiscard = resolvers.discardCards(s, cardIds, 'player');
                     }
@@ -1016,6 +1040,61 @@ export const useGameState = (
         }
     }, [gameState.animationState, getTurnProgressionCallback]);
 
+    // Hook: Auto-process discard_completed for player (Fire-2, Fire-3 "If you do" effects)
+    useEffect(() => {
+        const action = gameState.actionRequired;
+        if (action?.type === 'discard_completed' && action.actor === 'player' && !gameState.animationState) {
+            const { followUpEffect, conditionalType, previousHandSize, sourceCardId } = action as any;
+
+            setGameState(prev => {
+                if (prev.actionRequired?.type !== 'discard_completed') return prev;
+
+                const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+
+                if (followUpEffect && sourceCardId) {
+                    const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
+                    if (sourceCardInfo) {
+                        const currentHandSize = prev.player.hand.length;
+                        const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
+                        const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+                        if (shouldExecute) {
+                            let laneIndex = -1;
+                            for (let i = 0; i < prev[sourceCardInfo.owner].lanes.length; i++) {
+                                if (prev[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                                    laneIndex = i;
+                                    break;
+                                }
+                            }
+
+                            if (laneIndex !== -1) {
+                                const context: EffectContext = {
+                                    cardOwner: sourceCardInfo.owner,
+                                    opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
+                                    currentTurn: prev.turn,
+                                    actor: 'player',
+                                    discardedCount: discardedCount,
+                                };
+
+                                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...prev, actionRequired: null }, context, followUpEffect);
+
+                                // If the effect created a new actionRequired, return that state
+                                if (result.newState.actionRequired) {
+                                    return result.newState;
+                                }
+
+                                return turnProgressionCb(result.newState);
+                            }
+                        }
+                    }
+                }
+
+                // No followUp or couldn't execute - clear actionRequired and continue
+                const clearedState = { ...prev, actionRequired: null };
+                return turnProgressionCb(clearedState);
+            });
+        }
+    }, [gameState.actionRequired, gameState.animationState, getTurnProgressionCallback]);
 
     // Hook 1: AI Turn Processing (Normal opponent turns)
     useEffect(() => {
@@ -1158,6 +1237,7 @@ export const useGameState = (
         resolveControlMechanicPrompt, resolveCustomChoice, resolveSelectRevealedDeckCard,
         resolveStateNumber, resolveStateProtocol, resolveSelectFromDrawnToReveal,
         resolveConfirmDeckDiscard, resolveConfirmDeckPlayPreview,
+        resolveSelectTrashCardToPlay, resolveSelectTrashCardToReveal,
         setupTestScenario,
         // REMOVED: resolveFire3Prompt, resolveDeath1Prompt, resolveLove1Prompt, resolvePsychic4Prompt, resolveSpirit1Prompt
     };

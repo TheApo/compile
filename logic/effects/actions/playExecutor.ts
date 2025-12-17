@@ -582,6 +582,36 @@ export function executePlayEffect(
         return { newState };
     }
 
+    // NEW: Time-0 logic - Play from trash
+    // Player selects a card from their trash to play
+    if (source === 'trash') {
+        const trashCards = state[actor].discard;
+
+        // Check if trash has any cards
+        if (trashCards.length === 0) {
+            const sourceCardInfo = findCardOnBoard(state, card.id);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+            let newState = log(state, cardOwner, `${sourceCardName}: No cards in trash. Effect skipped.`);
+            return { newState };
+        }
+
+        let newState = { ...state };
+        newState.actionRequired = {
+            type: 'select_card_from_trash_to_play',
+            sourceCardId: card.id,
+            actor,
+            count: params.count || 1,
+            faceDown: params.faceDown,
+            destinationRule: params.destinationRule,
+            // CRITICAL: Pass conditional info for "If you do" effects
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
+            sourceLaneIndex: laneIndex,
+        } as any;
+
+        return { newState };
+    }
+
     // CRITICAL FIX: Check if actor has any cards in hand to play
     if (source === 'hand' && state[actor].hand.length === 0) {
         return { newState: state };

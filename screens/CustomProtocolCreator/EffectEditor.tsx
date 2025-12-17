@@ -358,13 +358,14 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
         }
 
         // Other reactive triggers with actor context
-        if (['after_delete', 'after_discard', 'after_draw', 'after_shift', 'after_flip'].includes(trigger)) {
+        if (['after_delete', 'after_discard', 'after_draw', 'after_shift', 'after_flip', 'after_shuffle'].includes(trigger)) {
             const actionMap: Record<string, string> = {
                 'after_delete': 'cards are deleted',
                 'after_discard': 'cards are discarded',
                 'after_draw': 'cards are drawn',
                 'after_shift': 'cards are shifted',
                 'after_flip': 'cards are flipped',
+                'after_shuffle': 'deck is shuffled',
             };
             const actorPrefix = triggerActor === 'opponent' ? 'After opponent: ' :
                                triggerActor === 'any' ? 'After anyone: ' : 'After you: ';
@@ -434,6 +435,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="after_shift">After cards are shifted</option>
                                 <option value="after_flip">After cards are flipped</option>
                                 <option value="after_play">After a card is played</option>
+                                <option value="after_shuffle">After deck is shuffled</option>
                                 <option value="after_clear_cache">After cache is cleared</option>
                                 <option value="after_refresh">After you refresh</option>
                                 <option value="after_opponent_refresh">After opponent refreshes</option>
@@ -482,7 +484,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             </div>
 
             {/* Reactive Trigger Actor (only for reactive triggers) */}
-            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard' || effect.trigger === 'after_play') && (
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_shuffle' || effect.trigger === 'after_clear_cache' || effect.trigger === 'after_opponent_discard' || effect.trigger === 'after_play') && (
                 <div style={{ marginTop: '15px' }}>
                     <label>
                         Trigger Actor (who triggers this effect?)
@@ -547,7 +549,7 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
             )}
 
             {/* Only During Opponent's Turn (Peace-4) */}
-            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip') && (
+            {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_shuffle') && (
                 <div style={{ marginTop: '15px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                         <input

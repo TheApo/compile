@@ -13,8 +13,9 @@ import { playCard } from './playResolver';
 // NOTE: Old hardcoded effects removed - all protocols now use custom effects
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+import { executeOnPlayEffect } from '../../effectExecutor';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
-import { canShiftCard } from '../passiveRuleChecker';
+import { canShiftCard, hasAnyProtocolPlayRule } from '../passiveRuleChecker';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -805,6 +806,154 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         let finalState = s;
 
                         // Handle followUpEffect (e.g., Luck-1: "then flip that card, ignoring its middle commands")
+                        if (followUpEffect && sourceCardId) {
+                            const shouldExecute = conditionalType !== 'if_executed' || true; // Play succeeded
+                            if (shouldExecute) {
+                                const sourceCard = findCardOnBoard(finalState, sourceCardId);
+                                if (sourceCard && sourceCard.card.isFaceUp) {
+                                    const lane = finalState[sourceCard.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+                                    const laneIdx = finalState[sourceCard.owner].lanes.indexOf(lane!);
+                                    const context = {
+                                        cardOwner: sourceCard.owner,
+                                        actor: actor,
+                                        currentTurn: finalState.turn,
+                                        opponent: (sourceCard.owner === 'player' ? 'opponent' : 'player') as Player,
+                                    };
+                                    const result = executeCustomEffect(sourceCard.card, laneIdx, finalState, context, followUpEffect);
+                                    finalState = result.newState;
+                                    if (finalState.actionRequired) {
+                                        return finalState;
+                                    }
+                                }
+                            }
+                        }
+
+                        return endTurnCb(finalState);
+                    }
+                };
+
+                break;
+            }
+
+            // Play from trash (Time-0, Time-3: play card from discard pile)
+            if (source === 'trash') {
+                const preDrawnCard = (prev.actionRequired as any)?.preDrawnCard;
+                const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
+                const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+                const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                const useNormalPlayRules = (prev.actionRequired as any)?.useNormalPlayRules;
+
+                if (!preDrawnCard) {
+                    console.error("No preDrawnCard for trash play");
+                    newState = { ...prev, actionRequired: null };
+                    break;
+                }
+
+                const stateBeforePlay = { ...prev, actionRequired: null };
+                const playerState = stateBeforePlay[actor];
+
+                // Determine face state based on rules - use GENERIC passive rule system
+                let shouldPlayFaceUp: boolean;
+                if (typeof isFaceDown === 'boolean') {
+                    // Explicit face-down setting (Time-3: play face-down)
+                    shouldPlayFaceUp = !isFaceDown;
+                } else if (useNormalPlayRules) {
+                    // Normal play rules: use the same logic as hand plays
+                    // Check protocol matching and passive rules generically
+                    const opponentId = actor === 'player' ? 'opponent' : 'player';
+                    const playerProtocol = prev[actor].protocols[effectiveLaneIndex];
+                    const opponentProtocol = prev[opponentId].protocols[effectiveLaneIndex];
+                    const protocolMatches = preDrawnCard.protocol === playerProtocol ||
+                                           preDrawnCard.protocol === opponentProtocol;
+
+                    // Use generic passive rule checks instead of hardcoded card names
+                    const hasAnyProtocolRule = hasAnyProtocolPlayRule(prev, actor, effectiveLaneIndex);
+
+                    // Face-up if protocol matches OR if any passive rule allows any protocol play
+                    shouldPlayFaceUp = protocolMatches || hasAnyProtocolRule;
+                } else {
+                    // Default: face-up
+                    shouldPlayFaceUp = true;
+                }
+
+                // Create new card to play from the pre-selected trash card
+                const newCardToPlay: PlayedCard = { ...preDrawnCard, isFaceUp: shouldPlayFaceUp };
+
+                // Add card to the chosen lane
+                const newPlayerLanes = [...playerState.lanes];
+                newPlayerLanes[effectiveLaneIndex] = [...newPlayerLanes[effectiveLaneIndex], newCardToPlay];
+
+                const updatedPlayerState = {
+                    ...playerState,
+                    lanes: newPlayerLanes,
+                };
+
+                newState = {
+                    ...stateBeforePlay,
+                    [actor]: updatedPlayerState,
+                    // Store the played card ID for useCardFromPreviousEffect
+                    lastCustomEffectTargetCardId: newCardToPlay.id
+                };
+
+                // Log the play
+                const actorName = actor === 'player' ? 'Player' : 'Opponent';
+                const faceText = shouldPlayFaceUp ? 'face-up' : 'face-down';
+                newState = log(newState, actor, `${actorName} plays ${newCardToPlay.protocol}-${newCardToPlay.value} ${faceText} from trash.`);
+
+                // Recalculate lane values after playing the card
+                newState = recalculateAllLaneValues(newState);
+
+                // Add play animation with followUpEffect handling
+                requiresAnimation = {
+                    animationRequests: [{
+                        type: 'play',
+                        cardId: newCardToPlay.id,
+                        owner: actor,
+                        laneIndex: effectiveLaneIndex,
+                        isFaceUp: newCardToPlay.isFaceUp
+                    }],
+                    onCompleteCallback: (s, endTurnCb) => {
+                        let finalState = s;
+
+                        // CRITICAL: First trigger the PLAYED card's on_play effects (like normal card play)
+                        // Only trigger if card is face-up
+                        if (newCardToPlay.isFaceUp) {
+                            const playedCardOnBoard = findCardOnBoard(finalState, newCardToPlay.id);
+                            if (playedCardOnBoard) {
+                                const playContext: EffectContext = {
+                                    cardOwner: actor,
+                                    actor: actor,
+                                    currentTurn: finalState.turn,
+                                    opponent: (actor === 'player' ? 'opponent' : 'player') as Player,
+                                    triggerType: 'play'
+                                };
+                                const playResult = executeOnPlayEffect(playedCardOnBoard.card, effectiveLaneIndex, finalState, playContext);
+                                finalState = playResult.newState;
+
+                                // If played card's effect created an action, pause and wait
+                                if (finalState.actionRequired) {
+                                    // Queue the Time-0 followUpEffect (shuffle_trash) for after the played card's effects
+                                    if (followUpEffect && sourceCardId) {
+                                        finalState = {
+                                            ...finalState,
+                                            queuedActions: [
+                                                ...(finalState.queuedActions || []),
+                                                {
+                                                    type: 'execute_followup_effect',
+                                                    sourceCardId,
+                                                    followUpEffect,
+                                                    conditionalType,
+                                                    actor,
+                                                }
+                                            ]
+                                        };
+                                    }
+                                    return finalState;
+                                }
+                            }
+                        }
+
+                        // Handle followUpEffect (e.g., Time-0's shuffle_trash after playing from trash)
                         if (followUpEffect && sourceCardId) {
                             const shouldExecute = conditionalType !== 'if_executed' || true; // Play succeeded
                             if (shouldExecute) {

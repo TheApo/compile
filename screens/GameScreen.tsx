@@ -24,6 +24,7 @@ import { RevealedDeckModal } from '../components/RevealedDeckModal';
 import { RevealedDeckTopModal } from '../components/RevealedDeckTopModal';
 import { DeckDiscardModal } from '../components/DeckDiscardModal';
 import { DeckPlayPreviewModal } from '../components/DeckPlayPreviewModal';
+import { TrashSelectionModal } from '../components/TrashSelectionModal';
 import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
@@ -160,6 +161,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveSelectFromDrawnToReveal,
     resolveConfirmDeckDiscard,
     resolveConfirmDeckPlayPreview,
+    resolveSelectTrashCardToPlay,
+    resolveSelectTrashCardToReveal,
     setupTestScenario,
   } = useGameState(
     playerProtocols,
@@ -462,19 +465,24 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     if (currentState.animationState) return;
 
     if (currentState.actionRequired) {
-      // Check for variable-count discard (Fire_custom-4, Plague-2)
+      // Check for discard action
       if (currentState.actionRequired.type === 'discard' && currentState.actionRequired.actor === 'player') {
-        if (currentState.actionRequired.variableCount) {
-          // Multi-select mode for variable discard
+        const discardCount = currentState.actionRequired.count;
+        // Multi-select mode when count > 1 OR variableCount (select all, then confirm)
+        if (discardCount > 1 || currentState.actionRequired.variableCount) {
           setMultiSelectedCardIds(prev => {
             if (prev.includes(card.id)) {
               return prev.filter(id => id !== card.id);
+            }
+            // For fixed count, limit selection to exactly count cards
+            if (!currentState.actionRequired.variableCount && prev.length >= discardCount) {
+              return prev; // Don't add more than required
             }
             return [...prev, card.id];
           });
           return;
         } else {
-          // Single discard
+          // Single discard (count === 1)
           discardCardFromHand(card.id);
           return;
         }
@@ -669,6 +677,23 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 gameState={gameState}
                 onSelectCard={(cardId) => {
                     resolveSelectRevealedDeckCard(cardId);
+                }}
+            />
+        )}
+        {/* Time Protocol: Trash selection modals */}
+        {gameState.actionRequired?.type === 'select_card_from_trash_to_play' && gameState.actionRequired.actor === 'player' && (
+            <TrashSelectionModal
+                gameState={gameState}
+                onSelectCard={(cardIndex) => {
+                    resolveSelectTrashCardToPlay(cardIndex);
+                }}
+            />
+        )}
+        {gameState.actionRequired?.type === 'select_card_from_trash_to_reveal' && gameState.actionRequired.actor === 'player' && (
+            <TrashSelectionModal
+                gameState={gameState}
+                onSelectCard={(cardIndex) => {
+                    resolveSelectTrashCardToReveal(cardIndex);
                 }}
             />
         )}

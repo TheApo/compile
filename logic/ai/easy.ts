@@ -1067,6 +1067,33 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             return { type: 'skip' };
         }
+
+        // =========================================================================
+        // TIME PROTOCOL - Trash selection handlers
+        // =========================================================================
+
+        // Time-0: Select a card from trash to play
+        case 'select_card_from_trash_to_play': {
+            const trashCards = state.opponent.discard;
+            if (trashCards.length === 0) {
+                return { type: 'skip' };
+            }
+            // Easy AI: Pick highest value card from trash
+            const sortedTrash = [...trashCards]
+                .map((card, index) => ({ card, index }))
+                .sort((a, b) => b.card.value - a.card.value);
+            return { type: 'selectTrashCard', cardIndex: sortedTrash[0].index };
+        }
+
+        // Time-3: Select a card from trash to reveal (then play face-down)
+        case 'select_card_from_trash_to_reveal': {
+            const trashCards = state.opponent.discard;
+            if (trashCards.length === 0) {
+                return { type: 'skip' };
+            }
+            // Easy AI: Pick first card from trash
+            return { type: 'selectTrashCard', cardIndex: 0 };
+        }
     }
 
     // Fallback for any unhandled cases

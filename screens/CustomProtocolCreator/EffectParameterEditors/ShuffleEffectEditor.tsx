@@ -9,6 +9,9 @@ import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 interface ShuffleTrashEffectParams {
     action: 'shuffle_trash';
     optional: boolean;
+    advancedConditional?: {
+        type: 'trash_not_empty';
+    };
 }
 
 interface ShuffleDeckEffectParams {
@@ -33,6 +36,23 @@ export const ShuffleTrashEffectEditor: React.FC<{
                     onChange={e => onChange({ ...params, optional: e.target.checked })}
                 />
                 Optional ("You may shuffle...")
+            </label>
+
+            <h5 style={{ marginTop: '15px' }}>Conditional</h5>
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.advancedConditional?.type === 'trash_not_empty'}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, advancedConditional: { type: 'trash_not_empty' } });
+                        } else {
+                            const { advancedConditional, ...rest } = params;
+                            onChange(rest as ShuffleTrashEffectParams);
+                        }
+                    }}
+                />
+                Only if trash is not empty ("If there are any cards in your trash...")
             </label>
 
         </div>

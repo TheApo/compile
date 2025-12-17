@@ -1,0 +1,192 @@
+{
+  "id": "time-custom-001",
+  "name": "Time",
+  "description": "Manipulate time through your trash and deck. Recycle discarded cards and control the flow of battle.",
+  "author": "System",
+  "createdAt": "2025-12-17T00:00:00.000Z",
+  "color": "#8B4513",
+  "pattern": "hexagons",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "time-0-play-from-trash",
+          "params": {
+            "action": "play",
+            "source": "trash",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "time-0-shuffle-trash",
+          "params": {
+            "action": "shuffle_trash",
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "time-1-flip-covered",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "covered",
+              "faceState": "any",
+              "excludeSelf": false
+            },
+            "optional": false
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "time-1-discard-entire-deck",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self",
+            "source": "entire_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 2,
+      "topEffects": [
+        {
+          "id": "time-2-after-shuffle-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "top",
+          "trigger": "after_shuffle",
+          "reactiveTriggerActor": "self",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "time-2-then-shift-self",
+              "params": {
+                "action": "shift",
+                "targetFilter": { "owner": "own" },
+                "shiftSelf": true,
+                "optional": true
+              }
+            }
+          }
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "time-2-conditional-shuffle-trash",
+          "params": {
+            "action": "shuffle_trash",
+            "optional": true,
+            "advancedConditional": {
+              "type": "trash_not_empty"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "time-3-reveal-from-trash",
+          "params": {
+            "action": "reveal",
+            "source": "own_trash",
+            "count": 1
+          },
+          "position": "middle",
+          "trigger": "on_play",
+          "conditional": {
+            "type": "if_executed",
+            "thenEffect": {
+              "id": "time-3-play-face-down",
+              "params": {
+                "action": "play",
+                "source": "trash",
+                "count": 1,
+                "faceDown": true,
+                "destinationRule": { "type": "other_lines" }
+              },
+              "useCardFromPreviousEffect": true
+            }
+          }
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "time-4-draw-2",
+          "params": {
+            "action": "draw",
+            "count": 2,
+            "target": "self",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "time-4-discard-2",
+          "params": {
+            "action": "discard",
+            "count": 2,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "time-5-discard-1",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Main 2"
+}

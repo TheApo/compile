@@ -199,17 +199,23 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
-        // NEW: Handle variable-count discard for custom protocols (Fire_custom-4)
-        if (actionRequired?.type === 'discard' && (actionRequired as any).variableCount && actionRequired.actor === 'player') {
-            return (
-                <button
-                    className="btn"
-                    onClick={() => onResolveFire4Discard(multiSelectedCardIds)}
-                    disabled={multiSelectedCardIds.length < 1}
-                >
-                    Confirm Discard ({multiSelectedCardIds.length})
-                </button>
-            );
+        // Handle batch discard: count > 1 OR variableCount
+        if (actionRequired?.type === 'discard' && actionRequired.actor === 'player') {
+            const discardCount = actionRequired.count;
+            const isVariableCount = (actionRequired as any).variableCount;
+            // Show confirm button for batch discard (count > 1) or variable count
+            if (discardCount > 1 || isVariableCount) {
+                const requiredCount = isVariableCount ? 1 : discardCount;
+                return (
+                    <button
+                        className="btn"
+                        onClick={() => onResolveFire4Discard(multiSelectedCardIds)}
+                        disabled={multiSelectedCardIds.length < requiredCount}
+                    >
+                        Confirm Discard ({multiSelectedCardIds.length}/{isVariableCount ? '?' : discardCount})
+                    </button>
+                );
+            }
         }
 
         if (actionRequired?.type === 'plague_2_player_discard' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_hate_1') {
@@ -299,11 +305,15 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             switch (actionRequired.type) {
                 case 'discard':
                     if (actionRequired.actor === 'player') {
-                        // NEW: Variable count discard (Fire_custom-4)
+                        // Variable count discard (Fire_custom-4)
                         if ((actionRequired as any).variableCount) {
                             return 'Action: Select 1 or more cards to discard';
                         }
-                        return `Action: Discard ${actionRequired.count} card(s) from your hand`;
+                        // Batch discard (count > 1): select all cards first, then confirm
+                        if (actionRequired.count > 1) {
+                            return `Action: Select ${actionRequired.count} cards to discard, then confirm`;
+                        }
+                        return `Action: Discard ${actionRequired.count} card from your hand`;
                     } else {
                         return 'Waiting for Opponent to discard...';
                     }
@@ -552,6 +562,19 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     };
                     const effectNames = phaseAction.availableEffects.map(e => e.cardName).join(', ');
                     return `${phaseAction.phase} Phase: Choose which effect to resolve first (${effectNames})`;
+                }
+                // Time Protocol: Trash selection (supports trashOwner: own/opponent/any)
+                case 'select_card_from_trash_to_play': {
+                    const trashOwner = (actionRequired as any).trashOwner || 'own';
+                    const ownerText = trashOwner === 'opponent' ? "opponent's" :
+                                      trashOwner === 'any' ? "any player's" : 'your';
+                    return `Action: Select a card from ${ownerText} trash to play`;
+                }
+                case 'select_card_from_trash_to_reveal': {
+                    const trashOwner = (actionRequired as any).trashOwner || 'own';
+                    const ownerText = trashOwner === 'opponent' ? "opponent's" :
+                                      trashOwner === 'any' ? "any player's" : 'your';
+                    return `Action: Select a card from ${ownerText} trash to reveal`;
                 }
                 default:
                     return 'Action Required';

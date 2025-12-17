@@ -183,6 +183,11 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     const followUpEffect = (state.actionRequired as any)?.followUpEffect;
     const conditionalType = (state.actionRequired as any)?.conditionalType; // "if_executed" or "then"
 
+    // DEBUG: Log entry values
+    if (followUpEffect) {
+        console.log(`[handleChainedEffectsOnDiscard] Called with followUpEffect=${followUpEffect?.params?.action}, sourceCardId=${sourceCardId}, conditionalType=${conditionalType}, actionRequired.type=${state.actionRequired?.type}`);
+    }
+
     // CRITICAL: Queue pending custom effects BEFORE clearing actionRequired
     // This handles multi-effect cards like Hate-1: "Discard 3. Delete 1. Delete 1."
     newState = queuePendingCustomEffects(newState);
@@ -199,6 +204,9 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     // Handle custom effect conditional follow-ups
     if (followUpEffect && sourceCardId) {
         const sourceCardInfo = findCardOnBoard(newState, sourceCardId);
+        if (!sourceCardInfo) {
+            console.warn(`[handleChainedEffectsOnDiscard] Source card ${sourceCardId} not found on board - followUp skipped`);
+        }
         if (sourceCardInfo) {
             // NEW: Check if we should execute the follow-up based on conditional type
             const previousHandSize = (state.actionRequired as any)?.previousHandSize || 0;
@@ -210,6 +218,7 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
             const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
 
             if (!shouldExecute) {
+                console.warn(`[handleChainedEffectsOnDiscard] Follow-up skipped: conditionalType=${conditionalType}, discardedCount=${discardedCount}, previousHandSize=${previousHandSize}, currentHandSize=${currentHandSize}`);
                 return newState;
             }
 

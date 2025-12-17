@@ -68,6 +68,25 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                 // All other lanes are playable (face-down from deck, no protocol matching needed)
                 return { isPlayable: true, isMatching: false, isCompilable };
             }
+
+            // Time-0, Time-3: Playing from trash - card is pre-selected (preDrawnCard)
+            if ((actionRequired as any).source === 'trash') {
+                const useNormalPlayRules = (actionRequired as any).useNormalPlayRules;
+                const preDrawnCard = (actionRequired as any).preDrawnCard;
+
+                if (useNormalPlayRules && preDrawnCard) {
+                    // Normal play rules: check protocol matching EXACTLY like hand plays
+                    // Card matches if it matches EITHER player's OR opponent's assigned protocol for this lane
+                    const playerProtocol = player.protocols[laneIndex];
+                    const opponentProtocol = opponent.protocols[laneIndex];
+                    const isMatching = preDrawnCard.protocol === playerProtocol || preDrawnCard.protocol === opponentProtocol;
+                    return { isPlayable: true, isMatching, isCompilable };
+                }
+
+                // Time-3: play face-down, no protocol matching needed
+                return { isPlayable: true, isMatching: false, isCompilable };
+            }
+
             card = player.hand.find(c => c.id === actionRequired.cardInHandId);
         }
 

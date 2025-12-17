@@ -630,7 +630,11 @@ export type AIAction =
     | { type: 'stateProtocol', protocol: string }
     | { type: 'selectFromDrawnToReveal', cardId: string }
     | { type: 'confirmDeckDiscard' }
-    | { type: 'confirmDeckPlayPreview' };
+    | { type: 'confirmDeckPlayPreview' }
+    // Clarity Protocol actions
+    | { type: 'selectRevealedDeckCard', cardId: string }
+    // Time Protocol actions
+    | { type: 'selectTrashCard', cardIndex: number };
 
 // =============================================================================
 // ANIMATION REQUEST TYPES
