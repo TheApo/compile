@@ -642,6 +642,23 @@ export function executePlayEffect(
         return { newState: state };
     }
 
+    // NEW: excludeSourceProtocol - filter out cards with same protocol as source card
+    let excludeProtocolCardIds: string[] | undefined = undefined;
+    if (params.excludeSourceProtocol && source === 'hand') {
+        const sourceProtocol = card.protocol;
+        const nonMatchingCards = state[actor].hand.filter(c => c.protocol !== sourceProtocol);
+
+        if (nonMatchingCards.length === 0) {
+            // No non-matching cards in hand - skip effect
+            const sourceCardInfo = findCardOnBoard(state, card.id);
+            const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+            let newState = log(state, cardOwner, `${sourceCardName}: No non-${sourceProtocol} cards in hand. Effect skipped.`);
+            return { newState };
+        }
+
+        excludeProtocolCardIds = nonMatchingCards.map(c => c.id);
+    }
+
     let newState = { ...state };
 
     // Convert destinationRule to disallowedLaneIndex for compatibility with existing UI logic
@@ -667,6 +684,11 @@ export function executePlayEffect(
         }
     }
 
+    // If excludeSourceProtocol was set, use those card IDs (overrides useCardFromPreviousEffect)
+    if (excludeProtocolCardIds) {
+        selectableCardIds = excludeProtocolCardIds;
+    }
+
     newState.actionRequired = {
         type: 'select_card_from_hand_to_play',
         count,
@@ -678,6 +700,9 @@ export function executePlayEffect(
         destinationRule: params.destinationRule, // Keep original for future use
         condition: params.condition, // For conditional play (Gravity-0, Life-0)
         selectableCardIds, // CRITICAL: Restrict to specific card(s) for "may play" effects
+        excludeSourceProtocol: params.excludeSourceProtocol, // Pass for UI/AI reference
+        sourceProtocol: params.excludeSourceProtocol ? card.protocol : undefined, // Pass source protocol for display
+        optional: params.optional, // NEW: For optional play effects
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,

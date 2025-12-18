@@ -9,7 +9,7 @@
  * - Challenging but beatable
  */
 
-import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
+import { GameState, ActionRequired, AIAction, PlayedCard, Player, TargetFilter } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
 import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
@@ -81,16 +81,7 @@ const addNoise = (score: number): number => {
     return score + (Math.random() * 4 - 2); // ±2 noise (reduced from ±5)
 };
 
-// Type for targetFilter with all possible options
-type TargetFilter = {
-    owner?: 'own' | 'opponent' | 'any';
-    position?: 'uncovered' | 'covered' | 'any';
-    faceState?: 'face_up' | 'face_down' | 'any';
-    excludeSelf?: boolean;
-    valueRange?: { min: number; max: number };
-    valueEquals?: number;
-    calculation?: 'highest_value' | 'lowest_value';
-};
+// TargetFilter is imported from '../../types'
 
 // Helper: Check if a card matches ALL targetFilter criteria
 // This is the SINGLE source of truth for filter matching in normal AI

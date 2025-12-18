@@ -1,0 +1,161 @@
+{
+  "id": "diversity-custom-001",
+  "name": "Diversity",
+  "description": "Embrace variety. The more different protocols on the field, the stronger your effects become.",
+  "author": "System",
+  "createdAt": "2025-12-18T00:00:00.000Z",
+  "color": "#FF6B6B",
+  "pattern": "zigzag",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "diversity-0-auto-compile",
+          "params": {
+            "action": "auto_compile",
+            "protocolCountConditional": {
+              "type": "unique_protocols_on_field",
+              "threshold": 6
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "diversity-0-play-non-protocol",
+          "params": {
+            "action": "play",
+            "source": "hand",
+            "count": 1,
+            "excludeSourceProtocol": true,
+            "optional": true,
+            "destinationRule": {
+              "type": "specific_lane",
+              "laneIndex": "current"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "diversity-1-shift",
+          "params": {
+            "action": "shift",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any"
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "diversity-1-draw-protocols",
+          "params": {
+            "action": "draw",
+            "countType": "equal_to_unique_protocols_in_lane",
+            "target": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [
+        {
+          "id": "diversity-3-value-modifier",
+          "params": {
+            "action": "value_modifier",
+            "modifier": {
+              "type": "add_to_total",
+              "value": 2,
+              "target": "own_total",
+              "scope": "this_lane",
+              "condition": "has_non_own_protocol_face_up"
+            }
+          },
+          "position": "top",
+          "trigger": "passive"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "diversity-4-flip-dynamic",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "any",
+              "excludeSelf": false,
+              "valueLessThanUniqueProtocolsOnField": true
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "diversity-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [
+        {
+          "id": "diversity-6-conditional-delete",
+          "params": {
+            "action": "delete",
+            "deleteSelf": true,
+            "protocolCountConditional": {
+              "type": "unique_protocols_on_field_below",
+              "threshold": 3
+            }
+          },
+          "position": "top",
+          "trigger": "end"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Aux 2"
+}

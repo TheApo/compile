@@ -7,7 +7,7 @@ import { GameState, PlayedCard, Player } from "../types";
 // REMOVED: findAllHighestUncoveredCards - no longer needed after Hate-2 migration to generic handler
 import { isFrost1Active, canFlipSpecificCard } from "../logic/game/passiveRuleChecker";
 import { getActivePassiveRules } from "../logic/game/passiveRuleChecker";
-import { isCardCommitted as isCardCommittedHelper, isCardAtIndexUncovered } from "../logic/game/helpers/actionUtils";
+import { isCardCommitted as isCardCommittedHelper, isCardAtIndexUncovered, countUniqueProtocolsOnField } from "../logic/game/helpers/actionUtils";
 
 /**
  * Check if a card is "committed" (being played but not yet landed on board).
@@ -137,6 +137,12 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             if (targetFilter.valueMinGreaterThanHandSize) {
                 const handSize = gameState[actionRequired.actor].hand.length;
                 if (card.value <= handSize) return false;
+            }
+
+            // NEW: Check valueLessThanUniqueProtocolsOnField - target must have value < unique protocols
+            if (targetFilter.valueLessThanUniqueProtocolsOnField) {
+                const threshold = countUniqueProtocolsOnField(gameState);
+                if (card.value >= threshold) return false;
             }
 
             return true;

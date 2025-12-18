@@ -4410,6 +4410,113 @@ export const scenario84_AssimilationAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 85: Diversity Custom Playground
+ * All Diversity cards on hand - test protocol count effects
+ */
+export const scenario85_DiversityCustomPlayground: TestScenario = {
+    name: "Diversity Test Playground",
+    description: "All Diversity cards on hand - test auto-compile, value modifiers, and protocol-count effects",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Diversity', 'Fire', 'Water'];
+        const opponentProtocols = ['Death', 'Life', 'Light'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand: all Diversity cards
+        const playerHand = [
+            createCard('Diversity', 0),
+            createCard('Diversity', 1),
+            createCard('Diversity', 3),
+            createCard('Diversity', 4),
+            createCard('Diversity', 5),
+            createCard('Diversity', 6),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+            },
+        };
+
+        // Place cards on board with multiple protocols for protocol count effects
+        // Need at least 6 different protocols for auto-compile
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 3, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 4, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Life', 2, true));
+        newState = placeCard(newState, 'opponent', 2, createCard('Light', 1, true));
+
+        // Build remaining deck with diverse protocols
+        const usedCards = [...playerHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 86: Diversity AI Test
+ * AI plays with Diversity protocol - test protocol-based decisions
+ */
+export const scenario86_DiversityAITest: TestScenario = {
+    name: "Diversity AI Test",
+    description: "AI plays Diversity cards - test auto-compile and conditional effects",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Fire', 'Water', 'Death'];
+        const opponentProtocols = ['Diversity', 'Life', 'Light'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // Player gets some basic cards
+        const playerHand = [
+            createCard('Fire', 2),
+            createCard('Water', 3),
+        ];
+
+        // Opponent (AI) hand: all Diversity cards
+        const opponentHand = [
+            createCard('Diversity', 0),
+            createCard('Diversity', 1),
+            createCard('Diversity', 3),
+            createCard('Diversity', 4),
+            createCard('Diversity', 5),
+            createCard('Diversity', 6),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+            },
+            opponent: {
+                ...newState.opponent,
+                hand: opponentHand,
+            },
+        };
+
+        // Place cards on board with multiple protocols
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 4, true));
+        newState = placeCard(newState, 'player', 1, createCard('Water', 2, true));
+        newState = placeCard(newState, 'player', 2, createCard('Death', 1, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Life', 3, true));
+        newState = placeCard(newState, 'opponent', 1, createCard('Light', 2, true));
+
+        // Build remaining decks
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4495,4 +4602,6 @@ export const allScenarios: TestScenario[] = [
     scenario82_TimeAITest,
     scenario83_AssimilationCustomPlayground,
     scenario84_AssimilationAITest,
+    scenario85_DiversityCustomPlayground,
+    scenario86_DiversityAITest,
 ];

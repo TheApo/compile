@@ -17,6 +17,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'courage-custom-001',
     'darkness_custom_v1',
     'death_custom_v1',
+    'diversity-custom-001',
     'fear_custom',
     'fire-custom-001',
     'frost_custom_1',

@@ -12,7 +12,7 @@ import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../.
 import { log } from '../../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
-import { findCardOnBoard } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, countUniqueProtocolsInLane } from '../../game/helpers/actionUtils';
 import { getEffectiveCardValue, getPlayerLaneValue } from '../../game/stateManager';
 import { canPlayerDraw } from '../../game/passiveRuleChecker';
 
@@ -257,6 +257,12 @@ export function executeDrawEffect(
             } else {
                 count = 0;
             }
+            break;
+        }
+
+        case 'equal_to_unique_protocols_in_lane': {
+            // Diversity-1: "Draw cards equal to the number of different protocols in this line"
+            count = countUniqueProtocolsInLane(state, laneIndex);
             break;
         }
 

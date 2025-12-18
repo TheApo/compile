@@ -145,9 +145,10 @@ const calculateBaseLaneValue = (lane: PlayedCard[], state?: GameState, laneIndex
 interface ValueModifier {
     type: 'add_per_condition' | 'set_to_fixed' | 'add_to_total';
     value: number;
-    condition?: 'per_face_down_card' | 'per_face_up_card' | 'per_card' | 'per_card_in_hand';
+    condition?: 'per_face_down_card' | 'per_face_up_card' | 'per_card' | 'per_card_in_hand' | 'per_opponent_card_in_lane' | 'has_non_own_protocol_face_up';
     target: 'own_cards' | 'opponent_cards' | 'all_cards' | 'own_total' | 'opponent_total';
     scope: 'this_lane' | 'global';
+    sourceCardProtocol?: string; // For has_non_own_protocol_face_up condition
     filter?: {
         faceState?: 'face_up' | 'face_down' | 'any';
         position?: 'covered' | 'uncovered' | 'any';
@@ -177,7 +178,8 @@ function getActiveValueModifiers(state: GameState): ValueModifier[] {
                                 modifiers.push({
                                     ...effect.params.modifier,
                                     cardOwner: player,
-                                    laneIndex
+                                    laneIndex,
+                                    sourceCardProtocol: card.protocol // Store for has_non_own_protocol_face_up
                                 });
                             }
                         });
@@ -254,6 +256,22 @@ function applyCustomValueModifiers(
                 }
 
                 case 'add_to_total': {
+                    // NEW: Check has_non_own_protocol_face_up condition (Diversity-3)
+                    if (condition === 'has_non_own_protocol_face_up') {
+                        // Only apply if there are face-up cards with different protocol in owner's lane
+                        const ownerLane = state[cardOwner].lanes[laneIndex];
+                        const sourceProtocol = modifier.sourceCardProtocol;
+
+                        if (!sourceProtocol) continue; // Skip if no source protocol stored
+
+                        // Check if any OTHER face-up card in owner's stack has different protocol
+                        const hasNonOwnProtocol = ownerLane.some(c =>
+                            c.isFaceUp && c.protocol !== sourceProtocol
+                        );
+
+                        if (!hasNonOwnProtocol) continue; // Condition not met, skip this modifier
+                    }
+
                     if (target === 'own_total' && cardOwner === 'player') {
                         finalPlayerValues[lane] += value;
                     } else if (target === 'own_total' && cardOwner === 'opponent') {

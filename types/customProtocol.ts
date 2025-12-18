@@ -35,7 +35,8 @@ export type EffectActionType =
     | 'state_number'   // Luck-0: Player states a number (0-5)
     | 'state_protocol'  // Luck-3: Player states a protocol
     | 'swap_stacks'     // Mirror-2: Swap cards between own lanes
-    | 'copy_opponent_middle';  // Mirror-1: Copy opponent's middle effect
+    | 'copy_opponent_middle'  // Mirror-1: Copy opponent's middle effect
+    | 'auto_compile';  // Diversity-0: Mark lane as compiled (cards stay on board)
 
 export type EffectPosition = 'top' | 'middle' | 'bottom';
 
@@ -82,7 +83,7 @@ export interface DrawEffectParams {
     target: 'self' | 'opponent';
     source: 'own_deck' | 'opponent_deck';
     // NEW: Dynamic draw count types
-    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size' | 'all_matching';  // 'all_matching' for Clarity-2/3
+    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size' | 'all_matching' | 'equal_to_unique_protocols_in_lane';  // 'all_matching' for Clarity-2/3, 'equal_to_unique_protocols_in_lane' for Diversity-1
     countOffset?: number;  // For Fire-4: "discard count + 1" → offset = 1
     conditional?: {
         type: 'count_face_down' | 'is_covering' | 'non_matching_protocols';
@@ -121,6 +122,7 @@ export interface FlipEffectParams {
         faceState: TargetFaceState;
         excludeSelf: boolean;
         valueMinGreaterThanHandSize?: boolean;  // Peace-3: Target must have value > hand size
+        valueLessThanUniqueProtocolsOnField?: boolean;  // Diversity-4: Target must have value < unique protocols count
     };
     optional: boolean;  // "may flip" vs "flip"
     selfFlipAfter?: boolean;  // Flip this card after target flip
@@ -200,6 +202,11 @@ export interface DeleteEffectParams {
     advancedConditional?: {
         type: 'empty_hand' | 'opponent_higher_value_in_lane';
     };
+    // Conditional self-delete based on protocol count (Diversity-6)
+    protocolCountConditional?: {
+        type: 'unique_protocols_on_field_below';
+        threshold: number;  // Delete if count < threshold
+    };
 }
 
 /**
@@ -267,6 +274,8 @@ export interface PlayEffectParams {
     source: 'hand' | 'deck' | 'trash';  // 'trash' for Time-0
     count: number;  // 1-6
     faceDown: boolean;
+    excludeSourceProtocol?: boolean;  // Diversity-0: Can only play cards that are NOT this card's protocol
+    optional?: boolean;  // "You may play..."
     destinationRule: {
         type: 'other_lines' | 'specific_lane' | 'each_line_with_card' | 'under_this_card' | 'each_other_line' | 'line_with_matching_cards';
         excludeCurrentLane?: boolean;
@@ -392,7 +401,8 @@ export interface ValueModifierParams {
                   | 'per_face_up_card'
                   | 'per_card'
                   | 'per_card_in_hand'    // Clarity-0: +1 per card in your hand
-                  | 'per_opponent_card_in_lane';  // Mirror-0: +1 per opponent's card in this lane
+                  | 'per_opponent_card_in_lane'  // Mirror-0: +1 per opponent's card in this lane
+                  | 'has_non_own_protocol_face_up';  // Diversity-3: Only if there are non-own-protocol face-up cards in this stack
         target: 'own_cards'               // Which cards/totals to modify
               | 'opponent_cards'
               | 'all_cards'
@@ -462,6 +472,20 @@ export interface CopyOpponentMiddleEffectParams {
 }
 
 /**
+ * Auto Compile Effect Parameters (Diversity-0)
+ * Marks the lane as compiled WITHOUT deleting cards - they stay on the board.
+ * Used for conditional compile effects based on protocol diversity.
+ */
+export interface AutoCompileEffectParams {
+    action: 'auto_compile';
+    // Conditional: only compile if unique protocols >= threshold
+    protocolCountConditional?: {
+        type: 'unique_protocols_on_field';
+        threshold: number;  // Compile if count >= threshold
+    };
+}
+
+/**
  * Union of all effect parameter types
  */
 export type EffectParams =
@@ -483,7 +507,8 @@ export type EffectParams =
     | StateNumberEffectParams
     | StateProtocolEffectParams
     | SwapStacksEffectParams
-    | CopyOpponentMiddleEffectParams;
+    | CopyOpponentMiddleEffectParams
+    | AutoCompileEffectParams;
 
 /**
  * Effect Definition - Single effect with parameters

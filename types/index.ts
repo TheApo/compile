@@ -34,7 +34,7 @@ export type EffectContext = {
     actor: Player;               // Wer führt die Aktion aus? (für Prompts und Queue)
     currentTurn: Player;         // Wessen Zug ist es?
     opponent: Player;            // Gegner des Kartenbesitzers
-    triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover' | 'middle'; // Wie wurde der Effekt ausgelöst?
+    triggerType?: 'play' | 'flip' | 'uncover' | 'start' | 'end' | 'cover' | 'middle' | 'on_cover' | 'compile' | 'oncover' | 'after'; // Wie wurde der Effekt ausgelöst?
     sourceCardId?: string;       // ID of the card that triggered this effect
     laneIndex?: number;          // Lane where the source card is located
     // NEW: For follow-up actions (useCardFromPreviousEffect)
@@ -54,6 +54,7 @@ export interface PlayerStats {
     cardsDrawn: number;
     cardsReturned: number;  // NEW: Track returned cards
     handsRefreshed: number;
+    protocolsCompiled?: number;  // Track protocols compiled via auto_compile
 }
 
 /** Detailed game statistics tracked during gameplay for permanent storage */
@@ -498,6 +499,80 @@ export type ActionRequired =
 }
 
 // -----------------------------------------------------------------------------
+// CLARITY PROTOCOL - Deck reveal and selection
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_card_from_revealed_deck';
+    actor: Player;
+    sourceCardId: string;
+    revealedCardIds: string[];
+    selectAction: 'play' | 'discard' | 'return_to_deck';
+    optional?: boolean;
+}
+| {
+    type: 'confirm_deck_discard';
+    actor: Player;
+    sourceCardId: string;
+    cardToDiscard: { id: string; protocol: string; value: number };
+}
+| {
+    type: 'confirm_deck_play_preview';
+    actor: Player;
+    sourceCardId: string;
+    cardToPlay: { id: string; protocol: string; value: number };
+    laneIndex: number;
+}
+| {
+    type: 'prompt_optional_shuffle_trash';
+    actor: Player;
+    sourceCardId: string;
+}
+
+// -----------------------------------------------------------------------------
+// TIME PROTOCOL - Trash selection
+// -----------------------------------------------------------------------------
+| {
+    type: 'select_card_from_trash_to_play';
+    actor: Player;
+    sourceCardId: string;
+    trashOwner?: 'own' | 'opponent' | 'any';
+    laneIndex?: number;
+    validCardIndices?: number[];
+}
+| {
+    type: 'select_card_from_trash_to_reveal';
+    actor: Player;
+    sourceCardId: string;
+    trashOwner?: 'own' | 'opponent' | 'any';
+    validCardIndices?: number[];
+}
+
+// -----------------------------------------------------------------------------
+// INTERNAL EFFECT EXECUTION TYPES
+// -----------------------------------------------------------------------------
+| {
+    type: 'execute_follow_up_effect';
+    actor: Player;
+    sourceCardId: string;
+    effect: any;
+    context: EffectContext;
+}
+| {
+    type: 'execute_conditional_followup';
+    actor: Player;
+    sourceCardId: string;
+    effect: any;
+    context: EffectContext;
+}
+| {
+    type: 'pending_uncover_effect';
+    actor: Player;
+    sourceCardId: string;
+    card: PlayedCard;
+    laneIndex: number;
+}
+
+// -----------------------------------------------------------------------------
 // NULL (no action required)
 // -----------------------------------------------------------------------------
 | null;
@@ -598,6 +673,10 @@ export interface GameState {
      *  Example: Smoke-1 (flip + shift) flips Test-1 (delete + delete + flip)
      *  Smoke-1's shift is deferred until Test-1's ALL effects complete */
     _deferredParentEffects?: any[];
+    /** Custom protocol effects pending execution */
+    _pendingCustomEffects?: any[];
+    /** Suspended queued actions during effect execution */
+    _suspendedQueuedActions?: ActionRequired[];
 }
 
 // =============================================================================
@@ -625,6 +704,8 @@ export type AIAction =
     | { type: 'resolveCustomChoice', optionIndex: number }
     | { type: 'resolveRevealBoardCardPrompt', choice: 'shift' | 'flip' | 'skip' }
     | { type: 'resolvePrompt', accept: boolean }  // Generic prompt resolution
+    // Generic card selection
+    | { type: 'selectCard', cardId: string }  // Generic card selection for various prompts
     // Luck Protocol actions
     | { type: 'stateNumber', number: number }
     | { type: 'stateProtocol', protocol: string }
@@ -634,7 +715,9 @@ export type AIAction =
     // Clarity Protocol actions
     | { type: 'selectRevealedDeckCard', cardId: string }
     // Time Protocol actions
-    | { type: 'selectTrashCard', cardIndex: number };
+    | { type: 'selectTrashCard', cardIndex: number }
+    // Shuffle trash prompt
+    | { type: 'resolveShuffleTrashPrompt', accept: boolean };
 
 // =============================================================================
 // ANIMATION REQUEST TYPES

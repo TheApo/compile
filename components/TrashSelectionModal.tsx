@@ -35,7 +35,8 @@ export function TrashSelectionModal({ gameState, onSelectCard }: TrashSelectionM
     const actor = action?.actor;
     const trashOwner = action?.trashOwner || 'own';
 
-    let trash: PlayedCard[] = [];
+    // Note: discard piles contain Card[], we'll convert to PlayedCard[] in useMemo below
+    let trash: any[] = [];
     if (trashOwner === 'own') {
         trash = actor ? gameState[actor]?.discard || [] : [];
     } else if (trashOwner === 'opponent') {

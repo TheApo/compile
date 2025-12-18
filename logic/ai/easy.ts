@@ -1008,18 +1008,22 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 undefined,
                 action.sourceCardId
             ).filter(t => {
-                // Exclude cards in the disallowed lane
-                for (let i = 0; i < state[t.owner].lanes.length; i++) {
-                    if (state[t.owner].lanes[i].some(c => c.id === t.id)) {
-                        return i !== disallowedLaneIndex;
+                // Exclude cards in the disallowed lane - check both players' lanes
+                for (const playerKey of ['player', 'opponent'] as const) {
+                    for (let i = 0; i < state[playerKey].lanes.length; i++) {
+                        if (state[playerKey].lanes[i].some(c => c.id === t.id)) {
+                            return i !== disallowedLaneIndex;
+                        }
                     }
                 }
                 return true;
             });
 
             if (validTargets.length > 0) {
-                // Prefer deleting player's cards
-                const playerTargets = validTargets.filter(t => t.owner === 'player');
+                // Prefer deleting player's cards - find owner by checking which player has the card
+                const playerTargets = validTargets.filter(t =>
+                    state.player.lanes.some(lane => lane.some(c => c.id === t.id))
+                );
                 const target = playerTargets.length > 0 ? playerTargets[0] : validTargets[0];
                 return { type: 'deleteCard', cardId: target.id };
             }

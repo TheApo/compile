@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../../game/helpers/actionUtils';
 import { isFrost1Active, canFlipSpecificCard } from '../../game/passiveRuleChecker';
 import { getPlayerLaneValue } from '../../game/stateManager';
 
@@ -350,6 +350,12 @@ export function executeFlipEffect(
                     if (c.value <= handSize) continue;
                 }
 
+                // NEW: Check valueLessThanUniqueProtocolsOnField - target must have value < unique protocols
+                if (targetFilter.valueLessThanUniqueProtocolsOnField) {
+                    const threshold = countUniqueProtocolsOnField(state);
+                    if (c.value >= threshold) continue;
+                }
+
                 validTargets.push(c.id);
             }
         }
@@ -363,6 +369,9 @@ export function executeFlipEffect(
             const handSize = state[cardOwner].hand.length;
             const minValue = handSize + 1;
             newState = log(newState, cardOwner, `Hand size: ${handSize} cards. No cards with value ${minValue} or higher available. Effect skipped.`);
+        } else if (targetFilter.valueLessThanUniqueProtocolsOnField) {
+            const threshold = countUniqueProtocolsOnField(state);
+            newState = log(newState, cardOwner, `${threshold} unique protocols on field. No cards with value less than ${threshold} available. Effect skipped.`);
         } else {
             newState = log(newState, cardOwner, `No valid cards to flip. Effect skipped.`);
         }

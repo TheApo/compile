@@ -14,34 +14,25 @@ export {
 
 // Flip effects
 export {
-    executeFlipEffect,
-    executeFlipAllInLane,
-    type FlipEffectParams
+    executeFlipEffect
 } from './flipExecutor';
 
 // Delete effects
 export {
-    executeDeleteEffect,
-    countValidDeleteTargets,
-    type DeleteEffectParams
+    executeDeleteEffect
 } from './deleteExecutor';
 
 // Shift effects
 export {
-    executeShiftEffect,
-    performShift,
-    type ShiftEffectParams
+    executeShiftEffect
 } from './shiftExecutor';
 
 // Return effects
 export {
-    executeReturnEffect,
-    performReturn,
-    type ReturnEffectParams
+    executeReturnEffect
 } from './returnExecutor';
 
 // Play effects
 export {
-    executePlayEffect,
-    type PlayEffectParams
+    executePlayEffect
 } from './playExecutor';

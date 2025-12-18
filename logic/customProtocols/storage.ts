@@ -4,7 +4,7 @@
  */
 
 import { CustomProtocolDefinition, CustomProtocolStorage, CustomCardDefinition } from "../../types/customProtocol";
-import { CardData } from "../../types";
+import { Card } from "../../types";
 // REMOVED: generateEffect import - was never used, all effects go through effectInterpreter
 
 const STORAGE_KEY = 'custom_protocols_v1';
@@ -99,7 +99,7 @@ export const getCustomProtocol = (id: string): CustomProtocolDefinition | null =
 export const customCardToCardData = (
     customCard: CustomCardDefinition,
     protocolName: string
-): CardData => {
+): Card => {
     // Generate card text from effects
     const topTexts: string[] = [];
     const middleTexts: string[] = [];
@@ -142,11 +142,13 @@ export const customCardToCardData = (
     const bottom = bottomTexts.length > 0 ? bottomTexts.join(' ') : '';
 
     return {
-        protocol: protocolName as any,  // Will be the custom protocol name
+        protocol: protocolName,  // Will be the custom protocol name
         value: customCard.value,
         top,
         middle,
         bottom,
+        keywords: {},
+        category: 'Custom',
     };
 };
 
@@ -346,6 +348,6 @@ const generateEffectText = (params: any): string => {
 /**
  * Convert custom protocol to full card set
  */
-export const customProtocolToCards = (protocol: CustomProtocolDefinition): CardData[] => {
+export const customProtocolToCards = (protocol: CustomProtocolDefinition): Card[] => {
     return protocol.cards.map(customCard => customCardToCardData(customCard, protocol.name));
 };

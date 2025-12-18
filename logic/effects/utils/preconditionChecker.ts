@@ -11,18 +11,10 @@
 import { GameState, Player, PlayedCard } from '../../../types';
 import { EffectDefinition } from '../../../types/customProtocol';
 import { findValidTargets, hasValidTargets } from './targetResolver';
+import type { PreconditionResult } from '../types';
 
-/**
- * Result of precondition check
- */
-export interface PreconditionResult {
-    /** Whether the effect can be executed */
-    canExecute: boolean;
-    /** Reason why it cannot be executed (if canExecute is false) */
-    skipReason?: string;
-    /** Count of valid targets (for target-requiring effects) */
-    validTargetCount?: number;
-}
+// Re-export for backwards compatibility
+export type { PreconditionResult };
 
 /**
  * Check if an effect's preconditions are met

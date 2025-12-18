@@ -122,6 +122,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += `Draw all cards with a value of ${targetValue}.`;
                 mainText = text;
                 break;
+            } else if (params.countType === 'equal_to_unique_protocols_in_lane') {
+                // Diversity-1: "Draw cards equal to the number of different protocols in this line"
+                text += 'Draw cards equal to the number of different protocols in this line.';
+                mainText = text;
+                break;
             } else if (params.valueFilter?.equals !== undefined && params.count) {
                 // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
                 const targetValue = params.valueFilter.equals;
@@ -274,6 +279,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // NEW: valueMinGreaterThanHandSize - target must have value > hand size
             if (params.targetFilter?.valueMinGreaterThanHandSize) {
                 text += ' that has a value greater than the number of cards in your hand';
+            }
+
+            // NEW: valueLessThanUniqueProtocolsOnField - target must have value < unique protocols
+            if (params.targetFilter?.valueLessThanUniqueProtocolsOnField) {
+                text += ' with a value less than the number of different protocols on cards in the field';
             }
 
             text += '.';
@@ -462,7 +472,13 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
             // Handle deleteSelf
             if (params.deleteSelf) {
-                mainText = 'Delete this card.';
+                // NEW: protocolCountConditional for deleteSelf (Diversity-6)
+                if (params.protocolCountConditional?.type === 'unique_protocols_on_field_below') {
+                    const threshold = params.protocolCountConditional.threshold;
+                    mainText = `If there are not at least ${threshold} different protocols on cards in the field, delete this card.`;
+                } else {
+                    mainText = 'Delete this card.';
+                }
                 break;
             }
 
@@ -885,6 +901,14 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += " on your opponent's side";
             }
 
+            // NEW: excludeSourceProtocol - "non-X card" (Diversity-0)
+            // This modifies the text to indicate "non-[protocol]" restriction
+            // Applied when excludeSourceProtocol is true
+            if (params.excludeSourceProtocol) {
+                // Replace "1 card" with "1 non-[protocol] card" - the protocol name will be shown dynamically in game
+                text = text.replace(/(\d+) card/, '$1 non-[protocol] card');
+            }
+
             mainText = text + '.';
             break;
         }
@@ -1201,17 +1225,23 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 }
                 case 'add_to_total': {
                     const scopeText = mod.scope === 'this_lane' ? ' in this line' : '';
+
+                    // NEW: has_non_own_protocol_face_up condition (Diversity-3)
+                    const conditionText = mod.condition === 'has_non_own_protocol_face_up'
+                        ? ' if there are any non-[protocol] face-up cards in this stack'
+                        : '';
+
                     if (mod.target === 'opponent_total') {
                         if (mod.value < 0) {
-                            mainText = `Your opponent's total value${scopeText} is reduced by ${Math.abs(mod.value)}.`;
+                            mainText = `Your opponent's total value${scopeText} is reduced by ${Math.abs(mod.value)}${conditionText}.`;
                         } else {
-                            mainText = `Your opponent's total value${scopeText} is increased by ${mod.value}.`;
+                            mainText = `Your opponent's total value${scopeText} is increased by ${mod.value}${conditionText}.`;
                         }
                     } else {
                         if (mod.value < 0) {
-                            mainText = `Your total value${scopeText} is reduced by ${Math.abs(mod.value)}.`;
+                            mainText = `Your total value${scopeText} is reduced by ${Math.abs(mod.value)}${conditionText}.`;
                         } else {
-                            mainText = `Your total value${scopeText} is increased by ${mod.value}.`;
+                            mainText = `Your total value${scopeText} is increased by ${mod.value}${conditionText}.`;
                         }
                     }
                     break;
@@ -1301,6 +1331,17 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // Mirror-1: Copy opponent's middle effect
             const optText = params.optional ? 'You may resolve' : 'Resolve';
             mainText = `${optText} the middle command of 1 of your opponent's cards as if it were on this card.`;
+            break;
+        }
+
+        case 'auto_compile': {
+            // Diversity-0: Compile without deleting cards
+            if (params.protocolCountConditional?.type === 'unique_protocols_on_field') {
+                const threshold = params.protocolCountConditional.threshold;
+                mainText = `If there are ${threshold} different protocols on cards in the field, compile this protocol.`;
+            } else {
+                mainText = 'Compile this protocol.';
+            }
             break;
         }
 

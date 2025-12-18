@@ -13,8 +13,8 @@ import { GameState, Player, PlayedCard, TargetFilter, EffectScope, DestinationRe
 import { EffectDefinition } from '../../types/customProtocol';
 
 // Re-export commonly used types
-export { GameState, Player, PlayedCard, TargetFilter, EffectScope, DestinationRestriction };
-export { EffectDefinition };
+export type { GameState, Player, PlayedCard, TargetFilter, EffectScope, DestinationRestriction };
+export type { EffectDefinition };
 
 // =============================================================================
 // EFFECT EXECUTION TYPES
@@ -30,6 +30,8 @@ export interface PreconditionResult {
     skipReason?: string;
     /** Valid targets found (for target-requiring effects) */
     validTargets?: CardLocation[];
+    /** Count of valid targets (for target-requiring effects) */
+    validTargetCount?: number;
 }
 
 /**

@@ -932,3 +932,47 @@ export function findAllHighestUncoveredCards(
     // Return all cards with the highest value (handles ties)
     return uncoveredCards.filter(c => c.value === maxValue);
 }
+
+/**
+ * Count unique protocols on all face-up cards on the field (both players).
+ * Used for Diversity protocol effects that check protocol diversity.
+ *
+ * @param state Current game state
+ * @returns Number of unique protocols on face-up cards
+ */
+export function countUniqueProtocolsOnField(state: GameState): number {
+    const protocols = new Set<string>();
+    for (const player of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[player].lanes) {
+            for (const card of lane) {
+                if (card.isFaceUp) {
+                    protocols.add(card.protocol);
+                }
+            }
+        }
+    }
+    return protocols.size;
+}
+
+/**
+ * Count unique protocols on all face-up cards in a specific lane (both players).
+ * Used for Diversity protocol effects that check protocol diversity in a line.
+ *
+ * @param state Current game state
+ * @param laneIndex The lane index to check
+ * @returns Number of unique protocols on face-up cards in the lane
+ */
+export function countUniqueProtocolsInLane(state: GameState, laneIndex: number): number {
+    const protocols = new Set<string>();
+    for (const player of ['player', 'opponent'] as Player[]) {
+        const lane = state[player].lanes[laneIndex];
+        if (lane) {
+            for (const card of lane) {
+                if (card.isFaceUp) {
+                    protocols.add(card.protocol);
+                }
+            }
+        }
+    }
+    return protocols.size;
+}

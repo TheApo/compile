@@ -27,6 +27,7 @@ import smokeCustomData from '../../custom_protocols/smoke_custom_protocol.json';
 import clarityCustomData from '../../custom_protocols/clarity_custom_protocol.json';
 import corruptionCustomData from '../../custom_protocols/corruption_custom_protocol.json';
 import courageCustomData from '../../custom_protocols/courage_custom_protocol.json';
+import diversityCustomData from '../../custom_protocols/diversity_custom_protocol.json';
 import fearCustomData from '../../custom_protocols/fear_custom_protocol.json';
 import iceCustomData from '../../custom_protocols/ice_custom_protocol.json';
 import luckCustomData from '../../custom_protocols/luck_custom_protocol.json';
@@ -41,7 +42,7 @@ import warCustomData from '../../custom_protocols/war_custom_protocol.json';
  */
 const allDefaultCustomProtocolData = [
     anarchyCustomData, apathyCustomData, assimilationCustomData, chaosCustomData, darknessCustomData,
-    deathCustomData, fireCustomData, frostCustomData, hateCustomData,
+    deathCustomData, diversityCustomData, fireCustomData, frostCustomData, hateCustomData,
     waterCustomData, spiritCustomData, gravityCustomData, lifeCustomData,
     lightCustomData, speedCustomData, metalCustomData, plagueCustomData,
     loveCustomData, psychicCustomData, smokeCustomData, clarityCustomData,
@@ -99,6 +100,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(clarityCustomData as any);
         addCustomProtocol(corruptionCustomData as any);
         addCustomProtocol(courageCustomData as any);
+        addCustomProtocol(diversityCustomData as any);
         addCustomProtocol(fearCustomData as any);
         addCustomProtocol(iceCustomData as any);
         addCustomProtocol(luckCustomData as any);

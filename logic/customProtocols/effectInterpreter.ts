@@ -7,7 +7,7 @@ import { GameState, PlayedCard, EffectResult, EffectContext, Player, AnimationRe
 import { EffectDefinition } from '../../types/customProtocol';
 import { log } from '../utils/log';
 import { v4 as uuidv4 } from 'uuid';
-import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard, countUniqueProtocolsOnField } from '../game/helpers/actionUtils';
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 import { isFrost1Active, isFrost1BottomActive, canPlayerDraw } from '../game/passiveRuleChecker';
@@ -28,6 +28,62 @@ import { executeStateNumberEffect } from '../effects/actions/stateNumberExecutor
 import { executeStateProtocolEffect } from '../effects/actions/stateProtocolExecutor';
 import { executeSwapStacksEffect } from '../effects/actions/swapStacksExecutor';
 import { executeCopyOpponentMiddleEffect } from '../effects/actions/copyEffectExecutor';
+
+/**
+ * Execute AUTO_COMPILE effect (Diversity-0)
+ * Marks the lane as compiled WITHOUT deleting cards - they stay on the board.
+ * This is different from normal compile which moves cards to trash.
+ */
+function executeAutoCompileEffect(
+    card: PlayedCard,
+    laneIndex: number,
+    state: GameState,
+    context: EffectContext,
+    params: any
+): EffectResult {
+    const { cardOwner } = context;
+    let newState = { ...state };
+
+    // Check protocolCountConditional (Diversity-0: "If there are 6 different protocols on cards in the field")
+    if (params.protocolCountConditional?.type === 'unique_protocols_on_field') {
+        const threshold = params.protocolCountConditional.threshold;
+        const protocolCount = countUniqueProtocolsOnField(state);
+
+        if (protocolCount < threshold) {
+            // Condition NOT met (not enough protocols on field) - skip compile
+            newState = log(newState, cardOwner, `Not enough different protocols on field (${protocolCount}/${threshold}). Effect skipped.`);
+            return { newState };
+        }
+
+        // Condition met - proceed with compile
+        newState = log(newState, cardOwner, `${protocolCount} different protocols on field. Protocol compiled!`);
+    }
+
+    // Mark the lane as compiled - but DO NOT move cards to trash!
+    // Cards stay on the board
+    if (!newState[cardOwner].compiled[laneIndex]) {
+        newState[cardOwner] = {
+            ...newState[cardOwner],
+            compiled: [
+                ...newState[cardOwner].compiled.slice(0, laneIndex),
+                true,
+                ...newState[cardOwner].compiled.slice(laneIndex + 1)
+            ]
+        };
+
+        // Update stats
+        const newStats = {
+            ...newState.stats[cardOwner],
+            protocolsCompiled: newState.stats[cardOwner].protocolsCompiled + 1
+        };
+        newState = {
+            ...newState,
+            stats: { ...newState.stats, [cardOwner]: newStats }
+        };
+    }
+
+    return { newState };
+}
 
 /**
  * Execute a custom effect based on its EffectDefinition
@@ -547,6 +603,10 @@ export function executeCustomEffect(
 
         case 'copy_opponent_middle':
             result = executeCopyOpponentMiddleEffect(card, laneIndex, state, context, params);
+            break;
+
+        case 'auto_compile':
+            result = executeAutoCompileEffect(card, laneIndex, state, context, params);
             break;
 
         default:

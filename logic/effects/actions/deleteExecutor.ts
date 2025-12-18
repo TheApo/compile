@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard, handleUncoverEffect, isCardCommitted, isCardAtIndexUncovered } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, handleUncoverEffect, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../../game/helpers/actionUtils';
 import { getLanesWhereOpponentHasHigherValue, getPlayerLaneValue } from '../../game/stateManager';
 
 /**
@@ -343,6 +343,20 @@ export function executeDeleteEffect(
     // NEW: Handle deleteSelf (Life-0 on_cover: "then delete this card")
     // Directly delete the source card without prompting
     if (params.deleteSelf) {
+
+        // NEW: Check protocolCountConditional (Diversity-6: "If there are not at least 3 different protocols")
+        if (params.protocolCountConditional?.type === 'unique_protocols_on_field_below') {
+            const threshold = params.protocolCountConditional.threshold;
+            const protocolCount = countUniqueProtocolsOnField(state);
+
+            if (protocolCount >= threshold) {
+                // Condition NOT met (enough protocols on field) - skip delete
+                newState = log(newState, cardOwner, `${protocolCount} different protocols on field (need less than ${threshold}). Card not deleted.`);
+                return { newState };
+            }
+            // Condition met - proceed with self-delete
+            newState = log(newState, cardOwner, `Only ${protocolCount} different protocols on field (need ${threshold}). Deleting this card.`);
+        }
 
         // CRITICAL: Use the laneIndex parameter (we already know where the card is)
         // Don't use findCardOnBoard because in on_cover context, the state might be mid-transition
