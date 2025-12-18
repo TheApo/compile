@@ -34,6 +34,7 @@ import luckCustomData from '../../custom_protocols/luck_custom_protocol.json';
 import mirrorCustomData from '../../custom_protocols/mirror_custom_protocol.json';
 import peaceCustomData from '../../custom_protocols/peace_custom_protocol.json';
 import timeCustomData from '../../custom_protocols/time_custom_protocol.json';
+import unityCustomData from '../../custom_protocols/unity_custom_protocol.json';
 import warCustomData from '../../custom_protocols/war_custom_protocol.json';
 
 /**
@@ -47,7 +48,7 @@ const allDefaultCustomProtocolData = [
     lightCustomData, speedCustomData, metalCustomData, plagueCustomData,
     loveCustomData, psychicCustomData, smokeCustomData, clarityCustomData,
     corruptionCustomData, courageCustomData, fearCustomData, iceCustomData,
-    luckCustomData, mirrorCustomData, peaceCustomData, timeCustomData, warCustomData
+    luckCustomData, mirrorCustomData, peaceCustomData, timeCustomData, unityCustomData, warCustomData
 ];
 
 /**
@@ -107,6 +108,7 @@ export const loadDefaultCustomProtocols = (): void => {
         addCustomProtocol(mirrorCustomData as any);
         addCustomProtocol(peaceCustomData as any);
         addCustomProtocol(timeCustomData as any);
+        addCustomProtocol(unityCustomData as any);
         addCustomProtocol(warCustomData as any);
     } catch (error) {
         console.error('[Default Protocols] Error loading default protocols:', error);

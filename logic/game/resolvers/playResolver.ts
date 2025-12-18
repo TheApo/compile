@@ -9,7 +9,7 @@ import { executeOnCoverEffect, executeOnPlayEffect } from '../../effectExecutor'
 import { recalculateAllLaneValues } from '../stateManager';
 import { log, setLogSource, setLogPhase, increaseLogIndent } from '../../utils/log';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
-import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule, hasPlayOnOpponentSideRule } from '../passiveRuleChecker';
+import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
 
 export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player, targetOwner: Player = player): EffectResult => {
     // player = who is playing the card (whose hand it comes from)
@@ -74,18 +74,23 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
         const playerHasSpirit1 = prevState[player].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
-        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
-        const playerHasChaosThree = prevState[player].lanes.some((lane) => {
-            if (lane.length === 0) return false;
-            const uncoveredCard = lane[lane.length - 1];
-            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
-        });
+        // Check if the card being played has ignore_protocol_matching card_property (generic check)
+        const thisCardIgnoresMatching = (cardToPlay as any).customEffects?.bottomEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (cardToPlay as any).customEffects?.topEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (cardToPlay as any).customEffects?.middleEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        );
 
-        // NEW: Check for custom cards with allow_any_protocol_play passive rule
+        // NEW: Check for custom cards with allow_any_protocol_play passive rule (Spirit-1 style - affects ALL cards)
         const hasCustomAnyProtocolRule = hasAnyProtocolPlayRule(prevState, player, laneIndex);
 
         // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
         const canPlayAnywhere = hasPlayOnOpponentSideRule(prevState, cardToPlay);
+
+        // NEW: Check for Unity-1 same-protocol face-up play rule
+        const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(prevState, player, laneIndex, cardToPlay.protocol);
 
         let canPlayFaceUp: boolean;
 
@@ -100,9 +105,11 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             const doesNotMatch = cardToPlay.protocol !== playerProtocol && cardToPlay.protocol !== opponentProtocol;
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
         } else {
-            // Normal rule: can only play if protocol DOES match (or Spirit-1/Chaos-3/custom rule override)
+            // Normal rule: can only play if protocol DOES match (or Spirit-1/custom rule override)
+            // OR if THIS CARD ignores protocol matching (cards with ignore_protocol_matching card_property)
+            // OR if Unity-1 same-protocol face-up rule allows it (only for same-protocol cards)
             const doesMatch = cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol;
-            canPlayFaceUp = (doesMatch || playerHasSpirit1 || playerHasChaosThree || hasCustomAnyProtocolRule) && !opponentHasPsychic1;
+            canPlayFaceUp = (doesMatch || playerHasSpirit1 || thisCardIgnoresMatching || hasCustomAnyProtocolRule || hasSameProtocolFaceUpRule) && !opponentHasPsychic1;
         }
 
         if (!canPlayFaceUp) {
@@ -186,7 +193,12 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
                 opponent: targetOwner === 'player' ? 'opponent' : 'player',
                 triggerType: 'cover'
             };
-            onCoverResult = executeOnCoverEffect(topCard, laneIndex, stateBeforeCover, coverContext);
+            // NEW: Store covering card's protocol for on_cover restriction (Unity-0 Bottom)
+            const stateWithCoveringProtocol = {
+                ...stateBeforeCover,
+                _coveringCardProtocol: cardToPlay.protocol
+            } as GameState;
+            onCoverResult = executeOnCoverEffect(topCard, laneIndex, stateWithCoveringProtocol, coverContext);
         } else {
             // Card was deleted by reactive effect - skip bottom on_cover effects
             onCoverResult = { newState: stateBeforeCover };

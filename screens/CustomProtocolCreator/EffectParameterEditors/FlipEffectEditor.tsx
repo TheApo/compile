@@ -162,6 +162,8 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                     <option value="protocol_match">Only if in specific protocol line</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
                     <option value="hand_size_greater_than">Only if hand size greater than X</option>
+                    <option value="same_protocol_on_field">Only if another face-up same-protocol card exists (Unity)</option>
+                    <option value="this_card_is_covered">Only if this card is covered</option>
                 </select>
             </label>
 
@@ -276,6 +278,20 @@ export const FlipEffectEditor: React.FC<FlipEffectEditorProps> = ({ params, onCh
                 Value Greater Than Hand Size
                 <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
                     Target must have value greater than the number of cards in your hand.
+                </small>
+            </label>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={targetFilter.valueLessThanUniqueProtocolsOnField || false}
+                    onChange={e =>
+                        onChange({ ...params, targetFilter: { ...targetFilter, valueLessThanUniqueProtocolsOnField: e.target.checked } })
+                    }
+                />
+                Value Less Than Protocol Count
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Target must have value less than the number of different protocols on cards in the field.
                 </small>
             </label>
 

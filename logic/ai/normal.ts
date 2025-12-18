@@ -17,7 +17,8 @@ import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
     canPlayCard,
     hasAnyProtocolPlayRule,
-    hasRequireNonMatchingProtocolRule
+    hasRequireNonMatchingProtocolRule,
+    canPlayFaceUpDueToSameProtocolRule
 } from '../game/passiveRuleChecker';
 import {
     hasRequireFaceDownPlayRule,
@@ -1143,16 +1144,21 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                     if (!isForcedFaceDown) {
                         const aiHasSpirit1 = state.opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
-                        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
-                        const aiHasChaos3 = state.opponent.lanes.some((lane) => {
-                            if (lane.length === 0) return false;
-                            const uncoveredCard = lane[lane.length - 1];
-                            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
-                        });
+                        // Check if the card being played has ignore_protocol_matching card_property (generic check)
+                        const thisCardIgnoresMatching = (card as any).customEffects?.bottomEffects?.some(
+                            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                        ) || (card as any).customEffects?.topEffects?.some(
+                            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                        ) || (card as any).customEffects?.middleEffects?.some(
+                            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                        );
 
                         // Check for Anarchy-1 on ANY player's field (affects both players)
                         const anyPlayerHasAnarchy1 = [...state.player.lanes.flat(), ...state.opponent.lanes.flat()]
                             .some(c => c.isFaceUp && c.protocol === 'Anarchy' && c.value === 1);
+
+                        // Check Unity-1 same-protocol face-up play rule
+                        const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(state, 'opponent', laneIndex, card.protocol);
 
                         let canPlayFaceUp: boolean;
                         if (anyPlayerHasAnarchy1) {
@@ -1160,11 +1166,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                             const doesNotMatch = card.protocol !== state.opponent.protocols[laneIndex] && card.protocol !== state.player.protocols[laneIndex];
                             canPlayFaceUp = doesNotMatch;
                         } else {
-                            // Normal rule
+                            // Normal rule - or THIS CARD ignores protocol matching (cards with ignore_protocol_matching)
+                            // OR if Unity-1 same-protocol face-up rule allows it
                             canPlayFaceUp = card.protocol === state.opponent.protocols[laneIndex]
                                 || card.protocol === state.player.protocols[laneIndex]
                                 || aiHasSpirit1
-                                || aiHasChaos3;
+                                || thisCardIgnoresMatching
+                                || hasSameProtocolFaceUpRule;
                         }
 
                         if (canPlayFaceUp) {
@@ -2776,6 +2784,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             // No valid selection - skip
             return { type: 'resolvePrompt', accept: false };
+        }
+
+        // Unity-4: "Reveal deck, draw all Unity cards, shuffle"
+        // Auto-confirm - all matching cards are drawn automatically
+        case 'reveal_deck_draw_protocol': {
+            return { type: 'confirmRevealDeckDrawProtocol' };
         }
 
         case 'custom_choice': {

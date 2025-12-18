@@ -42,6 +42,25 @@ export function executeDeleteEffect(
             return { newState: state };
         }
     }
+    // NEW: Check 'this_card_is_covered' - only execute if this card is covered (not top card)
+    if (params.advancedConditional?.type === 'this_card_is_covered') {
+        const ownerLanes = state[cardOwner].lanes;
+        let isCardCovered = false;
+
+        for (let i = 0; i < ownerLanes.length; i++) {
+            const lane = ownerLanes[i];
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            if (cardIndex !== -1 && cardIndex < lane.length - 1) {
+                // Card is in this lane and NOT the top card = covered
+                isCardCovered = true;
+                break;
+            }
+        }
+
+        if (!isCardCovered) {
+            return { newState: state };
+        }
+    }
 
     // Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId

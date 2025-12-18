@@ -322,3 +322,51 @@ choose one of the tied cards.
 11
 ● CLARIFICATION: If Hate 2 is the highest value card you own it deletes itself as a result
 of the first clause. Thus, the second clause no longer exists and does not trigger.
+
+Main 2
+Chaos 0
+● ERRATA(9/2025): The middle command should be: “Flip 1 covered card in each line.”
+● CLARIFICATION: When Chaos 0's middle command triggers, the owner notes each line
+that needs to be acted in. Then, they choose which line to process, one at a time.
+For each line, they select a covered card to flip, processing the consequences of that
+flip before addressing the next line. Covered cards never activate their middle
+command when flipped.
+Chaos 1
+● CLARIFICATION: You must make a change to the protocols of both players.
+Corruption 6
+● CLARIFICATION: This will trigger the middle command of the card it was covering if it
+deletes itself at the end of turn.
+Courage 3
+● CLARIFICATION: Multiple lines can be tied for “highest total value”. In this case, the
+player chooses.
+Ice 6
+● CLARIFICATION: Cards are drawn in a batch. Refreshing with 0 cards in hand will
+draw you 5 cards.
+Luck 0
+● CLARIFICATION: The played card must be one that you drew with Luck 0. You can
+play the card face-up or face-down.
+Luck 1
+● ERRATA(9/2025): The middle command should be: “Play the top card of your deck
+face-down. Flip that card, ignoring its middle command.”
+● CLARIFICATION: The middle command is only ignored for the flip.
+Luck 3
+● ERRATA(8/2025): The middle command should be: “State a protocol. Discard the top
+card of your opponent's deck. If the discarded card matched the stated protocol, delete
+12
+1 card.”
+Mirror 1
+● CLARIFICATION: Mirror 1’s bottom text is blocked by Fear 0 because the text is treated
+“as if it were on this card” but there’s no text to copy because Fear 0 says the “cards
+do not have middle commands”.
+Mirror 2
+● CLARIFICATION: The swapped cards keep the same relative positions. A stack must
+have at least 1 card in it to swap.
+Mirror 3
+● CLARIFICATION: If Mirror 3 flips itself first, the second flip doesn’t happen.
+Peace 1
+● CLARIFICATION: The owner decides which player discards their hand first.
+Smoke 0 and 3
+● CLARIFICATION: Both Smoke 0 and 3 count your opponent’s face-down cards.
+Time 2
+● ERRATA (8/2025): The top command should be: “After you shuffle your deck: Draw 1
+card. Then, you may shift this card.”

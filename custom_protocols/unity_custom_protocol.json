@@ -1,0 +1,229 @@
+{
+  "id": "unity-custom-001",
+  "name": "Unity",
+  "description": "Strength in unity. Unity cards synergize with each other - effects become stronger with more face-up Unity cards on the field.",
+  "author": "System",
+  "createdAt": "2025-12-18T00:00:00.000Z",
+  "color": "#4CAF50",
+  "pattern": "hexagons",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "unity-0-choice",
+          "params": {
+            "action": "choice",
+            "advancedConditional": {
+              "type": "same_protocol_on_field"
+            },
+            "options": [
+              {
+                "id": "unity-0-choice-flip",
+                "trigger": "on_play",
+                "params": {
+                  "action": "flip",
+                  "count": 1,
+                  "optional": true,
+                  "targetFilter": {
+                    "owner": "any",
+                    "position": "uncovered",
+                    "faceState": "any",
+                    "excludeSelf": false
+                  }
+                },
+                "position": "middle"
+              },
+              {
+                "id": "unity-0-choice-draw",
+                "trigger": "on_play",
+                "params": {
+                  "action": "draw",
+                  "count": 1,
+                  "target": "self"
+                },
+                "position": "middle"
+              }
+            ]
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "unity-0-on-cover-choice",
+          "params": {
+            "action": "choice",
+            "options": [
+              {
+                "id": "unity-0-cover-choice-flip",
+                "trigger": "on_cover",
+                "params": {
+                  "action": "flip",
+                  "count": 1,
+                  "optional": false,
+                  "targetFilter": {
+                    "owner": "any",
+                    "position": "uncovered",
+                    "faceState": "any",
+                    "excludeSelf": false
+                  }
+                },
+                "position": "bottom"
+              },
+              {
+                "id": "unity-0-cover-choice-draw",
+                "trigger": "on_cover",
+                "params": {
+                  "action": "draw",
+                  "count": 1,
+                  "target": "self"
+                },
+                "position": "bottom"
+              }
+            ]
+          },
+          "position": "bottom",
+          "trigger": "on_cover",
+          "onCoverProtocolRestriction": "same_protocol"
+        }
+      ]
+    },
+    {
+      "value": 1,
+      "topEffects": [
+        {
+          "id": "unity-1-shift-if-covered",
+          "params": {
+            "action": "shift",
+            "shiftSelf": true,
+            "optional": true,
+            "advancedConditional": {
+              "type": "this_card_is_covered"
+            }
+          },
+          "position": "top",
+          "trigger": "start"
+        }
+      ],
+      "middleEffects": [
+        {
+          "id": "unity-1-auto-compile",
+          "params": {
+            "action": "auto_compile",
+            "protocolCountConditional": {
+              "type": "same_protocol_count_on_field",
+              "threshold": 5,
+              "faceState": "face_up"
+            },
+            "deleteAllInLane": true
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "unity-1-face-up-play",
+          "params": {
+            "action": "passive_rule",
+            "rule": {
+              "type": "allow_same_protocol_face_up_play",
+              "scope": "this_lane",
+              "protocolScope": "same_as_source"
+            }
+          },
+          "position": "bottom",
+          "trigger": "passive"
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "unity-2-draw-count",
+          "params": {
+            "action": "draw",
+            "countType": "count_own_protocol_cards_on_field",
+            "target": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 3,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "unity-3-conditional-flip",
+          "params": {
+            "action": "flip",
+            "count": 1,
+            "optional": true,
+            "advancedConditional": {
+              "type": "same_protocol_on_field"
+            },
+            "targetFilter": {
+              "owner": "any",
+              "position": "uncovered",
+              "faceState": "face_up",
+              "excludeSelf": false
+            }
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 4,
+      "topEffects": [
+        {
+          "id": "unity-4-draw-all-protocol",
+          "params": {
+            "action": "draw",
+            "advancedConditional": {
+              "type": "empty_hand"
+            },
+            "protocolFilter": {
+              "type": "same_as_source"
+            },
+            "revealDeck": true,
+            "shuffleAfter": true,
+            "target": "self"
+          },
+          "position": "top",
+          "trigger": "start"
+        }
+      ],
+      "middleEffects": [],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "unity-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    }
+  ],
+  "category": "Aux 2"
+}

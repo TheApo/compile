@@ -34,6 +34,7 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                     <option value="equal_to_card_value">Equal to Card Value (from previous effect)</option>
                     <option value="equal_to_discarded">Equal to Discarded Cards</option>
                     <option value="hand_size">Equal to Hand Size</option>
+                    <option value="count_own_protocol_cards_on_field">Count Same Protocol Cards on Field (Unity)</option>
                 </select>
             </label>
 
@@ -262,6 +263,8 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                             onChange({ ...params, advancedConditional: { type: 'empty_hand' } });
                         } else if (e.target.value === 'opponent_higher_value_in_lane') {
                             onChange({ ...params, advancedConditional: { type: 'opponent_higher_value_in_lane' } });
+                        } else if (e.target.value === 'same_protocol_on_field') {
+                            onChange({ ...params, advancedConditional: { type: 'same_protocol_on_field' } });
                         }
                     }}
                 >
@@ -270,6 +273,7 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                     <option value="compile_block">Block opponent's compile next turn</option>
                     <option value="empty_hand">Only if hand is empty</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                    <option value="same_protocol_on_field">Only if another face-up same-protocol card exists (Unity)</option>
                 </select>
             </label>
 
@@ -309,6 +313,25 @@ export const DrawEffectEditor: React.FC<DrawEffectEditorProps> = ({ params, onCh
                     </small>
                 </label>
             )}
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.protocolFilter?.type === 'same_as_source'}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, protocolFilter: { type: 'same_as_source' } });
+                        } else {
+                            const { protocolFilter, ...rest } = params;
+                            onChange(rest as DrawEffectParams);
+                        }
+                    }}
+                />
+                Draw all same-protocol cards from deck (Unity-4)
+                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                    Reveals deck and draws all cards matching this card's protocol.
+                </small>
+            </label>
 
         </div>
     );

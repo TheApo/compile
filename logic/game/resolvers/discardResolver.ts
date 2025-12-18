@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player } from '../../../types';
+import { GameState, Player, EffectContext } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
-import { handleChainedEffectsOnDiscard, countValidDeleteTargets } from '../helpers/actionUtils';
+import { handleChainedEffectsOnDiscard, countValidDeleteTargets, findCardOnBoard } from '../helpers/actionUtils';
 // NOTE: checkForPlague1Trigger removed - Plague-1 is now custom protocol, triggers via processReactiveEffects
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { queuePendingCustomEffects } from '../phaseManager';
+import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 
 const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     if (state.processedSpeed1TriggerThisTurn) {
@@ -40,6 +41,71 @@ const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
     }
 
     return state;
+};
+
+/**
+ * Helper to execute followUpEffect directly after discard completes.
+ * This is the SINGLE POINT OF TRUTH for "if you do" effect execution after discard.
+ * NO MORE discard_completed action - execute directly here!
+ */
+const executeFollowUpAfterDiscard = (
+    state: GameState,
+    followUpEffect: any,
+    conditionalType: string | undefined,
+    previousHandSize: number | undefined,
+    sourceCardId: string,
+    actor: 'player' | 'opponent',
+    savedIndentLevel: number
+): GameState => {
+    // Find the source card on board
+    const sourceCardInfo = findCardOnBoard(state, sourceCardId);
+    if (!sourceCardInfo) {
+        return state;
+    }
+
+    // Calculate discarded count for if_executed conditional
+    const currentHandSize = state[actor].hand.length;
+    const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
+
+    // Check if condition is met
+    const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+    if (!shouldExecute) {
+        return state;
+    }
+
+    // Set log context
+    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+    let newState = setLogSource(state, cardName);
+    newState = setLogPhase(newState, 'middle');
+    if (savedIndentLevel !== undefined) {
+        newState = { ...newState, _logIndentLevel: savedIndentLevel };
+    }
+
+    // Find lane index
+    let laneIndex = -1;
+    for (let i = 0; i < newState[sourceCardInfo.owner].lanes.length; i++) {
+        if (newState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
+            laneIndex = i;
+            break;
+        }
+    }
+
+    if (laneIndex === -1) {
+        return newState;
+    }
+
+    // Create context and execute the followUpEffect
+    const context: EffectContext = {
+        cardOwner: sourceCardInfo.owner,
+        opponent: sourceCardInfo.owner === 'player' ? 'opponent' as const : 'player' as const,
+        currentTurn: newState.turn,
+        actor: actor,
+        discardedCount: discardedCount,
+    };
+
+    const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
+    return result.newState;
 };
 
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {
@@ -213,14 +279,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 ...prevState.stats,
                 [player]: newStats,
             },
-            actionRequired: followUpEffect ? {
-                type: 'discard_completed',
-                followUpEffect,
-                conditionalType,
-                previousHandSize,
-                sourceCardId: originalAction?.sourceCardId,
-                actor: player,
-            } as any : null
+            // CRITICAL: Don't set discard_completed here - followUpEffect is executed directly later
+            actionRequired: null
         };
     } else {
         // Standard discard to own trash
@@ -231,14 +291,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 ...prevState.stats,
                 [player]: newStats,
             },
-            actionRequired: followUpEffect ? {
-                type: 'discard_completed',
-                followUpEffect,
-                conditionalType,
-                previousHandSize,
-                sourceCardId: originalAction?.sourceCardId,
-                actor: player,
-            } as any : null
+            // CRITICAL: Don't set discard_completed here - followUpEffect is executed directly later
+            actionRequired: null
         };
     }
 
@@ -357,14 +411,11 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             newState.actionRequired = { ...originalAction, count: remainingDiscards };
             return newState;
         } else {
-            // CRITICAL FIX: Wenn followUpEffect existiert, trotzdem reactive effects triggern!
-            // War-3's "after_opponent_discard" muss trotzdem feuern.
+            // Handle followUpEffect for "if you do" patterns (Fire-1, Fire-2, Fire-3, etc.)
             if ((originalAction as any).followUpEffect) {
-                // CRITICAL: Save indent level BEFORE reactive effects change it
-                // This is the indent level for Plague-2's followUp (should be 2 for uncover chain)
                 const savedIndentLevel = newState._logIndentLevel || 2;
 
-                // Trigger reactive effects BEFORE returning with discard_completed
+                // Trigger reactive effects BEFORE executing followUp
                 const selfDiscardResult = processReactiveEffects(newState, 'after_discard', { player });
                 let stateWithReactive = selfDiscardResult.newState;
 
@@ -372,35 +423,29 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 const reactiveResult = processReactiveEffects(stateWithReactive, 'after_opponent_discard', { player: opponentOfDiscarder });
                 stateWithReactive = reactiveResult.newState;
 
-                // If reactive effects created an actionRequired, queue the followUpEffect
+                // If reactive effects created an actionRequired, queue the followUp for later
                 if (stateWithReactive.actionRequired) {
-                    stateWithReactive.queuedActions = [
-                        {
-                            type: 'discard_completed',
-                            followUpEffect: (originalAction as any).followUpEffect,
-                            conditionalType: (originalAction as any).conditionalType,
-                            previousHandSize: (originalAction as any).previousHandSize,
-                            sourceCardId: originalAction.sourceCardId,
-                            actor: player,
-                            savedIndentLevel,
-                        } as any,
-                        ...(stateWithReactive.queuedActions || []),
-                    ];
-                    return stateWithReactive;
-                }
-
-                return {
-                    ...stateWithReactive,
-                    actionRequired: {
-                        type: 'discard_completed',
+                    (stateWithReactive as any)._pendingFollowUpEffect = {
                         followUpEffect: (originalAction as any).followUpEffect,
                         conditionalType: (originalAction as any).conditionalType,
                         previousHandSize: (originalAction as any).previousHandSize,
                         sourceCardId: originalAction.sourceCardId,
                         actor: player,
                         savedIndentLevel,
-                    }
-                };
+                    };
+                    return stateWithReactive;
+                }
+
+                // Execute followUpEffect DIRECTLY here (SINGLE POINT OF TRUTH)
+                return executeFollowUpAfterDiscard(
+                    stateWithReactive,
+                    (originalAction as any).followUpEffect,
+                    (originalAction as any).conditionalType,
+                    (originalAction as any).previousHandSize,
+                    originalAction.sourceCardId!,
+                    player,
+                    savedIndentLevel
+                );
             }
             return handleDiscardCompletion(newState, originalAction);
         }
@@ -418,7 +463,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 // CRITICAL: Save indent level BEFORE reactive effects change it
                 const savedIndentLevel = newState._logIndentLevel || 2;
 
-                // Trigger reactive effects BEFORE returning with discard_completed
+                // Trigger reactive effects BEFORE executing followUp
                 const selfDiscardResult = processReactiveEffects(newState, 'after_discard', { player });
                 let stateWithReactive = selfDiscardResult.newState;
 
@@ -426,40 +471,35 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
                 const reactiveResult = processReactiveEffects(stateWithReactive, 'after_opponent_discard', { player: opponentOfDiscarder });
                 stateWithReactive = reactiveResult.newState;
 
-                // If reactive effects created an actionRequired, queue the followUpEffect
+                // If reactive effects created an actionRequired, queue the followUp for later
                 if (stateWithReactive.actionRequired) {
-                    stateWithReactive.queuedActions = [
-                        {
-                            type: 'discard_completed',
-                            followUpEffect: (directAction as any).followUpEffect,
-                            conditionalType: (directAction as any).conditionalType,
-                            previousHandSize: (directAction as any).previousHandSize,
-                            sourceCardId: directAction.sourceCardId,
-                            actor: player,
-                            savedIndentLevel,
-                        } as any,
-                        ...(stateWithReactive.queuedActions || []),
-                    ];
-                    return stateWithReactive;
-                }
-
-                return {
-                    ...stateWithReactive,
-                    actionRequired: {
-                        type: 'discard_completed',
+                    // Use _pendingFollowUpEffect to queue the followUp execution
+                    (stateWithReactive as any)._pendingFollowUpEffect = {
                         followUpEffect: (directAction as any).followUpEffect,
                         conditionalType: (directAction as any).conditionalType,
                         previousHandSize: (directAction as any).previousHandSize,
                         sourceCardId: directAction.sourceCardId,
                         actor: player,
                         savedIndentLevel,
-                    }
-                };
+                    };
+                    return stateWithReactive;
+                }
+
+                // NO discard_completed - execute followUpEffect DIRECTLY here!
+                return executeFollowUpAfterDiscard(
+                    stateWithReactive,
+                    (directAction as any).followUpEffect,
+                    (directAction as any).conditionalType,
+                    (directAction as any).previousHandSize,
+                    directAction.sourceCardId!,
+                    player,
+                    savedIndentLevel
+                );
             }
             return handleDiscardCompletion(newState, directAction);
         }
     }
-    
+
     const isHandLimitDiscard = (prevState.phase === 'hand_limit');
 
     // Trigger reactive effects after self discards (Corruption-2 custom protocol)

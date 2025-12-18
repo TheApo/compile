@@ -16,6 +16,7 @@ import { queuePendingCustomEffects } from '../phaseManager';
 import { resolveStateNumber } from '../../effects/actions/stateNumberExecutor';
 import { resolveStateProtocol } from '../../effects/actions/stateProtocolExecutor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * CompileResult includes animation requests for deleted cards
@@ -399,6 +400,71 @@ export const resolveSelectRevealedDeckCard = (prevState: GameState, selectedCard
     newState.actionRequired = null;
 
     // CRITICAL: Queue any pending effects from the source card (Clarity-2 has shuffle_deck and play effects after draw)
+    newState = queuePendingCustomEffects(newState);
+
+    return newState;
+};
+
+/**
+ * Unity-4: "Reveal your deck, draw all Unity cards, shuffle"
+ * Player confirms the revealed deck modal, all matching protocol cards are drawn automatically.
+ */
+export const resolveRevealDeckDrawProtocol = (prevState: GameState): GameState => {
+    if (prevState.actionRequired?.type !== 'reveal_deck_draw_protocol') return prevState;
+
+    const action = prevState.actionRequired as any;
+    const actor = action.actor as Player;
+    const actorName = actor === 'player' ? 'Player' : 'Opponent';
+    const targetProtocol = action.targetProtocol as string;
+    const shuffleAfter = action.shuffleAfter as boolean;
+
+    let newState = { ...prevState };
+    const actorState = { ...newState[actor] };
+    const deck = [...actorState.deck];
+
+    // Find all cards of the target protocol
+    const matchingCards = deck.filter(c => c.protocol === targetProtocol);
+    const remainingDeck = deck.filter(c => c.protocol !== targetProtocol);
+
+    // Convert to PlayedCards with IDs and add to hand
+    const newCards = matchingCards.map(c => ({
+        ...c,
+        id: uuidv4(),
+        isFaceUp: true
+    }));
+
+    // Update deck (without matching cards)
+    actorState.deck = remainingDeck;
+
+    // Add drawn cards to hand
+    actorState.hand = [...actorState.hand, ...newCards];
+
+    // Clear deckRevealed flag
+    actorState.deckRevealed = false;
+
+    newState[actor] = actorState;
+
+    // Log the draw action
+    if (newCards.length > 0) {
+        const cardNames = newCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+        newState = log(newState, actor, `${actorName} draws ${newCards.length} ${targetProtocol} card${newCards.length !== 1 ? 's' : ''} (${cardNames}).`);
+    } else {
+        newState = log(newState, actor, `No ${targetProtocol} cards in deck.`);
+    }
+
+    // Shuffle the deck if requested
+    if (shuffleAfter) {
+        const shuffledDeck = [...newState[actor].deck].sort(() => Math.random() - 0.5);
+        newState[actor] = {
+            ...newState[actor],
+            deck: shuffledDeck
+        };
+        newState = log(newState, actor, `${actorName} shuffles their deck.`);
+    }
+
+    newState.actionRequired = null;
+
+    // Queue any pending effects
     newState = queuePendingCustomEffects(newState);
 
     return newState;

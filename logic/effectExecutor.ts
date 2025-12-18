@@ -264,9 +264,20 @@ export function executeOnCoverEffect(coveredCard: PlayedCard, laneIndex: number,
             ...(customCard.customEffects.middleEffects || []),
             ...(customCard.customEffects.bottomEffects || [])
         ];
-        const onCoverEffects = allEffects.filter((e: any) =>
-            e.trigger === 'on_cover' || e.trigger === 'on_cover_or_flip'
-        );
+        const onCoverEffects = allEffects.filter((e: any) => {
+            const isTriggerMatch = e.trigger === 'on_cover' || e.trigger === 'on_cover_or_flip';
+            if (!isTriggerMatch) return false;
+
+            // NEW: Check protocol restriction for Unity-0 Bottom
+            // Only trigger if covered by same protocol
+            if (e.onCoverProtocolRestriction === 'same_protocol') {
+                const coveringCardProtocol = (state as any)._coveringCardProtocol;
+                if (coveringCardProtocol && coveringCardProtocol !== coveredCard.protocol) {
+                    return false;  // Skip - covered by different protocol
+                }
+            }
+            return true;
+        });
 
         if (onCoverEffects.length > 0) {
             const cardName = `${coveredCard.protocol}-${coveredCard.value}`;

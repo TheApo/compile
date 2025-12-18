@@ -83,21 +83,25 @@ export interface DrawEffectParams {
     target: 'self' | 'opponent';
     source: 'own_deck' | 'opponent_deck';
     // NEW: Dynamic draw count types
-    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size' | 'all_matching' | 'equal_to_unique_protocols_in_lane';  // 'all_matching' for Clarity-2/3, 'equal_to_unique_protocols_in_lane' for Diversity-1
+    countType?: 'fixed' | 'equal_to_card_value' | 'equal_to_discarded' | 'hand_size' | 'all_matching' | 'equal_to_unique_protocols_in_lane' | 'count_own_protocol_cards_on_field';  // 'all_matching' for Clarity-2/3, 'equal_to_unique_protocols_in_lane' for Diversity-1, 'count_own_protocol_cards_on_field' for Unity-2
     countOffset?: number;  // For Fire-4: "discard count + 1" → offset = 1
     conditional?: {
-        type: 'count_face_down' | 'is_covering' | 'non_matching_protocols';
+        type: 'count_face_down' | 'is_covering' | 'non_matching_protocols' | 'same_protocol_on_field';  // 'same_protocol_on_field' for Unity-0/Unity-3
     };
     preAction?: 'refresh';  // Refresh hand before drawing
     // NEW: Advanced conditionals
     advancedConditional?: {
-        type: 'protocol_match' | 'compile_block' | 'empty_hand' | 'opponent_higher_value_in_lane';  // Anarchy-6, Metal-1, Courage-0, Courage-2
+        type: 'protocol_match' | 'compile_block' | 'empty_hand' | 'opponent_higher_value_in_lane' | 'same_protocol_on_field';  // Anarchy-6, Metal-1, Courage-0, Courage-2, Unity-0/Unity-3
         protocol?: string;  // For 'protocol_match'
         turnDuration?: number;  // For 'compile_block'
     };
     // NEW: Value filter for drawing specific cards (Clarity-2: "Draw all cards with a value of 1")
     valueFilter?: {
         equals: number;  // Draw only cards with this value
+    };
+    // NEW: Protocol filter for drawing all cards of same protocol (Unity-4)
+    protocolFilter?: {
+        type: 'same_as_source';  // Draw all cards matching source card's protocol
     };
     // NEW: If true, player must SELECT from revealed deck (Clarity-2/3: "revealed this way")
     fromRevealed?: boolean;
@@ -130,7 +134,7 @@ export interface FlipEffectParams {
     scope?: 'any' | 'this_lane' | 'each_lane';  // NEW: 'each_lane' = execute once per lane (Chaos-0)
     // NEW: Advanced conditionals
     advancedConditional?: {
-        type: 'protocol_match' | 'opponent_higher_value_in_lane' | 'hand_size_greater_than';  // Anarchy-6, Courage-6, Peace-6
+        type: 'protocol_match' | 'opponent_higher_value_in_lane' | 'hand_size_greater_than' | 'same_protocol_on_field' | 'this_card_is_covered';  // Anarchy-6, Courage-6, Peace-6, Unity-0/Unity-3, Life-0
         protocol?: string;  // For 'protocol_match'
         threshold?: number;  // For 'hand_size_greater_than' - effect only if hand size > threshold
     };
@@ -200,7 +204,7 @@ export interface DeleteEffectParams {
     deleteSelf?: boolean;
     // Advanced conditionals - effect only executes if condition is met
     advancedConditional?: {
-        type: 'empty_hand' | 'opponent_higher_value_in_lane';
+        type: 'empty_hand' | 'opponent_higher_value_in_lane' | 'this_card_is_covered';
     };
     // Conditional self-delete based on protocol count (Diversity-6)
     protocolCountConditional?: {
@@ -250,9 +254,12 @@ export interface ReturnEffectParams {
     };
     // NEW: Destination - where the card goes (default: 'owner_hand')
     destination?: 'owner_hand' | 'actor_hand';  // 'actor_hand' for stealing (Assimilation-0)
+    // Return this card itself
+    returnSelf?: boolean;
+    optional?: boolean;  // "You may return" vs "Return"
     // Advanced conditionals - effect only executes if condition is met
     advancedConditional?: {
-        type: 'empty_hand' | 'opponent_higher_value_in_lane';
+        type: 'empty_hand' | 'opponent_higher_value_in_lane' | 'this_card_is_covered';
     };
 }
 
@@ -333,6 +340,10 @@ export interface RevealEffectParams {
         faceState?: TargetFaceState;
     };
     optional?: boolean;  // "You may shift or flip" = optional follow-up
+    // NEW: Protocol filter for revealing all cards of same protocol (Unity-0 Bottom)
+    protocolFilter?: {
+        type: 'same_as_source';  // Reveal all cards matching source card's protocol
+    };
 }
 
 /**
@@ -375,7 +386,8 @@ export interface PassiveRuleParams {
             | 'ignore_middle_commands'       // Apathy-2: Ignore middle effects in this lane
             | 'skip_check_cache_phase'       // Spirit-0: Skip check cache phase
             | 'block_flip_this_card'         // Ice-4: This card cannot be flipped
-            | 'block_draw_conditional';      // Ice-6: Conditional draw blocking
+            | 'block_draw_conditional'       // Ice-6: Conditional draw blocking
+            | 'allow_same_protocol_face_up_play';  // Unity-1 Bottom: Same-protocol cards may be played face-up
         target: 'self' | 'opponent' | 'all' | 'this_card';  // Who is affected (this_card = only this card)
         scope: 'this_lane' | 'global' | 'this_card';        // Where it applies (this_card = only this card)
         // NEW: Only active during card owner's turn (Fear-0: "During your turn...")
@@ -383,6 +395,8 @@ export interface PassiveRuleParams {
         // NEW: For block_draw_conditional - flexible condition and target (Ice-6)
         conditionTarget?: 'self' | 'opponent';  // Who must have cards in hand?
         blockTarget?: 'self' | 'opponent' | 'all';  // Who cannot draw?
+        // NEW: For allow_same_protocol_face_up_play - rule only applies to same-protocol cards (Unity-1)
+        protocolScope?: 'same_as_source';  // Rule applies only to cards matching source card's protocol
     };
 }
 
@@ -478,10 +492,11 @@ export interface CopyOpponentMiddleEffectParams {
  */
 export interface AutoCompileEffectParams {
     action: 'auto_compile';
-    // Conditional: only compile if unique protocols >= threshold
+    // Conditional: only compile if unique protocols >= threshold OR same-protocol count >= threshold
     protocolCountConditional?: {
-        type: 'unique_protocols_on_field';
+        type: 'unique_protocols_on_field' | 'same_protocol_count_on_field';  // Unity-1: count same-protocol face-up cards
         threshold: number;  // Compile if count >= threshold
+        faceState?: 'face_up';  // CRITICAL: For 'same_protocol_count_on_field' - only count face-up cards
     };
 }
 
@@ -536,6 +551,8 @@ export interface EffectDefinition {
     reactiveScope?: 'global' | 'this_lane';
     // NEW: For reactive triggers - only trigger during opponent's turn (Peace-4)
     onlyDuringOpponentTurn?: boolean;
+    // NEW: For on_cover triggers - only trigger if covered by same protocol (Unity-0 Bottom)
+    onCoverProtocolRestriction?: 'same_protocol';  // Only trigger if covering card has same protocol
 }
 
 /**

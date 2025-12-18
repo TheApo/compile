@@ -12,7 +12,7 @@ import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../.
 import { log } from '../../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
-import { findCardOnBoard, countUniqueProtocolsInLane } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, countUniqueProtocolsInLane, countFaceUpProtocolCardsOnField, hasOtherFaceUpSameProtocolCard } from '../../game/helpers/actionUtils';
 import { getEffectiveCardValue, getPlayerLaneValue } from '../../game/stateManager';
 import { canPlayerDraw } from '../../game/passiveRuleChecker';
 
@@ -106,6 +106,16 @@ export function executeDrawEffect(
                 const lane = state[cardOwner].lanes[laneIndex];
                 const isCovering = lane.length > 1;
                 dynamicCount = isCovering ? (params.count || 1) : 0;
+                break;
+            }
+
+            case 'same_protocol_on_field': {
+                // Unity-0, Unity-3: If another face-up same-protocol card exists
+                if (!hasOtherFaceUpSameProtocolCard(state, card)) {
+                    dynamicCount = 0;  // Condition not met
+                } else {
+                    dynamicCount = params.count || 1;
+                }
                 break;
             }
         }
@@ -266,6 +276,13 @@ export function executeDrawEffect(
             break;
         }
 
+        case 'count_own_protocol_cards_on_field': {
+            // Unity-2: "Draw cards equal to the number of face-up Unity cards in the field"
+            // CRITICAL: Only count FACE-UP cards
+            count = countFaceUpProtocolCardsOnField(state, card.protocol);
+            break;
+        }
+
         case 'fixed':
         default:
             // Standard fixed count
@@ -302,6 +319,13 @@ export function executeDrawEffect(
         const oppValue = getPlayerLaneValue(state, opponent, laneIndex);
 
         if (oppValue <= ownValue) {
+            return { newState: state };
+        }
+    }
+
+    // NEW: Advanced Conditional - Same Protocol on Field (Unity-0, Unity-3)
+    if (params.advancedConditional?.type === 'same_protocol_on_field') {
+        if (!hasOtherFaceUpSameProtocolCard(state, card)) {
             return { newState: state };
         }
     }
@@ -442,6 +466,33 @@ export function executeDrawEffect(
 
         drawnCards = [...newState[drawingPlayer].hand, ...newCards];
         remainingDeck = remainingCards;
+
+    } else if (params.protocolFilter?.type === 'same_as_source') {
+        // Unity-4: "Reveal your deck, draw all Unity cards, shuffle"
+        // This requires showing a modal with the deck revealed
+        const deck = newState[sourcePlayer].deck;
+        const sourceProtocol = card.protocol;
+
+        // Find all cards of same protocol in deck - these will be auto-selected
+        const matchingCardIndices: number[] = [];
+        deck.forEach((c, idx) => {
+            if (c.protocol === sourceProtocol) {
+                matchingCardIndices.push(idx);
+            }
+        });
+
+        // Show modal to reveal deck with matching cards highlighted
+        newState.actionRequired = {
+            type: 'reveal_deck_draw_protocol',
+            sourceCardId: card.id,
+            actor: drawingPlayer,
+            revealedCards: deck,
+            targetProtocol: sourceProtocol,
+            autoSelectedIndices: matchingCardIndices,
+            shuffleAfter: params.shuffleAfter || false,
+        } as any;
+
+        return { newState };
 
     } else {
         // Simple draw without conditionals for now

@@ -166,44 +166,7 @@ export const resolveRequiredOpponentAction = (
 
         if (!isOpponentInterrupt) return state;
 
-        // CRITICAL: Handle 'discard_completed' automatically - execute the followUp effect
-        if (action.type === 'discard_completed') {
-            const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
-
-            if (followUpEffect && sourceCardId) {
-                const sourceCardInfo = findCardOnBoard(state, sourceCardId);
-                if (sourceCardInfo) {
-                    const currentHandSize = state[actor].hand.length;
-                    const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-                    const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
-
-                    if (shouldExecute) {
-
-                        let laneIndex = -1;
-                        for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
-                            if (state[sourceCardInfo.owner].lanes[i].some((c: any) => c.id === sourceCardId)) {
-                                laneIndex = i;
-                                break;
-                            }
-                        }
-
-                        if (laneIndex !== -1) {
-                            const context: EffectContext = {
-                                cardOwner: sourceCardInfo.owner,
-                                opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
-                                currentTurn: state.turn,
-                                actor: actor,
-                                discardedCount: discardedCount,
-                            };
-
-                            const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
-                            return result.newState;
-                        }
-                    }
-                }
-            }
-            return { ...state, actionRequired: null };
-        }
+        // NOTE: discard_completed is now handled directly in discardResolver via executeFollowUpAfterDiscard
 
         const aiDecision = getAIAction(state, action, difficulty);
 
@@ -407,44 +370,7 @@ const handleRequiredAction = (
 
     const action = state.actionRequired!; // Action is guaranteed to exist here
 
-    // CRITICAL: Handle 'discard_completed' automatically - execute the followUp effect
-    if (action.type === 'discard_completed') {
-        const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor } = action as any;
-
-        if (followUpEffect && sourceCardId) {
-            const sourceCardInfo = findCardOnBoard(state, sourceCardId);
-            if (sourceCardInfo) {
-                const currentHandSize = state[actor].hand.length;
-                const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-                const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
-
-                if (shouldExecute) {
-
-                    let laneIndex = -1;
-                    for (let i = 0; i < state[sourceCardInfo.owner].lanes.length; i++) {
-                        if (state[sourceCardInfo.owner].lanes[i].some((c: any) => c.id === sourceCardId)) {
-                            laneIndex = i;
-                            break;
-                        }
-                    }
-
-                    if (laneIndex !== -1) {
-                        const context: EffectContext = {
-                            cardOwner: sourceCardInfo.owner,
-                            opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
-                            currentTurn: state.turn,
-                            actor: actor,
-                            discardedCount: discardedCount,
-                        };
-
-                        const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...state, actionRequired: null }, context, followUpEffect);
-                        return result.newState;
-                    }
-                }
-            }
-        }
-        return { ...state, actionRequired: null };
-    }
+    // NOTE: discard_completed is now handled directly in discardResolver via executeFollowUpAfterDiscard
 
     const aiDecision = getAIAction(state, state.actionRequired, difficulty);
 
@@ -715,6 +641,12 @@ const handleRequiredAction = (
     // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
     if (aiDecision.type === 'selectRevealedDeckCard' && action.type === 'select_card_from_revealed_deck') {
         const newState = resolvers.resolveSelectRevealedDeckCard(state, aiDecision.cardId);
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // Unity-4: "Reveal deck, draw all Unity cards, shuffle"
+    if (aiDecision.type === 'confirmRevealDeckDrawProtocol' && action.type === 'reveal_deck_draw_protocol') {
+        const newState = resolvers.resolveRevealDeckDrawProtocol(state);
         return endActionForPhase(newState, phaseManager);
     }
 

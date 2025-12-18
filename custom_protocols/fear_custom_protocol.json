@@ -102,8 +102,7 @@
                     "action": "draw",
                     "countType": "equal_to_discarded",
                     "countOffset": -1,
-                    "target": "opponent",
-                    "source": "own_deck"
+                    "target": "opponent"
                   },
                   "position": "middle",
                   "trigger": "on_play"

@@ -10,7 +10,7 @@
 
 import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
 import { log } from '../../utils/log';
-import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField, hasOtherFaceUpSameProtocolCard } from '../../game/helpers/actionUtils';
 import { isFrost1Active, canFlipSpecificCard } from '../../game/passiveRuleChecker';
 import { getPlayerLaneValue } from '../../game/stateManager';
 
@@ -28,6 +28,14 @@ export function executeFlipEffect(
     // Extract conditional info for "If you do" effects
     const conditional = params._conditional;
 
+    // NEW: Early check for same_protocol_on_field conditional (Unity-0, Unity-3)
+    // This check applies to ALL flip modes, not just flipSelf
+    if (params.advancedConditional?.type === 'same_protocol_on_field') {
+        if (!hasOtherFaceUpSameProtocolCard(state, card)) {
+            // No other face-up same-protocol card - skip entire flip effect
+            return { newState: state };
+        }
+    }
 
     // NEW: Generic useCardFromPreviousEffect support
     // If this effect should operate on the card from the previous effect, use lastCustomEffectTargetCardId
@@ -182,6 +190,33 @@ export function executeFlipEffect(
 
             if (handSize <= threshold) {
                 // Hand size is NOT greater than threshold - skip effect
+                return { newState: state };
+            }
+        }
+
+        // NEW: Check same_protocol_on_field (Unity-0, Unity-3)
+        if (params.advancedConditional?.type === 'same_protocol_on_field') {
+            if (!hasOtherFaceUpSameProtocolCard(state, card)) {
+                // No other face-up same-protocol card - skip effect
+                return { newState: state };
+            }
+        }
+
+        // NEW: Check this_card_is_covered - only execute if this card is covered
+        if (params.advancedConditional?.type === 'this_card_is_covered') {
+            const ownerLanes = state[cardOwner].lanes;
+            let isCardCovered = false;
+
+            for (let i = 0; i < ownerLanes.length; i++) {
+                const lane = ownerLanes[i];
+                const cardIndex = lane.findIndex(c => c.id === card.id);
+                if (cardIndex !== -1 && cardIndex < lane.length - 1) {
+                    isCardCovered = true;
+                    break;
+                }
+            }
+
+            if (!isCardCovered) {
                 return { newState: state };
             }
         }

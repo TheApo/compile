@@ -29,7 +29,7 @@ import { DebugModal } from '../components/DebugModal';
 import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
-import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, hasPlayOnOpponentSideRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
 
 
 interface GameScreenProps {
@@ -156,6 +156,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveControlMechanicPrompt,
     resolveCustomChoice,
     resolveSelectRevealedDeckCard,
+    resolveRevealDeckDrawProtocol,
     resolveStateNumber,
     resolveStateProtocol,
     resolveSelectFromDrawnToReveal,
@@ -398,12 +399,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         // Normal play on player's side
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
-        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
-        const playerHasChaosThree = player.lanes.some((lane, idx) => {
-            if (lane.length === 0) return false;
-            const uncoveredCard = lane[lane.length - 1];
-            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
-        });
+        // Check if the card being played has ignore_protocol_matching card_property (generic check)
+        const thisCardIgnoresMatching = (cardInHand as any).customEffects?.bottomEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (cardInHand as any).customEffects?.topEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (cardInHand as any).customEffects?.middleEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        );
 
         // Check for Anarchy-1 on ANY player's field (affects both players)
         const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
@@ -418,6 +421,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
         const canPlayAnywhere = hasPlayOnOpponentSideRule(currentState, cardInHand);
 
+        // NEW: Check for Unity-1 same-protocol face-up play rule
+        const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(currentState, 'player', laneIndex, cardInHand.protocol);
+
         let canPlayFaceUp: boolean;
         if (canPlayAnywhere) {
             // Can play face-up on ANY lane (ignores protocol matching)
@@ -427,11 +433,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             const doesNotMatch = cardInHand.protocol !== player.protocols[laneIndex] && cardInHand.protocol !== opponent.protocols[laneIndex];
             canPlayFaceUp = doesNotMatch && !opponentHasPsychic1;
         } else {
-            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3/Spirit_custom-1 override)
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/custom override)
+            // OR if THIS CARD ignores protocol matching (Chaos-3 or custom cards with ignore_protocol_matching)
+            // OR if Unity-1 same-protocol face-up rule allows it
             canPlayFaceUp = (
                 playerHasSpiritOne ||
                 hasCustomAllowAnyProtocol ||
-                playerHasChaosThree ||
+                thisCardIgnoresMatching ||
+                hasSameProtocolFaceUpRule ||
                 cardInHand.protocol === player.protocols[laneIndex] ||
                 cardInHand.protocol === opponent.protocols[laneIndex]
             ) && !opponentHasPsychic1;
@@ -672,11 +681,14 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'select_card_from_revealed_deck' && gameState.actionRequired.actor === 'player' && (
+        {(gameState.actionRequired?.type === 'select_card_from_revealed_deck' || gameState.actionRequired?.type === 'reveal_deck_draw_protocol') && gameState.actionRequired.actor === 'player' && (
             <RevealedDeckModal
                 gameState={gameState}
                 onSelectCard={(cardId) => {
                     resolveSelectRevealedDeckCard(cardId);
+                }}
+                onConfirmProtocolDraw={() => {
+                    resolveRevealDeckDrawProtocol();
                 }}
             />
         )}

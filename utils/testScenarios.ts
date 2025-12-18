@@ -4517,6 +4517,121 @@ export const scenario86_DiversityAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 87: Unity Custom Playground (Player)
+ *
+ * Test all Unity effects - Player has Unity protocol with cards in hand
+ * - Unity-0: If another face-up Unity card, choice: flip 1 OR draw 1
+ * - Unity-0 Bottom: When covered by Unity card, reveal all Unity in hand
+ * - Unity-1: If covered, may shift this card / If 5+ face-up Unity, compile / Face-up play rule
+ * - Unity-2: Draw = face-up Unity cards
+ * - Unity-3: If another face-up Unity, may flip 1 face-up card
+ * - Unity-4: If empty hand, reveal deck & draw all Unity
+ * - Unity-5: Discard 1
+ */
+export const scenario87_UnityCustomPlayground: TestScenario = {
+    name: "Unity Custom Playground (Player)",
+    description: "Test Unity synergy effects - cards become stronger with more face-up Unity on field",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Unity', 'Fire', 'Water'];
+        const opponentProtocols = ['Death', 'Spirit', 'Light'];
+
+        let newState = initScenarioBase(
+            state,
+            playerProtocols,
+            opponentProtocols,
+            'player',
+            'action'
+        );
+
+        // Player: Unity cards in hand to test synergies
+        const playerHand = [
+            createCard('Unity', 0, true),
+            createCard('Unity', 1, true),
+            createCard('Unity', 2, true),
+            createCard('Unity', 3, true),
+            createCard('Unity', 4, true),
+            createCard('Unity', 5, true),
+        ];
+        newState.player.hand = playerHand;
+
+        // Opponent hand
+        const opponentHand = [
+            createCard('Death', 1, true),
+            createCard('Spirit', 2, true),
+            createCard('Light', 3, true),
+        ];
+        newState.opponent.hand = opponentHand;
+
+        // Place some Unity cards face-up to test synergy conditionals
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 2, true));
+        newState = placeCard(newState, 'opponent', 0, createCard('Death', 3, true));
+
+        // Build remaining decks - include extra Unity for Unity-4 draw test
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 88: Unity AI Test (Opponent)
+ *
+ * Test AI behavior with Unity cards - Opponent has Unity protocol
+ * Verifies AI can properly:
+ * - Evaluate conditional effects (same_protocol_on_field)
+ * - Make choices when conditions are met
+ * - Handle the auto-compile threshold
+ */
+export const scenario88_UnityAITest: TestScenario = {
+    name: "Unity AI Test (Opponent)",
+    description: "Test AI handling of Unity synergy effects",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Fire', 'Water', 'Spirit'];
+        const opponentProtocols = ['Unity', 'Death', 'Light'];
+
+        let newState = initScenarioBase(
+            state,
+            playerProtocols,
+            opponentProtocols,
+            'opponent',
+            'action'
+        );
+
+        // Player hand
+        const playerHand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 2, true),
+            createCard('Spirit', 3, true),
+        ];
+        newState.player.hand = playerHand;
+
+        // Opponent: Unity cards in hand for AI to play
+        const opponentHand = [
+            createCard('Unity', 0, true),
+            createCard('Unity', 2, true),
+            createCard('Unity', 3, true),
+            createCard('Unity', 5, true),
+        ];
+        newState.opponent.hand = opponentHand;
+
+        // Place some cards on board - including a Unity card to enable conditionals
+        newState = placeCard(newState, 'opponent', 0, createCard('Unity', 1, true)); // Enables same_protocol_on_field
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 4, true));
+
+        // Build remaining decks
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4604,4 +4719,6 @@ export const allScenarios: TestScenario[] = [
     scenario84_AssimilationAITest,
     scenario85_DiversityCustomPlayground,
     scenario86_DiversityAITest,
+    scenario87_UnityCustomPlayground,
+    scenario88_UnityAITest,
 ];

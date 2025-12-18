@@ -7,7 +7,7 @@ import { GameState, PlayedCard, EffectResult, EffectContext, Player, AnimationRe
 import { EffectDefinition } from '../../types/customProtocol';
 import { log } from '../utils/log';
 import { v4 as uuidv4 } from 'uuid';
-import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard, countUniqueProtocolsOnField } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardUncovered, handleUncoverEffect, internalShiftCard, countUniqueProtocolsOnField, countFaceUpProtocolCardsOnField, hasOtherFaceUpSameProtocolCard } from '../game/helpers/actionUtils';
 import { drawCards } from '../../utils/gameStateModifiers';
 import { processReactiveEffects } from '../game/reactiveEffectProcessor';
 import { isFrost1Active, isFrost1BottomActive, canPlayerDraw } from '../game/passiveRuleChecker';
@@ -57,6 +57,20 @@ function executeAutoCompileEffect(
 
         // Condition met - proceed with compile
         newState = log(newState, cardOwner, `${protocolCount} different protocols on field. Protocol compiled!`);
+    } else if (params.protocolCountConditional?.type === 'same_protocol_count_on_field') {
+        // Unity-1: "If there are 5 or more face-up Unity cards in the field"
+        // CRITICAL: Only count FACE-UP cards!
+        const threshold = params.protocolCountConditional.threshold;
+        const sameProtocolCount = countFaceUpProtocolCardsOnField(state, card.protocol);
+
+        if (sameProtocolCount < threshold) {
+            // Condition NOT met - skip compile
+            newState = log(newState, cardOwner, `Not enough face-up ${card.protocol} cards on field (${sameProtocolCount}/${threshold}). Effect skipped.`);
+            return { newState };
+        }
+
+        // Condition met - proceed with compile
+        newState = log(newState, cardOwner, `${sameProtocolCount} face-up ${card.protocol} cards on field. Protocol compiled!`);
     }
 
     // Mark the lane as compiled - but DO NOT move cards to trash!
@@ -898,6 +912,14 @@ function executeChoiceEffect(
 ): EffectResult {
     const { cardOwner } = context;
     const options = params.options || [];
+
+    // Check advancedConditional - same_protocol_on_field (Unity-0)
+    if (params.advancedConditional?.type === 'same_protocol_on_field') {
+        if (!hasOtherFaceUpSameProtocolCard(state, card)) {
+            // No other face-up same-protocol card - skip choice effect
+            return { newState: state };
+        }
+    }
 
     if (options.length !== 2) {
         console.error(`[Choice Effect] Expected 2 options, got ${options.length}`);

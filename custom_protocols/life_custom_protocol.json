@@ -7,7 +7,20 @@
   "cards": [
     {
       "value": 0,
-      "topEffects": [],
+      "topEffects": [
+        {
+          "id": "life_0_end_delete_if_covered",
+          "trigger": "end",
+          "position": "top",
+          "params": {
+            "action": "delete",
+            "deleteSelf": true,
+            "advancedConditional": {
+              "type": "this_card_is_covered"
+            }
+          }
+        }
+      ],
       "middleEffects": [
         {
           "id": "life_0_play_each_line_with_card",
@@ -26,17 +39,7 @@
           }
         }
       ],
-      "bottomEffects": [
-        {
-          "id": "life_0_on_cover_delete_self",
-          "trigger": "on_cover",
-          "position": "bottom",
-          "params": {
-            "action": "delete",
-            "deleteSelf": true
-          }
-        }
-      ]
+      "bottomEffects": []
     },
     {
       "value": 1,

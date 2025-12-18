@@ -234,6 +234,7 @@ export function queuePendingCustomEffects(state: GameState): GameState {
     if (!pendingEffects || pendingEffects.effects.length === 0) {
         return state; // No pending effects, nothing to do
     }
+    console.log('[queuePendingCustomEffects] Queueing effects for sourceCardId:', pendingEffects.sourceCardId, 'effects:', pendingEffects.effects?.map((e: any) => ({ id: e.id, action: e.params?.action, hasConditional: !!e.conditional })));
 
     // CRITICAL FIX: Check if these exact effects are already queued (by sourceCardId AND effect IDs)
     // This prevents double-queueing when card deletion triggers uncover + callback restoration
@@ -293,6 +294,60 @@ export function queuePendingCustomEffects(state: GameState): GameState {
 export const processQueuedActions = (state: GameState): GameState => {
     // CRITICAL: Check for pending custom effects FIRST before processing queue
     let mutableState = queuePendingCustomEffects(state);
+
+    // CRITICAL: Handle _pendingFollowUpEffect (queued from discardResolver when reactive effects interrupted)
+    // This is the SINGLE POINT OF TRUTH for executing followUpEffect after discard
+    const pendingFollowUp = (mutableState as any)._pendingFollowUpEffect;
+    if (pendingFollowUp && !mutableState.actionRequired) {
+        const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor, savedIndentLevel } = pendingFollowUp;
+        delete (mutableState as any)._pendingFollowUpEffect;
+
+        // Find source card and execute followUpEffect
+        const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+        if (sourceCardInfo) {
+            const actorPlayer = actor as 'player' | 'opponent';
+            const currentHandSize = mutableState[actorPlayer].hand.length;
+            const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
+            const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
+
+            if (shouldExecute) {
+                // Set log context
+                const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
+                mutableState = setLogSource(mutableState, cardName);
+                mutableState = setLogPhase(mutableState, 'middle');
+                if (savedIndentLevel !== undefined) {
+                    mutableState = { ...mutableState, _logIndentLevel: savedIndentLevel };
+                }
+
+                // Find lane index
+                let laneIndex = -1;
+                for (let i = 0; i < mutableState[sourceCardInfo.owner].lanes.length; i++) {
+                    if (mutableState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
+                        laneIndex = i;
+                        break;
+                    }
+                }
+
+                if (laneIndex !== -1) {
+                    const context: EffectContext = {
+                        cardOwner: sourceCardInfo.owner,
+                        opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
+                        currentTurn: mutableState.turn,
+                        actor: actorPlayer,
+                        discardedCount: discardedCount,
+                    };
+
+                    const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, followUpEffect);
+                    mutableState = result.newState;
+
+                    // If effect created actionRequired, return it
+                    if (mutableState.actionRequired) {
+                        return mutableState;
+                    }
+                }
+            }
+        }
+    }
 
     // Check for a queued ACTION first.
     if (!mutableState.queuedActions || mutableState.queuedActions.length === 0) {
@@ -483,69 +538,8 @@ export const processQueuedActions = (state: GameState): GameState => {
             continue; // Action resolved, move to next in queue
         }
 
-        // Handle discard_completed from queue (after reactive effects like War-3)
-        // This ensures followUpEffect executes even when reactive effects interrupted
-        if ((nextAction as any).type === 'discard_completed') {
-            const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor, savedIndentLevel } = nextAction as any;
-
-            if (followUpEffect && sourceCardId) {
-                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-
-                if (sourceCardInfo) {
-                    // Calculate discarded count (for if_executed conditional)
-                    const actorPlayer = actor as 'player' | 'opponent';
-                    const currentHandSize = mutableState[actorPlayer].hand.length;
-                    const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-
-                    // Determine if the followUp effect should execute
-                    const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
-
-                    // CRITICAL: Set log context for proper message formatting
-                    const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                    mutableState = setLogSource(mutableState, cardName);
-                    mutableState = setLogPhase(mutableState, 'middle');
-                    // Restore saved indent level (or use 2 as default for uncover chain)
-                    if (savedIndentLevel !== undefined) {
-                        mutableState = { ...mutableState, _logIndentLevel: savedIndentLevel };
-                    }
-
-                    if (shouldExecute) {
-                        // Find lane index
-                        let laneIndex = -1;
-                        for (let i = 0; i < mutableState[sourceCardInfo.owner].lanes.length; i++) {
-                            if (mutableState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
-                                laneIndex = i;
-                                break;
-                            }
-                        }
-
-                        if (laneIndex !== -1) {
-                            const context: EffectContext = {
-                                cardOwner: sourceCardInfo.owner,
-                                opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
-                                currentTurn: mutableState.turn,
-                                actor: actorPlayer,
-                                discardedCount: discardedCount,
-                            };
-
-                            const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, followUpEffect);
-                            mutableState = result.newState;
-
-                            // If the effect created a new actionRequired, pause and save remaining queue
-                            if (mutableState.actionRequired) {
-                                mutableState.queuedActions = queuedActions;
-                                return mutableState;
-                            }
-                        }
-                    } else {
-                        // Conditional not met (if_executed but nothing discarded) - log and skip
-                        mutableState = log(mutableState, actorPlayer, `Follow-up effect skipped (no cards discarded).`);
-                    }
-                }
-            }
-
-            continue; // Move to next queued action
-        }
+        // NOTE: discard_completed is now handled directly in discardResolver via executeFollowUpAfterDiscard
+        // and _pendingFollowUpEffect at the top of processQueuedActions
 
         // Internal queue action type for executing remaining custom effects
         if ((nextAction as any).type === 'execute_remaining_custom_effects') {
@@ -560,6 +554,7 @@ export const processQueuedActions = (state: GameState): GameState => {
                 logPhase,
                 logIndentLevel
             } = nextAction as any;
+            console.log('[phaseManager] execute_remaining_custom_effects for sourceCardId:', sourceCardId, 'effects:', effects?.map((e: any) => ({ id: e.id, action: e.params?.action, hasConditional: !!e.conditional })));
 
             // Log-Kontext wiederherstellen VOR der Effekt-Ausführung
             if (logSource !== undefined) {
@@ -1081,69 +1076,8 @@ export const processEndOfAction = (state: GameState): GameState => {
             // NOTE: Legacy select_any_opponent_card_to_shift and shift_flipped_card_optional removed
             // Now use generic select_card_to_shift with targetFilter parameters
 
-            // Handle discard_completed from queue (after reactive effects like War-3)
-            // This ensures followUpEffect executes even when reactive effects interrupted
-            if ((nextAction as any).type === 'discard_completed') {
-                const { followUpEffect, conditionalType, previousHandSize, sourceCardId, actor, savedIndentLevel } = nextAction as any;
-
-                if (followUpEffect && sourceCardId) {
-                    const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
-
-                    if (sourceCardInfo) {
-                        // Calculate discarded count (for if_executed conditional)
-                        const actorPlayer = actor as 'player' | 'opponent';
-                        const currentHandSize = mutableState[actorPlayer].hand.length;
-                        const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-
-                        // Determine if the followUp effect should execute
-                        const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
-
-                        // CRITICAL: Set log context for proper message formatting
-                        const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
-                        mutableState = setLogSource(mutableState, cardName);
-                        mutableState = setLogPhase(mutableState, 'middle');
-                        // Restore saved indent level (or use 2 as default for uncover chain)
-                        if (savedIndentLevel !== undefined) {
-                            mutableState = { ...mutableState, _logIndentLevel: savedIndentLevel };
-                        }
-
-                        if (shouldExecute) {
-                            // Find lane index
-                            let laneIndex = -1;
-                            for (let i = 0; i < mutableState[sourceCardInfo.owner].lanes.length; i++) {
-                                if (mutableState[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
-                                    laneIndex = i;
-                                    break;
-                                }
-                            }
-
-                            if (laneIndex !== -1) {
-                                const context: EffectContext = {
-                                    cardOwner: sourceCardInfo.owner,
-                                    opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
-                                    currentTurn: mutableState.turn,
-                                    actor: actorPlayer,
-                                    discardedCount: discardedCount,
-                                };
-
-                                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, followUpEffect);
-                                mutableState = result.newState;
-
-                                // If the effect created a new actionRequired, pause and save remaining queue
-                                if (mutableState.actionRequired) {
-                                    mutableState.queuedActions = queuedActions;
-                                    return mutableState;
-                                }
-                            }
-                        } else {
-                            // Conditional not met (if_executed but nothing discarded) - log and skip
-                            mutableState = log(mutableState, actorPlayer, `Follow-up effect skipped (no cards discarded).`);
-                        }
-                    }
-                }
-
-                continue; // Move to next queued action
-            }
+            // NOTE: discard_completed is now handled directly in discardResolver via executeFollowUpAfterDiscard
+            // and _pendingFollowUpEffect at the top of processQueuedActions
 
             // CRITICAL FIX: When dequeuing a discard action, re-check hand size.
             // The hand size may have changed since the action was queued (e.g., War-3 reactive played a card).

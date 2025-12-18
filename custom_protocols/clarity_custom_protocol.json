@@ -124,7 +124,6 @@
             "action": "play",
             "source": "hand",
             "count": 1,
-            "faceDown": false,
             "valueFilter": {
               "equals": 1
             }

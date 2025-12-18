@@ -137,6 +137,7 @@ export function canPlayCard(
     // Cards with this rule can play face-up on ANY lane (like allow_any_protocol_play)
     // Note: This rule can be in top, middle, OR bottom box - check all three
     let cardHasPlayAnywhereRule = false;
+    let cardIgnoresProtocolMatching = false;
     if (card) {
         const customCard = card as any;
         const allEffects = [
@@ -146,6 +147,10 @@ export function canPlayCard(
         ];
         cardHasPlayAnywhereRule = allEffects.some((effect: any) =>
             effect.params?.action === 'passive_rule' && effect.params?.rule?.type === 'allow_play_on_opponent_side'
+        );
+        // Check if card has ignore_protocol_matching card_property (e.g., Chaos-3 style effect)
+        cardIgnoresProtocolMatching = allEffects.some((effect: any) =>
+            effect.params?.action === 'card_property' && effect.params?.property === 'ignore_protocol_matching'
         );
     }
 
@@ -216,11 +221,16 @@ export function canPlayCard(
         return appliesToLane && appliesToPlayer;
     });
 
+    // CRITICAL: Check if same-protocol face-up play rule allows this (Unity-1 Bottom)
+    const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(state, player, laneIndex, cardProtocol);
+
     // BASE RULE: Face-up play requires matching protocol (unless bypassed by passive rule)
     // EXCEPTION: If require_non_matching_protocol is active, the rule is INVERTED
     // (non-matching is required, which was already checked above in the switch)
     // EXCEPTION: Cards with allow_play_on_opponent_side can play face-up on ANY lane
-    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule && !cardHasPlayAnywhereRule) {
+    // EXCEPTION: Same-protocol face-up play rule allows face-up play for cards of that protocol
+    // EXCEPTION: Cards with ignore_protocol_matching card_property can play face-up on ANY lane
+    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule && !cardHasPlayAnywhereRule && !hasSameProtocolFaceUpRule && !cardIgnoresProtocolMatching) {
         return { allowed: false, reason: `Face-up play requires matching protocol` };
     }
 
@@ -240,7 +250,8 @@ export function hasRequireNonMatchingProtocolRule(state: GameState): boolean {
 }
 
 /**
- * Check if protocol matching rules should be ignored (Spirit-1, Chaos-3)
+ * Check if protocol matching rules should be ignored (Spirit-1 style - global passive effect)
+ * NOTE: Chaos-3 uses card_property instead (only affects that card being played, not all cards)
  */
 export function hasAnyProtocolPlayRule(state: GameState, player: Player, laneIndex?: number): boolean {
     const rules = getActivePassiveRules(state);
@@ -512,4 +523,65 @@ export function canPlayerDraw(
     }
 
     return { allowed: true };
+}
+
+/**
+ * Check if a card can be played face-up due to same-protocol face-up play rule (Unity-1 Bottom)
+ * This rule allows cards of the same protocol to be played face-up in the lane with this rule.
+ *
+ * @param state Current game state
+ * @param player Player who wants to play
+ * @param laneIndex Lane to play in
+ * @param cardProtocol Protocol of the card being played
+ * @returns true if face-up play is allowed due to same-protocol rule
+ */
+export function canPlayFaceUpDueToSameProtocolRule(
+    state: GameState,
+    player: Player,
+    laneIndex: number,
+    cardProtocol: string
+): boolean {
+    const rules = getActivePassiveRules(state);
+
+    for (const { rule, cardOwner, laneIndex: ruleLaneIndex } of rules) {
+        if (rule.type !== 'allow_same_protocol_face_up_play') continue;
+        if (rule.scope !== 'this_lane' || ruleLaneIndex !== laneIndex) continue;
+        if (cardOwner !== player) continue;
+
+        // Find the source card's protocol
+        // The rule allows cards of the SAME protocol as the source card
+        // to be played face-up in this lane
+        if ((rule as any).protocolScope === 'same_as_source') {
+            // Find the card that has this rule in the lane
+            const lane = state[cardOwner].lanes[ruleLaneIndex];
+            for (let i = 0; i < lane.length; i++) {
+                const card = lane[i];
+                if (!card.isFaceUp) continue;
+                // CRITICAL: Card must be UNCOVERED (last in lane or not covered by another card)
+                const isUncovered = i === lane.length - 1;
+                if (!isUncovered) continue;
+
+                const customCard = card as any;
+                if (!customCard.customEffects) continue;
+
+                // Check if this card has the allow_same_protocol_face_up_play rule
+                const allEffects = [
+                    ...(customCard.customEffects.topEffects || []),
+                    ...(customCard.customEffects.middleEffects || []),
+                    ...(customCard.customEffects.bottomEffects || [])
+                ];
+
+                const hasRule = allEffects.some((effect: any) =>
+                    effect.params?.action === 'passive_rule' &&
+                    effect.params?.rule?.type === 'allow_same_protocol_face_up_play'
+                );
+
+                // If this card has the rule AND its protocol matches the card being played
+                if (hasRule && card.protocol === cardProtocol) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }

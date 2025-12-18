@@ -61,7 +61,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
 
   return (
     <div className="screen main-menu">
-      <h1>COMPILE: MAIN 1</h1>
+      <h1>COMPILE: MAIN 1 & 2</h1>
       <div className="main-menu-attribution">
         <p>
           based on the card game <a href="https://boardgamegeek.com/boardgame/406652/compile-main-1" target="_blank" rel="noopener noreferrer">Compile: Main 1</a> designed by <a href="https://justgravyllc.com/" target="_blank" rel="noopener noreferrer">Michael Yang</a>
@@ -119,7 +119,7 @@ export function MainMenu({ onNavigate, difficulty, setDifficulty, useControl, on
             <button className="btn" onClick={() => onNavigate('Rules')}>
               Rules
             </button>
-            <p className="version-info">Version 0.26</p>
+            <p className="version-info">Version 0.30</p>
           </div>
         </div>
         

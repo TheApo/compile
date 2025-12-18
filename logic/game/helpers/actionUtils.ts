@@ -976,3 +976,47 @@ export function countUniqueProtocolsInLane(state: GameState, laneIndex: number):
     }
     return protocols.size;
 }
+
+/**
+ * Count face-up cards of a specific protocol on the field (both players).
+ * CRITICAL: Only counts face-up cards, not face-down.
+ * Used for Unity protocol effects that check same-protocol card count.
+ *
+ * @param state Current game state
+ * @param protocol The protocol to count
+ * @param excludeCardId Optional card ID to exclude from count (for "another" conditions)
+ * @returns Number of face-up cards of the specified protocol
+ */
+export function countFaceUpProtocolCardsOnField(
+    state: GameState,
+    protocol: string,
+    excludeCardId?: string
+): number {
+    let count = 0;
+    for (const player of ['player', 'opponent'] as Player[]) {
+        for (const lane of state[player].lanes) {
+            for (const card of lane) {
+                if (card.isFaceUp && card.protocol === protocol) {
+                    if (excludeCardId && card.id === excludeCardId) continue;
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+/**
+ * Check if there is another face-up card of the same protocol on the field.
+ * Used for Unity conditional effects ("If there is another face-up Unity card").
+ *
+ * @param state Current game state
+ * @param sourceCard The source card
+ * @returns true if at least one other face-up card of same protocol exists
+ */
+export function hasOtherFaceUpSameProtocolCard(
+    state: GameState,
+    sourceCard: PlayedCard
+): boolean {
+    return countFaceUpProtocolCardsOnField(state, sourceCard.protocol, sourceCard.id) > 0;
+}

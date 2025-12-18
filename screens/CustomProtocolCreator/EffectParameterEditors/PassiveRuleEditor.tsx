@@ -46,6 +46,7 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
                     <optgroup label="Protocol Matching">
                         <option value="allow_any_protocol_play">Allow Any Protocol (Spirit-1, Chaos-3)</option>
                         <option value="allow_play_on_opponent_side">Allow Play on Opponent Side (Corruption-0)</option>
+                        <option value="allow_same_protocol_face_up_play">Allow Same Protocol Face-Up Play (Unity-1)</option>
                         <option value="require_non_matching_protocol">Require Non-Matching (Anarchy-1)</option>
                     </optgroup>
                     <optgroup label="Action Blocks">
@@ -158,6 +159,13 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
             {ruleType === 'block_flip_this_card' && (
                 <small style={{ display: 'block', marginTop: '8px', color: '#8A79E8' }}>
                     This card cannot be flipped by any effect. Only affects this specific card.
+                </small>
+            )}
+
+            {/* NEW: allow_same_protocol_face_up_play info (Unity-1) */}
+            {ruleType === 'allow_same_protocol_face_up_play' && (
+                <small style={{ display: 'block', marginTop: '8px', color: '#8A79E8' }}>
+                    Cards of the same protocol as this card may be played face-up in this lane (bypasses the normal face-down play requirement for non-first cards).
                 </small>
             )}
 

@@ -165,11 +165,20 @@ const getBestCardToPlay = (state: GameState): { cardId: string, laneIndex: numbe
         if (mustPlayFaceDown) return false;
         if (!canPlayInLane(laneIndex, true, card.protocol)) return false;
 
+        // Check if the card has ignore_protocol_matching card_property (generic check)
+        const thisCardIgnoresMatching = (card as any).customEffects?.bottomEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (card as any).customEffects?.topEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (card as any).customEffects?.middleEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        );
+
         if (requireNonMatching) {
             return card.protocol !== opponent.protocols[laneIndex] && card.protocol !== player.protocols[laneIndex];
         }
         const protocolMatches = card.protocol === opponent.protocols[laneIndex] || card.protocol === player.protocols[laneIndex];
-        return protocolMatches || canPlayAnyProtocol;
+        return protocolMatches || canPlayAnyProtocol || thisCardIgnoresMatching;
     };
 
     const getEffectiveValue = (card: PlayedCard, isFaceUp: boolean, laneIndex: number): number => {
@@ -713,6 +722,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             }
             // No valid selection - skip
             return { type: 'resolvePrompt', accept: false };
+        }
+
+        // Unity-4: "Reveal deck, draw all Unity cards, shuffle"
+        case 'reveal_deck_draw_protocol': {
+            return { type: 'confirmRevealDeckDrawProtocol' };
         }
 
         case 'custom_choice':

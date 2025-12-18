@@ -294,7 +294,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             // NEW: Handle custom protocol follow-up effects (e.g., "Flip 1 card. Draw cards equal to that card's value")
             // CRITICAL: Read followUpEffect from PREV.actionRequired (not newState!) because
             // internalResolveTargetedFlip already cleared actionRequired
-            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+            // CRITICAL FIX: Don't chain followUpEffect if it was already executed
+            // This prevents double execution of "if you do" effects
+            const followUpAlreadyExecuted = (prev.actionRequired as any)?._followUpAlreadyExecuted;
+            const followUpEffect = followUpAlreadyExecuted ? undefined : (prev.actionRequired as any)?.followUpEffect;
             const sourceCardId = (prev.actionRequired as any)?.sourceCardId;
             if (followUpEffect && sourceCardId) {
                 newState = handleChainedEffectsOnFlip(newState, targetCardId, sourceCardId, followUpEffect);
@@ -1081,7 +1084,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
 
             const { sourceCardId, actor } = prev.actionRequired;
-            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
+            // CRITICAL FIX: Don't use followUpEffect if it was already executed
+            // This prevents double execution of "if you do" effects
+            const followUpAlreadyExecuted = (prev.actionRequired as any)?._followUpAlreadyExecuted;
+            const followUpEffect = followUpAlreadyExecuted ? undefined : (prev.actionRequired as any)?.followUpEffect;
             const conditionalType = (prev.actionRequired as any)?.conditionalType;
             const targetFilter = (prev.actionRequired as any)?.targetFilter;
             const destination = (prev.actionRequired as any)?.destination as 'owner_hand' | 'actor_hand' | undefined;

@@ -44,6 +44,8 @@ export const useGameState = (
 
 
 
+
+
     // Update turn when startingPlayer changes (from coin flip)
     useEffect(() => {
         // Fix the turn if it doesn't match the coin flip winner
@@ -673,6 +675,20 @@ export const useGameState = (
         });
     }, [getTurnProgressionCallback]);
 
+    // Unity-4: "Reveal deck, draw all Unity cards, shuffle"
+    const resolveRevealDeckDrawProtocol = useCallback(() => {
+        setGameState(prev => {
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const nextState = resolvers.resolveRevealDeckDrawProtocol(prev);
+
+            if (nextState.winner) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    }, [getTurnProgressionCallback]);
+
     // Luck-0: "State a number"
     const resolveStateNumber = useCallback((number: number) => {
         setGameState(prev => {
@@ -1040,61 +1056,7 @@ export const useGameState = (
         }
     }, [gameState.animationState, getTurnProgressionCallback]);
 
-    // Hook: Auto-process discard_completed for player (Fire-2, Fire-3 "If you do" effects)
-    useEffect(() => {
-        const action = gameState.actionRequired;
-        if (action?.type === 'discard_completed' && action.actor === 'player' && !gameState.animationState) {
-            const { followUpEffect, conditionalType, previousHandSize, sourceCardId } = action as any;
-
-            setGameState(prev => {
-                if (prev.actionRequired?.type !== 'discard_completed') return prev;
-
-                const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-
-                if (followUpEffect && sourceCardId) {
-                    const sourceCardInfo = findCardOnBoard(prev, sourceCardId);
-                    if (sourceCardInfo) {
-                        const currentHandSize = prev.player.hand.length;
-                        const discardedCount = Math.max(0, (previousHandSize || 0) - currentHandSize);
-                        const shouldExecute = conditionalType === 'then' || (conditionalType === 'if_executed' && discardedCount > 0);
-
-                        if (shouldExecute) {
-                            let laneIndex = -1;
-                            for (let i = 0; i < prev[sourceCardInfo.owner].lanes.length; i++) {
-                                if (prev[sourceCardInfo.owner].lanes[i].some(c => c.id === sourceCardId)) {
-                                    laneIndex = i;
-                                    break;
-                                }
-                            }
-
-                            if (laneIndex !== -1) {
-                                const context: EffectContext = {
-                                    cardOwner: sourceCardInfo.owner,
-                                    opponent: sourceCardInfo.owner === 'player' ? 'opponent' as Player : 'player' as Player,
-                                    currentTurn: prev.turn,
-                                    actor: 'player',
-                                    discardedCount: discardedCount,
-                                };
-
-                                const result = executeCustomEffect(sourceCardInfo.card, laneIndex, { ...prev, actionRequired: null }, context, followUpEffect);
-
-                                // If the effect created a new actionRequired, return that state
-                                if (result.newState.actionRequired) {
-                                    return result.newState;
-                                }
-
-                                return turnProgressionCb(result.newState);
-                            }
-                        }
-                    }
-                }
-
-                // No followUp or couldn't execute - clear actionRequired and continue
-                const clearedState = { ...prev, actionRequired: null };
-                return turnProgressionCb(clearedState);
-            });
-        }
-    }, [gameState.actionRequired, gameState.animationState, getTurnProgressionCallback]);
+    // NOTE: discard_completed is now handled directly in discardResolver - no hook needed here
 
     // Hook 1: AI Turn Processing (Normal opponent turns)
     useEffect(() => {
@@ -1234,7 +1196,7 @@ export const useGameState = (
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
         resolvePlague4Flip, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveRevealBoardCardPrompt,
         resolveRearrangeProtocols, resolveOptionalDrawPrompt, resolveSwapProtocols,
-        resolveControlMechanicPrompt, resolveCustomChoice, resolveSelectRevealedDeckCard,
+        resolveControlMechanicPrompt, resolveCustomChoice, resolveSelectRevealedDeckCard, resolveRevealDeckDrawProtocol,
         resolveStateNumber, resolveStateProtocol, resolveSelectFromDrawnToReveal,
         resolveConfirmDeckDiscard, resolveConfirmDeckPlayPreview,
         resolveSelectTrashCardToPlay, resolveSelectTrashCardToReveal,

@@ -46,6 +46,45 @@ export function executeReturnEffect(
             return { newState: state };
         }
     }
+    // NEW: Check this_card_is_covered - only execute if this card is covered
+    if (params.advancedConditional?.type === 'this_card_is_covered') {
+        const ownerLanes = state[cardOwner].lanes;
+        let isCardCovered = false;
+
+        for (let i = 0; i < ownerLanes.length; i++) {
+            const lane = ownerLanes[i];
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            if (cardIndex !== -1 && cardIndex < lane.length - 1) {
+                isCardCovered = true;
+                break;
+            }
+        }
+
+        if (!isCardCovered) {
+            return { newState: state };
+        }
+    }
+
+    // NEW: Handle returnSelf - return this card to hand
+    if (params.returnSelf) {
+        let newState = { ...state };
+        const ownerLanes = newState[cardOwner].lanes;
+
+        // Find and remove this card from its lane
+        for (let i = 0; i < ownerLanes.length; i++) {
+            const lane = ownerLanes[i];
+            const cardIndex = lane.findIndex(c => c.id === card.id);
+            if (cardIndex !== -1) {
+                const [returnedCard] = lane.splice(cardIndex, 1);
+                newState[cardOwner].hand.push(returnedCard);
+                const playerName = cardOwner === 'player' ? 'Player' : 'Opponent';
+                newState = log(newState, cardOwner, `${playerName} returns this card to hand.`);
+                break;
+            }
+        }
+
+        return { newState };
+    }
 
     // Handle selectLane (Water-3: "Return all cards with a value of 2 in 1 line")
     // User first selects a lane, then all matching cards in that lane are returned

@@ -8,7 +8,7 @@ import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
 import { isCardTargetable } from '../utils/targeting';
-import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule } from '../logic/game/passiveRuleChecker';
+import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
 
 interface GameBoardProps {
@@ -107,12 +107,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         const opponentHasPsychic1 = opponent.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
         const playerHasSpiritOne = player.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
-        // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
-        const playerHasChaosThree = player.lanes.some((lane) => {
-            if (lane.length === 0) return false;
-            const uncoveredCard = lane[lane.length - 1];
-            return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
-        });
+        // Check if the card being played has ignore_protocol_matching card_property (generic check)
+        const thisCardIgnoresMatching = (card as any).customEffects?.bottomEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (card as any).customEffects?.topEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        ) || (card as any).customEffects?.middleEffects?.some(
+            (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+        );
 
         // Check for Anarchy-1 on ANY player's field (affects both players)
         const anyPlayerHasAnarchy1 = [...player.lanes.flat(), ...opponent.lanes.flat()]
@@ -127,6 +129,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         // Check if card can play on any lane (allow_play_on_opponent_side passive rule)
         const canPlayAnywhere = hasPlayOnOpponentSideRule(gameState, card);
 
+        // NEW: Check for Unity-1 same-protocol face-up play rule
+        const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(gameState, 'player', laneIndex, card.protocol);
+
         let isMatching: boolean;
         if (canPlayAnywhere) {
             // Can play face-up on ANY lane (ignores protocol matching)
@@ -136,11 +141,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             const doesNotMatch = card.protocol !== player.protocols[laneIndex] && card.protocol !== opponent.protocols[laneIndex];
             isMatching = doesNotMatch && !opponentHasPsychic1;
         } else {
-            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/Chaos-3/Spirit_custom-1 override)
+            // Normal rule: can play face-up if protocol DOES match (or Spirit-1/custom override)
+            // OR if THIS CARD ignores protocol matching (Chaos-3 or custom cards with ignore_protocol_matching)
+            // OR if Unity-1 same-protocol face-up rule allows it
             isMatching = (
                 playerHasSpiritOne ||
                 hasCustomAllowAnyProtocol ||
-                playerHasChaosThree ||
+                thisCardIgnoresMatching ||
+                hasSameProtocolFaceUpRule ||
                 card.protocol === player.protocols[laneIndex] ||
                 card.protocol === opponent.protocols[laneIndex]
             ) && !opponentHasPsychic1;

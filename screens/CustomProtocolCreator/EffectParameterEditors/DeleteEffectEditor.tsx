@@ -51,6 +51,40 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                 Delete this card (ignores all other settings)
             </label>
 
+            {params.deleteSelf && (
+                <label style={{ marginLeft: '24px' }}>
+                    Protocol Count Condition
+                    <select
+                        value={(params as any).protocolCountConditional?.threshold || 'none'}
+                        onChange={e => {
+                            const val = e.target.value;
+                            if (val === 'none') {
+                                const { protocolCountConditional, ...rest } = params as any;
+                                onChange(rest as DeleteEffectParams);
+                            } else {
+                                onChange({
+                                    ...params,
+                                    protocolCountConditional: {
+                                        type: 'unique_protocols_on_field_below',
+                                        threshold: parseInt(val)
+                                    }
+                                } as any);
+                            }
+                        }}
+                    >
+                        <option value="none">Always delete (no condition)</option>
+                        <option value="2">If less than 2 different protocols</option>
+                        <option value="3">If less than 3 different protocols</option>
+                        <option value="4">If less than 4 different protocols</option>
+                        <option value="5">If less than 5 different protocols</option>
+                        <option value="6">If less than 6 different protocols</option>
+                    </select>
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        "If there are not at least X different protocols on cards in the field, delete this card."
+                    </small>
+                </label>
+            )}
+
             <h5>Target Filter</h5>
 
             <label>
@@ -272,6 +306,7 @@ export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, 
                     <option value="none">None</option>
                     <option value="empty_hand">Only if hand is empty</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                    <option value="this_card_is_covered">Only if this card is covered</option>
                 </select>
             </label>
 

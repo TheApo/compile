@@ -108,6 +108,10 @@ const createDefaultParams = (action: EffectActionType): any => {
             return { action: 'swap_stacks', target: 'own' };
         case 'copy_opponent_middle':
             return { action: 'copy_opponent_middle', optional: true };
+        case 'auto_compile':
+            return { action: 'auto_compile', protocolCountConditional: { type: 'unique_protocols_on_field', threshold: 6 } };
+        case 'card_property':
+            return { action: 'card_property', property: 'ignore_protocol_matching' };
         default:
             return {};
     }
@@ -306,6 +310,89 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 return <ValueModifierEditor params={effectToRender.params} onChange={onChange} />;
             case 'block_compile':
                 return <BlockCompileEffectEditor params={effectToRender.params} onChange={onChange} />;
+            case 'auto_compile':
+                return (
+                    <div className="param-editor auto-compile-effect-editor">
+                        <h4>Auto Compile Effect Parameters</h4>
+                        <label>
+                            Conditional Type
+                            <select
+                                value={effectToRender.params.protocolCountConditional?.type || 'unique_protocols_on_field'}
+                                onChange={e => {
+                                    const condType = e.target.value;
+                                    if (condType === 'same_protocol_count_on_field') {
+                                        onChange({
+                                            ...effectToRender.params,
+                                            protocolCountConditional: {
+                                                type: 'same_protocol_count_on_field',
+                                                threshold: 5,
+                                                faceState: 'face_up'
+                                            }
+                                        });
+                                    } else {
+                                        onChange({
+                                            ...effectToRender.params,
+                                            protocolCountConditional: {
+                                                type: 'unique_protocols_on_field',
+                                                threshold: effectToRender.params.protocolCountConditional?.threshold || 6
+                                            }
+                                        });
+                                    }
+                                }}
+                            >
+                                <option value="unique_protocols_on_field">Unique Protocols on Field (Diversity)</option>
+                                <option value="same_protocol_count_on_field">Same Protocol Count on Field (Unity)</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Required Count
+                            <select
+                                value={effectToRender.params.protocolCountConditional?.threshold || 6}
+                                onChange={e => onChange({
+                                    ...effectToRender.params,
+                                    protocolCountConditional: {
+                                        ...effectToRender.params.protocolCountConditional,
+                                        threshold: parseInt(e.target.value)
+                                    }
+                                })}
+                            >
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
+                        </label>
+
+                        {effectToRender.params.protocolCountConditional?.type === 'same_protocol_count_on_field' && (
+                            <>
+                                <label style={{ marginTop: '10px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={effectToRender.params.deleteAllInLane || false}
+                                        onChange={e => onChange({
+                                            ...effectToRender.params,
+                                            deleteAllInLane: e.target.checked
+                                        })}
+                                    />
+                                    Also delete all cards in this lane (Unity-1)
+                                </label>
+                                <p className="param-hint" style={{ marginTop: '10px' }}>
+                                    "If there are X or more face-up [Protocol] cards in the field, compile this protocol."
+                                </p>
+                            </>
+                        )}
+
+                        {effectToRender.params.protocolCountConditional?.type !== 'same_protocol_count_on_field' && (
+                            <p className="param-hint">
+                                "If there are X different protocols on cards in the field, compile this protocol."
+                            </p>
+                        )}
+                    </div>
+                );
             case 'delete_all_in_lane':
                 return <DeleteAllInLaneEffectEditor params={effectToRender.params} onChange={onChange} />;
             case 'shuffle_trash':
@@ -337,6 +424,22 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                     </label>
                     <p style={{ color: '#8A79E8', marginTop: '10px' }}>
                         Select one of your opponent's face-up uncovered cards and execute its middle commands as if they were on this card.
+                    </p>
+                </div>;
+            case 'card_property':
+                return <div className="param-editor card-property-editor">
+                    <h4>Card Property</h4>
+                    <label>
+                        Property
+                        <select
+                            value={(effectToRender.params as any).property || 'ignore_protocol_matching'}
+                            onChange={e => onChange({ ...effectToRender.params, property: e.target.value })}
+                        >
+                            <option value="ignore_protocol_matching">Ignore Protocol Matching (Chaos-3)</option>
+                        </select>
+                    </label>
+                    <p style={{ color: '#8A79E8', marginTop: '10px' }}>
+                        This card may be played face-up in any lane, regardless of protocol matching rules.
                     </p>
                 </div>;
             default:
@@ -548,6 +651,33 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                 </div>
             )}
 
+            {/* On Cover Protocol Restriction (Unity-0 Bottom) */}
+            {effect.trigger === 'on_cover' && (
+                <div style={{ marginTop: '15px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={(effect as any).onCoverProtocolRestriction === 'same_protocol'}
+                            onChange={(e) => {
+                                if (e.target.checked) {
+                                    onChange({ ...effect, onCoverProtocolRestriction: 'same_protocol' });
+                                } else {
+                                    const { onCoverProtocolRestriction, ...rest } = effect as any;
+                                    onChange(rest as EffectDefinition);
+                                }
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        Only trigger when covered by same protocol (Unity)
+                    </label>
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        {(effect as any).onCoverProtocolRestriction === 'same_protocol'
+                            ? "Effect only triggers when covered by another card of the same protocol."
+                            : 'Effect triggers when covered by any card.'}
+                    </small>
+                </div>
+            )}
+
             {/* Only During Opponent's Turn (Peace-4) */}
             {(effect.trigger === 'after_draw' || effect.trigger === 'after_delete' || effect.trigger === 'after_discard' || effect.trigger === 'after_shift' || effect.trigger === 'after_flip' || effect.trigger === 'after_shuffle') && (
                 <div style={{ marginTop: '15px' }}>
@@ -638,12 +768,14 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                 <option value="take">Take from Hand</option>
                                 <option value="choice">Either/Or Choice</option>
                                 <option value="block_compile">Block Compile</option>
+                                <option value="auto_compile">Auto Compile (Diversity)</option>
                                 <option value="shuffle_trash">Shuffle Trash into Deck</option>
                                 <option value="shuffle_deck">Shuffle Deck</option>
                                 <option value="state_number">State a Number</option>
                                 <option value="state_protocol">State a Protocol</option>
                                 <option value="swap_stacks">Swap Stacks</option>
                                 <option value="copy_opponent_middle">Copy Opponent's Middle</option>
+                                <option value="card_property">Card Property (Chaos-3)</option>
                             </select>
                         </label>
 
@@ -726,12 +858,14 @@ export const EffectEditor: React.FC<EffectEditorProps> = ({ effect, onChange, re
                                             <option value="take">Take from Hand</option>
                                             <option value="choice">Either/Or Choice</option>
                                             <option value="block_compile">Block Compile</option>
+                                            <option value="auto_compile">Auto Compile (Diversity)</option>
                                             <option value="shuffle_trash">Shuffle Trash into Deck</option>
                                             <option value="shuffle_deck">Shuffle Deck</option>
                                             <option value="state_number">State a Number</option>
                                             <option value="state_protocol">State a Protocol</option>
                                             <option value="swap_stacks">Swap Stacks</option>
                                             <option value="copy_opponent_middle">Copy Opponent's Middle</option>
+                                            <option value="card_property">Card Property (Chaos-3)</option>
                                         </select>
                                     </label>
 

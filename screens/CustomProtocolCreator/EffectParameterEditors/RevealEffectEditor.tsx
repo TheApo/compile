@@ -69,6 +69,28 @@ export const RevealEffectEditor: React.FC<{ params: RevealEffectParams; onChange
                 </label>
             )}
 
+            {/* Protocol Filter - for revealing all same-protocol cards (Unity-0 Bottom) */}
+            {params.source === 'own_hand' && params.action === 'reveal' && (
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={(params as any).protocolFilter?.type === 'same_as_source'}
+                        onChange={e => {
+                            if (e.target.checked) {
+                                onChange({ ...params, protocolFilter: { type: 'same_as_source' } } as any);
+                            } else {
+                                const { protocolFilter, ...rest } = params as any;
+                                onChange(rest as RevealEffectParams);
+                            }
+                        }}
+                    />
+                    Reveal all same-protocol cards (Unity-0)
+                    <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
+                        Reveals all cards in hand that match this card's protocol.
+                    </small>
+                </label>
+            )}
+
         </div>
     );
 };

@@ -15,7 +15,7 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { executeOnPlayEffect } from '../../effectExecutor';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
-import { canShiftCard, hasAnyProtocolPlayRule } from '../passiveRuleChecker';
+import { canShiftCard, hasAnyProtocolPlayRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -1000,16 +1000,20 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             } else {
                 const playerHasSpiritOne = prev[actor].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Spirit' && c.value === 1);
 
-                // Check for Chaos-3: Must be uncovered (last in lane) AND face-up
-                const playerHasChaosThree = prev[actor].lanes.some((lane) => {
-                    if (lane.length === 0) return false;
-                    const uncoveredCard = lane[lane.length - 1];
-                    return uncoveredCard.isFaceUp && uncoveredCard.protocol === 'Chaos' && uncoveredCard.value === 3;
-                });
+                // Check if the card being played has ignore_protocol_matching card_property (generic check)
+                const thisCardIgnoresMatching = (cardInHand as any).customEffects?.bottomEffects?.some(
+                    (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                ) || (cardInHand as any).customEffects?.topEffects?.some(
+                    (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                ) || (cardInHand as any).customEffects?.middleEffects?.some(
+                    (e: any) => e.params?.action === 'card_property' && e.params?.property === 'ignore_protocol_matching'
+                );
 
                 const opponentId = actor === 'player' ? 'opponent' : 'player';
                 const opponentHasPsychic1 = prev[opponentId].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
-                canPlayFaceUp = (playerHasSpiritOne || playerHasChaosThree || cardInHand.protocol === prev[actor].protocols[effectiveLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[effectiveLaneIndex]) && !opponentHasPsychic1;
+                // Check Unity-1 same-protocol face-up rule
+                const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(prev, actor, effectiveLaneIndex, cardInHand.protocol);
+                canPlayFaceUp = (playerHasSpiritOne || thisCardIgnoresMatching || hasSameProtocolFaceUpRule || cardInHand.protocol === prev[actor].protocols[effectiveLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[effectiveLaneIndex]) && !opponentHasPsychic1;
             }
 
             const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, effectiveLaneIndex, canPlayFaceUp, actor);

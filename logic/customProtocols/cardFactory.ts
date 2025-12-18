@@ -11,8 +11,9 @@ import { CustomProtocolDefinition, CustomCardDefinition, EffectDefinition } from
  * IMPORTANT: This is the single source of truth for effect text generation
  * Used by both the game engine AND the card editor preview
  */
-export const getEffectSummary = (effect: EffectDefinition): string => {
+export const getEffectSummary = (effect: EffectDefinition, context?: { protocolName?: string }): string => {
     const params = effect.params as any;
+    const protocolName = context?.protocolName || '[protocol]';
     let mainText = '';
 
     switch (params.action) {
@@ -127,6 +128,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += 'Draw cards equal to the number of different protocols in this line.';
                 mainText = text;
                 break;
+            } else if (params.countType === 'count_own_protocol_cards_on_field') {
+                // Unity-2: "Draw cards equal to the number of face-up Unity cards in the field"
+                text += `Draw cards equal to the number of face-up ${protocolName} cards in the field.`;
+                mainText = text;
+                break;
             } else if (params.valueFilter?.equals !== undefined && params.count) {
                 // Clarity-2/3: "Draw 1 card with a value of X revealed this way."
                 const targetValue = params.valueFilter.equals;
@@ -148,6 +154,23 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
                 const count = params.count || 1;
                 mainText = `If your opponent has a higher total value than you do in this line, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
+            // NEW: Advanced Conditional - Same Protocol on Field (Unity-0, Unity-3)
+            if (params.advancedConditional?.type === 'same_protocol_on_field') {
+                const count = params.count || 1;
+                mainText = `If there is another face-up ${protocolName} card in the field, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
+            // NEW: Protocol Filter for Draw (Unity-4: "If your hand is empty, reveal your deck, draw all Unity cards from it, and shuffle your deck.")
+            if (params.protocolFilter?.type === 'same_as_source') {
+                if (params.advancedConditional?.type === 'empty_hand') {
+                    mainText = `If your hand is empty, reveal your deck, draw all ${protocolName} cards from it, and shuffle your deck.`;
+                } else {
+                    mainText = `Reveal your deck and draw all ${protocolName} cards.`;
+                }
                 break;
             }
 
@@ -202,6 +225,18 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     break;
                 }
 
+                // NEW: Unity-3 - Same protocol on field conditional for flipSelf
+                if (params.advancedConditional?.type === 'same_protocol_on_field') {
+                    mainText = `If there is another face-up ${protocolName} card in the field, you may flip this card.`;
+                    break;
+                }
+
+                // NEW: this_card_is_covered conditional for flipSelf
+                if (params.advancedConditional?.type === 'this_card_is_covered') {
+                    mainText = params.optional ? 'If this card is covered, you may flip this card.' : 'If this card is covered, flip this card.';
+                    break;
+                }
+
                 let text = params.optional ? 'You may flip this card' : 'Flip this card';
 
                 // NEW: Add conditional text (Anarchy-6)
@@ -210,6 +245,14 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 }
 
                 mainText = text + '.';
+                break;
+            }
+
+            // NEW: Unity-3 - Same protocol on field conditional for non-flipSelf
+            if (params.advancedConditional?.type === 'same_protocol_on_field') {
+                const count = params.count || 1;
+                const faceState = params.targetFilter?.faceState === 'face_up' ? 'face-up ' : '';
+                mainText = `If there is another face-up ${protocolName} card in the field, you may flip ${count} ${faceState}card${count !== 1 ? 's' : ''}.`;
                 break;
             }
 
@@ -476,6 +519,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 if (params.protocolCountConditional?.type === 'unique_protocols_on_field_below') {
                     const threshold = params.protocolCountConditional.threshold;
                     mainText = `If there are not at least ${threshold} different protocols on cards in the field, delete this card.`;
+                } else if (params.advancedConditional?.type === 'this_card_is_covered') {
+                    // Life-0: "If this card is covered, delete this card."
+                    mainText = 'If this card is covered, delete this card.';
                 } else {
                     mainText = 'Delete this card.';
                 }
@@ -496,21 +542,27 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // NEW: Special handling for Anarchy-2 style (covered or uncovered)
             const isCoveredOrUncovered = params.targetFilter?.position === 'any';
 
-            // NEW: For better English grammar (Hate-2: "Delete your highest value uncovered card")
-            // When count=1 + calculation + owner, skip the "1" and put owner first
+            // NEW: For better English grammar
+            // Hate-2: "Delete your highest value uncovered card" (owner + calculation)
+            // Hate-4: "Delete the lowest value covered card" (no owner + calculation)
             const hasCalculation = params.targetFilter?.calculation === 'highest_value' || params.targetFilter?.calculation === 'lowest_value';
             const hasOwner = params.targetFilter?.owner === 'own' || params.targetFilter?.owner === 'opponent';
-            const useNaturalOrder = params.count === 1 && hasCalculation && hasOwner;
+            const useNaturalOrderWithOwner = params.count === 1 && hasCalculation && hasOwner;
+            const useTheWithCalculation = params.count === 1 && hasCalculation && !hasOwner;
 
-            // Add count (skip if using natural order)
+            // Add count (skip if using natural order, or use "the" for calculation without owner)
             if (params.count === 'all_in_lane') {
                 text += 'all ';
-            } else if (!useNaturalOrder) {
+            } else if (useNaturalOrderWithOwner) {
+                // Skip count, owner comes first
+            } else if (useTheWithCalculation) {
+                text += 'the ';
+            } else {
                 text += isCoveredOrUncovered ? 'a ' : `${params.count} `;
             }
 
             // Add owner FIRST if using natural order (Hate-2 style)
-            if (useNaturalOrder) {
+            if (useNaturalOrderWithOwner) {
                 if (params.targetFilter?.owner === 'own') {
                     text += 'your ';
                 } else if (params.targetFilter?.owner === 'opponent') {
@@ -537,7 +589,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             }
 
             // Add owner if NOT using natural order (normal style)
-            if (!useNaturalOrder) {
+            if (!useNaturalOrderWithOwner) {
                 if (params.targetFilter?.owner === 'own') {
                     text += 'your ';
                 } else if (params.targetFilter?.owner === 'opponent') {
@@ -555,7 +607,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 text += 'covered or uncovered ';
             } else {
                 // Only add "covered" explicitly - "uncovered" is the default and should NOT appear in text
-                if (params.targetFilter?.position === 'covered') {
+                // covered_by_context also means covered cards (Hate-4)
+                if (params.targetFilter?.position === 'covered' || params.targetFilter?.position === 'covered_by_context') {
                     text += 'covered ';
                 }
             }
@@ -705,6 +758,16 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
                 const count = params.count || 1;
                 mainText = `If your opponent has a higher total value than you do in this line, return ${count} card${count !== 1 ? 's' : ''}.`;
+                break;
+            }
+
+            // Handle returnSelf
+            if (params.returnSelf) {
+                if (params.advancedConditional?.type === 'this_card_is_covered') {
+                    mainText = params.optional ? 'If this card is covered, you may return this card to hand.' : 'If this card is covered, return this card to hand.';
+                } else {
+                    mainText = params.optional ? 'You may return this card to hand.' : 'Return this card to hand.';
+                }
                 break;
             }
 
@@ -915,8 +978,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             // This modifies the text to indicate "non-[protocol]" restriction
             // Applied when excludeSourceProtocol is true
             if (params.excludeSourceProtocol) {
-                // Replace "1 card" with "1 non-[protocol] card" - the protocol name will be shown dynamically in game
-                text = text.replace(/(\d+) card/, '$1 non-[protocol] card');
+                // Replace "1 card" with "1 non-[protocol] card"
+                text = text.replace(/(\d+) card/, `$1 non-${protocolName} card`);
             }
 
             mainText = text + '.';
@@ -1002,6 +1065,12 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // NEW: Unity-0 - Protocol filter for reveal (reveal all same-protocol cards in hand)
+            if (params.protocolFilter?.type === 'same_as_source') {
+                mainText = `Reveal all ${protocolName} cards in your hand.`;
+                break;
+            }
+
             // NEW: Handle count=-1 for "reveal/give entire hand"
             if (params.count === -1) {
                 if (params.source === 'opponent_hand') {
@@ -1079,7 +1148,12 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                     return optText;
                 });
 
-                mainText = `Either ${optionTexts[0]} or ${optionTexts[1]}.`;
+                // Check for advancedConditional prefix (Unity-0)
+                if (params.advancedConditional?.type === 'same_protocol_on_field') {
+                    mainText = `If there is another ${protocolName} card in the field, either ${optionTexts[0]} or ${optionTexts[1]}.`;
+                } else {
+                    mainText = `Either ${optionTexts[0]} or ${optionTexts[1]}.`;
+                }
             } else {
                 // More than 2 options - just say "Effect" for now
                 mainText = 'Effect';
@@ -1123,6 +1197,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                         : 'Opponent can only play cards face-down in this line.';
                     break;
                 case 'allow_any_protocol_play':
+                    // Spirit-1: Global effect - all cards can be played without matching
                     mainText = 'You may play cards without matching protocols.';
                     break;
                 case 'allow_play_on_opponent_side':
@@ -1150,6 +1225,10 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 // NEW: Ice-4 - This card cannot be flipped
                 case 'block_flip_this_card':
                     mainText = 'This card cannot be flipped.';
+                    break;
+                // NEW: Unity-1 - Allow same protocol face-up play
+                case 'allow_same_protocol_face_up_play':
+                    mainText = `${protocolName} cards may be played face-up in this line.`;
                     break;
                 // NEW: Ice-6 - Conditional draw blocking (flexible)
                 case 'block_draw_conditional': {
@@ -1238,7 +1317,7 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
                     // NEW: has_non_own_protocol_face_up condition (Diversity-3)
                     const conditionText = mod.condition === 'has_non_own_protocol_face_up'
-                        ? ' if there are any non-[protocol] face-up cards in this stack'
+                        ? ` if there are any non-${protocolName} face-up cards in this stack`
                         : '';
 
                     if (mod.target === 'opponent_total') {
@@ -1349,8 +1428,24 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.protocolCountConditional?.type === 'unique_protocols_on_field') {
                 const threshold = params.protocolCountConditional.threshold;
                 mainText = `If there are ${threshold} different protocols on cards in the field, compile this protocol.`;
+            } else if (params.protocolCountConditional?.type === 'same_protocol_count_on_field') {
+                // Unity-1: If 5+ face-up Unity cards, compile and delete all in lane
+                const threshold = params.protocolCountConditional.threshold;
+                const faceStateText = params.protocolCountConditional.faceState === 'face_up' ? 'face-up ' : '';
+                const deleteText = params.deleteAllInLane ? ' and delete all cards in this line' : '';
+                mainText = `If there are ${threshold} or more ${faceStateText}${protocolName} cards in the field, compile this protocol${deleteText}.`;
             } else {
                 mainText = 'Compile this protocol.';
+            }
+            break;
+        }
+
+        case 'card_property': {
+            // Chaos-3: Card properties that affect how this card is played
+            if (params.property === 'ignore_protocol_matching') {
+                mainText = 'This card may be played without matching protocols.';
+            } else {
+                mainText = 'Card property.';
             }
             break;
         }
@@ -1422,16 +1517,22 @@ const extractKeywords = (effects: EffectDefinition[]): Record<string, boolean> =
  * IMPORTANT: This is the single source of truth for full effect text (trigger + effect)
  * Used by both the game engine AND the card editor preview
  */
-export const generateEffectText = (effects: EffectDefinition[]): string => {
+export const generateEffectText = (effects: EffectDefinition[], context?: { protocolName?: string }): string => {
     if (effects.length === 0) return '';
 
     return effects.map(effect => {
-        const summary = getEffectSummary(effect);
+        const summary = getEffectSummary(effect, context);
         const trigger = effect.trigger;
 
         if (trigger === 'start') return `<div><span class='emphasis'>Start:</span> ${summary}</div>`;
         if (trigger === 'end') return `<div><span class='emphasis'>End:</span> ${summary}</div>`;
-        if (trigger === 'on_cover') return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
+        if (trigger === 'on_cover') {
+            // NEW: Unity-0 Bottom - Protocol restriction for on_cover
+            if ((effect as any).onCoverProtocolRestriction === 'same_protocol') {
+                return `<div><span class='emphasis'>When this card would be covered by another ${context?.protocolName || '[protocol]'} card:</span> First, ${summary.toLowerCase()}</div>`;
+            }
+            return `<div><span class='emphasis'>When this card would be covered:</span> First, ${summary.toLowerCase()}</div>`;
+        }
         if (trigger === 'on_flip') return `<div><span class='emphasis'>When this card would be flipped:</span> First, ${summary.toLowerCase()}</div>`;
         if (trigger === 'on_cover_or_flip') return `<div><span class='emphasis'>When this card would be covered or flipped:</span> First, ${summary.toLowerCase()}</div>`;
 
@@ -1551,16 +1652,19 @@ export const convertCustomCardToCard = (
     customCard: CustomCardDefinition,
     protocol: CustomProtocolDefinition
 ): Card => {
+    // Pass protocol name for proper text generation (e.g., "non-Diversity card")
+    const effectContext = { protocolName: protocol.name };
+
     // Use manual text if provided, otherwise generate from effects
     const topText = (customCard.text?.top !== undefined)
         ? customCard.text.top
-        : generateEffectText(customCard.topEffects);
+        : generateEffectText(customCard.topEffects, effectContext);
     const middleText = (customCard.text?.middle !== undefined)
         ? customCard.text.middle
-        : generateEffectText(customCard.middleEffects);
+        : generateEffectText(customCard.middleEffects, effectContext);
     const bottomText = (customCard.text?.bottom !== undefined)
         ? customCard.text.bottom
-        : generateEffectText(customCard.bottomEffects);
+        : generateEffectText(customCard.bottomEffects, effectContext);
 
     // Collect keywords from all effects
     const allEffects = [...customCard.topEffects, ...customCard.middleEffects, ...customCard.bottomEffects];

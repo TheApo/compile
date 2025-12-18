@@ -187,6 +187,33 @@ export function executeRevealGiveEffect(
         return { newState };
     }
 
+    // NEW: Handle own_hand reveal with protocolFilter (Unity-0 Bottom: "Reveal all Unity cards in your hand")
+    if (action === 'reveal' && source === 'own_hand' && params.protocolFilter?.type === 'same_as_source') {
+        let newState = { ...state };
+        const ownerState = { ...newState[cardOwner] };
+        const cardName = `${card.protocol}-${card.value}`;
+
+        // Find all cards in hand matching the source card's protocol
+        const matchingCards = ownerState.hand.filter(c => c.protocol === card.protocol);
+
+        if (matchingCards.length === 0) {
+            newState = log(newState, cardOwner, `${cardName}: No ${card.protocol} cards in hand to reveal.`);
+            return { newState };
+        }
+
+        // Mark all matching cards as revealed
+        ownerState.hand = ownerState.hand.map(c =>
+            c.protocol === card.protocol ? { ...c, isRevealed: true } : c
+        );
+        newState[cardOwner] = ownerState;
+
+        // Log the reveal
+        const revealedNames = matchingCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+        newState = log(newState, cardOwner, `${cardName}: Revealed ${matchingCards.length} ${card.protocol} card(s) from hand: ${revealedNames}`);
+
+        return { newState };
+    }
+
     // CRITICAL: Check if player has any cards in hand (for own_hand reveal/give)
     if (state[cardOwner].hand.length === 0) {
         let newState = log(state, cardOwner, `No cards in hand to ${action}. Effect skipped.`);

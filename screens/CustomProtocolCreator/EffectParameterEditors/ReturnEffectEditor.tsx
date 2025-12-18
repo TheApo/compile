@@ -174,6 +174,35 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                 </label>
             )}
 
+            <h5>Return This Card</h5>
+
+            <label>
+                <input
+                    type="checkbox"
+                    checked={params.returnSelf || false}
+                    onChange={e => {
+                        if (e.target.checked) {
+                            onChange({ ...params, returnSelf: true });
+                        } else {
+                            const { returnSelf, ...rest } = params;
+                            onChange(rest as ReturnEffectParams);
+                        }
+                    }}
+                />
+                Return this card (self)
+            </label>
+
+            {params.returnSelf && (
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={params.optional || false}
+                        onChange={e => onChange({ ...params, optional: e.target.checked })}
+                    />
+                    Optional ("You may return")
+                </label>
+            )}
+
             <h5>Advanced Conditional</h5>
 
             <label>
@@ -192,6 +221,7 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                     <option value="none">None</option>
                     <option value="empty_hand">Only if hand is empty</option>
                     <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
+                    <option value="this_card_is_covered">Only if this card is covered</option>
                 </select>
             </label>
 

@@ -89,15 +89,11 @@
       "middleEffects": [],
       "bottomEffects": [
         {
-          "id": "chaos_3_allow_any_protocol",
+          "id": "chaos_3_ignore_protocol",
           "trigger": "passive",
           "params": {
-            "action": "passive_rule",
-            "rule": {
-              "type": "allow_any_protocol_play",
-              "target": "self",
-              "scope": "global"
-            }
+            "action": "card_property",
+            "property": "ignore_protocol_matching"
           },
           "position": "bottom"
         }

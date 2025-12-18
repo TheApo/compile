@@ -172,9 +172,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({ card, protocolName, prot
     };
 
     // Generate text directly - will update when card changes
-    const topText = generateEffectText(card.topEffects);
-    const middleText = generateEffectText(card.middleEffects);
-    const bottomText = generateEffectText(card.bottomEffects);
+    // Pass protocol name for proper text generation (e.g., "non-Diversity card" instead of "non-[protocol] card")
+    const effectContext = { protocolName };
+    const topText = generateEffectText(card.topEffects, effectContext);
+    const middleText = generateEffectText(card.middleEffects, effectContext);
+    const bottomText = generateEffectText(card.bottomEffects, effectContext);
 
     // Create a stable key based on effect content for re-rendering when effects actually change
     const effectsHash = JSON.stringify({

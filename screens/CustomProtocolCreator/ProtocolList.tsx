@@ -37,6 +37,7 @@ const SYSTEM_PROTOCOL_IDS = [
     'speed_custom_1',
     'spirit_custom_1',
     'time-custom-001',
+    'unity-custom-001',
     'war-custom-001',
     'water_custom_1',
 ];
