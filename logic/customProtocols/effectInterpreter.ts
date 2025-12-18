@@ -353,10 +353,21 @@ export function executeCustomEffect(
                 const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: actor, count: drawnCards.length });
                 newState = reactiveResult.newState;
 
+                // CRITICAL: Trigger reactive effects after refresh (Assimilation-1, War-0)
+                // Pass the actor who refreshed so reactiveTriggerActor can filter correctly
+                const refreshReactiveResult = processReactiveEffects(newState, 'after_refresh', { player: actor });
+                newState = refreshReactiveResult.newState;
+
                 result = { newState };
             } else {
                 // Hand already has 5+ cards, no need to draw
                 let newState = log(state, actor, `[Refresh] Hand already at ${currentHandSize} cards, no draw needed.`);
+
+                // CRITICAL: Still trigger after_refresh even when no cards were drawn
+                // The refresh action happened, even if hand was already full
+                const refreshReactiveResult = processReactiveEffects(newState, 'after_refresh', { player: actor });
+                newState = refreshReactiveResult.newState;
+
                 result = { newState };
             }
             break;

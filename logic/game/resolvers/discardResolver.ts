@@ -168,14 +168,27 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     if (discardedCards.length === 0) return prevState;
 
     const newHand = playerState.hand.filter(c => !cardsToDiscardSet.has(c.id));
-    const newDiscard = [...playerState.discard, ...discardedCards.map(({ id, isFaceUp, ...card }) => card)];
-    
+
     const originalAction = (prevState.animationState?.type === 'discardCard' && prevState.animationState.originalAction?.type === 'discard')
         ? prevState.animationState.originalAction
         : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
 
+    // NEW: Check discardTo parameter - determines which trash pile receives the cards
+    const discardTo = (originalAction as any)?.discardTo || 'own_trash';
+    const opponent = player === 'player' ? 'opponent' : 'player';
+    const discardPileOwner = discardTo === 'opponent_trash' ? opponent : player;
+
+    // Cards to add to discard pile (strip id and isFaceUp)
+    const cardsForDiscard = discardedCards.map(({ id, isFaceUp, ...card }) => card);
+
+    // Update discard pile of the appropriate player
     const newStats = { ...playerState.stats, cardsDiscarded: playerState.stats.cardsDiscarded + discardedCards.length };
-    const newPlayerState = { ...playerState, hand: newHand, discard: newDiscard, stats: newStats };
+    const newPlayerState = { ...playerState, hand: newHand, stats: newStats };
+
+    // If discarding to own trash, update player's discard
+    if (discardPileOwner === player) {
+        (newPlayerState as any).discard = [...playerState.discard, ...cardsForDiscard];
+    }
 
     // CRITICAL: Preserve followUpEffect and conditionalType from originalAction before clearing
     // They will be needed by handleChainedEffectsOnDiscard later
@@ -183,22 +196,51 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const conditionalType = (originalAction as any)?.conditionalType;
     const previousHandSize = (originalAction as any)?.previousHandSize;
 
-    let newState = {
-        ...prevState,
-        [player]: newPlayerState,
-        stats: {
-            ...prevState.stats,
-            [player]: newStats,
-        },
-        actionRequired: followUpEffect ? {
-            type: 'discard_completed',
-            followUpEffect,
-            conditionalType,
-            previousHandSize,
-            sourceCardId: originalAction?.sourceCardId,
-            actor: player,
-        } as any : null
-    };
+    // Build new state - handle opponent's discard pile if discarding to opponent's trash
+    let newState: GameState;
+    if (discardPileOwner === opponent) {
+        // Discard to opponent's trash (Assimilation-1 Bottom: "Discard 1 card into their trash.")
+        const opponentState = prevState[opponent];
+        const newOpponentState = {
+            ...opponentState,
+            discard: [...opponentState.discard, ...cardsForDiscard],
+        };
+        newState = {
+            ...prevState,
+            [player]: newPlayerState,
+            [opponent]: newOpponentState,
+            stats: {
+                ...prevState.stats,
+                [player]: newStats,
+            },
+            actionRequired: followUpEffect ? {
+                type: 'discard_completed',
+                followUpEffect,
+                conditionalType,
+                previousHandSize,
+                sourceCardId: originalAction?.sourceCardId,
+                actor: player,
+            } as any : null
+        };
+    } else {
+        // Standard discard to own trash
+        newState = {
+            ...prevState,
+            [player]: newPlayerState,
+            stats: {
+                ...prevState.stats,
+                [player]: newStats,
+            },
+            actionRequired: followUpEffect ? {
+                type: 'discard_completed',
+                followUpEffect,
+                conditionalType,
+                previousHandSize,
+                sourceCardId: originalAction?.sourceCardId,
+                actor: player,
+            } as any : null
+        };
+    }
 
     // IMPORTANT: Set context from source card if this discard was caused by an effect
     // Otherwise clear the context AND reset indent level
@@ -224,13 +266,14 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
+    const intoTheirTrash = discardPileOwner !== player ? ' into their trash' : '';
     let logMessage: string;
     if (player === 'player' || discardedCards.every(c => c.isRevealed)) {
         const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-        logMessage = `${playerName} discards ${cardNames}.`;
+        logMessage = `${playerName} discards ${cardNames}${intoTheirTrash}.`;
     } else {
         const cardText = discardedCards.length === 1 ? 'card' : 'cards';
-        logMessage = `${playerName} discards ${discardedCards.length} ${cardText}.`;
+        logMessage = `${playerName} discards ${discardedCards.length} ${cardText}${intoTheirTrash}.`;
     }
     newState = log(newState, player, logMessage);
 

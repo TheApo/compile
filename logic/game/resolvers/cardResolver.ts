@@ -1084,6 +1084,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
             const conditionalType = (prev.actionRequired as any)?.conditionalType;
             const targetFilter = (prev.actionRequired as any)?.targetFilter;
+            const destination = (prev.actionRequired as any)?.destination as 'owner_hand' | 'actor_hand' | undefined;
 
             // CRITICAL: Validate that target card is uncovered (unless targetFilter explicitly allows covered)
             const targetCardInfo = findCardOnBoard(prev, targetCardId);
@@ -1098,7 +1099,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 }
             }
 
-            const result = internalReturnCard(prev, targetCardId);
+            const result = internalReturnCard(prev, targetCardId, destination);
             newState = result.newState;
             if (result.animationRequests) {
                  requiresAnimation = {

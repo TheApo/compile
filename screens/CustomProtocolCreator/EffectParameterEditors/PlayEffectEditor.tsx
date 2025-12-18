@@ -42,6 +42,25 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                     <option value="trash">Trash (Discard Pile)</option>
                 </select>
             </label>
+
+            {/* Source owner - only for deck/trash source (Assimilation-2: opponent's deck) */}
+            {(params.source === 'deck' || params.source === 'trash') && (
+                <label>
+                    Source Owner
+                    <select
+                        value={params.sourceOwner || 'own'}
+                        onChange={e => onChange({ ...params, sourceOwner: e.target.value as 'own' | 'opponent' })}
+                    >
+                        <option value="own">Own {params.source}</option>
+                        <option value="opponent">Opponent's {params.source}</option>
+                    </select>
+                    {params.sourceOwner === 'opponent' && (
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Card is taken from opponent's {params.source} instead of your own.
+                        </small>
+                    )}
+                </label>
+            )}
             <label>
                 Anzahl
                 <input
@@ -97,6 +116,23 @@ export const PlayEffectEditor: React.FC<{ params: PlayEffectParams; onChange: (p
                     </select>
                 </label>
             )}
+
+            {/* Target board - for Assimilation-6: play on opponent's board */}
+            <label>
+                Target Board
+                <select
+                    value={params.targetBoard || 'own'}
+                    onChange={e => onChange({ ...params, targetBoard: e.target.value as 'own' | 'opponent' })}
+                >
+                    <option value="own">Own board (default)</option>
+                    <option value="opponent">Opponent's board</option>
+                </select>
+                {params.targetBoard === 'opponent' && (
+                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                        Card is played on opponent's board instead of your own.
+                    </small>
+                )}
+            </label>
 
             <label>
                 Condition

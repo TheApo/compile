@@ -13,8 +13,10 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
 }) => {
     const owner = params.targetFilter?.owner || 'any';
     const position = params.targetFilter?.position || 'uncovered';
+    const faceState = params.targetFilter?.faceState;
     const valueEquals = params.targetFilter?.valueEquals;
     const selectLane = (params as any).selectLane || false;
+    const destination = params.destination || 'owner_hand';
 
     return (
         <div className="param-editor">
@@ -66,6 +68,51 @@ export const ReturnEffectEditor: React.FC<{ params: ReturnEffectParams; onChange
                     <option value="any">Any (covered or uncovered)</option>
                 </select>
             </label>
+
+            <label>
+                Face State Filter
+                <select
+                    value={faceState || 'any'}
+                    onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'any') {
+                            const { faceState, ...rest } = params.targetFilter || {};
+                            onChange({ ...params, targetFilter: rest });
+                        } else {
+                            onChange({
+                                ...params,
+                                targetFilter: {
+                                    ...params.targetFilter,
+                                    faceState: val as 'face_up' | 'face_down'
+                                }
+                            });
+                        }
+                    }}
+                >
+                    <option value="any">Any (face-up or face-down)</option>
+                    <option value="face_up">Face-up only</option>
+                    <option value="face_down">Face-down only</option>
+                </select>
+            </label>
+
+            {/* Show destination option only when targeting opponent's cards */}
+            {owner === 'opponent' && (
+                <label>
+                    Card goes to
+                    <select
+                        value={destination}
+                        onChange={e => onChange({ ...params, destination: e.target.value as 'owner_hand' | 'actor_hand' })}
+                    >
+                        <option value="owner_hand">Owner's hand (normal return)</option>
+                        <option value="actor_hand">Your hand (steal)</option>
+                    </select>
+                    {destination === 'actor_hand' && (
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Steal: Card goes to your hand instead of owner's hand.
+                        </small>
+                    )}
+                </label>
+            )}
 
             <label>
                 <input

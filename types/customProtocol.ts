@@ -221,6 +221,8 @@ export interface DiscardEffectParams {
     random?: boolean;
     // NEW: Luck - Source of the card to discard (default: 'hand')
     source?: 'hand' | 'top_deck_own' | 'top_deck_opponent' | 'entire_deck';  // 'entire_deck' for Time-1
+    // NEW: Destination trash - where discarded cards go (default: 'own_trash')
+    discardTo?: 'own_trash' | 'opponent_trash';  // 'opponent_trash' for Assimilation-1
 }
 
 /**
@@ -231,13 +233,16 @@ export interface ReturnEffectParams {
     count: number | 'all';  // 1-6 or all
     targetFilter?: {
         valueEquals?: number;  // Return all cards with value X
-        position?: 'any';
+        position?: 'any' | 'covered' | 'uncovered';  // Position filter (default: 'uncovered')
         owner?: 'own' | 'opponent' | 'any';  // whose cards to return (default: 'any')
+        faceState?: 'face_up' | 'face_down';  // Face state filter
     };
     scope?: {
         type: 'any_card' | 'cards_in_lane';
         laneSelection?: 'prompt';
     };
+    // NEW: Destination - where the card goes (default: 'owner_hand')
+    destination?: 'owner_hand' | 'actor_hand';  // 'actor_hand' for stealing (Assimilation-0)
     // Advanced conditionals - effect only executes if condition is met
     advancedConditional?: {
         type: 'empty_hand' | 'opponent_higher_value_in_lane';
@@ -278,6 +283,10 @@ export interface PlayEffectParams {
         cardCount?: number;  // For 'per_x_cards_in_line' and 'per_x_face_down_cards' (e.g., 2 for "every 2 cards")
     };
     actor?: 'self' | 'opponent';  // Who plays (default: self)
+    // NEW: Source owner - whose deck/trash to play from (default: 'own')
+    sourceOwner?: 'own' | 'opponent';  // 'opponent' for Assimilation-2 (play from opponent's deck)
+    // NEW: Target board - which board to play to (default: 'own')
+    targetBoard?: 'own' | 'opponent';  // 'opponent' for Assimilation-6 (play on opponent's side)
     // Value filter for playing specific cards
     valueFilter?: {
         equals: number;  // Play only cards with this value

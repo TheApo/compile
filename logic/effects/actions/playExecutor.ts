@@ -412,6 +412,7 @@ export function executePlayEffect(
     }
 
     // NEW: Gravity-6 logic - Automatic play from deck to specific lane
+    // Extended for Assimilation-2/6: sourceOwner and targetBoard parameters
     // Resolve laneIndex: 'current' to actual lane number
     if (source === 'deck' && params.destinationRule?.type === 'specific_lane') {
         const resolvedLaneIndex = params.destinationRule.laneIndex === 'current'
@@ -423,17 +424,24 @@ export function executePlayEffect(
             return { newState: state };
         }
 
-        const playerState = state[actor];
+        // NEW: sourceOwner determines whose deck to draw from (Assimilation-2: opponent's deck)
+        const sourceOwner = params.sourceOwner || 'own';
+        const deckOwner = sourceOwner === 'opponent' ? opponent : cardOwner;
+        const deckOwnerState = state[deckOwner];
+
+        // NEW: targetBoard determines which board the card is played on (Assimilation-6: opponent's board)
+        const targetBoard = params.targetBoard || 'own';
+        const targetPlayer = targetBoard === 'opponent' ? opponent : cardOwner;
 
         // Check if deck has enough cards
-        if (playerState.deck.length === 0 && playerState.discard.length === 0) {
-            const actorName = actor === 'player' ? 'Player' : 'Opponent';
-            let newState = log(state, cardOwner, `${actorName} has no cards in deck/discard - effect skipped.`);
+        if (deckOwnerState.deck.length === 0 && deckOwnerState.discard.length === 0) {
+            const deckOwnerName = sourceOwner === 'opponent' ? "opponent's" : 'your';
+            let newState = log(state, cardOwner, `No cards in ${deckOwnerName} deck/discard - effect skipped.`);
             return { newState };
         }
 
         // Draw cards from deck (with auto-reshuffle if needed)
-        const { drawnCards, remainingDeck, newDiscard } = drawCards(playerState.deck, playerState.discard, count);
+        const { drawnCards, remainingDeck, newDiscard } = drawCards(deckOwnerState.deck, deckOwnerState.discard, count);
 
         if (drawnCards.length === 0) {
             return { newState: state };
@@ -442,26 +450,29 @@ export function executePlayEffect(
         // Create new cards to play
         const newCardsToPlay = drawnCards.map((c: any) => ({ ...c, id: uuidv4(), isFaceUp: !faceDown }));
 
-        // Add cards to the specific lane
-        const newPlayerLanes = [...playerState.lanes];
-        newPlayerLanes[resolvedLaneIndex] = [...newPlayerLanes[resolvedLaneIndex], ...newCardsToPlay];
+        // Start building new state
+        let newState = { ...state };
 
-        const updatedPlayerState = {
-            ...playerState,
-            lanes: newPlayerLanes,
+        // Update deck owner's state (deck/discard)
+        newState[deckOwner] = {
+            ...newState[deckOwner],
             deck: remainingDeck,
             discard: newDiscard
         };
 
-        let newState = {
-            ...state,
-            [actor]: updatedPlayerState
+        // Add cards to the target player's specific lane
+        const targetPlayerLanes = [...newState[targetPlayer].lanes];
+        targetPlayerLanes[resolvedLaneIndex] = [...targetPlayerLanes[resolvedLaneIndex], ...newCardsToPlay];
+        newState[targetPlayer] = {
+            ...newState[targetPlayer],
+            lanes: targetPlayerLanes
         };
 
-        // Update detailed game stats for cards played from effect (Gravity-6)
+        // Update detailed game stats for cards played from effect
         if (newState.detailedGameStats && drawnCards.length > 0) {
-            const fromEffectKey = actor === 'player' ? 'playerFromEffect' : 'aiFromEffect';
-            const faceKey = actor === 'player'
+            // Stats are based on who PLAYED the card (effect owner), not where it lands
+            const fromEffectKey = cardOwner === 'player' ? 'playerFromEffect' : 'aiFromEffect';
+            const faceKey = cardOwner === 'player'
                 ? (faceDown ? 'playerFaceDown' : 'playerFaceUp')
                 : (faceDown ? 'aiFaceDown' : 'aiFaceUp');
             newState = {
@@ -480,10 +491,24 @@ export function executePlayEffect(
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
-        const actorName = actor === 'player' ? 'Player' : 'Opponent';
         const faceText = faceDown ? 'face-down' : 'face-up';
         const protocolName = state.player.protocols[resolvedLaneIndex];
-        newState = log(newState, cardOwner, `${sourceCardName}: ${actorName} plays ${drawnCards.length} card(s) ${faceText} in ${protocolName} line.`);
+
+        // Build descriptive log based on sourceOwner and targetBoard
+        let logText = `${sourceCardName}: Plays `;
+        if (sourceOwner === 'opponent') {
+            logText += `the top card of opponent's deck `;
+        } else {
+            logText += `${drawnCards.length} card(s) from deck `;
+        }
+        logText += `${faceText} `;
+        if (targetBoard === 'opponent') {
+            logText += `on opponent's ${protocolName} line.`;
+        } else {
+            logText += `in ${protocolName} line.`;
+        }
+        newState = log(newState, cardOwner, logText);
+
         return { newState };
     }
 

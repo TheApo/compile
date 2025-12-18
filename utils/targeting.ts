@@ -325,6 +325,11 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             if (position === 'covered' && !isCovered) return false;
             // position === 'any' allows both
 
+            // Check faceState filter (for Assimilation-0: only face-down cards)
+            const faceState = targetFilter?.faceState;
+            if (faceState === 'face_up' && !card.isFaceUp) return false;
+            if (faceState === 'face_down' && card.isFaceUp) return false;
+
             // Filter by owner if specified
             if (targetOwner === 'own') {
                 return owner === actor;

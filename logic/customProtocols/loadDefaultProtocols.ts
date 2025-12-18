@@ -6,6 +6,7 @@
 import { addCustomProtocol, loadCustomProtocols, saveCustomProtocols } from './storage';
 import anarchyCustomData from '../../custom_protocols/anarchy_custom_protocol.json';
 import apathyCustomData from '../../custom_protocols/apathy_custom_protocol.json';
+import assimilationCustomData from '../../custom_protocols/assimilation_custom_protocol.json';
 import chaosCustomData from '../../custom_protocols/chaos_custom_protocol.json';
 import darknessCustomData from '../../custom_protocols/darkness_custom_protocol.json';
 import deathCustomData from '../../custom_protocols/death_custom_protocol.json';
@@ -39,7 +40,7 @@ import warCustomData from '../../custom_protocols/war_custom_protocol.json';
  * Each protocol has a 'name' field that represents the protocol name
  */
 const allDefaultCustomProtocolData = [
-    anarchyCustomData, apathyCustomData, chaosCustomData, darknessCustomData,
+    anarchyCustomData, apathyCustomData, assimilationCustomData, chaosCustomData, darknessCustomData,
     deathCustomData, fireCustomData, frostCustomData, hateCustomData,
     waterCustomData, spiritCustomData, gravityCustomData, lifeCustomData,
     lightCustomData, speedCustomData, metalCustomData, plagueCustomData,
@@ -77,6 +78,7 @@ export const loadDefaultCustomProtocols = (): void => {
 
         addCustomProtocol(anarchyCustomData as any);
         addCustomProtocol(apathyCustomData as any);
+        addCustomProtocol(assimilationCustomData as any);
         addCustomProtocol(darknessCustomData as any);
         addCustomProtocol(deathCustomData as any);
         addCustomProtocol(fireCustomData as any);

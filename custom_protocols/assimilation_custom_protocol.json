@@ -1,0 +1,179 @@
+{
+  "id": "assimilation-custom-001",
+  "name": "Assimilation",
+  "description": "Absorb your opponent's resources. Draw from their deck, steal their cards, and infiltrate their board.",
+  "author": "System",
+  "createdAt": "2025-12-18T00:00:00.000Z",
+  "color": "#8B008B",
+  "pattern": "radial",
+  "cards": [
+    {
+      "value": 0,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "assimilation-0-steal-facedown",
+          "params": {
+            "action": "return",
+            "count": 1,
+            "targetFilter": {
+              "owner": "opponent",
+              "position": "any",
+              "faceState": "face_down"
+            },
+            "destination": "actor_hand"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 1,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "assimilation-1-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "assimilation-1-refresh",
+          "params": {
+            "action": "refresh",
+            "target": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": [
+        {
+          "id": "assimilation-1-reactive-draw",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "opponent_deck"
+          },
+          "position": "bottom",
+          "trigger": "after_refresh",
+          "reactiveTriggerActor": "any",
+          "conditional": {
+            "type": "then",
+            "thenEffect": {
+              "id": "assimilation-1-reactive-discard",
+              "params": {
+                "action": "discard",
+                "count": 1,
+                "actor": "self",
+                "discardTo": "opponent_trash"
+              },
+              "position": "bottom",
+              "trigger": "on_play"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "value": 2,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "assimilation-2-play-opponent-deck",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "sourceOwner": "opponent",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "specific_lane",
+              "laneIndex": "current"
+            }
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    },
+    {
+      "value": 4,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "assimilation-4-draw-opponent-deck",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "self",
+            "source": "opponent_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        },
+        {
+          "id": "assimilation-4-opponent-draw-own-deck",
+          "params": {
+            "action": "draw",
+            "count": 1,
+            "target": "opponent",
+            "source": "own_deck"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 5,
+      "topEffects": [],
+      "middleEffects": [
+        {
+          "id": "assimilation-5-discard",
+          "params": {
+            "action": "discard",
+            "count": 1,
+            "actor": "self"
+          },
+          "position": "middle",
+          "trigger": "on_play"
+        }
+      ],
+      "bottomEffects": []
+    },
+    {
+      "value": 6,
+      "topEffects": [],
+      "middleEffects": [],
+      "bottomEffects": [
+        {
+          "id": "assimilation-6-play-to-opponent-board",
+          "params": {
+            "action": "play",
+            "source": "deck",
+            "count": 1,
+            "faceDown": true,
+            "destinationRule": {
+              "type": "specific_lane",
+              "laneIndex": "current"
+            },
+            "targetBoard": "opponent"
+          },
+          "position": "bottom",
+          "trigger": "end"
+        }
+      ]
+    }
+  ],
+  "category": "Aux 2"
+}

@@ -564,7 +564,7 @@ function hasRedirectReturnToDeckPassive(state: GameState, cardOwner: Player, act
     return null;
 }
 
-export function internalReturnCard(state: GameState, targetCardId: string): EffectResult {
+export function internalReturnCard(state: GameState, targetCardId: string, destination?: 'owner_hand' | 'actor_hand'): EffectResult {
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (!cardInfo) return { newState: state };
 
@@ -578,7 +578,6 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     const wasTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === targetCardId;
 
     let newState = { ...state };
-    const ownerState = { ...newState[owner] };
 
     // FIX: Use actor from actionRequired if available, otherwise fall back to turn
     // This is critical for interrupt scenarios (e.g., Psychic-4 during opponent's turn)
@@ -589,25 +588,40 @@ export function internalReturnCard(state: GameState, targetCardId: string): Effe
     const ownerName = owner === 'player' ? "Player's" : "Opponent's";
     const cardName = `${card.protocol}-${card.value}`;
 
-    // Check for redirect-to-deck passive (e.g., Corruption-1)
-    // This checks all face-up cards for when_card_returned trigger with redirect_return_to_deck action
-    const redirectPassiveCard = hasRedirectReturnToDeckPassive(state, owner, actor);
+    // Determine destination: owner's hand (default) or actor's hand (steal)
+    const effectiveDestination = destination || 'owner_hand';
+    const destinationPlayer = effectiveDestination === 'actor_hand' ? actor : owner;
 
-    // Remove from board
+    // Check for redirect-to-deck passive (e.g., Corruption-1) - only for normal returns, not steals
+    const redirectPassiveCard = effectiveDestination === 'owner_hand'
+        ? hasRedirectReturnToDeckPassive(state, owner, actor)
+        : null;
+
+    // Remove from board - we need to update the owner's state
+    const ownerState = { ...newState[owner] };
     ownerState.lanes = ownerState.lanes.map(lane => lane.filter(c => c.id !== targetCardId));
+    newState[owner] = ownerState;
 
     if (redirectPassiveCard) {
         // Corruption-1: Put on top of deck face-down instead of returning to hand
         const returnedCard = { ...card, isFaceUp: false, isRevealed: false };
-        ownerState.deck = [returnedCard, ...ownerState.deck];
-        newState[owner] = ownerState;
+        const updatedOwnerState = { ...newState[owner] };
+        updatedOwnerState.deck = [returnedCard, ...updatedOwnerState.deck];
+        newState[owner] = updatedOwnerState;
 
         const passiveCardName = `${redirectPassiveCard.protocol}-${redirectPassiveCard.value}`;
         newState = log(newState, actor, `${passiveCardName}: ${ownerName} ${cardName} is put on top of their deck face-down instead of returning to hand.`);
+    } else if (effectiveDestination === 'actor_hand' && actor !== owner) {
+        // Steal: Add to actor's hand (the one taking the card)
+        const destinationState = { ...newState[destinationPlayer] };
+        destinationState.hand = [...destinationState.hand, { ...card, isFaceUp: true, isRevealed: false }];
+        newState[destinationPlayer] = destinationState;
+        newState = log(newState, actor, `${actorName} takes ${ownerName} ${cardName} and puts it into their hand.`);
     } else {
-        // Normal return: Add to hand
-        ownerState.hand = [...ownerState.hand, { ...card, isFaceUp: true, isRevealed: false }];
-        newState[owner] = ownerState;
+        // Normal return: Add to owner's hand
+        const destinationState = { ...newState[destinationPlayer] };
+        destinationState.hand = [...destinationState.hand, { ...card, isFaceUp: true, isRevealed: false }];
+        newState[destinationPlayer] = destinationState;
         newState = log(newState, actor, `${actorName} returns ${ownerName} ${cardName} to their hand.`);
     }
 

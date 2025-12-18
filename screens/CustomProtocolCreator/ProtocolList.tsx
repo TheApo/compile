@@ -10,6 +10,7 @@ import { CustomProtocolDefinition, CardPattern } from '../../types/customProtoco
 const SYSTEM_PROTOCOL_IDS = [
     'anarchy-custom-001',
     'apathy_custom',
+    'assimilation-custom-001',
     'chaos_custom_1',
     'clarity-custom-001',
     'corruption-custom-001',

@@ -154,7 +154,15 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 const cardWord = params.count === 1 ? 'the top card' : `the top ${params.count} cards`;
                 text += `${optionalPrefix}Draw ${cardWord} of your opponent's deck.`;
             } else if (params.target === 'opponent') {
-                text += `Opponent draws ${params.count} card${params.count !== 1 ? 's' : ''}.`;
+                // Opponent draws - check which deck they draw from
+                if (params.source === 'own_deck') {
+                    // Assimilation-4: "Your opponent draws the top card of your deck."
+                    const cardWord = params.count === 1 ? 'the top card' : `the top ${params.count} cards`;
+                    text += `Your opponent draws ${cardWord} of your deck.`;
+                } else {
+                    // Default: opponent draws from their own deck
+                    text += `Opponent draws ${params.count} card${params.count !== 1 ? 's' : ''}.`;
+                }
             } else {
                 const drawVerb = params.optional ? 'draw' : 'Draw';
                 text += `${optionalPrefix}${drawVerb} ${params.count} card${params.count !== 1 ? 's' : ''}.`;
@@ -652,17 +660,21 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 break;
             }
 
+            // Handle discardTo (into their trash)
+            const discardTo = params.discardTo || 'own_trash';
+            const intoTheirTrash = discardTo === 'opponent_trash' ? ' into their trash' : '';
+
             if (params.actor === 'opponent') {
                 if (params.count === 'all') {
-                    mainText = `Opponent discards their hand.`;
+                    mainText = `Opponent discards their hand${intoTheirTrash}.`;
                 } else if (params.random) {
                     const cardWord = params.count === 1 ? 'card' : 'cards';
-                    mainText = `Your opponent discards ${params.count} random ${cardWord}.`;
+                    mainText = `Your opponent discards ${params.count} random ${cardWord}${intoTheirTrash}.`;
                 } else {
-                    mainText = `Your opponent discards ${countText}.`;
+                    mainText = `Your opponent discards ${countText}${intoTheirTrash}.`;
                 }
             } else {
-                mainText = `${mayPrefix} ${countText}.`;
+                mainText = `${mayPrefix} ${countText}${intoTheirTrash}.`;
             }
             break;
         }
@@ -697,6 +709,8 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
 
             const owner = params.targetFilter?.owner || 'any';
             const position = params.targetFilter?.position || 'uncovered';
+            const faceState = params.targetFilter?.faceState;
+            const destination = params.destination || 'owner_hand';
 
             // Build position text: 'any' = "covered or uncovered ", 'covered' = "covered ", default (uncovered) = ""
             let positionText = '';
@@ -706,8 +720,16 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 positionText = 'covered ';
             }
 
-            // Build count text with position included
-            const countText = params.count === 'all' ? `all ${positionText}cards` : params.count === 1 ? `1 ${positionText}card` : `${params.count} ${positionText}cards`;
+            // Build face state text
+            let faceStateText = '';
+            if (faceState === 'face_down') {
+                faceStateText = 'face-down ';
+            } else if (faceState === 'face_up') {
+                faceStateText = 'face-up ';
+            }
+
+            // Build count text with position and face state included
+            const countText = params.count === 'all' ? `all ${positionText}${faceStateText}cards` : params.count === 1 ? `1 ${positionText}${faceStateText}card` : `${params.count} ${positionText}${faceStateText}cards`;
 
             let ownerText = '';
             if (owner === 'own') {
@@ -716,7 +738,14 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 ownerText = " of your opponent's";
             }
 
-            // Handle optional return (Psychic-4: "You may return 1 of your opponent's cards")
+            // Handle steal (destination: 'actor_hand') - "Put X into your hand" instead of "Return X"
+            if (destination === 'actor_hand' && owner === 'opponent') {
+                const optionalPrefix = params.optional ? 'You may p' : 'P';
+                mainText = `${optionalPrefix}ut ${countText}${ownerText}${laneText} into your hand.`;
+                break;
+            }
+
+            // Handle optional return
             const optionalPrefix = params.optional ? 'You may r' : 'R';
             mainText = `${optionalPrefix}eturn ${countText}${ownerText}${laneText}.`;
             break;
@@ -751,7 +780,9 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (params.source === 'trash') {
                 const count = params.count || 1;
                 const cardWord = count === 1 ? 'card' : 'cards';
-                mainText = `Play ${count} ${cardWord} from your trash.`;
+                const sourceOwner = params.sourceOwner || 'own';
+                const sourceText = sourceOwner === 'opponent' ? "your opponent's trash" : 'your trash';
+                mainText = `Play ${count} ${cardWord} from ${sourceText}.`;
                 break;
             }
 
@@ -759,11 +790,15 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             const count = params.count || 1;
             // Only specify face state if explicitly set; undefined means player chooses
             const faceState = params.faceDown === true ? ' face-down' : params.faceDown === false ? ' face-up' : '';
+            // NEW: sourceOwner determines whose deck/trash to use
+            const sourceOwner = params.sourceOwner || 'own';
+            // NEW: targetBoard determines on which board the card lands
+            const targetBoard = params.targetBoard || 'own';
 
             let actorText = '';
             let cardPart = '';
 
-            // NEW: Handle valueFilter for Clarity-2 ("Play 1 card with a value of 1")
+            // NEW: Handle valueFilter ("Play 1 card with a value of 1")
             const valueFilterText = params.valueFilter?.equals !== undefined
                 ? ` with a value of ${params.valueFilter.equals}`
                 : '';
@@ -771,17 +806,26 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
             if (actor === 'opponent') {
                 actorText = 'Your opponent plays';
                 if (params.source === 'deck') {
-                    cardPart = count === 1 ? 'the top card of their deck' : `${count} cards from their deck`;
+                    // Handle sourceOwner for opponent actor
+                    if (sourceOwner === 'opponent') {
+                        cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
+                    } else {
+                        cardPart = count === 1 ? 'the top card of their deck' : `${count} cards from their deck`;
+                    }
                 } else {
                     cardPart = count === 1 ? `a card${valueFilterText} from their hand` : `${count} cards${valueFilterText} from their hand`;
                 }
             } else {
                 actorText = params.optional ? 'You may play' : 'Play';
                 if (params.source === 'deck') {
-                    cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
+                    // Handle sourceOwner for self actor
+                    if (sourceOwner === 'opponent') {
+                        cardPart = count === 1 ? "the top card of your opponent's deck" : `${count} cards from your opponent's deck`;
+                    } else {
+                        cardPart = count === 1 ? 'the top card of your deck' : `${count} cards from your deck`;
+                    }
                 } else {
-                    // Speed-0: Simple "Play 1 card" without "from your hand"
-                    // Clarity-2: "Play 1 card with a value of 1"
+                    // Simple "Play 1 card" without "from your hand"
                     cardPart = count === 1 ? `1 card${valueFilterText}` : `${count} cards${valueFilterText}`;
                 }
             }
@@ -834,6 +878,11 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 }
             } else if (params.destinationRule?.type === 'specific_lane') {
                 text += ' in this line';
+            }
+
+            // Handle targetBoard (on opponent's side)
+            if (targetBoard === 'opponent') {
+                text += " on your opponent's side";
             }
 
             mainText = text + '.';
@@ -1373,9 +1422,16 @@ export const generateEffectText = (effects: EffectDefinition[]): string => {
             return `<div><span class='emphasis'>After your opponent draws cards:</span> ${summary}</div>`;
         }
 
-        // War-0: "After you refresh: You may flip this card."
+        // After refresh triggers - support reactiveTriggerActor: self/opponent/any
         if (trigger === 'after_refresh') {
-            return `<div><span class='emphasis'>After you refresh:</span> ${summary}</div>`;
+            const triggerActor = effect.reactiveTriggerActor || 'self';
+            let prefix = 'After you refresh:';
+            if (triggerActor === 'opponent') {
+                prefix = 'After your opponent refreshes:';
+            } else if (triggerActor === 'any') {
+                prefix = 'After a player refreshes:';
+            }
+            return `<div><span class='emphasis'>${prefix}</span> ${summary}</div>`;
         }
 
         // War-1: "After your opponent refreshes: Discard any number of cards. Refresh."

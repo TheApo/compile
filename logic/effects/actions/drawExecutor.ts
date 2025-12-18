@@ -336,9 +336,24 @@ export function executeDrawEffect(
         return { newState };
     }
 
-    // NEW: Handle source = 'opponent_deck' (Love-1: "Draw the top card of your opponent's deck")
-    const source = params.source || 'own_deck';
-    const sourcePlayer = source === 'opponent_deck' ? context.opponent : drawingPlayer;
+    // Handle source for draw effects
+    // When source is explicitly specified:
+    // - 'own_deck' = card owner's deck (the player who triggered this effect)
+    // - 'opponent_deck' = opponent of card owner's deck
+    // When no source is specified: use the drawing player's own deck
+    // This is important for:
+    // - Assimilation-4: "Your opponent draws the top card of your deck" (source: own_deck, target: opponent)
+    // - Chaos/Anarchy: "Opponent draws 1 card" (no source, target: opponent) → from opponent's own deck
+    const source = params.source;
+    let sourcePlayer: Player;
+    if (source === 'opponent_deck') {
+        sourcePlayer = context.opponent;
+    } else if (source === 'own_deck') {
+        sourcePlayer = cardOwner;
+    } else {
+        // No source specified - draw from the drawing player's own deck
+        sourcePlayer = drawingPlayer;
+    }
 
     // NEW: Handle all_matching with valueFilter - draw SPECIFIC cards from deck
     let drawnCards: any[];
@@ -463,6 +478,21 @@ export function executeDrawEffect(
 
     const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
 
+    // Check if no cards were drawn (empty deck)
+    if (newCards.length === 0) {
+        // Log that no cards could be drawn because deck is empty
+        if (source === 'opponent_deck') {
+            const opponentName = sourcePlayer === 'player' ? "Player's" : "Opponent's";
+            newState = log(newState, drawingPlayer, `${opponentName} deck is empty. No cards drawn.`);
+        } else if (source === 'own_deck' && drawingPlayer !== cardOwner) {
+            const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
+            newState = log(newState, drawingPlayer, `${ownerName} deck is empty. No cards drawn.`);
+        } else {
+            newState = log(newState, drawingPlayer, `Deck is empty. No cards drawn.`);
+        }
+        return { newState };
+    }
+
     // Format the drawn card names for log - only show to player who drew them
     const drawnCardsText = (newCards.length > 0 && drawingPlayer === 'player')
         ? ` (${newCards.map(c => `${c.protocol}-${c.value}`).join(', ')})`
@@ -471,6 +501,11 @@ export function executeDrawEffect(
     if (source === 'opponent_deck') {
         const opponentName = sourcePlayer === 'player' ? "Player's" : "Opponent's";
         newState = log(newState, drawingPlayer, `${playerName} draws the top ${count === 1 ? 'card' : `${count} cards`} of ${opponentName} deck${drawnCardsText}.`);
+    } else if (source === 'own_deck' && drawingPlayer !== cardOwner) {
+        // Assimilation-4: "Your opponent draws the top card of your deck"
+        // source = 'own_deck' means cardOwner's deck, drawingPlayer = opponent
+        const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
+        newState = log(newState, drawingPlayer, `${playerName} draws the top ${count === 1 ? 'card' : `${count} cards`} of ${ownerName} deck${drawnCardsText}.`);
     } else {
         newState = log(newState, drawingPlayer, `${playerName} draws ${count} card${count !== 1 ? 's' : ''}${drawnCardsText}.`);
     }

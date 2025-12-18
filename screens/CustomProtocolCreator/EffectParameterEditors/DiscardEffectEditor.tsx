@@ -134,6 +134,25 @@ export const DiscardEffectEditor: React.FC<{ params: DiscardEffectParams; onChan
                 </label>
             )}
 
+            {/* Discard destination - for Assimilation-1 Bottom */}
+            {source === 'hand' && (
+                <label>
+                    Discard to
+                    <select
+                        value={params.discardTo || 'own_trash'}
+                        onChange={e => onChange({ ...params, discardTo: e.target.value as 'own_trash' | 'opponent_trash' })}
+                    >
+                        <option value="own_trash">Own trash (default)</option>
+                        <option value="opponent_trash">Opponent's trash</option>
+                    </select>
+                    {params.discardTo === 'opponent_trash' && (
+                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
+                            Card goes to opponent's trash instead of your own.
+                        </small>
+                    )}
+                </label>
+            )}
+
         </div>
     );
 };

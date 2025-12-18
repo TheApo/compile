@@ -29,6 +29,8 @@ export function executeReturnEffect(
     const count = params.count === 'all' ? 99 : (params.count || 1);
     const owner = params.targetFilter?.owner || 'any';
     const position = params.targetFilter?.position || 'uncovered';
+    const faceState = params.targetFilter?.faceState;  // 'face_up' | 'face_down' | undefined
+    const destination = params.destination || 'owner_hand';  // 'owner_hand' | 'actor_hand'
 
     // Advanced Conditional Checks - skip effect if condition not met
     if (params.advancedConditional?.type === 'empty_hand') {
@@ -80,6 +82,12 @@ export function executeReturnEffect(
                 if (position === 'uncovered' && !isUncovered) continue;
                 if (position === 'covered' && isUncovered) continue;
                 // position === 'any' allows both
+
+                // Check face state filter (for Assimilation-0: face-down only)
+                if (faceState === 'face_up' && !c.isFaceUp) continue;
+                if (faceState === 'face_down' && c.isFaceUp) continue;
+                // faceState undefined allows both
+
                 availableCards.push({ card: c, isUncovered });
             }
         }
@@ -108,7 +116,8 @@ export function executeReturnEffect(
         sourceCardId: card.id,
         actor: cardOwner,
         targetOwner: owner, // Pass owner filter to UI
-        targetFilter: params.targetFilter, // Pass full targetFilter including position
+        targetFilter: params.targetFilter, // Pass full targetFilter including position and faceState
+        destination: destination, // 'owner_hand' or 'actor_hand' (for stealing)
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,

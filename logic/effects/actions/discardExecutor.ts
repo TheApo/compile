@@ -388,6 +388,8 @@ export function executeDiscardEffect(
         conditionalType: conditional?.type,
         // Save indent level for correct log formatting when follow-up effects are queued
         _savedIndentLevel: state._logIndentLevel,
+        // NEW: Destination trash (default: own_trash, 'opponent_trash' for Assimilation-1)
+        discardTo: params.discardTo || 'own_trash',
     } as any;
 
     return { newState };

@@ -169,14 +169,25 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
 export function refreshHandForPlayer(state: GameState, player: Player): GameState {
     const playerState = state[player];
     const cardsToDraw = 5 - playerState.hand.length;
-    if (cardsToDraw <= 0) return state;
+
+    if (cardsToDraw <= 0) {
+        // Even if no cards were drawn, the refresh action happened
+        // Trigger after_refresh reactive effects (Assimilation-1, etc.)
+        const refreshReactiveResult = processReactiveEffects(state, 'after_refresh', { player });
+        return refreshReactiveResult.newState;
+    }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     // CRITICAL: Log BEFORE drawing, because drawForPlayer may trigger reactive effects
     // (like Spirit-3's after_draw) that change the log context. Logging after would
     // incorrectly show the reactive effect's context instead of the refresh context.
     let newState = log(state, player, `${playerName} refreshes their hand, drawing ${cardsToDraw} card(s).`);
-    return drawForPlayer(newState, player, cardsToDraw);
+    newState = drawForPlayer(newState, player, cardsToDraw);
+
+    // CRITICAL: Trigger after_refresh reactive effects AFTER the draw is complete
+    // This handles cards like Assimilation-1 that trigger "After a player refreshes"
+    const refreshReactiveResult = processReactiveEffects(newState, 'after_refresh', { player });
+    return refreshReactiveResult.newState;
 }
 
 

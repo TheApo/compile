@@ -4300,6 +4300,116 @@ export const scenario82_TimeAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 83: Assimilation Custom Playground
+ * All Assimilation cards on hand - steal cards, play from opponent's deck
+ */
+export const scenario83_AssimilationCustomPlayground: TestScenario = {
+    name: "Assimilation Test Playground",
+    description: "All Assimilation cards on hand - steal, draw from opponent, play to opponent's board",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Assimilation', 'Clarity', 'Life'];
+        const opponentProtocols = ['Fire', 'Water', 'Death'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'player', 'action');
+
+        // Player hand: all Assimilation cards
+        const playerHand = [
+            createCard('Assimilation', 0),
+            createCard('Assimilation', 1),
+            createCard('Assimilation', 2),
+            createCard('Assimilation', 4),
+            createCard('Assimilation', 5),
+            createCard('Assimilation', 6),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+            },
+        };
+
+        // Place face-down cards on opponent's board for Assimilation-0 (steal face-down)
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 3, false)); // face-down
+        newState = placeCard(newState, 'opponent', 0, createCard('Fire', 2, false)); // face-down, covered
+        newState = placeCard(newState, 'opponent', 1, createCard('Water', 4, true));  // face-up (not stealable)
+        newState = placeCard(newState, 'opponent', 2, createCard('Death', 1, false)); // face-down
+
+        // Place some cards on player's board for testing
+        newState = placeCard(newState, 'player', 0, createCard('Clarity', 0, true));
+        newState = placeCard(newState, 'player', 1, createCard('Life', 1, true));
+
+        // Build remaining deck (needs cards for play from deck effects)
+        const usedCards = [...playerHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+/**
+ * Scenario 84: Assimilation AI Test
+ * AI plays with Assimilation protocol - tests steal and cross-board play
+ */
+export const scenario84_AssimilationAITest: TestScenario = {
+    name: "Assimilation AI Test",
+    description: "AI plays Assimilation cards - test steal and play to opponent's board",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Fire', 'Water', 'Death'];
+        const opponentProtocols = ['Assimilation', 'Clarity', 'Life'];
+
+        let newState = initScenarioBase(state, playerProtocols, opponentProtocols, 'opponent', 'action');
+
+        // Player gets some basic cards
+        const playerHand = [
+            createCard('Fire', 2),
+            createCard('Water', 3),
+        ];
+
+        // Opponent (AI) hand: all Assimilation cards
+        const opponentHand = [
+            createCard('Assimilation', 0),
+            createCard('Assimilation', 1),
+            createCard('Assimilation', 2),
+            createCard('Assimilation', 4),
+            createCard('Assimilation', 5),
+            createCard('Assimilation', 6),
+        ];
+
+        newState = {
+            ...newState,
+            player: {
+                ...newState.player,
+                hand: playerHand,
+            },
+            opponent: {
+                ...newState.opponent,
+                hand: opponentHand,
+            },
+        };
+
+        // Place face-down cards on player's board for AI to steal
+        newState = placeCard(newState, 'player', 0, createCard('Fire', 5, false)); // face-down - high value target
+        newState = placeCard(newState, 'player', 1, createCard('Water', 4, true));  // face-up (not stealable)
+        newState = placeCard(newState, 'player', 2, createCard('Death', 2, false)); // face-down
+
+        // Place some cards on opponent's (AI) board
+        newState = placeCard(newState, 'opponent', 0, createCard('Clarity', 1, true));
+
+        // Build remaining decks
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4383,4 +4493,6 @@ export const allScenarios: TestScenario[] = [
     scenario80_WarAITest,
     scenario81_TimeCustomPlayground,
     scenario82_TimeAITest,
+    scenario83_AssimilationCustomPlayground,
+    scenario84_AssimilationAITest,
 ];
