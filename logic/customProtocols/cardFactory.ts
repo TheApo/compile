@@ -744,26 +744,36 @@ export const getEffectSummary = (effect: EffectDefinition): string => {
                 faceStateText = 'face-up ';
             }
 
-            // Build count text with position and face state included
-            const countText = params.count === 'all' ? `all ${positionText}${faceStateText}cards` : params.count === 1 ? `1 ${positionText}${faceStateText}card` : `${params.count} ${positionText}${faceStateText}cards`;
+            // Build count and cards text with proper grammar
+            // "1 of your cards" vs "1 card" (when no owner specified)
+            // "all of your opponent's cards" vs "all cards"
+            const count = params.count;
+            const cardWord = count === 1 ? 'card' : 'cards';
 
-            let ownerText = '';
+            let countAndCardsText = '';
             if (owner === 'own') {
-                ownerText = ' of your';
+                // "1 of your cards", "all of your face-down cards"
+                const countPart = count === 'all' ? 'all' : count;
+                countAndCardsText = `${countPart} of your ${positionText}${faceStateText}${cardWord}`;
             } else if (owner === 'opponent') {
-                ownerText = " of your opponent's";
+                // "1 of your opponent's cards", "all of your opponent's covered cards"
+                const countPart = count === 'all' ? 'all' : count;
+                countAndCardsText = `${countPart} of your opponent's ${positionText}${faceStateText}${cardWord}`;
+            } else {
+                // No owner specified: "1 card", "all covered cards"
+                countAndCardsText = count === 'all' ? `all ${positionText}${faceStateText}cards` : `${count} ${positionText}${faceStateText}${cardWord}`;
             }
 
             // Handle steal (destination: 'actor_hand') - "Put X into your hand" instead of "Return X"
             if (destination === 'actor_hand' && owner === 'opponent') {
                 const optionalPrefix = params.optional ? 'You may p' : 'P';
-                mainText = `${optionalPrefix}ut ${countText}${ownerText}${laneText} into your hand.`;
+                mainText = `${optionalPrefix}ut ${countAndCardsText}${laneText} into your hand.`;
                 break;
             }
 
             // Handle optional return
             const optionalPrefix = params.optional ? 'You may r' : 'R';
-            mainText = `${optionalPrefix}eturn ${countText}${ownerText}${laneText}.`;
+            mainText = `${optionalPrefix}eturn ${countAndCardsText}${laneText}.`;
             break;
         }
 

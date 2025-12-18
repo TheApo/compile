@@ -132,7 +132,11 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         stateWithCommitted = { ...stateWithCommitted, _logIndentLevel: 0 };
     } else {
         // For effect plays, increase indent for the play message itself
-        stateWithCommitted = increaseLogIndent(stateWithCommitted);
+        // CRITICAL: But NOT for reactive effects (phase = 'after') - they've already increased indent
+        // in reactiveEffectProcessor.ts when the trigger was processed
+        if (stateWithCommitted._currentPhaseContext !== 'after') {
+            stateWithCommitted = increaseLogIndent(stateWithCommitted);
+        }
     }
 
     const playerName = player === 'player' ? 'Player' : 'Opponent';

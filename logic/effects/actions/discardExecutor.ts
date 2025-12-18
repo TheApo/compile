@@ -234,9 +234,13 @@ export function executeDiscardEffect(
         // CRITICAL: Limit to actual hand size (like original Plague-2)
         count = Math.min(rawCount, state[actor].hand.length);
 
-        // If count is 0 or negative, skip the discard
+        // If count is 0 or negative, skip the discard WITH LOG MESSAGE
         if (count <= 0) {
-            return { newState: state };
+            const actorName = actor === 'player' ? 'Player' : 'Opponent';
+            let newState = log(state, actor, `${actorName} has no cards to discard - effect skipped.`);
+            (newState as any)._effectSkippedNoTargets = true;
+            (newState as any)._discardContext = { discardedCount: 0 };
+            return { newState };
         }
     }
 
