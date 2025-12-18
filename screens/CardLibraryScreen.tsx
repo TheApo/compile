@@ -32,7 +32,6 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
   // System protocols are identified by their category (Main 1, Main 2, Aux 1, Fan-Content)
   // User-created protocols have category "Custom"
   const cards = useMemo(() => {
-    console.log('[Card Library] Loading cards, refreshKey:', refreshKey);
     const customEnabled = isCustomProtocolEnabled();
     const allCustomCards = getAllCustomProtocolCards();
 
@@ -48,7 +47,6 @@ export function CardLibraryScreen({ onBack }: CardLibraryScreenProps) {
       return isSystem || customEnabled;
     });
 
-    console.log('[Card Library] Total cards:', filteredCards.length, '(custom enabled:', customEnabled, ')');
     return filteredCards;
   }, [refreshKey]);
 

@@ -5,8 +5,8 @@
  * NORMAL AI - Plays like a human player
  * - Makes good strategic decisions
  * - No memory of revealed cards
- * - 20% chance to make suboptimal moves for realism
- * - Balanced between Easy and Hard
+ * - 5% chance to make suboptimal moves for slight unpredictability
+ * - Challenging but beatable
  */
 
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
@@ -73,12 +73,12 @@ const getCardThreat = (card: PlayedCard, owner: Player, state: GameState): numbe
     return threat;
 };
 
-// Helper: Sometimes make suboptimal decisions (20% chance)
-const shouldMakeMistake = (): boolean => Math.random() < 0.20;
+// Helper: Sometimes make suboptimal decisions (5% chance - reduced from 20% for smarter play)
+const shouldMakeMistake = (): boolean => Math.random() < 0.05;
 
 // Helper: Add some randomness to scores for human-like play
 const addNoise = (score: number): number => {
-    return score + (Math.random() * 10 - 5); // ±5 noise
+    return score + (Math.random() * 4 - 2); // ±2 noise (reduced from ±5)
 };
 
 // Type for targetFilter with all possible options
@@ -440,9 +440,15 @@ const getBestMove = (state: GameState): AIAction => {
                     if (resultingValue > state.player.laneValues[i]) {
                         score = 180 + resultingValue * 5;
                         reason += ` [Blocks compile!]`;
+                    } else if (resultingValue === state.player.laneValues[i]) {
+                        // Equal value = neither can compile = we blocked them!
+                        score = 160 + resultingValue * 3;
+                        reason += ` [Blocks compile with tie!]`;
                     } else {
-                        score = -150; // Bad move
-                        reason += ` [Fails to block]`;
+                        // MASSIVE PENALTY: Card goes to TRASH immediately when player compiles!
+                        // This is a complete waste of a card
+                        score = -500;
+                        reason += ` [WASTE: Card goes to trash when player compiles!]`;
                     }
                 } else {
                     // PRIMARY GOAL: Build lane value toward compile (10+)
@@ -603,8 +609,9 @@ const getBestMove = (state: GameState): AIAction => {
                         score = 150; // OK to block, but face-up blocking is better
                         reason += ` [Blocks compile: ${resultingValue} vs ${state.player.laneValues[i]}]`;
                     } else {
-                        score = -200; // Can't even block - terrible
-                        reason += ` [Fails to block]`;
+                        // MASSIVE PENALTY: Card goes to TRASH immediately when player compiles!
+                        score = -500;
+                        reason += ` [WASTE: Card goes to trash when player compiles!]`;
                     }
                 }
                 // PRIORITY 2: Face-down would allow us to COMPILE - THIS IS VERY GOOD!
@@ -621,9 +628,9 @@ const getBestMove = (state: GameState): AIAction => {
                     reason += ` [BLOCK COMPILE: Face-down reaches ${resultingValue} vs player ${state.player.laneValues[i]}]`;
                 }
                 else if (!state.opponent.compiled[i] && state.player.laneValues[i] >= 10 && resultingValue < state.player.laneValues[i]) {
-                    // Player has 10+ and we CAN'T catch up - WASTED CARD! Player will still compile!
-                    score = -200;
-                    reason += ` [WASTED: ${resultingValue} vs player ${state.player.laneValues[i]} - player still compiles!]`;
+                    // MASSIVE PENALTY: Card goes to TRASH immediately when player compiles!
+                    score = -500;
+                    reason += ` [WASTE: Card goes to trash when player compiles!]`;
                 }
                 // PRIORITY 4: Face-down in FOCUS LANE to build toward compile - this is GOOD!
                 // If this is our focus lane and we're building toward 10, face-down is smart
@@ -757,8 +764,11 @@ const getBestMove = (state: GameState): AIAction => {
         return true;
     };
 
-    // 20% chance to pick second-best move for human-like play
-    if (shouldMakeMistake() && possibleMoves.length > 1 && possibleMoves[1].score > 0) {
+    // 5% chance to pick second-best move for slight unpredictability
+    // EXCEPTION: Never apply randomness to blocking moves - blocking is too critical!
+    const bestMoveIsBlocking = possibleMoves[0]?.reason?.includes('Blocks compile') ||
+                               possibleMoves[0]?.reason?.includes('BLOCK COMPILE');
+    if (!bestMoveIsBlocking && shouldMakeMistake() && possibleMoves.length > 1 && possibleMoves[1].score > 0) {
         if (validateMove(possibleMoves[1].move)) {
             return possibleMoves[1].move;
         }
@@ -1589,7 +1599,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 // Sort by score descending and pick best
                 lanePriorities.sort((a, b) => b.score - a.score);
 
-                // Add some randomness - 20% chance to pick suboptimally
+                // Add some randomness - 5% chance to pick suboptimally
                 if (shouldMakeMistake() && lanePriorities.length > 1) {
                     const randomIdx = Math.floor(Math.random() * lanePriorities.length);
                     return { type: 'selectLane', laneIndex: lanePriorities[randomIdx].laneIdx };
@@ -2432,7 +2442,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             scored.sort((a, b) => b.score - a.score);
 
-            // 20% chance to make suboptimal choice
+            // 5% chance to make suboptimal choice
             if (shouldMakeMistake() && scored.length > 1) {
                 const randomIdx = Math.floor(Math.random() * scored.length);
                 return { type: 'flipCard', cardId: scored[randomIdx].card.id };
@@ -2833,8 +2843,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 else if (desc.includes('flip')) score += 40;
                 else score += 20;
 
-                // Add some randomness (20% chance to pick suboptimally)
-                if (Math.random() < 0.2) {
+                // Add some randomness (5% chance to pick suboptimally - reduced from 20%)
+                if (Math.random() < 0.05) {
                     score = Math.random() * 50;
                 }
 
@@ -2879,8 +2889,8 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 }
             }
 
-            // 20% chance to pick randomly for unpredictability
-            if (Math.random() < 0.2) {
+            // 5% chance to pick randomly for unpredictability (reduced from 20%)
+            if (Math.random() < 0.05) {
                 bestValue = Math.floor(Math.random() * 6);
             }
 

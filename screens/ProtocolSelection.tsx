@@ -64,16 +64,13 @@ export function ProtocolSelection({ onBack, onStartGame }: ProtocolSelectionProp
       return isSystem || customEnabled;
     });
 
-    console.log('[Protocol Selection] Total cards loaded:', filteredCards.length, '(custom enabled:', customEnabled, ')');
     return filteredCards;
   }, [refreshKey]);
 
   // Get unique protocols from merged cards
   const uniqueProtocols = useMemo(() => {
     const protocolSet = new Set(cards.map(card => card.protocol));
-    const protocols = Array.from(protocolSet).sort();
-    console.log('[Protocol Selection] Unique protocols:', protocols);
-    return protocols;
+    return Array.from(protocolSet).sort();
   }, [cards]);
 
   // Get all unique categories dynamically
