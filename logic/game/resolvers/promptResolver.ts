@@ -351,7 +351,19 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
                 };
 
                 const followUpResult = executeCustomEffect(outerSourceCard, outerFollowUpLaneIndex || 0, finalState, outerContext, outerFollowUpEffect);
-                return followUpResult.newState;
+
+                // CRITICAL FIX: If the turn was restored during execution (by handleUncoverEffect),
+                // but _interruptedTurn is still set, clear it to prevent inconsistent state.
+                let resultState = followUpResult.newState;
+                if (resultState._interruptedTurn && !resultState.actionRequired) {
+                    resultState = {
+                        ...resultState,
+                        turn: resultState._interruptedTurn,
+                        _interruptedTurn: undefined,
+                        _interruptedPhase: undefined,
+                    };
+                }
+                return resultState;
             }
         }
 
@@ -402,7 +414,21 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
                 };
 
                 const followUpResult = executeCustomEffect(outerSourceCard, resolvedLaneIndex || 0, newState, outerContext, outerFollowUpEffect);
-                return followUpResult.newState;
+
+                // CRITICAL FIX: If the turn was restored during execution (by handleUncoverEffect),
+                // but _interruptedTurn is still set, clear it to prevent inconsistent state.
+                // This can happen when the outerFollowUpEffect triggers multiple uncovers in sequence.
+                let finalState = followUpResult.newState;
+                if (finalState._interruptedTurn && !finalState.actionRequired) {
+                    // Turn should have been restored but wasn't cleared - do it now
+                    finalState = {
+                        ...finalState,
+                        turn: finalState._interruptedTurn,
+                        _interruptedTurn: undefined,
+                        _interruptedPhase: undefined,
+                    };
+                }
+                return finalState;
             }
         }
 

@@ -505,6 +505,8 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             if (result.newState._interruptedTurn) {
                 result.newState.turn = result.newState._interruptedTurn;
                 result.newState._interruptedTurn = undefined;
+                // CRITICAL: Also clear _interruptedPhase to ensure consistent state
+                result.newState._interruptedPhase = undefined;
             }
         }
 

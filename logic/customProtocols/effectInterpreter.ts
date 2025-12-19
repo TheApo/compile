@@ -96,6 +96,49 @@ function executeAutoCompileEffect(
         };
     }
 
+    // CRITICAL: Handle deleteAllInLane (Unity-1: "compile this protocol and delete all cards in this line")
+    if (params.deleteAllInLane) {
+        // Delete ALL cards in this lane (both player's and opponent's)
+        const opponent = cardOwner === 'player' ? 'opponent' : 'player';
+
+        // Get all cards in the lane before deleting
+        const playerCardsInLane = [...newState[cardOwner].lanes[laneIndex]];
+        const opponentCardsInLane = [...newState[opponent].lanes[laneIndex]];
+
+        // Move cards to discard (delete = move to trash)
+        const playerCardsToDiscard = playerCardsInLane.map(({ id, isFaceUp, ...c }) => c);
+        const opponentCardsToDiscard = opponentCardsInLane.map(({ id, isFaceUp, ...c }) => c);
+
+        // Update both players' lanes and discard piles
+        newState = {
+            ...newState,
+            [cardOwner]: {
+                ...newState[cardOwner],
+                lanes: [
+                    ...newState[cardOwner].lanes.slice(0, laneIndex),
+                    [], // Empty the lane
+                    ...newState[cardOwner].lanes.slice(laneIndex + 1)
+                ],
+                discard: [...newState[cardOwner].discard, ...playerCardsToDiscard]
+            },
+            [opponent]: {
+                ...newState[opponent],
+                lanes: [
+                    ...newState[opponent].lanes.slice(0, laneIndex),
+                    [], // Empty the lane
+                    ...newState[opponent].lanes.slice(laneIndex + 1)
+                ],
+                discard: [...newState[opponent].discard, ...opponentCardsToDiscard]
+            }
+        };
+
+        // Log the deletion
+        const totalDeleted = playerCardsInLane.length + opponentCardsInLane.length;
+        if (totalDeleted > 0) {
+            newState = log(newState, cardOwner, `All ${totalDeleted} cards in this line deleted.`);
+        }
+    }
+
     return { newState };
 }
 
@@ -550,7 +593,11 @@ export function executeCustomEffect(
             break;
 
         case 'discard':
-            result = executeDiscardEffect(card, laneIndex, state, context, params);
+            // CRITICAL: Pass _conditional for follow-up effects (Plague-2: "Discard X. Your opponent discards X+1")
+            result = executeDiscardEffect(card, laneIndex, state, context, {
+                ...params,
+                _conditional: effectDef.conditional
+            });
             break;
 
         case 'shift':

@@ -598,9 +598,15 @@ export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): Ga
 
     let newState = discardCards(prevState, cardIds, player);
 
-    // For custom protocols (variable or batch), use handleChainedEffectsOnDiscard to process followUpEffect
+    // CRITICAL FIX: For variableCount and batch discards, discardCards() already handles
+    // the followUpEffect in its else branch (lines 415-448). We should NOT call
+    // handleChainedEffectsOnDiscard here because:
+    // 1. discardCards() already processed the followUpEffect from originalAction
+    // 2. discardCards() cleared actionRequired, so handleChainedEffectsOnDiscard
+    //    would find null and skip the followUp entirely
+    // Just return the state from discardCards - it already did all the work!
     if ((isVariableCount || isBatchDiscard) && sourceCardId) {
-        return handleChainedEffectsOnDiscard(newState, player, undefined, sourceCardId);
+        return newState;
     }
 
     // For batch discard without sourceCardId (e.g., hand limit or other), just return

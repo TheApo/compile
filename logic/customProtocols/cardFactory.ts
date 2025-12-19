@@ -143,6 +143,17 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
                 break;
             }
 
+            // NEW: Protocol Filter for Draw (Unity-4: "If your hand is empty, reveal your deck, draw all Unity cards from it, and shuffle your deck.")
+            // CRITICAL: This check must come BEFORE the generic empty_hand check below!
+            if (params.protocolFilter?.type === 'same_as_source') {
+                if (params.advancedConditional?.type === 'empty_hand') {
+                    mainText = `If your hand is empty, reveal your deck, draw all ${protocolName} cards from it, and shuffle your deck.`;
+                } else {
+                    mainText = `Reveal your deck and draw all ${protocolName} cards.`;
+                }
+                break;
+            }
+
             // NEW: Advanced Conditional - Empty Hand (Courage-0)
             if (params.advancedConditional?.type === 'empty_hand') {
                 const count = params.count || 1;
@@ -161,16 +172,6 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
             if (params.advancedConditional?.type === 'same_protocol_on_field') {
                 const count = params.count || 1;
                 mainText = `If there is another face-up ${protocolName} card in the field, draw ${count} card${count !== 1 ? 's' : ''}.`;
-                break;
-            }
-
-            // NEW: Protocol Filter for Draw (Unity-4: "If your hand is empty, reveal your deck, draw all Unity cards from it, and shuffle your deck.")
-            if (params.protocolFilter?.type === 'same_as_source') {
-                if (params.advancedConditional?.type === 'empty_hand') {
-                    mainText = `If your hand is empty, reveal your deck, draw all ${protocolName} cards from it, and shuffle your deck.`;
-                } else {
-                    mainText = `Reveal your deck and draw all ${protocolName} cards.`;
-                }
                 break;
             }
 
