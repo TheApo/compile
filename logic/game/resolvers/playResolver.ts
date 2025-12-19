@@ -10,6 +10,7 @@ import { recalculateAllLaneValues } from '../stateManager';
 import { log, setLogSource, setLogPhase, increaseLogIndent } from '../../utils/log';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { canPlayCard as checkPassiveRuleCanPlay, hasAnyProtocolPlayRule, hasRequireNonMatchingProtocolRule, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
+import { rememberAIPlayedCard } from '../../ai/cardMemory';
 
 export const playCard = (prevState: GameState, cardId: string, laneIndex: number, isFaceUp: boolean, player: Player, targetOwner: Player = player): EffectResult => {
     // player = who is playing the card (whose hand it comes from)
@@ -305,6 +306,11 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     stateAfterMove.lastPlayedCardId = newCardOnBoard.id;
 
     stateAfterMove = recalculateAllLaneValues(stateAfterMove);
+
+    // AI Memory: When AI plays a card face-down, remember its value
+    if (player === 'opponent' && !isFaceUp) {
+        stateAfterMove = rememberAIPlayedCard(stateAfterMove, newCardOnBoard);
+    }
 
     // "plays card" Log wurde bereits VOR dem OnCover-Effekt erstellt
     // Indent zurücksetzen für nachfolgende Effekte (falls kein actionRequired von OnCover)

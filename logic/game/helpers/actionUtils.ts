@@ -12,6 +12,7 @@ import { canFlipCard, canShiftCard } from '../passiveRuleChecker';
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
+import { rememberFlippedCard } from '../../ai/cardMemory';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex?: number } | null {
     if (!cardId) return null;
@@ -376,6 +377,11 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     const newStats = { ...newState.stats[actor], cardsFlipped: newState.stats[actor].cardsFlipped + 1 };
     const newPlayerState = { ...newState[actor], stats: newStats };
     newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+    // AI Memory: Remember the value BEFORE flipping face-up to face-down
+    if (card.isFaceUp) {
+        newState = rememberFlippedCard(newState, card);
+    }
 
     newState = findAndFlipCards(new Set([targetCardId]), newState);
     newState.animationState = { type: 'flipCard', cardId: targetCardId };

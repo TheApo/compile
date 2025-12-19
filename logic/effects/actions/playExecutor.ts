@@ -424,14 +424,20 @@ export function executePlayEffect(
             return { newState: state };
         }
 
-        // NEW: sourceOwner determines whose deck to draw from (Assimilation-2: opponent's deck)
+        // CRITICAL FIX: Use 'actor' as the base player for deck and lanes!
+        // When Gravity-6 is played by opponent (AI), actor='player' means PLAYER draws and plays
+        // sourceOwner/targetBoard override this if specified (for Assimilation effects)
         const sourceOwner = params.sourceOwner || 'own';
-        const deckOwner = sourceOwner === 'opponent' ? opponent : cardOwner;
+        const deckOwner = sourceOwner === 'opponent'
+            ? (actor === 'player' ? 'opponent' : 'player')  // Opponent of actor
+            : actor;  // Actor's own deck
         const deckOwnerState = state[deckOwner];
 
         // NEW: targetBoard determines which board the card is played on (Assimilation-6: opponent's board)
         const targetBoard = params.targetBoard || 'own';
-        const targetPlayer = targetBoard === 'opponent' ? opponent : cardOwner;
+        const targetPlayer = targetBoard === 'opponent'
+            ? (actor === 'player' ? 'opponent' : 'player')  // Opponent of actor
+            : actor;  // Actor's own board
 
         // Check if deck has enough cards
         if (deckOwnerState.deck.length === 0 && deckOwnerState.discard.length === 0) {

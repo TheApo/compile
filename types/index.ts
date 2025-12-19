@@ -677,6 +677,15 @@ export interface GameState {
     _pendingCustomEffects?: any[];
     /** Suspended queued actions during effect execution */
     _suspendedQueuedActions?: ActionRequired[];
+    /**
+     * AI Card Memory - Tracks known values of face-down cards
+     * Key: cardId, Value: known card value (0-6)
+     * Updated when:
+     * - AI plays a card face-down (AI knows its own cards)
+     * - A face-up card is flipped to face-down (value is remembered)
+     * - A card is revealed (value is learned)
+     */
+    aiCardMemory?: Record<string, number>;
 }
 
 // =============================================================================

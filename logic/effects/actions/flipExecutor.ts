@@ -13,6 +13,7 @@ import { log } from '../../utils/log';
 import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField, hasOtherFaceUpSameProtocolCard } from '../../game/helpers/actionUtils';
 import { isFrost1Active, canFlipSpecificCard } from '../../game/passiveRuleChecker';
 import { getPlayerLaneValue } from '../../game/stateManager';
+import { rememberFlippedCard } from '../../ai/cardMemory';
 
 /**
  * Execute FLIP effect
@@ -63,6 +64,11 @@ export function executeFlipEffect(
                 if (params.skipMiddleCommand && !cardToFlip.isFaceUp) {
                     // Card is face-down and will be flipped face-up - skip its middle command
                     newState.skipNextMiddleCommand = targetCardId;
+                }
+
+                // AI Memory: Remember the value BEFORE flipping face-up to face-down
+                if (cardToFlip.isFaceUp) {
+                    newState = rememberFlippedCard(newState, cardToFlip);
                 }
 
                 cardToFlip.isFaceUp = !cardToFlip.isFaceUp;
@@ -228,6 +234,10 @@ export function executeFlipEffect(
 
 
         if (cardInLane) {
+            // AI Memory: Remember the value BEFORE flipping face-up to face-down
+            if (cardInLane.isFaceUp) {
+                newState = rememberFlippedCard(newState, cardInLane);
+            }
             cardInLane.isFaceUp = !cardInLane.isFaceUp;
             const playerName = cardOwner === 'player' ? 'Player' : 'Opponent';
             const direction = cardInLane.isFaceUp ? 'face-up' : 'face-down';
@@ -313,6 +323,10 @@ export function executeFlipEffect(
                     for (const lane of newState[player].lanes) {
                         const cardToFlip = lane.find(c => c.id === cardId);
                         if (cardToFlip) {
+                            // AI Memory: Remember the value BEFORE flipping face-up to face-down
+                            if (cardToFlip.isFaceUp) {
+                                newState = rememberFlippedCard(newState, cardToFlip);
+                            }
                             cardToFlip.isFaceUp = !cardToFlip.isFaceUp;
                         }
                     }
