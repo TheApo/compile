@@ -376,3 +376,54 @@ export function getEffectiveCardValue(card: PlayedCard, state: GameState, laneIn
     const boost = getLaneFaceDownValueBoost(state, laneIndex);
     return 2 + boost; // Base face-down value is 2
 }
+
+/**
+ * Check if a card has an effect that flips your own cards in this stack/lane
+ * These effects are HARMFUL when playing on your own side!
+ * Example: "Start: Flip 1 of your other covered or uncovered face-up cards in this stack."
+ */
+export function hasFlipOwnCardEffect(card: PlayedCard): boolean {
+    const customCard = card as any;
+    if (!customCard.customEffects) return false;
+
+    const allEffects = [
+        ...(customCard.customEffects.topEffects || []),
+        ...(customCard.customEffects.middleEffects || []),
+        ...(customCard.customEffects.bottomEffects || [])
+    ];
+
+    return allEffects.some((effect: any) => {
+        if (effect.params?.action !== 'flip') return false;
+        const targetFilter = effect.params?.targetFilter;
+        // Check if it targets own cards in this lane/stack
+        return targetFilter?.owner === 'own' &&
+               (targetFilter?.scope === 'this_lane' ||
+                effect.params?.scope === 'this_lane' ||
+                targetFilter?.position === 'in_this_stack');
+    });
+}
+
+/**
+ * Check if a card has an effect that deletes your own cards in this stack/lane
+ * These effects are HARMFUL when playing on your own side!
+ */
+export function hasDeleteOwnCardInStackEffect(card: PlayedCard): boolean {
+    const customCard = card as any;
+    if (!customCard.customEffects) return false;
+
+    const allEffects = [
+        ...(customCard.customEffects.topEffects || []),
+        ...(customCard.customEffects.middleEffects || []),
+        ...(customCard.customEffects.bottomEffects || [])
+    ];
+
+    return allEffects.some((effect: any) => {
+        if (effect.params?.action !== 'delete') return false;
+        const targetFilter = effect.params?.targetFilter;
+        // Check if it targets own cards in this lane/stack
+        return targetFilter?.owner === 'own' &&
+               (targetFilter?.scope === 'this_lane' ||
+                effect.params?.scope === 'this_lane' ||
+                targetFilter?.position === 'in_this_stack');
+    });
+}

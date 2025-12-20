@@ -20,7 +20,8 @@ import {
     canPlayCard,
     hasAnyProtocolPlayRule,
     hasRequireNonMatchingProtocolRule,
-    canPlayFaceUpDueToSameProtocolRule
+    canPlayFaceUpDueToSameProtocolRule,
+    hasPlayOnOpponentSideRule
 } from '../game/passiveRuleChecker';
 import {
     hasRequireFaceDownPlayRule,
@@ -30,7 +31,9 @@ import {
     hasShiftToFromLaneEffect,
     hasShiftToNonMatchingProtocolEffect,
     getLaneFaceDownValueBoost,
-    getTopCardDeleteSelfValue
+    getTopCardDeleteSelfValue,
+    hasFlipOwnCardEffect,
+    hasDeleteOwnCardInStackEffect
 } from './aiEffectUtils';
 
 // NEW: Strategic modules
@@ -495,139 +498,99 @@ const getBestMove = (state: GameState): AIAction => {
                 });
             }
 
-            // FACE-DOWN PLAY - use generic canPlayCard result
-            // IMPORTANT: Face-down only in EMERGENCY situations!
-            // - When lane is at 8-9 and needs just a bit more to compile
-            // - When we MUST block player compile and can't do face-up
-            // - When we have no face-up options at all
+            // FACE-DOWN PLAY - ONLY in specific scenarios!
+            // Face-down = value 2 (or 4 with Darkness-2). Face-up = full value.
+            // Playing face-down wastes card value. ONLY do it when:
+            // 1. Face-down completes a COMPILE (lane 8+ -> 10+)
+            // 2. Face-down BLOCKS opponent compile
+            // 3. Card has value 0-1 (hiding loses nothing)
+            // 4. No face-up option available
             if (playCheckFaceDown.allowed) {
                 const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
                 const resultingValue = state.opponent.laneValues[i] + valueToAdd;
                 const currentLaneValue = state.opponent.laneValues[i];
-                let score = -100; // BASE PENALTY: Face-down is generally bad
-                let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i}`;
 
-                // EMERGENCY 1: Must block player compile
-                // Equal value also blocks - neither can compile with equal values!
-                if (canPlayerCompileThisLane) {
-                    if (resultingValue >= state.player.laneValues[i]) {
-                        score = 150; // OK to block, but face-up blocking is better
-                        reason += ` [Blocks compile: ${resultingValue} vs ${state.player.laneValues[i]}]`;
-                    } else {
-                        // MASSIVE PENALTY: Card goes to TRASH immediately when player compiles!
-                        score = -500;
-                        reason += ` [WASTE: Card goes to trash when player compiles!]`;
-                    }
+                // Calculate value LOST by playing face-down instead of face-up
+                const valueLost = card.value - valueToAdd; // e.g., 5 - 2 = 3 lost
+
+                // BASE: Massive penalty proportional to value lost
+                let score = -200 - (valueLost * 30); // Value 5 face-down: -200 - 90 = -290
+                let reason = `Play ${card.protocol}-${card.value} face-down in lane ${i} (loses ${valueLost} value)`;
+
+                // EXCEPTION 1: Face-down COMPLETES A COMPILE - this is GOOD!
+                if (!state.opponent.compiled[i] && resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                    score = 300;
+                    reason = `Play ${card.protocol}-${card.value} face-down COMPILES lane ${i}: ${currentLaneValue} -> ${resultingValue}`;
                 }
-                // PRIORITY 2: Face-down would allow us to COMPILE - THIS IS VERY GOOD!
-                // Compile requires: 10+ value AND more than opponent (not equal!)
-                else if (!state.opponent.compiled[i] && resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
-                    score = 300; // VERY HIGH - Completing a compile is the most important thing!
-                    reason += ` [COMPILE: Face-down finishes at ${currentLaneValue} -> ${resultingValue} beats player ${state.player.laneValues[i]}]`;
+                // EXCEPTION 2: Face-down BLOCKS opponent compile
+                else if (canPlayerCompileThisLane && resultingValue >= state.player.laneValues[i]) {
+                    score = 150;
+                    reason = `Play ${card.protocol}-${card.value} face-down BLOCKS compile in lane ${i}`;
                 }
-                // PRIORITY 3: BLOCK opponent from compiling by reaching equal value or getting ahead
-                // If player has 10+ and could compile, we MUST catch up to block them!
-                // Equal value = neither can compile = we blocked them!
-                else if (!state.opponent.compiled[i] && state.player.laneValues[i] >= 10 && resultingValue >= state.player.laneValues[i]) {
-                    score = 250; // Very high - blocking opponent compile is critical!
-                    reason += ` [BLOCK COMPILE: Face-down reaches ${resultingValue} vs player ${state.player.laneValues[i]}]`;
+                // EXCEPTION 3: Lane is at 8+ (close to compile) - face-down to finish is OK
+                else if (!state.opponent.compiled[i] && currentLaneValue >= 8 && resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                    score = 250;
+                    reason = `Play ${card.protocol}-${card.value} face-down finishes compile: ${currentLaneValue} -> ${resultingValue}`;
                 }
-                else if (!state.opponent.compiled[i] && state.player.laneValues[i] >= 10 && resultingValue < state.player.laneValues[i]) {
-                    // MASSIVE PENALTY: Card goes to TRASH immediately when player compiles!
+                // NO EXCEPTION for low value cards (0-1)!
+                // These often have the STRONGEST effects (draw, flip, delete, shift)
+                // Playing face-down WASTES the effect - that's terrible!
+                // Face-up 0-value + strong effect >>> face-down 2-value + no effect
+
+                // EXCEPTION 4: No face-up option available
+                else if (!canPlayFaceUp) {
+                    score = -100; // Less penalty - we have no choice
+                    reason = `Play ${card.protocol}-${card.value} face-down (no face-up option)`;
+                }
+                // WASTE: Player would compile and our card goes to trash
+                else if (canPlayerCompileThisLane && resultingValue < state.player.laneValues[i]) {
                     score = -500;
-                    reason += ` [WASTE: Card goes to trash when player compiles!]`;
+                    reason += ` [WASTE: Goes to trash when player compiles!]`;
                 }
-                // PRIORITY 4: Face-down in FOCUS LANE to build toward compile - this is GOOD!
-                // If this is our focus lane and we're building toward 10, face-down is smart
-                else if (focusLaneIndex === i && !state.opponent.compiled[i] && currentLaneValue >= 4) {
-                    // Building in focus lane - the closer to 10, the better!
-                    score = 50 + (currentLaneValue * 10); // 7 -> 120, 8 -> 130, 9 -> 140
-                    reason += ` [BUILD FOCUS: ${currentLaneValue} -> ${resultingValue}]`;
-                }
-                // EMERGENCY: No face-up option available and we have a low-value card (0-1)
-                else if (!playCheckFaceUp.allowed && card.value <= 1) {
-                    score = -20; // Slightly less bad - we have no choice
-                    reason += ` [No face-up option, low value]`;
-                }
-                // NON-EMERGENCY: Just a regular face-down play - heavily penalized
-                else {
-                    score = -120; // Very bad - face-up is almost always better
-                    reason += ` [Avoid: Face-up is better]`;
-                }
-
-                // Focus lane bonus/penalty for cases not already handled above
-                // BUT: Disabled in control hunting mode
-                if (focusLaneIndex !== -1 && score < 50 && !controlHuntingMode) { // Only apply if not already a good score
-                    if (i === focusLaneIndex) {
-                        score += 50; // Some bonus for focus lane
-                        reason += ` [Focus lane]`;
-                    } else {
-                        score -= 80; // Heavy penalty for non-focus
-                        reason += ` [Not focus lane]`;
-                    }
-                }
-
-                // =========================================================================
-                // CONTROL HUNTING: Face-down plays for lane leads
-                // Control = leading in 2+ lanes. ANY lane counts!
-                // These bonuses/penalties MUST override normal scoring!
-                // =========================================================================
-                if (controlHuntingMode) {
-                    const currentlyLeading = state.opponent.laneValues[i] > state.player.laneValues[i];
-                    const wouldLeadAfter = resultingValue > state.player.laneValues[i];
-                    const currentlyTied = state.opponent.laneValues[i] === state.player.laneValues[i];
-
-                    // CRITICAL: If we already lead this lane, heavily penalize!
-                    if (currentlyLeading) {
-                        score -= 200; // HEAVY penalty - don't waste cards!
-                        reason += ` [FD ALREADY LEADING - DON'T WASTE!]`;
-                    }
-                    // Face-down that gains us a new lead
-                    else if (!currentlyLeading && wouldLeadAfter) {
-                        if (lanesWeAreLead === 1) {
-                            score += 400; // Face-down for control capture!
-                            reason += ` [FD CONTROL CAPTURE! 1->2 leads]`;
-                        } else if (lanesWeAreLead === 0) {
-                            score += 250;
-                            reason += ` [FD First lead!]`;
-                        }
-                    }
-                    // Breaking ties with face-down
-                    else if (currentlyTied && wouldLeadAfter) {
-                        if (lanesWeAreLead === 1) {
-                            score += 350; // Breaking tie gives us control!
-                            reason += ` [FD BREAK TIE FOR CONTROL!]`;
-                        } else {
-                            score += 200;
-                            reason += ` [FD Break tie]`;
-                        }
-                    }
-                    // BUILD UP: Face-down to build toward 2nd lead
-                    else if (!currentlyLeading && !wouldLeadAfter && lanesWeAreLead === 1) {
-                        const gapToLead = state.player.laneValues[i] - resultingValue;
-                        if (gapToLead <= 3) {
-                            score += 150;
-                            reason += ` [FD BUILD toward 2nd lead, gap=${gapToLead}]`;
-                        } else if (gapToLead <= 6) {
-                            score += 100;
-                            reason += ` [FD BUILD toward 2nd lead, gap=${gapToLead}]`;
-                        }
-                    }
-                }
-
-                // FINAL OVERRIDE: NEVER face-down on empty board (Turn 1)!
-                // This MUST be after all other scoring to guarantee face-up is chosen
-                // Face-up is ALWAYS better on Turn 1: establishes board presence, shows strength
-                if (totalCardsOnBoard === 0) {
-                    score = -500;
-                    reason += ` [TURN 1: Face-up is ALWAYS better!]`;
-                }
+                // All other cases: Keep the massive penalty - face-down is BAD
 
                 possibleMoves.push({
                     move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false },
                     score: addNoise(score),
                     reason
                 });
+            }
+
+            // =========================================================================
+            // PLAY ON OPPONENT'S SIDE - for cards with "allow_play_on_opponent_side"
+            // This is SMART when the card has harmful self-effects (flip own, delete own)
+            // Playing on opponent's side makes "your cards in this stack" effects fizzle!
+            // =========================================================================
+            if (hasPlayOnOpponentSideRule(state, card as PlayedCard)) {
+                // Check if playing on player's (opponent from AI view) lane is allowed
+                const playerLaneCompiled = state.player.compiled[i];
+                if (!playerLaneCompiled) {
+                    // Evaluate: Does this card have harmful self-effects?
+                    const hasHarmfulSelfEffect = hasFlipOwnCardEffect(card as PlayedCard) ||
+                                                  hasDeleteOwnCardInStackEffect(card as PlayedCard);
+
+                    let score = 0;
+                    let reason = `Play ${card.protocol}-${card.value} on OPPONENT's lane ${i}`;
+
+                    if (hasHarmfulSelfEffect) {
+                        // SMART: Playing on opponent's side avoids harmful effect!
+                        // The effect targets "your cards in this stack" - there are none on opponent's side
+                        score = card.value * 8; // Value contribution (slightly less than normal face-up)
+                        score += 50; // Bonus for avoiding harmful effect
+                        reason += ` [SMART: Avoids harmful self-effect!]`;
+                    } else {
+                        // No harmful effect - playing on opponent's side just gives them value
+                        // This is usually BAD unless we're trying to disrupt somehow
+                        score = -100 - card.value * 10; // Heavy penalty
+                        reason += ` [Gives opponent value - usually bad]`;
+                    }
+
+                    possibleMoves.push({
+                        move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true, targetOwner: 'player' } as any,
+                        score: addNoise(score),
+                        reason
+                    });
+                }
             }
         }
     }
