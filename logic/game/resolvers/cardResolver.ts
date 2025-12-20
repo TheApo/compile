@@ -1424,8 +1424,18 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 triggerType: 'on_play',
             };
 
+            // === BUG FIX: PRESERVE phase effect IDs before effect execution ===
+            // Draw effects can lose these IDs through processReactiveEffects chain
+            // Mirror-1's ID was already added by effectExecutor.ts:676 when the End effect first triggered
+            const preservedEndEffectIds = [...(newState.processedEndEffectIds || [])];
+            const preservedStartEffectIds = [...(newState.processedStartEffectIds || [])];
+
             // Execute each middle effect from the copied card
             let currentState = newState;
+            // CRITICAL: Clear actionRequired BEFORE executing effects!
+            // Otherwise the old 'select_card_for_copy_middle' will still be set
+            // and cause an early return after executeCustomEffect
+            currentState.actionRequired = null;
             for (const effect of middleEffects) {
                 // Only execute effects with on_play trigger (middle effects)
                 if (effect.trigger !== 'on_play') continue;
@@ -1447,6 +1457,36 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 // If an action is required, stop here and let it be resolved
                 if (currentState.actionRequired) {
                     return { nextState: currentState, requiresTurnEnd: false };
+                }
+            }
+
+            // === BUG FIX: RESTORE phase effect IDs ===
+            // Merge preserved IDs with any that may have been added during execution
+            // This ensures Mirror-1's ID (added by effectExecutor before copy_middle prompt)
+            // is preserved even if draw effects call processReactiveEffects and lose it
+            currentState.processedEndEffectIds = [
+                ...new Set([
+                    ...(currentState.processedEndEffectIds || []),
+                    ...preservedEndEffectIds
+                ])
+            ];
+            currentState.processedStartEffectIds = [
+                ...new Set([
+                    ...(currentState.processedStartEffectIds || []),
+                    ...preservedStartEffectIds
+                ])
+            ];
+
+            // Also ensure source card is marked as processed
+            const sourceCardId = action.sourceCardId;
+            if (sourceCardId && prev.phase === 'end') {
+                if (!currentState.processedEndEffectIds.includes(sourceCardId)) {
+                    currentState.processedEndEffectIds.push(sourceCardId);
+                }
+            }
+            if (sourceCardId && prev.phase === 'start') {
+                if (!currentState.processedStartEffectIds.includes(sourceCardId)) {
+                    currentState.processedStartEffectIds.push(sourceCardId);
                 }
             }
 

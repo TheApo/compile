@@ -3853,7 +3853,7 @@ export const scenario74_MirrorCustomPlayground: TestScenario = {
         // - Mirror-3 (flip opponent in same lane)
         newState = placeCard(newState, 'opponent', 0, createCard('Death', 3, true));   // Has middle effects
         newState = placeCard(newState, 'opponent', 0, createCard('Death', 2, false));  // Covered
-        newState = placeCard(newState, 'opponent', 1, createCard('Metal', 4, true));   // Has middle effects
+        newState = placeCard(newState, 'opponent', 1, createCard('Courage', 2, true));   // Has middle effects
         newState = placeCard(newState, 'opponent', 2, createCard('Spirit', 2, true));  // Has middle effects
 
         // Opponent hand for discard effects

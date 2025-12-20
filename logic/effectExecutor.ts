@@ -539,7 +539,6 @@ function processTriggeredEffects(
         ? (newState.processedStartEffectIds || [])
         : (newState.processedEndEffectIds || []);
 
-
     // Get all VALID unprocessed effects from the snapshot
     const validUnprocessedEffects: Array<{
         entry: PhaseEffectSnapshotEntry;
