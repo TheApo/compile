@@ -38,7 +38,7 @@ import {
 
 // NEW: Strategic modules
 import { analyzeGameState, GameAnalysis, describeStrategy, getLaneRecommendations } from './analyzer';
-import { evaluateCardEffect, evaluateFlipTargets, evaluateDeleteTargets, evaluateReturnTargets, evaluateShiftTargets, getBestTarget } from './effectEvaluator';
+import { evaluateCardEffect, evaluateFlipTargets, evaluateDeleteTargets, evaluateReturnTargets, evaluateShiftTargets, getBestTarget, evaluateEffectInContext } from './effectEvaluator';
 import { calculateMoveScore, getMoveReasoning, shouldPlayFaceUp, shouldRefresh, MoveScore } from './strategies';
 import { cleanupMemory } from './cardMemory';
 
@@ -178,6 +178,25 @@ const getBestMove = (state: GameState): AIAction => {
     // LANE FOCUS: Use analyzer's lane recommendations
     // =========================================================================
     const ourCompiledCount = position.ourCompiledCount;
+
+    // =========================================================================
+    // CRITICAL ENDGAME: When OPPONENT has 2 compiles - CONTROL IS EVERYTHING!
+    // Next compile wins the game, so whoever has control wins.
+    // This applies whether we have 0, 1, or 2 compiles - opponent at 2 = critical!
+    // =========================================================================
+    const opponentNearWin = playerCompiledCount === 2;
+    const criticalEndgameControlMode = opponentNearWin && controlMechanicEnabled;
+
+    // If opponent has 2 compiles and we don't have control, we MUST get control!
+    // Otherwise opponent wins on their next compile
+    const mustHuntControl = criticalEndgameControlMode && !weHaveControl;
+
+    // If we have control and opponent has 2, we're in good shape
+    // But we still need to be careful not to lose control
+    const weAreWinning = criticalEndgameControlMode && weHaveControl;
+
+    // Override controlHuntingMode when opponent is near win
+    const effectiveControlHuntingMode = controlHuntingMode || mustHuntControl;
 
     // Get lane recommendations from analyzer - sorted by strategic priority
     const laneRecommendations = getLaneRecommendations(analysis);
@@ -421,8 +440,8 @@ const getBestMove = (state: GameState): AIAction => {
                     }
 
                     // FOCUS LANE STRATEGY: VERY strong bonus for focus lane, heavy penalty for others
-                    // BUT: Disabled in control hunting mode
-                    if (focusLaneIndex !== -1 && !controlHuntingMode) {
+                    // BUT: Disabled in control hunting mode (including critical endgame)
+                    if (focusLaneIndex !== -1 && !effectiveControlHuntingMode) {
                         if (i === focusLaneIndex) {
                             score += 150; // VERY strong bonus for focus lane
                             reason += ` [FOCUS LANE]`;
@@ -436,28 +455,32 @@ const getBestMove = (state: GameState): AIAction => {
                     // CONTROL HUNTING: Prioritize plays that give us lane leads
                     // Control = leading in 2+ lanes. ANY lane counts!
                     // These bonuses/penalties MUST override normal scoring!
+                    // CRITICAL ENDGAME: Even stronger bonuses when both have 2 compiles!
                     // =========================================================================
-                    if (controlHuntingMode) {
+                    if (effectiveControlHuntingMode) {
                         const currentlyLeading = state.opponent.laneValues[i] > state.player.laneValues[i];
                         const wouldLeadAfter = resultingValue > state.player.laneValues[i];
                         const currentlyTied = state.opponent.laneValues[i] === state.player.laneValues[i];
 
+                        // CRITICAL MULTIPLIER: When opponent has 2 compiles, control is LIFE OR DEATH
+                        const criticalMultiplier = opponentNearWin ? 1.5 : 1.0;
+
                         // CRITICAL: If we already lead this lane, heavily penalize playing more here!
                         // We need to build in OTHER lanes to get control!
                         if (currentlyLeading) {
-                            score -= 200; // HEAVY penalty - don't waste cards in lanes we already lead!
-                            reason += ` [ALREADY LEADING - DON'T WASTE!]`;
+                            score -= 200 * criticalMultiplier; // HEAVY penalty - don't waste cards in lanes we already lead!
+                            reason += opponentNearWin ? ` [CRITICAL: ALREADY LEADING - FOCUS ELSEWHERE!]` : ` [ALREADY LEADING - DON'T WASTE!]`;
                         }
                         // HUGE BONUS: This play would give us lead in a lane we don't currently lead
                         else if (!currentlyLeading && wouldLeadAfter) {
                             if (lanesWeAreLead === 1) {
                                 // This would give us 2 leads = CONTROL!
-                                score += 500; // MASSIVE bonus - this wins us control!
-                                reason += ` [CONTROL CAPTURE! 1->2 leads]`;
+                                score += 500 * criticalMultiplier; // MASSIVE bonus - this wins us control!
+                                reason += opponentNearWin ? ` [CRITICAL: CONTROL CAPTURE WINS GAME!]` : ` [CONTROL CAPTURE! 1->2 leads]`;
                             } else if (lanesWeAreLead === 0) {
                                 // First lead - very valuable
-                                score += 300;
-                                reason += ` [First lead! 0->1 leads]`;
+                                score += 300 * criticalMultiplier;
+                                reason += opponentNearWin ? ` [CRITICAL: First lead toward control!]` : ` [First lead! 0->1 leads]`;
                             } else {
                                 // Already have control, but more leads is still good
                                 score += 100;
@@ -467,10 +490,10 @@ const getBestMove = (state: GameState): AIAction => {
                         // Bonus for breaking ties - this is often how we get control!
                         else if (currentlyTied && wouldLeadAfter) {
                             if (lanesWeAreLead === 1) {
-                                score += 450; // Breaking tie gives us control!
-                                reason += ` [BREAK TIE FOR CONTROL!]`;
+                                score += 450 * criticalMultiplier; // Breaking tie gives us control!
+                                reason += opponentNearWin ? ` [CRITICAL: BREAK TIE FOR CONTROL!]` : ` [BREAK TIE FOR CONTROL!]`;
                             } else {
-                                score += 250;
+                                score += 250 * criticalMultiplier;
                                 reason += ` [Break tie]`;
                             }
                         }
@@ -478,17 +501,27 @@ const getBestMove = (state: GameState): AIAction => {
                         else if (!currentlyLeading && !wouldLeadAfter && lanesWeAreLead === 1) {
                             const gapToLead = state.player.laneValues[i] - resultingValue;
                             if (gapToLead <= 3) {
-                                score += 200; // Close to getting lead!
-                                reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
+                                score += 200 * criticalMultiplier; // Close to getting lead!
+                                reason += opponentNearWin ? ` [CRITICAL: BUILD toward control, gap=${gapToLead}]` : ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
                             } else if (gapToLead <= 6) {
-                                score += 150;
+                                score += 150 * criticalMultiplier;
                                 reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
                             } else {
-                                score += 100;
+                                score += 100 * criticalMultiplier;
                                 reason += ` [BUILD toward 2nd lead, gap=${gapToLead}]`;
                             }
                         }
                     }
+                }
+
+                // =========================================================================
+                // CONTEXTUAL EFFECT EVALUATION: Score card effects based on game state
+                // Human thinking: "What does my card do? Are there good targets?"
+                // =========================================================================
+                const effectContextScore = evaluateEffectInContext(card as PlayedCard, state, i, analysis);
+                if (effectContextScore !== 0) {
+                    score += effectContextScore;
+                    reason += ` [Effect: ${effectContextScore >= 0 ? '+' : ''}${effectContextScore}]`;
                 }
 
                 possibleMoves.push({
@@ -615,6 +648,26 @@ const getBestMove = (state: GameState): AIAction => {
         if (playerCanCompile && weHaveControl && playerHasCompiledLane) {
             // Emergency draw to trigger control swap and block compile
             possibleMoves.push({ move: { type: 'fillHand' }, score: 200, reason: "Emergency draw to block compile with control swap" });
+        }
+
+        // CRITICAL ENDGAME: If opponent has 2 compiles and can compile next, consider refresh
+        // This buys time to build control in subsequent turns
+        if (opponentNearWin && playerCanCompile && !weHaveControl) {
+            // Opponent can win next if they compile - we need to either:
+            // 1. Block their compile
+            // 2. Take control before they compile
+            // If our hand can't achieve either, refresh might help
+            const bestMoveScore = possibleMoves.length > 0 ?
+                Math.max(...possibleMoves.map(m => m.score)) : -1000;
+
+            // Only refresh if our best play is mediocre
+            if (bestMoveScore < 100) {
+                possibleMoves.push({
+                    move: { type: 'fillHand' },
+                    score: 50,
+                    reason: "CRITICAL: Refresh to find better options vs opponent win threat"
+                });
+            }
         }
         // Otherwise: Don't draw, play the cards we have
     }

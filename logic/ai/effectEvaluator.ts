@@ -653,6 +653,364 @@ export function evaluateCardEffect(
     };
 }
 
+// =============================================================================
+// CONTEXTUAL EFFECT EVALUATION - For getBestMove() scoring
+// =============================================================================
+
+/**
+ * Evaluate a single effect from customEffects in context
+ * Returns a score bonus/penalty based on:
+ * - Available targets
+ * - Strategic value (compile blocking, etc.)
+ * - Potential downsides (must target own cards)
+ */
+function evaluateSingleEffectInContext(
+    effect: any,
+    state: GameState,
+    laneIndex: number,
+    sourceCard: PlayedCard,
+    analysis: GameAnalysis
+): number {
+    const action = effect.params?.action;
+    const targetFilter = effect.params?.targetFilter;
+    const targetOwner = targetFilter?.owner || 'any';
+
+    // Get available targets
+    const opponentCards = getUncoveredCards(state, 'player'); // Player = opponent from AI view
+    const ownCards = getUncoveredCards(state, 'opponent');   // Opponent = us (AI)
+
+    switch (action) {
+        case 'flip':
+            return evaluateFlipEffectInContext(targetOwner, opponentCards, ownCards, state, analysis);
+
+        case 'delete':
+            return evaluateDeleteEffectInContext(targetOwner, opponentCards, ownCards, state, analysis);
+
+        case 'draw':
+            return evaluateDrawEffectInContext(effect.params?.count || 1, state);
+
+        case 'shift':
+            return evaluateShiftEffectInContext(targetOwner, opponentCards, ownCards, state, analysis);
+
+        case 'return':
+            return evaluateReturnEffectInContext(targetOwner, opponentCards, ownCards, state, analysis);
+
+        case 'discard':
+            // Opponent discard is good, self discard is bad
+            if (effect.params?.actor === 'opponent') {
+                return (effect.params?.count || 1) * 15;
+            }
+            return -(effect.params?.count || 1) * 10;
+
+        case 'value_modifier':
+            // Passive value modifiers are generally good
+            return 10;
+
+        default:
+            return 0;
+    }
+}
+
+/**
+ * FLIP effect context evaluation
+ * Human thinking: "Can I flip a high-value opponent card? Or do I have to flip my own?"
+ */
+function evaluateFlipEffectInContext(
+    targetOwner: string,
+    opponentCards: PlayedCard[],
+    ownCards: PlayedCard[],
+    state: GameState,
+    analysis: GameAnalysis
+): number {
+    // Target opponent cards only
+    if (targetOwner === 'opponent') {
+        if (opponentCards.length === 0) return 0; // No targets = useless
+
+        // Find best flip target (highest face-up value)
+        const faceUpOpponentCards = opponentCards.filter(c => c.isFaceUp);
+        if (faceUpOpponentCards.length > 0) {
+            const bestTarget = faceUpOpponentCards.sort((a, b) => b.value - a.value)[0];
+            // Flipping value X to face-down (2) = they lose (X - 2)
+            const valueReduction = bestTarget.value - 2;
+            return valueReduction * 12; // 5 -> +36, 3 -> +12, 0 -> -24
+        }
+        // Only face-down targets - revealing them is risky
+        return 5;
+    }
+
+    // Target own cards only - this is usually BAD
+    if (targetOwner === 'own') {
+        if (ownCards.length === 0) return 0; // No targets = useless
+
+        // Check if we have 0-1 value cards (flipping 0 to 2 is a GAIN!)
+        const lowValueCards = ownCards.filter(c => c.isFaceUp && c.value <= 1);
+        if (lowValueCards.length > 0) {
+            return 15; // Can flip 0/1 to gain value
+        }
+        // Must flip valuable own cards - bad!
+        return -25;
+    }
+
+    // Target ANY card - check if good opponent targets exist
+    if (opponentCards.length > 0) {
+        const faceUpOpponentCards = opponentCards.filter(c => c.isFaceUp && c.value >= 3);
+        if (faceUpOpponentCards.length > 0) {
+            // Good targets exist!
+            const bestValue = Math.max(...faceUpOpponentCards.map(c => c.value));
+            return (bestValue - 2) * 10; // Value reduction * 10
+        }
+        // Opponent has cards but they're low value
+        return 5;
+    }
+
+    // No opponent cards - must flip own
+    if (ownCards.length > 0) {
+        // Check for 0-value cards that BENEFIT from flip
+        const zeroValueCards = ownCards.filter(c => c.isFaceUp && c.value === 0);
+        if (zeroValueCards.length > 0) {
+            return 10; // 0 -> 2 is a gain!
+        }
+        // Must flip valuable own card - BAD
+        return -30;
+    }
+
+    // No cards at all
+    return 0;
+}
+
+/**
+ * DELETE effect context evaluation
+ * Human thinking: "Deleting opponent cards is ALWAYS good! Check what's underneath."
+ * User feedback: Delete is ALWAYS super valuable, they only check what's underneath
+ */
+function evaluateDeleteEffectInContext(
+    targetOwner: string,
+    opponentCards: PlayedCard[],
+    ownCards: PlayedCard[],
+    state: GameState,
+    analysis: GameAnalysis
+): number {
+    // Target opponent cards - ALWAYS GOOD per user feedback!
+    if (targetOwner === 'opponent') {
+        if (opponentCards.length === 0) return 0; // No targets = can't use
+
+        // Base value: deleting is ALWAYS good
+        let score = 40;
+
+        // BONUS: Can prevent opponent compile?
+        for (let i = 0; i < 3; i++) {
+            if (state.player.laneValues[i] >= 10 && !state.player.compiled[i]) {
+                // Opponent could compile! Delete is SUPER valuable
+                const cardsInLane = state.player.lanes[i].filter(c =>
+                    opponentCards.some(oc => oc.id === c.id)
+                );
+                if (cardsInLane.length > 0) {
+                    score = 80; // Compile blocking is huge
+                }
+            } else if (state.player.laneValues[i] >= 8) {
+                // Near compile - delete is very valuable
+                score = Math.max(score, 60);
+            }
+        }
+
+        return score;
+    }
+
+    // Target own cards - ALWAYS BAD
+    if (targetOwner === 'own') {
+        if (ownCards.length === 0) return 0; // No targets = can't use
+
+        // Find lowest value target (minimize loss)
+        const lowestValue = Math.min(...ownCards.map(c => c.isFaceUp ? c.value : 2));
+        return -lowestValue * 8 - 20; // -20 base penalty + value loss
+    }
+
+    // Target ANY card - check if opponent targets exist
+    if (opponentCards.length > 0) {
+        // Has opponent targets - this is still good!
+        let score = 35;
+
+        // Check compile threat
+        for (let i = 0; i < 3; i++) {
+            if (state.player.laneValues[i] >= 8) {
+                score = Math.max(score, 50);
+            }
+        }
+
+        return score;
+    }
+
+    // No opponent cards - MUST delete own card - VERY BAD
+    if (ownCards.length > 0) {
+        const lowestValue = Math.min(...ownCards.map(c => c.isFaceUp ? c.value : 2));
+        return -lowestValue * 10 - 40; // Heavy penalty
+    }
+
+    return 0;
+}
+
+/**
+ * DRAW effect context evaluation
+ * Drawing is almost always good, but check hand size
+ */
+function evaluateDrawEffectInContext(count: number, state: GameState): number {
+    const currentHandSize = state.opponent.hand.length;
+    const handAfterPlay = currentHandSize - 1; // After playing this card
+    const handAfterDraw = handAfterPlay + count;
+
+    if (handAfterDraw > 5) {
+        // Will cause discard - still OK but less value
+        const discardCount = handAfterDraw - 5;
+        return count * 10 - discardCount * 8;
+    }
+
+    // Low hand = draw very valuable
+    if (handAfterPlay <= 2) {
+        return count * 20;
+    }
+
+    // Normal draw value
+    return count * 12;
+}
+
+/**
+ * SHIFT effect context evaluation
+ * Moving opponent cards is good if they have targets
+ */
+function evaluateShiftEffectInContext(
+    targetOwner: string,
+    opponentCards: PlayedCard[],
+    ownCards: PlayedCard[],
+    state: GameState,
+    analysis: GameAnalysis
+): number {
+    // Target opponent cards
+    if (targetOwner === 'opponent') {
+        if (opponentCards.length === 0) return 0; // No targets
+
+        // Check if we can disrupt compile threat
+        for (let i = 0; i < 3; i++) {
+            if (state.player.laneValues[i] >= 8) {
+                return 35; // Can disrupt near-compile
+            }
+        }
+
+        return 20; // General disruption value
+    }
+
+    // Target own cards - could be useful for positioning
+    if (targetOwner === 'own') {
+        if (ownCards.length === 0) return 0;
+
+        // Check if we can shift to complete a compile
+        for (let i = 0; i < 3; i++) {
+            if (!state.opponent.compiled[i] && state.opponent.laneValues[i] >= 6) {
+                return 25; // Might enable compile
+            }
+        }
+
+        return 5; // Minor repositioning value
+    }
+
+    // Target any
+    if (opponentCards.length > 0) {
+        return 15; // Has targets for disruption
+    }
+
+    return 0;
+}
+
+/**
+ * RETURN effect context evaluation
+ * Similar to delete but card goes to hand
+ */
+function evaluateReturnEffectInContext(
+    targetOwner: string,
+    opponentCards: PlayedCard[],
+    ownCards: PlayedCard[],
+    state: GameState,
+    analysis: GameAnalysis
+): number {
+    // Target opponent cards
+    if (targetOwner === 'opponent') {
+        if (opponentCards.length === 0) return 0;
+
+        // Check compile threat
+        for (let i = 0; i < 3; i++) {
+            if (state.player.laneValues[i] >= 8) {
+                return 40; // Disrupt near-compile
+            }
+        }
+
+        return 25; // Tempo gain - opponent must replay
+    }
+
+    // Target own cards - usually bad
+    if (targetOwner === 'own') {
+        if (ownCards.length === 0) return 0;
+        return -20; // Lose board presence
+    }
+
+    // Target any
+    if (opponentCards.length > 0) {
+        return 20;
+    }
+
+    if (ownCards.length > 0) {
+        return -25; // Must return own
+    }
+
+    return 0;
+}
+
+/**
+ * MAIN FUNCTION: Evaluate all effects of a card in context
+ *
+ * This is called from getBestMove() to score a card based on its effects
+ * and the current game situation, not just its raw value.
+ *
+ * @param card The card being evaluated
+ * @param state Current game state
+ * @param laneIndex The lane where the card would be played
+ * @param analysis Game analysis (lane states, threats, etc.)
+ * @returns Score bonus/penalty for the card's effects in this context
+ */
+export function evaluateEffectInContext(
+    card: PlayedCard,
+    state: GameState,
+    laneIndex: number,
+    analysis: GameAnalysis
+): number {
+    const customCard = card as any;
+    if (!customCard.customEffects) return 0;
+
+    let totalScore = 0;
+
+    // Parse all effects from customEffects
+    const allEffects = [
+        ...(customCard.customEffects.topEffects || []),
+        ...(customCard.customEffects.middleEffects || []),
+        ...(customCard.customEffects.bottomEffects || [])
+    ];
+
+    // Only evaluate 'start' and 'instant' triggers (not 'on_cover', 'passive', etc.)
+    // Those trigger immediately when played
+    const relevantTriggers = ['start', 'instant', 'on_play', undefined];
+
+    for (const effect of allEffects) {
+        const trigger = effect.trigger;
+
+        // Skip effects that don't trigger on play
+        if (trigger && !relevantTriggers.includes(trigger)) continue;
+
+        // Evaluate this effect
+        const effectScore = evaluateSingleEffectInContext(effect, state, laneIndex, card, analysis);
+        totalScore += effectScore;
+    }
+
+    return totalScore;
+}
+
 /**
  * Get the best target for a specific effect type
  */
