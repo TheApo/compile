@@ -13,7 +13,7 @@ import { playCard } from './playResolver';
 // NOTE: Old hardcoded effects removed - all protocols now use custom effects
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
-import { executeOnPlayEffect } from '../../effectExecutor';
+import { executeOnPlayEffect, executeOnCoverEffect } from '../../effectExecutor';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
 import { canShiftCard, hasAnyProtocolPlayRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
 
@@ -879,17 +879,61 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 // Create new card to play from the pre-selected trash card
                 const newCardToPlay: PlayedCard = { ...preDrawnCard, isFaceUp: shouldPlayFaceUp };
 
+                // === BUG FIX: Trigger onCover effect for the top card in target lane ===
+                // (Same pattern as playResolver.ts lines 175-207)
+                let stateForPlay = stateBeforePlay;
+                const targetLane = stateForPlay[actor].lanes[effectiveLaneIndex];
+
+                if (targetLane.length > 0) {
+                    const topCard = targetLane[targetLane.length - 1];
+
+                    // Trigger reactive effects first (Metal-6 style: "When this card would be covered")
+                    const beforeCoverResult = processReactiveEffects(
+                        stateForPlay, 'on_cover',
+                        { player: actor, cardId: topCard.id }
+                    );
+                    stateForPlay = beforeCoverResult.newState;
+
+                    // Check if card still exists after reactive effects
+                    const laneAfterReactive = stateForPlay[actor].lanes[effectiveLaneIndex];
+                    const cardStillExists = laneAfterReactive.some(c => c.id === topCard.id);
+
+                    if (cardStillExists && topCard.isFaceUp) {
+                        // Card still exists - execute on_cover bottom effects (e.g., Hate-4)
+                        const coverContext: EffectContext = {
+                            cardOwner: actor,
+                            actor: actor,
+                            currentTurn: stateForPlay.turn,
+                            opponent: (actor === 'player' ? 'opponent' : 'player') as Player,
+                            triggerType: 'cover'
+                        };
+                        // Store covering card's protocol for on_cover restrictions
+                        const stateWithCoveringProtocol = {
+                            ...stateForPlay,
+                            _coveringCardProtocol: newCardToPlay.protocol
+                        } as GameState;
+                        const onCoverResult = executeOnCoverEffect(
+                            topCard, effectiveLaneIndex, stateWithCoveringProtocol, coverContext
+                        );
+                        stateForPlay = onCoverResult.newState;
+                    }
+                }
+
+                // Use stateForPlay (may have been modified by onCover effects)
+                const playerStateAfterCover = stateForPlay[actor];
+                // === END BUG FIX ===
+
                 // Add card to the chosen lane
-                const newPlayerLanes = [...playerState.lanes];
+                const newPlayerLanes = [...playerStateAfterCover.lanes];
                 newPlayerLanes[effectiveLaneIndex] = [...newPlayerLanes[effectiveLaneIndex], newCardToPlay];
 
                 const updatedPlayerState = {
-                    ...playerState,
+                    ...playerStateAfterCover,
                     lanes: newPlayerLanes,
                 };
 
                 newState = {
-                    ...stateBeforePlay,
+                    ...stateForPlay,
                     [actor]: updatedPlayerState,
                     // Store the played card ID for useCardFromPreviousEffect
                     lastCustomEffectTargetCardId: newCardToPlay.id

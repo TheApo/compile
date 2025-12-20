@@ -1415,8 +1415,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             // Create effect context with the Mirror-1 owner as cardOwner
             // CRITICAL: The copied effects are executed as if they were on Mirror-1
+            // BUG FIX: Must include opponent field for effects that target opponent (e.g., discard)
             const context: EffectContext = {
                 cardOwner: action.actor,
+                actor: action.actor,
+                opponent: action.actor === 'player' ? 'opponent' : 'player',
+                currentTurn: newState.turn,
                 triggerType: 'on_play',
             };
 

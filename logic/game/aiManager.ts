@@ -862,12 +862,14 @@ export const runOpponentTurn = (
                                     // This ensures multi-effect cards (like Gravity-2) complete all effects
                                     if (s_after_all_anims.queuedActions && s_after_all_anims.queuedActions.length > 0) {
                                         const stateAfterQueue = phaseManager.processEndOfAction(s_after_all_anims);
-                                        if (stateAfterQueue.actionRequired) {
+                                        // BUG FIX: Only continue opponent turn if it's still opponent's turn
+                                        if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
                                             runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                         }
                                         return stateAfterQueue;
                                     }
-                                    if (s_after_all_anims.actionRequired) {
+                                    // BUG FIX: Only continue opponent turn if it's still opponent's turn
+                                    if (s_after_all_anims.actionRequired && s_after_all_anims.turn === 'opponent') {
                                         runOpponentTurn(s_after_all_anims, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                         return s_after_all_anims;
                                     } else {
@@ -886,12 +888,14 @@ export const runOpponentTurn = (
                                 // CRITICAL FIX: Process queuedActions before checking actionRequired
                                 if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
                                     const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
-                                    if (stateAfterQueue.actionRequired) {
+                                    // BUG FIX: Only continue opponent turn if it's still opponent's turn
+                                    if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
                                         runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                     }
                                     return stateAfterQueue;
                                 }
-                                if (stateAfterOnPlayLogic.actionRequired) {
+                                // BUG FIX: Only continue opponent turn if it's still opponent's turn
+                                if (stateAfterOnPlayLogic.actionRequired && stateAfterOnPlayLogic.turn === 'opponent') {
                                     runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
                                     return stateAfterOnPlayLogic;
                                 } else {
