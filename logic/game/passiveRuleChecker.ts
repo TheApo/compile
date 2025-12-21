@@ -124,7 +124,8 @@ export function canPlayCard(
     laneIndex: number,
     isFaceUp: boolean,
     cardProtocol: string,
-    card?: PlayedCard  // Optional: pass the card to check its own passive rules
+    card?: PlayedCard,  // Optional: pass the card to check its own passive rules
+    ignoreProtocolMatching?: boolean  // Optional: skip protocol matching check (Diversity-0 effect)
 ): { allowed: boolean; reason?: string } {
     const rules = getActivePassiveRules(state);
     const opponent = player === 'player' ? 'opponent' : 'player';
@@ -230,7 +231,8 @@ export function canPlayCard(
     // EXCEPTION: Cards with allow_play_on_opponent_side can play face-up on ANY lane
     // EXCEPTION: Same-protocol face-up play rule allows face-up play for cards of that protocol
     // EXCEPTION: Cards with ignore_protocol_matching card_property can play face-up on ANY lane
-    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule && !cardHasPlayAnywhereRule && !hasSameProtocolFaceUpRule && !cardIgnoresProtocolMatching) {
+    // EXCEPTION: ignoreProtocolMatching flag from effect (Diversity-0 "in this line" play)
+    if (isFaceUp && !protocolMatches && !hasAnyProtocolRule && !hasNonMatchingRule && !cardHasPlayAnywhereRule && !hasSameProtocolFaceUpRule && !cardIgnoresProtocolMatching && !ignoreProtocolMatching) {
         return { allowed: false, reason: `Face-up play requires matching protocol` };
     }
 

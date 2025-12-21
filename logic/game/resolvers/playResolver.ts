@@ -21,8 +21,10 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
 
     // NEW: Check passive rule restrictions (Metal-2, Plague-0, Psychic-1, etc.)
     // Skip some checks when playing on opponent's side
+    // CRITICAL: Pass _ignoreProtocolMatching flag for effects like Diversity-0 "in this line" play
     if (targetOwner === player) {
-        const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol, cardToPlay);
+        const ignoreProtocolMatching = (prevState as any)._ignoreProtocolMatching || false;
+        const passiveRuleCheck = checkPassiveRuleCanPlay(prevState, player, laneIndex, isFaceUp, cardToPlay.protocol, cardToPlay, ignoreProtocolMatching);
         if (!passiveRuleCheck.allowed) {
             console.error(`Illegal Move: ${player} tried to play ${cardToPlay.protocol}-${cardToPlay.value} - ${passiveRuleCheck.reason}`);
             return { newState: prevState };
@@ -93,6 +95,9 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
         // NEW: Check for Unity-1 same-protocol face-up play rule
         const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(prevState, player, laneIndex, cardToPlay.protocol);
 
+        // NEW: Check for _ignoreProtocolMatching flag from effect (Diversity-0 "in this line" play)
+        const effectIgnoresProtocolMatching = (prevState as any)._ignoreProtocolMatching || false;
+
         let canPlayFaceUp: boolean;
 
         // Cards with allow_play_on_opponent_side can play face-up on ANY lane
@@ -109,8 +114,9 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
             // Normal rule: can only play if protocol DOES match (or Spirit-1/custom rule override)
             // OR if THIS CARD ignores protocol matching (cards with ignore_protocol_matching card_property)
             // OR if Unity-1 same-protocol face-up rule allows it (only for same-protocol cards)
+            // OR if effect set _ignoreProtocolMatching (Diversity-0 "in this line" play)
             const doesMatch = cardToPlay.protocol === playerProtocol || cardToPlay.protocol === opponentProtocol;
-            canPlayFaceUp = (doesMatch || playerHasSpirit1 || thisCardIgnoresMatching || hasCustomAnyProtocolRule || hasSameProtocolFaceUpRule) && !opponentHasPsychic1;
+            canPlayFaceUp = (doesMatch || playerHasSpirit1 || thisCardIgnoresMatching || hasCustomAnyProtocolRule || hasSameProtocolFaceUpRule || effectIgnoresProtocolMatching) && !opponentHasPsychic1;
         }
 
         if (!canPlayFaceUp) {

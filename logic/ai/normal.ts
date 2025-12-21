@@ -721,7 +721,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
-            console.log('[AI Debug] normal.ts handling prompt_use_control_mechanic');
             const playerCompiledCount = state.player.compiled.filter(c => c).length;
 
             // Get the compiling lane index if this is during a compile
@@ -752,7 +751,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // PRIORITY 1: Can we force a recompile instead of a winning compile?
             // Player has 10+ in uncompiled lane AND has compiled lanes to swap with
             if (playerThreateningLane !== -1 && playerCompiledLanes.length > 0) {
-                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: player (threatening lane)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
@@ -761,28 +759,23 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (playerCompiledCount === 0) {
                 // Only use control if we can benefit from own rearrange
                 if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
-                    console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: opponent (own benefit)');
                     return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
                 }
-                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: skip (no benefit)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
             }
 
             // PRIORITY 2: Try to disrupt player if it actually hurts them
             // Pass compilingLaneIndex so that compiling lanes are treated as value 0
             if (canBenefitFromPlayerRearrange(state, compilingLaneIndex)) {
-                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: player (disrupt)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
             // PRIORITY 3: Rearrange own protocols ONLY if it actually helps
             if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
-                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: opponent (own benefit 2)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
 
             // No beneficial rearrange found - skip to avoid wasting the control action
-            console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: skip (final)');
             return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
         }
 
@@ -1307,10 +1300,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         }
 
         case 'prompt_rearrange_protocols': {
-            console.log('[AI Debug] normal.ts handling prompt_rearrange_protocols');
-            const result = handleControlRearrange(state, action);
-            console.log('[AI Debug] normal.ts prompt_rearrange_protocols result:', result);
-            return result;
+            return handleControlRearrange(state, action);
         }
 
         case 'prompt_swap_protocols': {

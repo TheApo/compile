@@ -234,7 +234,6 @@ export function queuePendingCustomEffects(state: GameState): GameState {
     if (!pendingEffects || pendingEffects.effects.length === 0) {
         return state; // No pending effects, nothing to do
     }
-    console.log('[queuePendingCustomEffects] Queueing effects for sourceCardId:', pendingEffects.sourceCardId, 'effects:', pendingEffects.effects?.map((e: any) => ({ id: e.id, action: e.params?.action, hasConditional: !!e.conditional })));
 
     // CRITICAL FIX: Check if these exact effects are already queued (by sourceCardId AND effect IDs)
     // This prevents double-queueing when card deletion triggers uncover + callback restoration
@@ -554,7 +553,6 @@ export const processQueuedActions = (state: GameState): GameState => {
                 logPhase,
                 logIndentLevel
             } = nextAction as any;
-            console.log('[phaseManager] execute_remaining_custom_effects for sourceCardId:', sourceCardId, 'effects:', effects?.map((e: any) => ({ id: e.id, action: e.params?.action, hasConditional: !!e.conditional })));
 
             // Log-Kontext wiederherstellen VOR der Effekt-Ausführung
             if (logSource !== undefined) {
