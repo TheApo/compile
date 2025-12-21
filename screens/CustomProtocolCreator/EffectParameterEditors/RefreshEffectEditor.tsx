@@ -18,21 +18,23 @@ interface RefreshEffectEditorProps {
 export const RefreshEffectEditor: React.FC<RefreshEffectEditorProps> = ({ params, onChange }) => {
     return (
         <div className="param-editor refresh-effect-editor">
-            <h4>Refresh Effect Parameters</h4>
-            <p className="effect-description">
+            <h4>Refresh Effect</h4>
+            <small className="hint-text">
                 Refresh fills the hand to 5 cards (Spirit-0: "Refresh.")
-            </p>
+            </small>
 
-            <label>
-                Target
-                <select
-                    value={params.target || 'self'}
-                    onChange={e => onChange({ ...params, target: e.target.value as 'self' | 'opponent' })}
-                >
-                    <option value="self">Self</option>
-                    <option value="opponent">Opponent</option>
-                </select>
-            </label>
+            <div className="effect-editor-basic">
+                <label>
+                    Target
+                    <select
+                        value={params.target || 'self'}
+                        onChange={e => onChange({ ...params, target: e.target.value as 'self' | 'opponent' })}
+                    >
+                        <option value="self">Self</option>
+                        <option value="opponent">Opponent</option>
+                    </select>
+                </label>
+            </div>
         </div>
     );
 };

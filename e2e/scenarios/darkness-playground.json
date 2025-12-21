@@ -1,0 +1,10 @@
+{
+  "name": "darkness-playground",
+  "description": "All Darkness cards in hand for testing flip/shift mechanics",
+  "playerProtocols": ["Darkness", "Water", "Fire"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Darkness-1: Flip opponent, shift that card. Darkness-2: Flip face-down only."
+}

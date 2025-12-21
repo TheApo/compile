@@ -1464,3 +1464,290 @@ textarea.read-only {
         font-size: 0.85rem;
     }
 }
+
+/* ========== EFFECT EDITOR COMPONENTS ========== */
+
+/* Mode Selector - Radio button group for main effect mode */
+.mode-selector {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    flex-wrap: wrap;
+}
+
+.mode-selector .mode-option {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    background: var(--background-color);
+    border: 1px solid var(--surface-hover);
+    transition: all 0.15s ease;
+    font-size: 0.85rem;
+}
+
+.mode-selector .mode-option:hover {
+    border-color: var(--primary-color);
+}
+
+.mode-selector .mode-option.selected {
+    background: var(--surface-hover);
+    border-color: var(--primary-color);
+}
+
+.mode-selector .mode-option input[type="radio"] {
+    margin: 0;
+}
+
+/* Field Group - Visual grouping with title */
+.field-group {
+    background-color: var(--surface-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.field-group-title {
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Collapsible Section - For advanced options */
+.collapsible-section {
+    margin-top: 0.5rem;
+}
+
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem 0;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    font-weight: 500;
+    width: 100%;
+    text-align: left;
+    font-family: 'Poppins', sans-serif;
+}
+
+.collapsible-header:hover {
+    color: var(--text-color);
+}
+
+.collapsible-arrow {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+}
+
+.collapsible-content {
+    padding-left: 1rem;
+    border-left: 2px solid var(--surface-hover);
+    margin-left: 0.25rem;
+    margin-top: 0.5rem;
+}
+
+/* Inline filter row for compact display */
+.param-editor .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.param-editor .filter-row > label {
+    flex: 0 0 auto;
+    min-width: 100px;
+}
+
+/* Hint text styling */
+.param-editor .hint-text {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--primary-color);
+    font-size: 0.75rem;
+    font-style: normal;
+}
+
+/* Basic options row - compact horizontal layout */
+.param-editor .effect-editor-basic {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.param-editor .effect-editor-basic > label {
+    flex: 0 0 auto;
+    min-width: auto;
+}
+
+/* Checkbox label with inline text */
+.param-editor .checkbox-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.param-editor .checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.param-editor .checkbox-label .hint-text {
+    margin-top: 0;
+    margin-left: 0.5rem;
+}
+
+/* Collapsible section spacing within param-editor */
+.param-editor .collapsible-section {
+    margin-top: 0.75rem;
+}
+
+.param-editor .collapsible-section .filter-row {
+    margin-top: 0.5rem;
+}
+
+/* ========== CHOICE EFFECT EDITOR ========== */
+
+.choice-effect-editor {
+    background: rgba(44, 29, 99, 0.3);
+    border: 1px solid rgba(97, 239, 255, 0.3);
+    border-radius: 4px;
+    padding: 0.75rem;
+}
+
+.choice-effect-editor h4 {
+    color: var(--secondary-color);
+    margin-bottom: 0.75rem;
+}
+
+.choice-option-container {
+    background: rgba(97, 239, 255, 0.05);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.choice-option-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.choice-option-header h5 {
+    color: var(--secondary-color);
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.choice-option-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.choice-option-actions button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: var(--surface-color);
+    border: 1px solid var(--surface-hover);
+    border-radius: 4px;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.choice-option-actions button:hover {
+    border-color: var(--primary-color);
+}
+
+.choice-option-actions button.remove-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.choice-action-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.choice-option-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.choice-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.choice-btn-edit {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.choice-btn-edit:hover {
+    background: var(--primary-color);
+}
+
+.choice-btn-active {
+    background: #8B0000;
+    color: var(--text-color);
+}
+
+.choice-btn-remove {
+    background: #8B0000;
+    color: var(--text-color);
+}
+
+.choice-btn-remove:hover {
+    background: #a00;
+}
+
+.choice-btn-add {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.choice-btn-add:hover {
+    background: var(--primary-color);
+}
+
+.choice-btn-disabled {
+    background: #444;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.choice-option-editor {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(97, 239, 255, 0.1);
+}
+
+.choice-complete-notice {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(97, 239, 255, 0.1);
+    border-radius: 4px;
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}

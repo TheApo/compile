@@ -1,0 +1,10 @@
+{
+  "name": "spirit-playground",
+  "description": "All Spirit cards in hand for testing draw/give/return mechanics",
+  "playerProtocols": ["Spirit", "Water", "Fire"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Spirit-1: Give opponent 1 card. Spirit-3: End draw 1, shift 1."
+}

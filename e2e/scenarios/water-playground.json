@@ -1,0 +1,10 @@
+{
+  "name": "water-playground",
+  "description": "All Water cards in hand for testing return/flip/shift mechanics",
+  "playerProtocols": ["Water", "Fire", "Speed"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Water-0: Flip any, if you do flip self. Water-4: Return 1 opponent, if you do flip self."
+}

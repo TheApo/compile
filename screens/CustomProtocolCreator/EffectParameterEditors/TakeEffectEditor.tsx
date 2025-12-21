@@ -4,7 +4,6 @@
  */
 
 import React from 'react';
-import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface TakeEffectParams {
     action: 'take';
@@ -21,43 +20,41 @@ interface TakeEffectEditorProps {
 export const TakeEffectEditor: React.FC<TakeEffectEditorProps> = ({ params, onChange }) => {
     return (
         <div className="param-editor take-effect-editor">
-            <h4>Take Effect Parameters</h4>
+            <h4>Take Effect</h4>
 
-            <label>
-                Card Count
-                <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    value={params.count}
-                    onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
-                />
-            </label>
+            <div className="effect-editor-basic">
+                <label>
+                    Count
+                    <select
+                        value={params.count || 1}
+                        onChange={e => onChange({ ...params, count: parseInt(e.target.value) })}
+                    >
+                        {[1, 2, 3, 4, 5, 6].map(n => (
+                            <option key={n} value={n}>{n}</option>
+                        ))}
+                    </select>
+                </label>
 
-            <label>
-                Source
-                <select value={params.source} onChange={e => onChange({ ...params, source: e.target.value as any })}>
-                    <option value="opponent_hand">Opponent's Hand</option>
-                </select>
-            </label>
+                <label>
+                    Source
+                    <select
+                        value={params.source}
+                        onChange={e => onChange({ ...params, source: e.target.value as any })}
+                    >
+                        <option value="opponent_hand">Opponent's Hand</option>
+                    </select>
+                </label>
 
-            <label>
-                <input
-                    type="checkbox"
-                    checked={params.random}
-                    onChange={e => onChange({ ...params, random: e.target.checked })}
-                />
-                Random (if unchecked, you choose)
-            </label>
-
+                <label className="checkbox-label">
+                    <input
+                        type="checkbox"
+                        checked={params.random}
+                        onChange={e => onChange({ ...params, random: e.target.checked })}
+                    />
+                    Random
+                    <small className="hint-text">If unchecked, you choose</small>
+                </label>
+            </div>
         </div>
     );
-};
-
-// Keeping for reference but using getEffectSummary from cardFactory instead
-const _generateTakeText = (params: TakeEffectParams): string => {
-    const cardWord = params.count === 1 ? 'card' : 'cards';
-    const randomText = params.random ? 'random ' : '';
-
-    return `Take ${params.count} ${randomText}${cardWord} from opponent's hand.`;
 };

@@ -41,6 +41,8 @@ interface GameScreenProps {
   difficulty: Difficulty;
   useControlMechanic: boolean;
   startingPlayer?: Player;
+  // E2E Testing: Setup function for complex test scenarios
+  initialScenarioSetup?: ((state: GameState) => GameState) | null;
 }
 
 type PreviewState = {
@@ -70,7 +72,7 @@ const ACTIONS_REQUIRING_HAND_INTERACTION = new Set<ActionRequired['type']>([
 ]);
 
 
-export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player' }: GameScreenProps) {
+export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
   // Determine starting player via coin flip on first mount
   const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
   const [showCoinFlip, setShowCoinFlip] = useState(true);
@@ -97,6 +99,15 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     setShowCoinFlip(false);
     startGameTracking();
   }, [startGameTracking]);
+
+  // Auto-skip coin flip when loading a test scenario
+  useEffect(() => {
+    if (initialScenarioSetup && showCoinFlip) {
+      console.log('[E2E] Auto-skipping coin flip for scenario');
+      setActualStartingPlayer('player');
+      setShowCoinFlip(false);
+    }
+  }, [initialScenarioSetup, showCoinFlip]);
 
   // Start tracking when coin flip completes
   useEffect(() => {
@@ -132,6 +143,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     compileLane,
     resolveActionWithCard,
     resolveActionWithLane,
+    resolveActionWithLaneFaceDown,
     selectHandCardForAction,
     resolveActionWithHandCard,
     skipAction,
@@ -191,6 +203,20 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   useEffect(() => {
       gameStateRef.current = gameState;
   }, [gameState]);
+
+  // E2E Testing: Apply initial scenario setup if provided
+  const scenarioAppliedRef = useRef(false);
+  useEffect(() => {
+    if (initialScenarioSetup && !scenarioAppliedRef.current) {
+      console.log('[E2E] Applying initial scenario setup...');
+      scenarioAppliedRef.current = true;
+      // Small delay to ensure game is fully initialized
+      setTimeout(() => {
+        setupTestScenario(initialScenarioSetup);
+        console.log('[E2E] Scenario setup complete');
+      }, 100);
+    }
+  }, [initialScenarioSetup, setupTestScenario]);
 
   // Mainframe Debug Toggle: 5 clicks to toggle debug mode
   const handleMainframeClick = () => {
@@ -459,9 +485,22 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handlePlayFaceDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState || !selectedCard) return;
+    if (currentState.animationState) return;
 
     const { phase, actionRequired, player } = currentState;
+
+    // Handle face-down during select_lane_for_play with player orientation choice
+    if (actionRequired?.type === 'select_lane_for_play' &&
+        (actionRequired as any).ignoreProtocolMatching &&
+        (actionRequired as any).isFaceDown === undefined) {
+      const validLanes = (actionRequired as any).validLanes;
+      if (validLanes && !validLanes.includes(laneIndex)) return;
+      resolveActionWithLaneFaceDown(laneIndex);
+      return;
+    }
+
+    // Normal face-down from hand
+    if (!selectedCard) return;
     if (phase !== 'action' || actionRequired || !player.hand.some(c => c.id === selectedCard)) return;
 
     playSelectedCard(laneIndex, false);

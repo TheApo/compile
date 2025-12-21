@@ -13,7 +13,7 @@
 
 import { GameState, ActionRequired, AIAction, PlayedCard, Player, TargetFilter } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
-import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
 import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
@@ -721,6 +721,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
+            console.log('[AI Debug] normal.ts handling prompt_use_control_mechanic');
             const playerCompiledCount = state.player.compiled.filter(c => c).length;
 
             // Get the compiling lane index if this is during a compile
@@ -751,6 +752,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // PRIORITY 1: Can we force a recompile instead of a winning compile?
             // Player has 10+ in uncompiled lane AND has compiled lanes to swap with
             if (playerThreateningLane !== -1 && playerCompiledLanes.length > 0) {
+                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: player (threatening lane)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
@@ -759,23 +761,28 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             if (playerCompiledCount === 0) {
                 // Only use control if we can benefit from own rearrange
                 if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
+                    console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: opponent (own benefit)');
                     return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
                 }
+                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: skip (no benefit)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
             }
 
             // PRIORITY 2: Try to disrupt player if it actually hurts them
             // Pass compilingLaneIndex so that compiling lanes are treated as value 0
             if (canBenefitFromPlayerRearrange(state, compilingLaneIndex)) {
+                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: player (disrupt)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
             // PRIORITY 3: Rearrange own protocols ONLY if it actually helps
             if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
+                console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: opponent (own benefit 2)');
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
 
             // No beneficial rearrange found - skip to avoid wasting the control action
+            console.log('[AI Debug] normal.ts prompt_use_control_mechanic -> choice: skip (final)');
             return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
         }
 
@@ -822,10 +829,51 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         case 'select_cards_to_delete': {
             const disallowedIds = action.disallowedIds || [];
-            const allowedIds = (action as any).allowedIds as string[] | undefined; // NEW: For calculation filters (highest_value, lowest_value)
+            const allowedIds = (action as any).allowedIds as string[] | undefined; // For valueSource/calculation filters (highest_value, lowest_value)
             const targetFilter = ((action as any).targetFilter ?? {}) as TargetFilter;
             const actorChooses = 'actorChooses' in action ? action.actorChooses : 'effect_owner';
             const sourceCardId = action.sourceCardId;
+            const positionFilter = targetFilter?.position || 'uncovered';
+
+
+            // CRITICAL FIX: If allowedIds is provided, use ONLY those cards (Luck-4 fix)
+            if (allowedIds && allowedIds.length > 0) {
+                const findCardById = (cardId: string): { card: PlayedCard; owner: Player; isUncovered: boolean } | null => {
+                    for (const playerKey of ['player', 'opponent'] as const) {
+                        for (const lane of state[playerKey].lanes) {
+                            for (let i = 0; i < lane.length; i++) {
+                                if (lane[i].id === cardId) {
+                                    return { card: lane[i], owner: playerKey, isUncovered: i === lane.length - 1 };
+                                }
+                            }
+                        }
+                    }
+                    return null;
+                };
+                const validAllowedCards = allowedIds
+                    .map(id => ({ id, info: findCardById(id) }))
+                    .filter(({ info }) => info !== null)
+                    .filter(({ info }) => {
+                        if (positionFilter === 'any') return true;
+                        if (positionFilter === 'uncovered') return info!.isUncovered;
+                        if (positionFilter === 'covered') return !info!.isUncovered;
+                        return true;
+                    })
+                    .filter(({ id }) => !disallowedIds.includes(id));
+                if (validAllowedCards.length > 0) {
+                    const opponentCards = validAllowedCards.filter(({ info }) => info!.owner === 'player');
+                    if (opponentCards.length > 0) {
+                        opponentCards.sort((a, b) => b.info!.card.value - a.info!.card.value);
+                        return { type: 'deleteCard', cardId: opponentCards[0].id };
+                    }
+                    const ownCards = validAllowedCards.filter(({ info }) => info!.owner === 'opponent');
+                    if (ownCards.length > 0) {
+                        ownCards.sort((a, b) => a.info!.card.value - b.info!.card.value);
+                        return { type: 'deleteCard', cardId: ownCards[0].id };
+                    }
+                }
+                return { type: 'skip' };
+            }
 
 
             // FLEXIBLE: Check if AI must select its OWN cards (actorChooses: 'card_owner' + targetFilter.owner: 'opponent')
@@ -919,6 +967,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const frost1Active = isFrost1Active(state);
             const targetFilter = action.targetFilter;
             const sourceCardId = action.sourceCardId;
+            const positionFilter = targetFilter?.position || 'uncovered';
             const cardOwner = action.actor;
             const restrictedLaneIndex = (action as any).currentLaneIndex ?? (action as any).laneIndex;
             const scope = (action as any).scope;
@@ -999,8 +1048,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (playableHand.length === 0) return { type: 'skip' };
 
-            // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
-            let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
+            // CRITICAL: Respect forcedLaneIndex for "in this line" effects (Diversity-0)
+            const forcedLaneIndex = (action as any).forcedLaneIndex;
+            let playableLanes: number[];
+            if (forcedLaneIndex !== undefined) {
+                // "In this line" - ONLY this lane is valid
+                playableLanes = [forcedLaneIndex];
+            } else {
+                // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
+                playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
+            }
             playableLanes = playableLanes.filter((laneIndex: number) => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
@@ -1134,6 +1191,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             };
             const targetOwner = (action as any).targetOwner || targetFilter.owner;
             const sourceCardId = action.sourceCardId;
+            const positionFilter = targetFilter?.position || 'uncovered';
             const cardOwner = action.actor;
 
             // Collect valid targets based on filter
@@ -1190,9 +1248,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
             let playableLanes = (action as any).validLanes || [0, 1, 2];
             playableLanes = playableLanes.filter((i: number) => !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex);
+
+            // FIX: Determine which board to check based on actor
+            // When AI plays to their own board (Life-3 oncover), check opponent.lanes
+            // When AI plays to player's board (attacking), check player.lanes
+            const actor = (action as any).actor || 'opponent';
+            const targetBoard = actor === 'opponent' ? state.opponent : state.player;
+
             playableLanes = playableLanes.filter((laneIndex: number) => {
-                const opponentLane = state.player.lanes[laneIndex];
-                const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
+                const targetLane = targetBoard.lanes[laneIndex];
+                const topCard = targetLane.length > 0 ? targetLane[targetLane.length - 1] : null;
 
                 // Check for Plague-0 block
                 const isBlockedByPlague0 = topCard && topCard.isFaceUp &&
@@ -1200,7 +1265,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
                 // Check for Metal-2 block (only if playing face-down)
                 const isBlockedByMetal2 = ('isFaceDown' in action && action.isFaceDown) &&
-                    opponentLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
+                    targetLane.some(c => c.isFaceUp && c.protocol === 'Metal' && c.value === 2);
 
                 return !isBlockedByPlague0 && !isBlockedByMetal2;
             });
@@ -1241,8 +1306,12 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'selectLane', laneIndex: scoredLanes[0].laneIndex };
         }
 
-        case 'prompt_rearrange_protocols':
-            return handleControlRearrange(state, action);
+        case 'prompt_rearrange_protocols': {
+            console.log('[AI Debug] normal.ts handling prompt_rearrange_protocols');
+            const result = handleControlRearrange(state, action);
+            console.log('[AI Debug] normal.ts prompt_rearrange_protocols result:', result);
+            return result;
+        }
 
         case 'prompt_swap_protocols': {
             // Spirit-4: Swap own protocols (target = 'opponent' = AI's own)
@@ -2278,6 +2347,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const scope = (action as any).scope;
             const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
             const sourceCardId = action.sourceCardId;
+            const positionFilter = targetFilter?.position || 'uncovered';
             const validTargets: { card: PlayedCard; owner: Player; laneIndex: number }[] = [];
 
             // Log for debugging
@@ -2317,6 +2387,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         if (targetFilter.valueMinGreaterThanHandSize) {
                             const handSize = state[cardOwner].hand.length;
                             if (card.value <= handSize) continue;
+                        }
+
+                        // NEW: Check valueLessThanUniqueProtocolsOnField - target must have value < unique protocols
+                        // Diversity-4: "Flip 1 card with a value less than the number of different protocols on cards in the field"
+                        if (targetFilter.valueLessThanUniqueProtocolsOnField) {
+                            const threshold = countUniqueProtocolsOnField(state);
+                            if (card.value >= threshold) continue;
                         }
 
                         validTargets.push({ card, owner: playerKey, laneIndex: laneIdx });
@@ -2408,6 +2485,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 : undefined;
             const cardOwner = action.actor;
             const sourceCardId = action.sourceCardId;
+            const positionFilter = targetFilter?.position || 'uncovered';
             const scoredTargets: { cardId: string; score: number }[] = [];
 
             for (const playerKey of ['player', 'opponent'] as const) {

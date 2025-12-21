@@ -7,6 +7,42 @@ import { Card } from '../../data/cards';
 import { CustomProtocolDefinition, CustomCardDefinition, EffectDefinition } from '../../types/customProtocol';
 
 /**
+ * Helper function to build target description text from params
+ * Used by conditional branches to include targetFilter information
+ */
+function buildTargetDescription(params: any, defaultCount: number = 1): string {
+    const count = params.count ?? defaultCount;
+    const owner = params.targetFilter?.owner || 'any';
+    const position = params.targetFilter?.position || 'uncovered';
+    const faceState = params.targetFilter?.faceState;
+
+    // Position text: 'uncovered' is default (no text), 'covered' adds "covered ", 'any' adds "covered or uncovered "
+    let positionText = '';
+    if (position === 'any') positionText = 'covered or uncovered ';
+    else if (position === 'covered') positionText = 'covered ';
+
+    // Face state text
+    let faceStateText = '';
+    if (faceState === 'face_down') faceStateText = 'face-down ';
+    else if (faceState === 'face_up') faceStateText = 'face-up ';
+
+    // Build with proper grammar
+    const cardWord = count === 1 ? 'card' : 'cards';
+
+    if (owner === 'own') {
+        return `${count} of your ${positionText}${faceStateText}${cardWord}`;
+    } else if (owner === 'opponent') {
+        return `${count} of your opponent's ${positionText}${faceStateText}${cardWord}`;
+    } else {
+        // No owner specified
+        if (count === 'all') {
+            return `all ${positionText}${faceStateText}cards`;
+        }
+        return `${count} ${positionText}${faceStateText}${cardWord}`;
+    }
+}
+
+/**
  * Generates human-readable text for an effect
  * IMPORTANT: This is the single source of truth for effect text generation
  * Used by both the game engine AND the card editor preview
@@ -156,22 +192,19 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
 
             // NEW: Advanced Conditional - Empty Hand (Courage-0)
             if (params.advancedConditional?.type === 'empty_hand') {
-                const count = params.count || 1;
-                mainText = `If you have no cards in hand, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If you have no cards in hand, draw ${buildTargetDescription(params)}.`;
                 break;
             }
 
             // NEW: Advanced Conditional - Opponent Higher Value in Lane (Courage-2)
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
-                const count = params.count || 1;
-                mainText = `If your opponent has a higher total value than you do in this line, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If your opponent has a higher total value than you do in this line, draw ${buildTargetDescription(params)}.`;
                 break;
             }
 
             // NEW: Advanced Conditional - Same Protocol on Field (Unity-0, Unity-3)
             if (params.advancedConditional?.type === 'same_protocol_on_field') {
-                const count = params.count || 1;
-                mainText = `If there is another face-up ${protocolName} card in the field, draw ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If there is another face-up ${protocolName} card in the field, draw ${buildTargetDescription(params)}.`;
                 break;
             }
 
@@ -345,14 +378,14 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
 
             // Advanced Conditional prefix for shift
             if (params.advancedConditional?.type === 'empty_hand') {
-                mainText = `If you have no cards in hand, ${mayShift.toLowerCase()} 1 card.`;
+                mainText = `If you have no cards in hand, ${mayShift.toLowerCase()} ${buildTargetDescription(params)}.`;
                 break;
             }
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
-                mainText = `If your opponent has a higher total value than you do in this line, ${mayShift.toLowerCase()} 1 card.`;
+                mainText = `If your opponent has a higher total value than you do in this line, ${mayShift.toLowerCase()} ${buildTargetDescription(params)}.`;
                 break;
             }
-            // NEW: this_card_is_covered conditional (Ice-3)
+            // NEW: this_card_is_covered conditional (Ice-3) - refers to "this card" so keep "it"
             if (params.advancedConditional?.type === 'this_card_is_covered') {
                 mainText = `If this card is covered, ${mayShift.toLowerCase()} it.`;
                 break;
@@ -752,13 +785,11 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
         case 'return': {
             // Advanced Conditional prefix for return
             if (params.advancedConditional?.type === 'empty_hand') {
-                const count = params.count || 1;
-                mainText = `If you have no cards in hand, return ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If you have no cards in hand, return ${buildTargetDescription(params)}.`;
                 break;
             }
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
-                const count = params.count || 1;
-                mainText = `If your opponent has a higher total value than you do in this line, return ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If your opponent has a higher total value than you do in this line, return ${buildTargetDescription(params)}.`;
                 break;
             }
 
@@ -844,13 +875,11 @@ export const getEffectSummary = (effect: EffectDefinition, context?: { protocolN
         case 'play': {
             // Advanced Conditional prefix for play
             if (params.advancedConditional?.type === 'empty_hand') {
-                const count = params.count || 1;
-                mainText = `If you have no cards in hand, play ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If you have no cards in hand, play ${buildTargetDescription(params)}.`;
                 break;
             }
             if (params.advancedConditional?.type === 'opponent_higher_value_in_lane') {
-                const count = params.count || 1;
-                mainText = `If your opponent has a higher total value than you do in this line, play ${count} card${count !== 1 ? 's' : ''}.`;
+                mainText = `If your opponent has a higher total value than you do in this line, play ${buildTargetDescription(params)}.`;
                 break;
             }
 

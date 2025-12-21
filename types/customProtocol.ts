@@ -280,7 +280,7 @@ export interface PlayEffectParams {
     action: 'play';
     source: 'hand' | 'deck' | 'trash';  // 'trash' for Time-0
     count: number;  // 1-6
-    faceDown: boolean;
+    faceDown?: boolean;  // true = face-down, false = face-up, undefined = player chooses
     excludeSourceProtocol?: boolean;  // Diversity-0: Can only play cards that are NOT this card's protocol
     optional?: boolean;  // "You may play..."
     destinationRule: {

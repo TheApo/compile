@@ -1,0 +1,10 @@
+{
+  "name": "control-test",
+  "description": "Test control mechanic rearrange",
+  "playerProtocols": ["Fire", "Water", "Speed"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "normal",
+  "useControlMechanic": true,
+  "startingPlayer": "player",
+  "notes": "Control mechanic enabled - test rearrange prompts"
+}

@@ -1669,7 +1669,7 @@ export const scenario33_DeathCustomPlayground: TestScenario = {
     setup: (state: GameState) => {
         let newState = initScenarioBase(
             state,
-            ['Death_cust', 'Water', 'Spirit'],
+            ['Death', 'Water', 'Spirit'],
             ['Metal', 'Death', 'Fire'],
             'player',
             'action'
@@ -1677,12 +1677,12 @@ export const scenario33_DeathCustomPlayground: TestScenario = {
 
         // Player: All Death cards in hand
         newState.player.hand = [
-            createCard('Death_cust', 0, true),
-            createCard('Death_cust', 1, true),
-            createCard('Death_cust', 2, true),
-            createCard('Death_cust', 3, true),
-            createCard('Death_cust', 4, true),
-            createCard('Death_cust', 5, true),
+            createCard('Death', 0, true),
+            createCard('Death', 1, true),
+            createCard('Death', 2, true),
+            createCard('Death', 3, true),
+            createCard('Death', 4, true),
+            createCard('Death', 5, true),
         ];
 
         // Opponent: At least one card in each lane (including value 0-1 for Death-4 testing)

@@ -11,7 +11,7 @@
 
 import { GameState, ActionRequired, AIAction, PlayedCard, Player } from '../../types';
 import { getEffectiveCardValue } from '../game/stateManager';
-import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered } from '../game/helpers/actionUtils';
+import { findCardOnBoard, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../game/helpers/actionUtils';
 import { handleControlRearrange, canBenefitFromPlayerRearrange, canBenefitFromOwnRearrange } from './controlMechanicLogic';
 import { isFrost1Active } from '../game/passiveRuleChecker';
 import {
@@ -1132,8 +1132,16 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
             if (playableHand.length === 0) return { type: 'skip' };
 
-            // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
-            let playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
+            // CRITICAL: Respect forcedLaneIndex for "in this line" effects (Diversity-0)
+            const forcedLaneIndex = (action as any).forcedLaneIndex;
+            let playableLanes: number[];
+            if (forcedLaneIndex !== undefined) {
+                // "In this line" - ONLY this lane is valid
+                playableLanes = [forcedLaneIndex];
+            } else {
+                // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
+                playableLanes = (action as any).validLanes || [0, 1, 2].filter(i => i !== (action as any).disallowedLaneIndex);
+            }
             playableLanes = playableLanes.filter((laneIndex: number) => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
@@ -2369,6 +2377,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         if (targetFilter.valueMinGreaterThanHandSize) {
                             const handSize = state[cardOwner].hand.length;
                             if (card.value <= handSize) continue;
+                        }
+
+                        // NEW: Check valueLessThanUniqueProtocolsOnField - target must have value < unique protocols
+                        // Diversity-4: "Flip 1 card with a value less than the number of different protocols on cards in the field"
+                        if (targetFilter.valueLessThanUniqueProtocolsOnField) {
+                            const threshold = countUniqueProtocolsOnField(state);
+                            if (card.value >= threshold) continue;
                         }
 
                         validTargets.push({ card, owner: playerKey, laneIndex: laneIdx });

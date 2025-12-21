@@ -271,11 +271,51 @@ export const compileLane = (prevState: GameState, laneIndex: number): GameState 
 export const selectHandCardForAction = (prevState: GameState, cardId: string): GameState => {
     if (prevState.actionRequired?.type !== 'select_card_from_hand_to_play') return prevState;
 
-    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown, targetLaneIndex, validLanes, selectableCardIds, valueFilter } = prevState.actionRequired as any;
+    const { disallowedLaneIndex, sourceCardId, isFaceDown, actor, destinationRule, condition, faceDown, targetLaneIndex, validLanes, selectableCardIds, valueFilter, forcedLaneIndex } = prevState.actionRequired as any;
 
     // NEW: Validate that selected card is in the selectable list (for valueFilter effects like Clarity-2)
     if (selectableCardIds && !selectableCardIds.includes(cardId)) {
         return prevState;
+    }
+
+    // NEW: Diversity-0 - if forcedLaneIndex is set, restrict to that lane
+    // If faceDown is undefined (player chooses orientation), use validLanes so player can click the lane
+    // If faceDown is defined (forced orientation), use preSelectedLane for auto-play
+    if (forcedLaneIndex !== undefined) {
+        const faceDownValue = faceDown !== undefined ? faceDown : isFaceDown;
+        const { ignoreProtocolMatching } = prevState.actionRequired as any;
+
+        if (faceDownValue === undefined) {
+            // Player chooses orientation - they must click the lane
+            // validLanes restricts to only the forced lane
+            return {
+                ...prevState,
+                actionRequired: {
+                    type: 'select_lane_for_play',
+                    cardInHandId: cardId,
+                    sourceCardId,
+                    isFaceDown: undefined,  // Player chooses
+                    actor,
+                    source: 'hand',
+                    validLanes: [forcedLaneIndex],  // Only this lane is clickable
+                    ignoreProtocolMatching,  // Pass through for face-up determination
+                } as any
+            };
+        } else {
+            // Forced orientation - auto-play to the lane
+            return {
+                ...prevState,
+                actionRequired: {
+                    type: 'select_lane_for_play',
+                    cardInHandId: cardId,
+                    sourceCardId,
+                    isFaceDown: faceDownValue,
+                    actor,
+                    source: 'hand',
+                    preSelectedLane: forcedLaneIndex,
+                } as any
+            };
+        }
     }
 
     // NEW: Smoke-3 - if targetLaneIndex is already set, skip lane selection and go directly to play

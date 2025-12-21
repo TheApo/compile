@@ -581,13 +581,15 @@ export const processQueuedActions = (state: GameState): GameState => {
                 continue;
             }
 
-            // Check if source card is still PHYSICALLY uncovered (required for middle/bottom box effects)
-            // CRITICAL: Use isCardPhysicallyUncovered here, NOT isCardUncovered!
-            // Even if a committed card is on top (which isCardUncovered would ignore),
-            // the source card's remaining effects should be cancelled because it IS covered.
-            // Per rules: "The remainder of darkness 0 effect... does NOT trigger as its middle text is now covered by spirit 3"
+            // Check if source card is still PHYSICALLY uncovered
+            // CRITICAL FIX: Top effects (start/end triggers) work even when covered, per rules!
+            // Only bottom effects require the card to be uncovered.
+            // Per rules: "Top box effects are active if the card is face-up, even if covered"
+            // But for middle/bottom effects: "The remainder of darkness 0 effect... does NOT trigger as its middle text is now covered"
+            const isTopEffect = context.triggerType === 'start' || context.triggerType === 'end';
             const sourceIsUncovered = isCardPhysicallyUncovered(mutableState, sourceCardId);
-            if (!sourceIsUncovered) {
+
+            if (!sourceIsUncovered && !isTopEffect) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, context.cardOwner, `Remaining effects from ${cardName} cancelled because it is now covered.`);
                 continue;

@@ -1,0 +1,10 @@
+{
+  "name": "fire-playground",
+  "description": "All Fire cards in hand for testing discard/delete/return mechanics",
+  "playerProtocols": ["Fire", "Water", "Speed"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Fire-1: Discard, if you do delete. Fire-2: Discard, if you do return. Fire-3: May discard, if you do flip. Fire-4: Opponent discards 2."
+}

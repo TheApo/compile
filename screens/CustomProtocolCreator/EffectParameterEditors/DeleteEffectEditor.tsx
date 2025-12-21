@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { DeleteEffectParams } from '../../../types/customProtocol';
-import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
+import { CollapsibleSection, TargetFilterRow, AdvancedConditionalSection } from './shared';
 
 interface DeleteEffectEditorProps {
     params: DeleteEffectParams;
@@ -13,419 +13,269 @@ interface DeleteEffectEditorProps {
 }
 
 export const DeleteEffectEditor: React.FC<DeleteEffectEditorProps> = ({ params, onChange }) => {
-    // Ensure targetFilter exists
     const targetFilter = params.targetFilter || { position: 'uncovered', faceState: 'any' };
+
+    // Check for non-default configurations
+    const hasTargetFilterConfig = targetFilter.position !== 'uncovered' || targetFilter.faceState !== 'any' ||
+                                   targetFilter.owner || targetFilter.calculation || targetFilter.valueRange || targetFilter.valueSource;
+    const hasScopeConfig = params.scope?.type && params.scope.type !== 'any';
+    const hasLaneConfig = params.laneCondition?.type || params.selectLane;
+    const hasDeleteSelf = params.deleteSelf;
 
     return (
         <div className="param-editor delete-effect-editor">
-            <h4>Delete Effect Parameters</h4>
+            <h4>Delete Effect</h4>
 
-            <label>
-                Anzahl
-                <select
-                    value={typeof params.count === 'number' ? params.count.toString() : 'all'}
-                    onChange={e => onChange({ ...params, count: e.target.value === 'all' ? 'all_in_lane' : parseInt(e.target.value) })}
-                >
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="all">All in a lane</option>
-                </select>
-            </label>
-
-            <label>
-                <input
-                    type="checkbox"
-                    checked={params.excludeSelf}
-                    onChange={e => onChange({ ...params, excludeSelf: e.target.checked })}
-                />
-                Exclude self (other cards only)
-            </label>
-
-            <label>
-                <input
-                    type="checkbox"
-                    checked={params.deleteSelf || false}
-                    onChange={e => onChange({ ...params, deleteSelf: e.target.checked })}
-                />
-                Delete this card (ignores all other settings)
-            </label>
-
-            {params.deleteSelf && (
-                <label style={{ marginLeft: '24px' }}>
-                    Protocol Count Condition
-                    <select
-                        value={(params as any).protocolCountConditional?.threshold || 'none'}
-                        onChange={e => {
-                            const val = e.target.value;
-                            if (val === 'none') {
-                                const { protocolCountConditional, ...rest } = params as any;
-                                onChange(rest as DeleteEffectParams);
-                            } else {
-                                onChange({
-                                    ...params,
-                                    protocolCountConditional: {
-                                        type: 'unique_protocols_on_field_below',
-                                        threshold: parseInt(val)
-                                    }
-                                } as any);
-                            }
-                        }}
-                    >
-                        <option value="none">Always delete (no condition)</option>
-                        <option value="2">If less than 2 different protocols</option>
-                        <option value="3">If less than 3 different protocols</option>
-                        <option value="4">If less than 4 different protocols</option>
-                        <option value="5">If less than 5 different protocols</option>
-                        <option value="6">If less than 6 different protocols</option>
-                    </select>
-                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                        "If there are not at least X different protocols on cards in the field, delete this card."
-                    </small>
-                </label>
-            )}
-
-            <h5>Target Filter</h5>
-
-            <label>
-                Position
-                <select
-                    value={targetFilter.position}
-                    onChange={e =>
-                        onChange({ ...params, targetFilter: { ...targetFilter, position: e.target.value as any } })
-                    }
-                >
-                    <option value="any">Any</option>
-                    <option value="uncovered">Uncovered</option>
-                    <option value="covered">Covered</option>
-                </select>
-            </label>
-
-            <label>
-                Face State
-                <select
-                    value={targetFilter.faceState}
-                    onChange={e =>
-                        onChange({ ...params, targetFilter: { ...targetFilter, faceState: e.target.value as any } })
-                    }
-                >
-                    <option value="any">Any</option>
-                    <option value="face_up">Face-up</option>
-                    <option value="face_down">Face-down</option>
-                </select>
-            </label>
-
-            <label>
-                Owner
-                <select
-                    value={targetFilter.owner || 'any'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        const newFilter = { ...targetFilter };
-                        if (val === 'any') {
-                            delete newFilter.owner;
-                        } else {
-                            newFilter.owner = val as any;
-                        }
-                        onChange({ ...params, targetFilter: newFilter });
-                    }}
-                >
-                    <option value="any">Any (own or opponent)</option>
-                    <option value="own">Own cards only</option>
-                    <option value="opponent">Opponent's cards only</option>
-                </select>
-            </label>
-
-            <label>
-                Calculation
-                <select
-                    value={targetFilter.calculation || 'none'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        const newFilter = { ...targetFilter };
-                        if (val === 'none') {
-                            delete newFilter.calculation;
-                        } else {
-                            newFilter.calculation = val as any;
-                        }
-                        onChange({ ...params, targetFilter: newFilter });
-                    }}
-                >
-                    <option value="none">None</option>
-                    <option value="highest_value">Highest value</option>
-                    <option value="lowest_value">Lowest value</option>
-                </select>
-            </label>
-
-            <label>
-                Value Range (specific values to target)
-                <select
-                    value={targetFilter.valueRange ? `${targetFilter.valueRange.min}-${targetFilter.valueRange.max}` : 'none'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        const newFilter = { ...targetFilter };
-                        if (val === 'none') {
-                            delete newFilter.valueRange;
-                        } else if (val === '0-1') {
-                            newFilter.valueRange = { min: 0, max: 1 };
-                        } else if (val === '1-2') {
-                            newFilter.valueRange = { min: 1, max: 2 };
-                        } else if (val === '0-0') {
-                            newFilter.valueRange = { min: 0, max: 0 };
-                        }
-                        onChange({ ...params, targetFilter: newFilter });
-                    }}
-                >
-                    <option value="none">Any value</option>
-                    <option value="0-0">Value 0 only</option>
-                    <option value="0-1">Values 0 or 1</option>
-                    <option value="1-2">Values 1 or 2</option>
-                </select>
-            </label>
-
-            <label>
-                Value Source (dynamic value from previous effect)
-                <select
-                    value={targetFilter.valueSource || 'none'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        const newFilter = { ...targetFilter };
-                        if (val === 'none') {
-                            delete newFilter.valueSource;
-                        } else {
-                            newFilter.valueSource = val as any;
-                        }
-                        onChange({ ...params, targetFilter: newFilter });
-                    }}
-                >
-                    <option value="none">None (use value range above)</option>
-                    <option value="previous_effect_card">Previous Effect Card Value</option>
-                </select>
-                {targetFilter.valueSource === 'previous_effect_card' && (
-                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                        Delete cards that share the value with the card from the previous effect.
-                    </small>
-                )}
-            </label>
-
-            <h5>Scope</h5>
-
-            <label>
-                Lane Scope
-                <select
-                    value={params.scope?.type || 'any'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        if (val === 'any') {
-                            const { scope, ...rest } = params;
-                            onChange(rest as DeleteEffectParams);
-                        } else {
-                            onChange({ ...params, scope: { type: val as any } });
-                        }
-                    }}
-                >
-                    <option value="any">Any lane</option>
-                    <option value="this_line">This line only</option>
-                    <option value="other_lanes">Other lanes</option>
-                    <option value="each_other_line">Each other line (1 per line)</option>
-                    <option value="each_lane">Each lane (flexible, 1 per line)</option>
-                </select>
-            </label>
-
-            {(params.scope?.type === 'other_lanes' || params.scope?.type === 'any') && (
+            {/* Basic Options */}
+            <div className="effect-editor-basic">
                 <label>
-                    Minimum Cards in Lane
+                    Count
                     <select
-                        value={params.scope?.minCardsInLane || 0}
-                        onChange={e => {
-                            const val = parseInt(e.target.value);
-                            if (val === 0) {
-                                const newScope = { ...params.scope };
-                                delete newScope.minCardsInLane;
-                                onChange({ ...params, scope: newScope as any });
-                            } else {
-                                onChange({
-                                    ...params,
-                                    scope: { ...params.scope!, minCardsInLane: val }
-                                });
-                            }
-                        }}
+                        value={typeof params.count === 'number' ? params.count.toString() : 'all'}
+                        onChange={e => onChange({ ...params, count: e.target.value === 'all' ? 'all_in_lane' : parseInt(e.target.value) })}
                     >
-                        <option value={0}>No minimum</option>
-                        <option value={8}>8 or more cards (Metal-3)</option>
-                        <option value={6}>6 or more cards</option>
-                        <option value={4}>4 or more cards</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="all">All in lane</option>
                     </select>
-                    {params.scope?.minCardsInLane && (
-                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                            Only delete from lanes with {params.scope.minCardsInLane}+ cards total.
-                        </small>
-                    )}
                 </label>
+
+                <label className="checkbox-label">
+                    <input
+                        type="checkbox"
+                        checked={params.excludeSelf}
+                        onChange={e => onChange({ ...params, excludeSelf: e.target.checked })}
+                    />
+                    Exclude self
+                </label>
+
+                <label className="checkbox-label">
+                    <input
+                        type="checkbox"
+                        checked={params.deleteSelf || false}
+                        onChange={e => onChange({ ...params, deleteSelf: e.target.checked })}
+                    />
+                    Delete this card
+                </label>
+            </div>
+
+            {/* Delete Self Condition */}
+            {hasDeleteSelf && (
+                <CollapsibleSection title="Delete Self Condition" forceOpen={!!(params as any).protocolCountConditional}>
+                    <label>
+                        Protocol Count
+                        <select
+                            value={(params as any).protocolCountConditional?.threshold || 'none'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'none') {
+                                    const { protocolCountConditional, ...rest } = params as any;
+                                    onChange(rest as DeleteEffectParams);
+                                } else {
+                                    onChange({
+                                        ...params,
+                                        protocolCountConditional: { type: 'unique_protocols_on_field_below', threshold: parseInt(val) }
+                                    } as any);
+                                }
+                            }}
+                        >
+                            <option value="none">Always delete</option>
+                            <option value="2">If &lt; 2 protocols</option>
+                            <option value="3">If &lt; 3 protocols</option>
+                            <option value="4">If &lt; 4 protocols</option>
+                            <option value="5">If &lt; 5 protocols</option>
+                            <option value="6">If &lt; 6 protocols</option>
+                        </select>
+                    </label>
+                </CollapsibleSection>
             )}
 
-            <label>
-                Who Chooses Target?
-                <select
-                    value={params.actorChooses || 'effect_owner'}
-                    onChange={e => {
-                        const val = e.target.value as 'effect_owner' | 'card_owner';
-                        if (val === 'effect_owner') {
-                            const { actorChooses, ...rest } = params;
-                            onChange(rest as DeleteEffectParams);
-                        } else {
-                            onChange({ ...params, actorChooses: val });
-                        }
-                    }}
-                >
-                    <option value="effect_owner">Effect owner chooses (default)</option>
-                    <option value="card_owner">Card owner chooses (Plague-4: opponent deletes their own)</option>
-                </select>
-                {params.actorChooses === 'card_owner' && (
-                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                        The owner of the targeted card chooses which card to delete.
-                    </small>
-                )}
-            </label>
-
-            <h5>Advanced Conditional</h5>
-
-            <label>
-                Conditional Type
-                <select
-                    value={params.advancedConditional?.type || 'none'}
-                    onChange={e => {
-                        if (e.target.value === 'none') {
-                            const { advancedConditional, ...rest } = params;
-                            onChange(rest as DeleteEffectParams);
-                        } else {
-                            onChange({ ...params, advancedConditional: { type: e.target.value as any } });
-                        }
-                    }}
-                >
-                    <option value="none">None</option>
-                    <option value="empty_hand">Only if hand is empty</option>
-                    <option value="opponent_higher_value_in_lane">Only if opponent has higher value in this lane</option>
-                    <option value="this_card_is_covered">Only if this card is covered</option>
-                </select>
-            </label>
-
-            <h5>Lane Restriction</h5>
-
-            <label>
-                Lane Condition
-                <select
-                    value={params.laneCondition?.type || 'none'}
-                    onChange={e => {
-                        const val = e.target.value;
-                        if (val === 'none') {
-                            const { laneCondition, selectLane, ...rest } = params;
-                            onChange(rest as DeleteEffectParams);
-                        } else {
-                            onChange({
-                                ...params,
-                                laneCondition: { type: val as any },
-                                selectLane: true
-                            });
-                        }
-                    }}
-                >
-                    <option value="none">None (any lane)</option>
-                    <option value="opponent_higher_value">Only lanes where opponent has higher value</option>
-                </select>
-                {params.laneCondition?.type === 'opponent_higher_value' && (
-                    <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                        Can only delete cards in lanes where opponent's total value is higher than yours.
-                        Player selects lane first, then card.
-                    </small>
-                )}
-            </label>
-
-            <label>
-                <input
-                    type="checkbox"
-                    checked={params.selectLane || false}
-                    onChange={e => onChange({ ...params, selectLane: e.target.checked })}
+            {/* Target Filter Section */}
+            <CollapsibleSection title="Target Filter" forceOpen={hasTargetFilterConfig}>
+                <TargetFilterRow
+                    filter={targetFilter}
+                    onChange={newFilter => onChange({ ...params, targetFilter: { ...targetFilter, ...newFilter } })}
+                    showOwner={true}
+                    showPosition={true}
+                    showFaceState={true}
                 />
-                Select lane first (player chooses lane, then card)
-                <small style={{ display: 'block', marginLeft: '24px', color: '#8A79E8' }}>
-                    Enable if player should pick a lane before selecting a card.
-                </small>
-            </label>
 
+                <div className="filter-row">
+                    <label>
+                        Calculation
+                        <select
+                            value={targetFilter.calculation || 'none'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                const newFilter = { ...targetFilter };
+                                if (val === 'none') delete newFilter.calculation;
+                                else newFilter.calculation = val as any;
+                                onChange({ ...params, targetFilter: newFilter });
+                            }}
+                        >
+                            <option value="none">None</option>
+                            <option value="highest_value">Highest value</option>
+                            <option value="lowest_value">Lowest value</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Value Range
+                        <select
+                            value={targetFilter.valueRange ? `${targetFilter.valueRange.min}-${targetFilter.valueRange.max}` : 'none'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                const newFilter = { ...targetFilter };
+                                if (val === 'none') delete newFilter.valueRange;
+                                else if (val === '0-1') newFilter.valueRange = { min: 0, max: 1 };
+                                else if (val === '1-2') newFilter.valueRange = { min: 1, max: 2 };
+                                else if (val === '0-0') newFilter.valueRange = { min: 0, max: 0 };
+                                onChange({ ...params, targetFilter: newFilter });
+                            }}
+                        >
+                            <option value="none">Any value</option>
+                            <option value="0-0">Value 0 only</option>
+                            <option value="0-1">Values 0-1</option>
+                            <option value="1-2">Values 1-2</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Value Source
+                        <select
+                            value={targetFilter.valueSource || 'none'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                const newFilter = { ...targetFilter };
+                                if (val === 'none') delete newFilter.valueSource;
+                                else newFilter.valueSource = val as any;
+                                onChange({ ...params, targetFilter: newFilter });
+                            }}
+                        >
+                            <option value="none">None</option>
+                            <option value="previous_effect_card">Previous effect card</option>
+                        </select>
+                    </label>
+                </div>
+            </CollapsibleSection>
+
+            {/* Scope Section */}
+            <CollapsibleSection title="Scope" forceOpen={hasScopeConfig}>
+                <div className="filter-row">
+                    <label>
+                        Lane Scope
+                        <select
+                            value={params.scope?.type || 'any'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'any') {
+                                    const { scope, ...rest } = params;
+                                    onChange(rest as DeleteEffectParams);
+                                } else {
+                                    onChange({ ...params, scope: { type: val as any } });
+                                }
+                            }}
+                        >
+                            <option value="any">Any lane</option>
+                            <option value="this_line">This lane only</option>
+                            <option value="other_lanes">Other lanes</option>
+                            <option value="each_other_line">Each other lane</option>
+                            <option value="each_lane">Each lane</option>
+                        </select>
+                    </label>
+
+                    {(params.scope?.type === 'other_lanes' || params.scope?.type === 'any') && (
+                        <label>
+                            Min Cards
+                            <select
+                                value={params.scope?.minCardsInLane || 0}
+                                onChange={e => {
+                                    const val = parseInt(e.target.value);
+                                    if (val === 0) {
+                                        const newScope = { ...params.scope };
+                                        delete newScope.minCardsInLane;
+                                        onChange({ ...params, scope: newScope as any });
+                                    } else {
+                                        onChange({ ...params, scope: { ...params.scope!, minCardsInLane: val } });
+                                    }
+                                }}
+                            >
+                                <option value={0}>No minimum</option>
+                                <option value={4}>4+ cards</option>
+                                <option value={6}>6+ cards</option>
+                                <option value={8}>8+ cards</option>
+                            </select>
+                        </label>
+                    )}
+
+                    <label>
+                        Who Chooses
+                        <select
+                            value={params.actorChooses || 'effect_owner'}
+                            onChange={e => {
+                                const val = e.target.value as 'effect_owner' | 'card_owner';
+                                if (val === 'effect_owner') {
+                                    const { actorChooses, ...rest } = params;
+                                    onChange(rest as DeleteEffectParams);
+                                } else {
+                                    onChange({ ...params, actorChooses: val });
+                                }
+                            }}
+                        >
+                            <option value="effect_owner">Effect owner</option>
+                            <option value="card_owner">Card owner (Plague-4)</option>
+                        </select>
+                    </label>
+                </div>
+            </CollapsibleSection>
+
+            {/* Lane Restriction Section */}
+            <CollapsibleSection title="Lane Restriction" forceOpen={hasLaneConfig}>
+                <div className="filter-row">
+                    <label>
+                        Lane Condition
+                        <select
+                            value={params.laneCondition?.type || 'none'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'none') {
+                                    const { laneCondition, selectLane, ...rest } = params;
+                                    onChange(rest as DeleteEffectParams);
+                                } else {
+                                    onChange({ ...params, laneCondition: { type: val as any }, selectLane: true });
+                                }
+                            }}
+                        >
+                            <option value="none">None</option>
+                            <option value="opponent_higher_value">Opponent higher value</option>
+                        </select>
+                    </label>
+
+                    <label className="checkbox-label">
+                        <input
+                            type="checkbox"
+                            checked={params.selectLane || false}
+                            onChange={e => onChange({ ...params, selectLane: e.target.checked })}
+                        />
+                        Select lane first
+                    </label>
+                </div>
+            </CollapsibleSection>
+
+            {/* Conditionals Section */}
+            <AdvancedConditionalSection
+                conditional={params.advancedConditional}
+                onChange={cond => {
+                    if (cond) {
+                        onChange({ ...params, advancedConditional: cond });
+                    } else {
+                        const { advancedConditional, ...rest } = params;
+                        onChange(rest as DeleteEffectParams);
+                    }
+                }}
+                availableTypes={['none', 'empty_hand', 'opponent_higher_value_in_lane', 'this_card_is_covered']}
+            />
         </div>
     );
-};
-
-// Keeping for reference but using getEffectSummary from cardFactory instead
-const _generateDeleteText = (params: DeleteEffectParams): string => {
-    let text = 'Delete ';
-
-    if (params.count === 'all_in_lane') {
-        text += 'all ';
-    } else {
-        text += `${params.count} `;
-    }
-
-    // Ensure targetFilter exists
-    const targetFilter = params.targetFilter || { position: 'uncovered', faceState: 'any' };
-
-    if (targetFilter.calculation === 'highest_value') {
-        text += 'highest value ';
-    } else if (targetFilter.calculation === 'lowest_value') {
-        text += 'lowest value ';
-    }
-
-    if (targetFilter.valueRange) {
-        text += `value ${targetFilter.valueRange.min}-${targetFilter.valueRange.max} `;
-    }
-
-    if (targetFilter.position === 'covered') {
-        text += 'covered ';
-    } else if (targetFilter.position === 'uncovered') {
-        text += 'uncovered ';
-    }
-
-    if (targetFilter.faceState === 'face_down') {
-        text += 'face-down ';
-    } else if (targetFilter.faceState === 'face_up') {
-        text += 'face-up ';
-    }
-
-    const cardWord = params.count === 1 ? 'card' : 'cards';
-    text += cardWord;
-
-    if (params.scope?.type === 'this_line') {
-        text += ' in this line';
-    } else if (params.scope?.type === 'other_lanes') {
-        text += ' in other lanes';
-        if (params.scope.minCardsInLane) {
-            text += ` with ${params.scope.minCardsInLane}+ cards`;
-        }
-    } else if (params.scope?.type === 'each_other_line' || (params.scope as any)?.type === 'each_other_line') {
-        text += ' from each other line';
-    } else if (params.scope?.type === 'each_lane') {
-        text = `In each line, ${text.toLowerCase()}`;
-    } else if ((params.scope as any)?.type === 'any' && (params.scope as any).minCardsInLane) {
-        text += ` in lanes with ${(params.scope as any).minCardsInLane}+ cards`;
-    }
-
-    // Add owner info
-    if (targetFilter.owner === 'own') {
-        text += ' (your cards)';
-    } else if (targetFilter.owner === 'opponent') {
-        text += ' (opponent\'s cards)';
-    }
-
-    if (params.excludeSelf) {
-        text += ' (excluding self)';
-    }
-
-    // Add actor info
-    if (params.actorChooses === 'card_owner') {
-        text += '. Card owner chooses which.';
-        return text;
-    }
-
-    return text + '.';
 };

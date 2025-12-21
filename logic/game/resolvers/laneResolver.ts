@@ -719,7 +719,7 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             break;
         }
         case 'select_lane_for_play': {
-            const { cardInHandId, isFaceDown, actor, source, disallowedLaneIndex, validLanes, preSelectedLane } = prev.actionRequired as any;
+            const { cardInHandId, isFaceDown, actor, source, disallowedLaneIndex, validLanes, preSelectedLane, ignoreProtocolMatching } = prev.actionRequired as any;
 
             // NEW: Smoke-3 - if preSelectedLane is set, use it instead of targetLaneIndex
             // This allows automatic lane resolution after card selection
@@ -1036,7 +1036,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 break;
             }
 
-            const stateBeforePlay = { ...prev, actionRequired: null };
+            // Pass ignoreProtocolMatching to playResolver via state (since actionRequired will be null)
+            const stateBeforePlay = {
+                ...prev,
+                actionRequired: null,
+                _ignoreProtocolMatching: ignoreProtocolMatching || false
+            };
 
             let canPlayFaceUp: boolean;
             if (typeof isFaceDown === 'boolean') {
@@ -1057,7 +1062,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const opponentHasPsychic1 = prev[opponentId].lanes.flat().some(c => c.isFaceUp && c.protocol === 'Psychic' && c.value === 1);
                 // Check Unity-1 same-protocol face-up rule
                 const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(prev, actor, effectiveLaneIndex, cardInHand.protocol);
-                canPlayFaceUp = (playerHasSpiritOne || thisCardIgnoresMatching || hasSameProtocolFaceUpRule || cardInHand.protocol === prev[actor].protocols[effectiveLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[effectiveLaneIndex]) && !opponentHasPsychic1;
+                // NEW: ignoreProtocolMatching from effect (Diversity-0: player chooses orientation regardless of protocol)
+                canPlayFaceUp = (playerHasSpiritOne || thisCardIgnoresMatching || ignoreProtocolMatching || hasSameProtocolFaceUpRule || cardInHand.protocol === prev[actor].protocols[effectiveLaneIndex] || cardInHand.protocol === prev[opponentId].protocols[effectiveLaneIndex]) && !opponentHasPsychic1;
             }
 
             const { newState: stateAfterPlay, animationRequests } = playCard(stateBeforePlay, cardInHandId, effectiveLaneIndex, canPlayFaceUp, actor);

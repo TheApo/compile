@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { PassiveRuleParams } from '../../../types/customProtocol';
-import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
+import { CollapsibleSection } from './shared';
 
 interface PassiveRuleEditorProps {
     params: PassiveRuleParams;
@@ -17,199 +17,137 @@ export const PassiveRuleEditor: React.FC<PassiveRuleEditorProps> = ({ params, on
     const target = params.rule?.target || 'opponent';
     const scope = params.rule?.scope || 'this_lane';
     const onlyDuringYourTurn = params.rule?.onlyDuringYourTurn || false;
-    // NEW: For block_draw_conditional
     const conditionTarget = (params.rule as any)?.conditionTarget || 'self';
     const blockTarget = (params.rule as any)?.blockTarget || 'self';
 
+    const hasDrawBlockConfig = ruleType === 'block_draw_conditional';
+    const hasMiddleCommandConfig = ruleType === 'ignore_middle_commands' && onlyDuringYourTurn;
+
     return (
         <div className="param-editor passive-rule-editor">
-            <h4>Passive Rule Parameters</h4>
-            <p style={{ color: '#8A79E8', fontSize: '14px', marginBottom: '15px' }}>
-                This rule is active while the card is face-up. It modifies game behavior.
-            </p>
+            <h4>Passive Rule</h4>
+            <small className="hint-text">Active while card is face-up. Modifies game behavior.</small>
 
-            <label>
-                Rule Type
-                <select
-                    value={ruleType}
-                    onChange={e => onChange({
-                        ...params,
-                        rule: { ...params.rule, type: e.target.value as any, target, scope }
-                    })}
-                >
-                    <optgroup label="Play Restrictions">
-                        <option value="block_face_down_play">Block Face-Down Plays (Metal-2)</option>
-                        <option value="block_face_up_play">Block Face-Up Plays</option>
-                        <option value="block_all_play">Block All Plays (Plague-0)</option>
-                        <option value="require_face_down_play">Require Face-Down Plays (Psychic-1)</option>
-                    </optgroup>
-                    <optgroup label="Protocol Matching">
-                        <option value="allow_any_protocol_play">Allow Any Protocol (Spirit-1, Chaos-3)</option>
-                        <option value="allow_play_on_opponent_side">Allow Play on Opponent Side (Corruption-0)</option>
-                        <option value="allow_same_protocol_face_up_play">Allow Same Protocol Face-Up Play (Unity-1)</option>
-                        <option value="require_non_matching_protocol">Require Non-Matching (Anarchy-1)</option>
-                    </optgroup>
-                    <optgroup label="Action Blocks">
-                        <option value="block_flips">Block Flips (Frost-1)</option>
-                        <option value="block_protocol_rearrange">Block Protocol Rearrange (Frost-1)</option>
-                        <option value="block_shifts_from_lane">Block Shifts From Lane (Frost-3)</option>
-                        <option value="block_shifts_to_lane">Block Shifts To Lane (Frost-3)</option>
-                        <option value="block_flip_this_card">This Card Cannot Be Flipped</option>
-                    </optgroup>
-                    <optgroup label="Draw Restrictions">
-                        <option value="block_draw_conditional">Conditional Draw Block</option>
-                    </optgroup>
-                    <optgroup label="Effect Modifications">
-                        <option value="ignore_middle_commands">Ignore Middle Commands (Apathy-2)</option>
-                    </optgroup>
-                    <optgroup label="Phase Modifications">
-                        <option value="skip_check_cache_phase">Skip Check Cache Phase (Spirit-0)</option>
-                    </optgroup>
-                </select>
-            </label>
-
-            <label>
-                Affected Player
-                <select
-                    value={target}
-                    onChange={e => onChange({
-                        ...params,
-                        rule: { ...params.rule, type: ruleType, target: e.target.value as any, scope }
-                    })}
-                >
-                    <option value="self">Self (You)</option>
-                    <option value="opponent">Opponent</option>
-                    <option value="all">All Players</option>
-                </select>
-            </label>
-
-            <label>
-                Scope
-                <select
-                    value={scope}
-                    onChange={e => onChange({
-                        ...params,
-                        rule: { ...params.rule, type: ruleType, target, scope: e.target.value as any, onlyDuringYourTurn }
-                    })}
-                >
-                    <option value="this_lane">This Lane Only</option>
-                    <option value="global">Global (All Lanes)</option>
-                </select>
-            </label>
-
-            {/* Only during your turn - for ignore_middle_commands */}
-            {ruleType === 'ignore_middle_commands' && (
+            {/* Basic Options */}
+            <div className="effect-editor-basic">
                 <label>
-                    <input
-                        type="checkbox"
-                        checked={onlyDuringYourTurn}
+                    Rule Type
+                    <select
+                        value={ruleType}
                         onChange={e => onChange({
                             ...params,
-                            rule: { ...params.rule, type: ruleType, target, scope, onlyDuringYourTurn: e.target.checked }
+                            rule: { ...params.rule, type: e.target.value as any, target, scope }
                         })}
-                    />
-                    Only during your turn
-                    <small style={{ display: 'block', marginLeft: '24px', marginTop: '4px', color: '#8A79E8' }}>
-                        Effect only applies during card owner's turn, not during opponent's turn.
-                    </small>
+                    >
+                        <optgroup label="Play Restrictions">
+                            <option value="block_face_down_play">Block Face-Down</option>
+                            <option value="block_face_up_play">Block Face-Up</option>
+                            <option value="block_all_play">Block All</option>
+                            <option value="require_face_down_play">Require Face-Down</option>
+                        </optgroup>
+                        <optgroup label="Protocol Matching">
+                            <option value="allow_any_protocol_play">Allow Any Protocol</option>
+                            <option value="allow_play_on_opponent_side">Allow Opponent Side</option>
+                            <option value="allow_same_protocol_face_up_play">Same Protocol Face-Up</option>
+                            <option value="require_non_matching_protocol">Non-Matching Only</option>
+                        </optgroup>
+                        <optgroup label="Action Blocks">
+                            <option value="block_flips">Block Flips</option>
+                            <option value="block_protocol_rearrange">Block Rearrange</option>
+                            <option value="block_shifts_from_lane">Block Shift From</option>
+                            <option value="block_shifts_to_lane">Block Shift To</option>
+                            <option value="block_flip_this_card">Can't Flip This Card</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                            <option value="block_draw_conditional">Conditional Draw Block</option>
+                            <option value="ignore_middle_commands">Ignore Middle Commands</option>
+                            <option value="skip_check_cache_phase">Skip Check Cache</option>
+                        </optgroup>
+                    </select>
                 </label>
-            )}
 
-            {/* NEW: block_draw_conditional options */}
+                <label>
+                    Target
+                    <select
+                        value={target}
+                        onChange={e => onChange({
+                            ...params,
+                            rule: { ...params.rule, type: ruleType, target: e.target.value as any, scope }
+                        })}
+                    >
+                        <option value="self">Self</option>
+                        <option value="opponent">Opponent</option>
+                        <option value="all">All</option>
+                    </select>
+                </label>
+
+                <label>
+                    Scope
+                    <select
+                        value={scope}
+                        onChange={e => onChange({
+                            ...params,
+                            rule: { ...params.rule, type: ruleType, target, scope: e.target.value as any, onlyDuringYourTurn }
+                        })}
+                    >
+                        <option value="this_lane">This Lane</option>
+                        <option value="global">Global</option>
+                    </select>
+                </label>
+            </div>
+
+            {/* Conditional Draw Block Options */}
             {ruleType === 'block_draw_conditional' && (
-                <>
-                    <label>
-                        Condition (who must have cards in hand)
-                        <select
-                            value={conditionTarget}
+                <CollapsibleSection title="Draw Block Settings" forceOpen={hasDrawBlockConfig}>
+                    <div className="filter-row">
+                        <label>
+                            Condition (who must have cards)
+                            <select
+                                value={conditionTarget}
+                                onChange={e => onChange({
+                                    ...params,
+                                    rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget: e.target.value, blockTarget } as any
+                                })}
+                            >
+                                <option value="self">Card owner</option>
+                                <option value="opponent">Opponent</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Block Target (who can't draw)
+                            <select
+                                value={blockTarget}
+                                onChange={e => onChange({
+                                    ...params,
+                                    rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget, blockTarget: e.target.value } as any
+                                })}
+                            >
+                                <option value="self">Card owner</option>
+                                <option value="opponent">Opponent</option>
+                                <option value="all">Both</option>
+                            </select>
+                        </label>
+                    </div>
+                </CollapsibleSection>
+            )}
+
+            {/* Ignore Middle Commands Option */}
+            {ruleType === 'ignore_middle_commands' && (
+                <CollapsibleSection title="Timing" forceOpen={hasMiddleCommandConfig}>
+                    <label className="checkbox-label">
+                        <input
+                            type="checkbox"
+                            checked={onlyDuringYourTurn}
                             onChange={e => onChange({
                                 ...params,
-                                rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget: e.target.value, blockTarget } as any
+                                rule: { ...params.rule, type: ruleType, target, scope, onlyDuringYourTurn: e.target.checked }
                             })}
-                        >
-                            <option value="self">Card owner (you)</option>
-                            <option value="opponent">Opponent of card owner</option>
-                        </select>
-                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                            If this player has any cards in hand, the draw block activates.
-                        </small>
+                        />
+                        Only during your turn
                     </label>
-
-                    <label>
-                        Block target (who cannot draw)
-                        <select
-                            value={blockTarget}
-                            onChange={e => onChange({
-                                ...params,
-                                rule: { ...params.rule, type: ruleType, target: 'this_card', scope: 'global', conditionTarget, blockTarget: e.target.value } as any
-                            })}
-                        >
-                            <option value="self">Card owner (you)</option>
-                            <option value="opponent">Opponent of card owner</option>
-                            <option value="all">Both players</option>
-                        </select>
-                        <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                            This player cannot draw cards when the condition is met.
-                        </small>
-                    </label>
-                </>
+                </CollapsibleSection>
             )}
-
-            {/* NEW: block_flip_this_card info */}
-            {ruleType === 'block_flip_this_card' && (
-                <small style={{ display: 'block', marginTop: '8px', color: '#8A79E8' }}>
-                    This card cannot be flipped by any effect. Only affects this specific card.
-                </small>
-            )}
-
-            {/* NEW: allow_same_protocol_face_up_play info (Unity-1) */}
-            {ruleType === 'allow_same_protocol_face_up_play' && (
-                <small style={{ display: 'block', marginTop: '8px', color: '#8A79E8' }}>
-                    Cards of the same protocol as this card may be played face-up in this lane (bypasses the normal face-down play requirement for non-first cards).
-                </small>
-            )}
-
         </div>
     );
-};
-
-// Keeping for reference but using getEffectSummary from cardFactory instead
-const _generatePassiveRuleText = (params: PassiveRuleParams): string => {
-    const ruleType = params.rule?.type || 'block_all_play';
-    const target = params.rule?.target || 'opponent';
-    const scope = params.rule?.scope || 'this_lane';
-
-    const targetText = target === 'self' ? 'You' : target === 'opponent' ? 'Your opponent' : 'All players';
-    const scopeText = scope === 'this_lane' ? ' in this lane' : '';
-
-    switch (ruleType) {
-        case 'block_face_down_play':
-            return `${targetText} cannot play cards face-down${scopeText}.`;
-        case 'block_face_up_play':
-            return `${targetText} cannot play cards face-up${scopeText}.`;
-        case 'block_all_play':
-            return `${targetText} cannot play cards${scopeText}.`;
-        case 'require_face_down_play':
-            return `${targetText} can only play cards face-down${scopeText}.`;
-        case 'allow_any_protocol_play':
-            return `${targetText} may play cards without matching protocols${scopeText}.`;
-        case 'allow_play_on_opponent_side':
-            return `You may play this card in any line on either player's side.`;
-        case 'require_non_matching_protocol':
-            return `${targetText} can only play cards without matching protocols${scopeText}.`;
-        case 'block_flips':
-            return `Cards cannot be flipped face-up${scopeText}.`;
-        case 'block_protocol_rearrange':
-            return `Protocols cannot be rearranged.`;
-        case 'block_shifts_from_lane':
-            return `Cards cannot shift from this lane.`;
-        case 'block_shifts_to_lane':
-            return `Cards cannot shift to this lane.`;
-        case 'ignore_middle_commands':
-            return `Ignore all middle commands of cards${scopeText}.`;
-        case 'skip_check_cache_phase':
-            return `Skip your check cache phase.`;
-        default:
-            return 'Passive rule active.';
-    }
 };

@@ -229,29 +229,20 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
     };
 
     return (
-        <div style={{ padding: '10px', backgroundColor: '#2c1d63', borderRadius: '4px', border: '1px solid rgba(97, 239, 255, 0.3)' }}>
-            <h4 style={{ color: '#61EFFF', marginTop: 0 }}>Either/Or Choice</h4>
-            <p style={{ color: '#F0F0F0', fontSize: '14px', marginBottom: '15px' }}>
-                Player chooses one of two options. Example: "Either discard 1 card or flip this card"
-            </p>
+        <div className="param-editor choice-effect-editor">
+            <h4>Either/Or Choice</h4>
+            <small className="hint-text">Player chooses one of two options during gameplay.</small>
 
             {/* Option 1 */}
-            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: 'rgba(97, 239, 255, 0.05)', borderRadius: '4px' }}>
-                <label style={{ color: '#61EFFF', display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Option 1:</label>
+            <div className="choice-option-container">
+                <label className="choice-option-header">Option 1:</label>
                 {option1 ? (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                        <div className="choice-option-row">
                             <select
+                                className="choice-action-select"
                                 value={(option1.params as any).action}
                                 onChange={(e) => handleChangeOption1Action(e.target.value as EffectActionType)}
-                                style={{
-                                    flex: 1,
-                                    padding: '8px',
-                                    backgroundColor: '#1A113B',
-                                    color: '#F0F0F0',
-                                    border: '1px solid rgba(97, 239, 255, 0.3)',
-                                    borderRadius: '4px',
-                                }}
                             >
                                 <option value="draw">Draw Cards</option>
                                 <option value="flip">Flip Cards</option>
@@ -262,52 +253,30 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
                                 <option value="play">Play from Hand/Deck</option>
                             </select>
                             <button
+                                className={`choice-btn ${editingOption === 1 ? 'choice-btn-active' : 'choice-btn-edit'}`}
                                 onClick={() => setEditingOption(editingOption === 1 ? null : 1)}
-                                style={{
-                                    padding: '8px 15px',
-                                    backgroundColor: editingOption === 1 ? '#8B0000' : '#61EFFF',
-                                    color: editingOption === 1 ? '#F0F0F0' : '#0A051A',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: 'bold',
-                                }}
                             >
                                 {editingOption === 1 ? 'Hide' : 'Edit'}
                             </button>
                             <button
+                                className="choice-btn choice-btn-remove"
                                 onClick={handleRemoveOption1}
-                                style={{
-                                    padding: '8px 15px',
-                                    backgroundColor: '#8B0000',
-                                    color: '#F0F0F0',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                }}
                             >
                                 Remove
                             </button>
                         </div>
                         {editingOption === 1 && (
-                            <div style={{ marginTop: '10px' }}>
+                            <div className="choice-option-editor">
                                 {renderEffectParams(option1, handleUpdateOption1)}
                             </div>
                         )}
                     </>
                 ) : (
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div className="choice-option-row">
                         <select
+                            className="choice-action-select"
                             value={option1Action}
                             onChange={(e) => setOption1Action(e.target.value as EffectActionType)}
-                            style={{
-                                flex: 1,
-                                padding: '8px',
-                                backgroundColor: '#1A113B',
-                                color: '#F0F0F0',
-                                border: '1px solid rgba(97, 239, 255, 0.3)',
-                                borderRadius: '4px',
-                            }}
                         >
                             <option value="">Choose Action</option>
                             <option value="draw">Draw Cards</option>
@@ -319,17 +288,9 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
                             <option value="play">Play from Hand/Deck</option>
                         </select>
                         <button
+                            className={`choice-btn ${option1Action ? 'choice-btn-add' : 'choice-btn-disabled'}`}
                             onClick={handleAddOption1}
                             disabled={!option1Action}
-                            style={{
-                                padding: '8px 15px',
-                                backgroundColor: option1Action ? '#61EFFF' : '#444',
-                                color: '#0A051A',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: option1Action ? 'pointer' : 'not-allowed',
-                                fontWeight: 'bold',
-                            }}
                         >
                             Add
                         </button>
@@ -338,22 +299,15 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
             </div>
 
             {/* Option 2 */}
-            <div style={{ padding: '10px', backgroundColor: 'rgba(97, 239, 255, 0.05)', borderRadius: '4px' }}>
-                <label style={{ color: '#61EFFF', display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Option 2:</label>
+            <div className="choice-option-container">
+                <label className="choice-option-header">Option 2:</label>
                 {option2 ? (
                     <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                        <div className="choice-option-row">
                             <select
+                                className="choice-action-select"
                                 value={(option2.params as any).action}
                                 onChange={(e) => handleChangeOption2Action(e.target.value as EffectActionType)}
-                                style={{
-                                    flex: 1,
-                                    padding: '8px',
-                                    backgroundColor: '#1A113B',
-                                    color: '#F0F0F0',
-                                    border: '1px solid rgba(97, 239, 255, 0.3)',
-                                    borderRadius: '4px',
-                                }}
                             >
                                 <option value="draw">Draw Cards</option>
                                 <option value="flip">Flip Cards</option>
@@ -364,52 +318,30 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
                                 <option value="play">Play from Hand/Deck</option>
                             </select>
                             <button
+                                className={`choice-btn ${editingOption === 2 ? 'choice-btn-active' : 'choice-btn-edit'}`}
                                 onClick={() => setEditingOption(editingOption === 2 ? null : 2)}
-                                style={{
-                                    padding: '8px 15px',
-                                    backgroundColor: editingOption === 2 ? '#8B0000' : '#61EFFF',
-                                    color: editingOption === 2 ? '#F0F0F0' : '#0A051A',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: 'bold',
-                                }}
                             >
                                 {editingOption === 2 ? 'Hide' : 'Edit'}
                             </button>
                             <button
+                                className="choice-btn choice-btn-remove"
                                 onClick={handleRemoveOption2}
-                                style={{
-                                    padding: '8px 15px',
-                                    backgroundColor: '#8B0000',
-                                    color: '#F0F0F0',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                }}
                             >
                                 Remove
                             </button>
                         </div>
                         {editingOption === 2 && (
-                            <div style={{ marginTop: '10px' }}>
+                            <div className="choice-option-editor">
                                 {renderEffectParams(option2, handleUpdateOption2)}
                             </div>
                         )}
                     </>
                 ) : (
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div className="choice-option-row">
                         <select
+                            className="choice-action-select"
                             value={option2Action}
                             onChange={(e) => setOption2Action(e.target.value as EffectActionType)}
-                            style={{
-                                flex: 1,
-                                padding: '8px',
-                                backgroundColor: '#1A113B',
-                                color: '#F0F0F0',
-                                border: '1px solid rgba(97, 239, 255, 0.3)',
-                                borderRadius: '4px',
-                            }}
                         >
                             <option value="">Choose Action</option>
                             <option value="draw">Draw Cards</option>
@@ -421,17 +353,9 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
                             <option value="play">Play from Hand/Deck</option>
                         </select>
                         <button
+                            className={`choice-btn ${option2Action ? 'choice-btn-add' : 'choice-btn-disabled'}`}
                             onClick={handleAddOption2}
                             disabled={!option2Action}
-                            style={{
-                                padding: '8px 15px',
-                                backgroundColor: option2Action ? '#61EFFF' : '#444',
-                                color: '#0A051A',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: option2Action ? 'pointer' : 'not-allowed',
-                                fontWeight: 'bold',
-                            }}
                         >
                             Add
                         </button>
@@ -440,10 +364,8 @@ export const ChoiceEffectEditor: React.FC<ChoiceEffectEditorProps> = ({ params, 
             </div>
 
             {options.length === 2 && (
-                <div style={{ marginTop: '15px', padding: '10px', backgroundColor: 'rgba(97, 239, 255, 0.1)', borderRadius: '4px' }}>
-                    <p style={{ color: '#61EFFF', fontSize: '14px', margin: 0 }}>
-                        ✓ Both options configured. Player will choose one during gameplay.
-                    </p>
+                <div className="choice-complete-notice">
+                    Both options configured. Player will choose one during gameplay.
                 </div>
             )}
         </div>

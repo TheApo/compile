@@ -1,0 +1,10 @@
+{
+  "name": "speed-playground",
+  "description": "All Speed cards in hand for testing draw/shift mechanics",
+  "playerProtocols": ["Speed", "Water", "Fire"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Speed-1: Start draw if no uncovered. Speed-3: End shift this to another lane."
+}

@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { ValueModifierParams } from '../../../types/customProtocol';
-import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
+import { CollapsibleSection } from './shared';
 
 interface ValueModifierEditorProps {
     params: ValueModifierParams;
@@ -23,199 +23,137 @@ export const ValueModifierEditor: React.FC<ValueModifierEditorProps> = ({ params
 
     const showCondition = modifierType === 'add_per_condition';
     const showFilter = modifierType === 'set_to_fixed' && (target === 'own_cards' || target === 'opponent_cards' || target === 'all_cards');
+    const hasFilterConfig = showFilter && (faceState !== 'face_down' || position !== 'any');
+
+    const updateModifier = (updates: Partial<typeof params.modifier>) => {
+        onChange({
+            ...params,
+            modifier: {
+                ...params.modifier,
+                type: modifierType,
+                value,
+                condition: showCondition ? condition : undefined,
+                target,
+                scope,
+                filter: showFilter ? { faceState, position } : undefined,
+                ...updates
+            }
+        });
+    };
 
     return (
         <div className="param-editor value-modifier-editor">
-            <h4>Value Modifier Parameters</h4>
-            <p style={{ color: '#8A79E8', fontSize: '14px', marginBottom: '15px' }}>
-                This modifier is active while the card is face-up. It modifies card values or lane totals.
-            </p>
+            <h4>Value Modifier</h4>
+            <small className="hint-text">Active while card is face-up. Modifies card values or lane totals.</small>
 
-            <label>
-                Modifier Type
-                <select
-                    value={modifierType}
-                    onChange={e => onChange({
-                        ...params,
-                        modifier: {
-                            ...params.modifier,
-                            type: e.target.value as any,
-                            value,
-                            condition: showCondition ? condition : undefined,
-                            target,
-                            scope,
-                            filter: showFilter ? { faceState, position } : undefined
-                        }
-                    })}
-                >
-                    <option value="add_per_condition">Add Per Condition (Apathy-0: +1 per face-down)</option>
-                    <option value="set_to_fixed">Set Cards To Fixed Value (Darkness-2: face-down = 4)</option>
-                    <option value="add_to_total">Add To Lane Total (Metal-0: opponent total -2)</option>
-                </select>
-            </label>
-
-            <label>
-                Value
-                <input
-                    type="number"
-                    value={value}
-                    onChange={e => onChange({
-                        ...params,
-                        modifier: {
-                            ...params.modifier,
-                            type: modifierType,
-                            value: parseInt(e.target.value) || 0,
-                            condition: showCondition ? condition : undefined,
-                            target,
-                            scope,
-                            filter: showFilter ? { faceState, position } : undefined
-                        }
-                    })}
-                    style={{
-                        width: '100%',
-                        padding: '8px',
-                        marginTop: '5px',
-                        backgroundColor: '#1A113B',
-                        color: '#F0F0F0',
-                        border: '1px solid rgba(97, 239, 255, 0.3)',
-                        borderRadius: '4px'
-                    }}
-                />
-                <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                    {modifierType === 'add_per_condition' && 'Value to add per condition (e.g., +1)'}
-                    {modifierType === 'set_to_fixed' && 'Fixed value to set cards to (e.g., 4)'}
-                    {modifierType === 'add_to_total' && 'Value to add to total (use negative for subtraction, e.g., -2)'}
-                </small>
-            </label>
-
-            {showCondition && (
+            {/* Basic Options */}
+            <div className="effect-editor-basic">
                 <label>
-                    Condition
+                    Type
                     <select
-                        value={condition}
-                        onChange={e => onChange({
-                            ...params,
-                            modifier: {
-                                ...params.modifier,
-                                type: modifierType,
-                                value,
-                                condition: e.target.value as any,
-                                target,
-                                scope,
-                                filter: showFilter ? { faceState, position } : undefined
-                            }
-                        })}
+                        value={modifierType}
+                        onChange={e => updateModifier({ type: e.target.value as any })}
                     >
-                        <option value="per_face_down_card">Per Face-Down Card</option>
-                        <option value="per_face_up_card">Per Face-Up Card</option>
-                        <option value="per_card">Per Card (any)</option>
-                        <option value="per_card_in_hand">Per Card in Your Hand</option>
-                        <option value="per_opponent_card_in_lane">Per Opponent Card in Lane</option>
+                        <option value="add_per_condition">Add Per Condition</option>
+                        <option value="set_to_fixed">Set To Fixed Value</option>
+                        <option value="add_to_total">Add To Total</option>
                     </select>
                 </label>
-            )}
 
-            <label>
-                Target
-                <select
-                    value={target}
-                    onChange={e => onChange({
-                        ...params,
-                        modifier: {
-                            ...params.modifier,
-                            type: modifierType,
-                            value,
-                            condition: showCondition ? condition : undefined,
-                            target: e.target.value as any,
-                            scope,
-                            filter: showFilter ? { faceState, position } : undefined
-                        }
-                    })}
-                >
-                    <optgroup label="Card Values">
-                        <option value="own_cards">Own Cards</option>
-                        <option value="opponent_cards">Opponent Cards</option>
-                        <option value="all_cards">All Cards</option>
-                    </optgroup>
-                    <optgroup label="Lane Totals">
-                        <option value="own_total">Own Total</option>
-                        <option value="opponent_total">Opponent Total</option>
-                    </optgroup>
-                </select>
-            </label>
+                <label>
+                    Value
+                    <input
+                        type="number"
+                        value={value}
+                        onChange={e => updateModifier({ value: parseInt(e.target.value) || 0 })}
+                    />
+                </label>
 
+                {showCondition && (
+                    <label>
+                        Condition
+                        <select
+                            value={condition}
+                            onChange={e => updateModifier({ condition: e.target.value as any })}
+                        >
+                            <option value="per_face_down_card">Per Face-Down</option>
+                            <option value="per_face_up_card">Per Face-Up</option>
+                            <option value="per_card">Per Card (any)</option>
+                            <option value="per_card_in_hand">Per Hand Card</option>
+                            <option value="per_opponent_card_in_lane">Per Opp. Card</option>
+                        </select>
+                    </label>
+                )}
+            </div>
+
+            {/* Target & Scope Section */}
+            <CollapsibleSection title="Target & Scope" forceOpen={target !== 'own_total' || scope !== 'this_lane'}>
+                <div className="filter-row">
+                    <label>
+                        Target
+                        <select
+                            value={target}
+                            onChange={e => updateModifier({ target: e.target.value as any })}
+                        >
+                            <optgroup label="Card Values">
+                                <option value="own_cards">Own Cards</option>
+                                <option value="opponent_cards">Opponent Cards</option>
+                                <option value="all_cards">All Cards</option>
+                            </optgroup>
+                            <optgroup label="Lane Totals">
+                                <option value="own_total">Own Total</option>
+                                <option value="opponent_total">Opponent Total</option>
+                            </optgroup>
+                        </select>
+                    </label>
+
+                    <label>
+                        Scope
+                        <select
+                            value={scope}
+                            onChange={e => updateModifier({ scope: e.target.value as any })}
+                        >
+                            <option value="this_lane">This Lane</option>
+                            <option value="global">Global</option>
+                        </select>
+                    </label>
+                </div>
+            </CollapsibleSection>
+
+            {/* Card Filter Section - only for set_to_fixed with card targets */}
             {showFilter && (
-                <>
-                    <label>
-                        Card Face State (Filter)
-                        <select
-                            value={faceState}
-                            onChange={e => onChange({
-                                ...params,
-                                modifier: {
-                                    ...params.modifier,
-                                    type: modifierType,
-                                    value,
-                                    condition: showCondition ? condition : undefined,
-                                    target,
-                                    scope,
+                <CollapsibleSection title="Card Filter" forceOpen={hasFilterConfig}>
+                    <div className="filter-row">
+                        <label>
+                            Face State
+                            <select
+                                value={faceState}
+                                onChange={e => updateModifier({
                                     filter: { faceState: e.target.value as any, position }
-                                }
-                            })}
-                        >
-                            <option value="face_down">Face-Down Only</option>
-                            <option value="face_up">Face-Up Only</option>
-                            <option value="any">Any</option>
-                        </select>
-                    </label>
+                                })}
+                            >
+                                <option value="face_down">Face-Down</option>
+                                <option value="face_up">Face-Up</option>
+                                <option value="any">Any</option>
+                            </select>
+                        </label>
 
-                    <label>
-                        Card Position (Filter)
-                        <select
-                            value={position}
-                            onChange={e => onChange({
-                                ...params,
-                                modifier: {
-                                    ...params.modifier,
-                                    type: modifierType,
-                                    value,
-                                    condition: showCondition ? condition : undefined,
-                                    target,
-                                    scope,
+                        <label>
+                            Position
+                            <select
+                                value={position}
+                                onChange={e => updateModifier({
                                     filter: { faceState, position: e.target.value as any }
-                                }
-                            })}
-                        >
-                            <option value="any">Any Position</option>
-                            <option value="covered">Covered Only</option>
-                            <option value="uncovered">Uncovered Only</option>
-                        </select>
-                    </label>
-                </>
+                                })}
+                            >
+                                <option value="any">Any</option>
+                                <option value="covered">Covered</option>
+                                <option value="uncovered">Uncovered</option>
+                            </select>
+                        </label>
+                    </div>
+                </CollapsibleSection>
             )}
-
-            <label>
-                Scope
-                <select
-                    value={scope}
-                    onChange={e => onChange({
-                        ...params,
-                        modifier: {
-                            ...params.modifier,
-                            type: modifierType,
-                            value,
-                            condition: showCondition ? condition : undefined,
-                            target,
-                            scope: e.target.value as any,
-                            filter: showFilter ? { faceState, position } : undefined
-                        }
-                    })}
-                >
-                    <option value="this_lane">This Lane Only</option>
-                    <option value="global">Global (All Lanes)</option>
-                </select>
-            </label>
-
         </div>
     );
 };

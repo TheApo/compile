@@ -1,0 +1,10 @@
+{
+  "name": "psychic-playground",
+  "description": "All Psychic cards in hand for testing reveal/discard/shift mechanics",
+  "playerProtocols": ["Psychic", "Water", "Speed"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Psychic-3: On play opponent discards, you shift opponent card. Psychic-4: End return 1, if you do flip self."
+}

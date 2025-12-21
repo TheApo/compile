@@ -132,8 +132,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
         // NEW: Check for Unity-1 same-protocol face-up play rule
         const hasSameProtocolFaceUpRule = canPlayFaceUpDueToSameProtocolRule(gameState, 'player', laneIndex, card.protocol);
 
+        // NEW: Check if effect allows any orientation (Diversity-0: player chooses)
+        const effectIgnoresProtocol = isPlayFromEffect && (actionRequired as any).ignoreProtocolMatching;
+
         let isMatching: boolean;
-        if (canPlayAnywhere) {
+        if (canPlayAnywhere || effectIgnoresProtocol) {
             // Can play face-up on ANY lane (ignores protocol matching)
             isMatching = !opponentHasPsychic1;
         } else if (anyPlayerHasAnarchy1 || hasCustomNonMatchingRule) {

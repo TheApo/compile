@@ -1,0 +1,10 @@
+{
+  "name": "gravity-playground",
+  "description": "All Gravity cards in hand for testing flip/shift mechanics",
+  "playerProtocols": ["Gravity", "Water", "Fire"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Gravity-2: Flip 1, shift that card."
+}

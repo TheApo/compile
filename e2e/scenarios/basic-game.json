@@ -1,0 +1,9 @@
+{
+  "name": "basic-game",
+  "description": "Basic game setup for testing",
+  "playerProtocols": ["Fire", "Water", "Speed"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player"
+}

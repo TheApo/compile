@@ -4,7 +4,6 @@
  */
 
 import React from 'react';
-import { getEffectSummary } from '../../../logic/customProtocols/cardFactory';
 
 interface BlockCompileEffectParams {
     action: 'block_compile';
@@ -19,19 +18,20 @@ interface BlockCompileEffectEditorProps {
 export const BlockCompileEffectEditor: React.FC<BlockCompileEffectEditorProps> = ({ params, onChange }) => {
     return (
         <div className="param-editor block-compile-effect-editor">
-            <h4>Block Compile Effect Parameters</h4>
+            <h4>Block Compile Effect</h4>
 
-            <label>
-                Target
-                <select
-                    value={params.target || 'opponent'}
-                    onChange={e => onChange({ ...params, target: e.target.value as 'opponent' | 'self' })}
-                >
-                    <option value="opponent">Opponent cannot compile next turn</option>
-                    <option value="self">You cannot compile next turn</option>
-                </select>
-            </label>
-
+            <div className="effect-editor-basic">
+                <label>
+                    Target
+                    <select
+                        value={params.target || 'opponent'}
+                        onChange={e => onChange({ ...params, target: e.target.value as 'opponent' | 'self' })}
+                    >
+                        <option value="opponent">Opponent cannot compile next turn</option>
+                        <option value="self">You cannot compile next turn</option>
+                    </select>
+                </label>
+            </div>
         </div>
     );
 };

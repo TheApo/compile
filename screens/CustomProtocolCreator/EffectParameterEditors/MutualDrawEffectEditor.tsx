@@ -18,21 +18,23 @@ interface MutualDrawEffectEditorProps {
 export const MutualDrawEffectEditor: React.FC<MutualDrawEffectEditorProps> = ({ params, onChange }) => {
     return (
         <div className="param-editor mutual-draw-effect-editor">
-            <h4>Mutual Draw Effect Parameters</h4>
-            <p className="effect-description">
+            <h4>Mutual Draw Effect</h4>
+            <small className="hint-text">
                 Both players draw from each other's decks (Chaos-0: "Draw the top card of your opponent's deck. Your opponent draws the top card of your deck.")
-            </p>
+            </small>
 
-            <label>
-                Count
-                <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={params.count || 1}
-                    onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
-                />
-            </label>
+            <div className="effect-editor-basic">
+                <label>
+                    Count
+                    <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={params.count || 1}
+                        onChange={e => onChange({ ...params, count: parseInt(e.target.value) || 1 })}
+                    />
+                </label>
+            </div>
         </div>
     );
 };

@@ -648,6 +648,58 @@ export function executePlayEffect(
         return { newState: state };
     }
 
+    // NEW: Diversity-0 logic - Play from hand to specific lane (forced lane, user chooses card only)
+    // "End: You may play 1 non-Diversity card in this line."
+    // faceDown param: true = face-down, false = face-up, undefined = player chooses (any orientation)
+    if (source === 'hand' && params.destinationRule?.type === 'specific_lane') {
+        const resolvedLaneIndex = params.destinationRule.laneIndex === 'current'
+            ? laneIndex
+            : params.destinationRule.laneIndex;
+
+        if (resolvedLaneIndex === undefined || resolvedLaneIndex < 0 || resolvedLaneIndex > 2) {
+            console.error(`[Play Effect] Invalid lane index for hand play: ${resolvedLaneIndex}`);
+            return { newState: state };
+        }
+
+        // Filter cards based on excludeSourceProtocol if set
+        let selectableCardIds: string[] | undefined = undefined;
+        if (params.excludeSourceProtocol) {
+            const sourceProtocol = card.protocol;
+            const nonMatchingCards = state[actor].hand.filter(c => c.protocol !== sourceProtocol);
+
+            if (nonMatchingCards.length === 0) {
+                const sourceCardInfo = findCardOnBoard(state, card.id);
+                const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'Effect';
+                let newState = log(state, cardOwner, `${sourceCardName}: No non-${sourceProtocol} cards in hand. Effect skipped.`);
+                return { newState };
+            }
+
+            selectableCardIds = nonMatchingCards.map(c => c.id);
+        }
+
+        let newState = { ...state };
+        newState.actionRequired = {
+            type: 'select_card_from_hand_to_play',
+            count: params.count || 1,
+            sourceCardId: card.id,
+            actor,
+            faceDown,  // true/false/undefined from params
+            source,
+            // Forced lane - miscResolver will handle orientation choice based on faceDown
+            forcedLaneIndex: resolvedLaneIndex,
+            // When faceDown is undefined, player chooses - ignore protocol matching for face-up option
+            ignoreProtocolMatching: faceDown === undefined,
+            selectableCardIds,
+            excludeSourceProtocol: params.excludeSourceProtocol,
+            sourceProtocol: params.excludeSourceProtocol ? card.protocol : undefined,
+            optional: params.optional,
+            followUpEffect: conditional?.thenEffect,
+            conditionalType: conditional?.type,
+        } as any;
+
+        return { newState };
+    }
+
     // NEW: excludeSourceProtocol - filter out cards with same protocol as source card
     let excludeProtocolCardIds: string[] | undefined = undefined;
     if (params.excludeSourceProtocol && source === 'hand') {

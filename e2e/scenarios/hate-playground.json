@@ -1,0 +1,10 @@
+{
+  "name": "hate-playground",
+  "description": "All Hate cards in hand for testing delete mechanics",
+  "playerProtocols": ["Hate", "Water", "Fire"],
+  "opponentProtocols": ["Death", "Life", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Hate-0: Delete face-down. Hate-1: Delete opponent discard 1. Hate-2: Delete own highest, delete opponent highest."
+}

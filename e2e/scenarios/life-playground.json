@@ -1,0 +1,10 @@
+{
+  "name": "life-playground",
+  "description": "All Life cards in hand for testing play/flip mechanics",
+  "playerProtocols": ["Life", "Water", "Speed"],
+  "opponentProtocols": ["Death", "Fire", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Life-1: Flip any. Life-2: Flip 2 of same owner. Life-3: On cover play from deck. Life-4: Flip 2 own + 1 opponent."
+}

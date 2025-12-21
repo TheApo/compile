@@ -15,20 +15,22 @@ export const StateProtocolEffectEditor: React.FC<StateProtocolEffectEditorProps>
     return (
         <div className="param-editor state-protocol-effect-editor">
             <h4>State Protocol Effect</h4>
+            <small className="hint-text">
+                Player chooses a protocol from the opponent's unique protocols.
+                The stated protocol is stored for subsequent effects (e.g., matching conditionals).
+            </small>
 
-            <label>
-                Protocol Source
-                <select
-                    value={params.protocolSource || 'opponent_cards'}
-                    onChange={e => onChange({ ...params, protocolSource: e.target.value as any })}
-                >
-                    <option value="opponent_cards">Opponent's Cards (unique protocols)</option>
-                </select>
-                <small style={{ display: 'block', marginTop: '4px', color: '#8A79E8' }}>
-                    Player chooses a protocol from the opponent's unique protocols.
-                    The stated protocol is stored for subsequent effects (e.g., matching conditionals).
-                </small>
-            </label>
+            <div className="effect-editor-basic">
+                <label>
+                    Protocol Source
+                    <select
+                        value={params.protocolSource || 'opponent_cards'}
+                        onChange={e => onChange({ ...params, protocolSource: e.target.value as any })}
+                    >
+                        <option value="opponent_cards">Opponent's Cards (unique protocols)</option>
+                    </select>
+                </label>
+            </div>
         </div>
     );
 };

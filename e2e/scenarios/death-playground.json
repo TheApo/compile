@@ -1,0 +1,10 @@
+{
+  "name": "death-playground",
+  "description": "All Death cards in hand for testing",
+  "playerProtocols": ["Death", "Water", "Fire"],
+  "opponentProtocols": ["Life", "Speed", "Light"],
+  "difficulty": "easy",
+  "useControlMechanic": false,
+  "startingPlayer": "player",
+  "notes": "Death-1: Draw, if you do delete. Death-2: Delete all 1s and 2s. etc."
+}
