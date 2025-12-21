@@ -393,6 +393,36 @@ export const useGameState = (
         });
     };
 
+    // Diversity-0: "in this line" play effect - player chooses face-down
+    const resolveActionWithLaneFaceDown = (targetLaneIndex: number) => {
+        setGameState(prev => {
+            // Set isFaceDown: true on the action before resolving
+            const stateWithFaceDown = {
+                ...prev,
+                actionRequired: prev.actionRequired ? {
+                    ...prev.actionRequired,
+                    isFaceDown: true
+                } : null
+            };
+
+            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(stateWithFaceDown, targetLaneIndex);
+
+            if (requiresAnimation) {
+                processAnimationQueue(requiresAnimation.animationRequests, () => {
+                    setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
+                });
+                return nextState;
+            }
+
+            if (nextState.actionRequired) {
+                return nextState;
+            }
+
+            return turnProgressionCb(nextState);
+        });
+    };
+
     const resolveActionWithHandCard = (cardId: string) => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
@@ -1192,7 +1222,7 @@ export const useGameState = (
 
     return {
         gameState, selectedCard, setSelectedCard, playSelectedCard, fillHand,
-        discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane,
+        discardCardFromHand, compileLane, resolveActionWithCard, resolveActionWithLane, resolveActionWithLaneFaceDown,
         selectHandCardForAction, skipAction, resolvePlague2Discard, resolveActionWithHandCard,
         resolvePlague4Flip, resolveOptionalDiscardCustomPrompt, resolveOptionalEffectPrompt, resolveFire4Discard, resolveHate1Discard, resolveRevealBoardCardPrompt,
         resolveRearrangeProtocols, resolveOptionalDrawPrompt, resolveSwapProtocols,
