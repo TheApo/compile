@@ -1315,6 +1315,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // FIX: Filter out blocked lanes and respect validLanes from Smoke-3
             let playableLanes = (action as any).validLanes || [0, 1, 2];
             playableLanes = playableLanes.filter((i: number) => !('disallowedLaneIndex' in action) || i !== action.disallowedLaneIndex);
+            // Life-3: "in another line" - excludeCurrentLane restricts to other lanes
+            if ((action as any).excludeCurrentLane && (action as any).currentLaneIndex !== undefined) {
+                playableLanes = playableLanes.filter((i: number) => i !== (action as any).currentLaneIndex);
+            }
             playableLanes = playableLanes.filter((laneIndex: number) => {
                 const opponentLane = state.player.lanes[laneIndex];
                 const topCard = opponentLane.length > 0 ? opponentLane[opponentLane.length - 1] : null;
