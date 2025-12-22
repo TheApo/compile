@@ -15,25 +15,45 @@ import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
 import { findCardOnBoard, countUniqueProtocolsInLane, countFaceUpProtocolCardsOnField, hasOtherFaceUpSameProtocolCard } from '../../game/helpers/actionUtils';
 import { getEffectiveCardValue, getPlayerLaneValue } from '../../game/stateManager';
 import { canPlayerDraw } from '../../game/passiveRuleChecker';
+import { shuffleDeck } from '../../../utils/gameLogic';
 
 /**
- * Helper function to draw cards from deck
+ * Helper function to draw cards from deck with automatic reshuffle from discard
+ * When deck is empty and discard has cards, shuffles discard into deck
  */
 function drawCardsUtil(
     deck: any[],
     hand: any[],
+    discard: any[],
     count: number
-): { drawnCards: any[]; remainingDeck: any[]; newCards: any[] } {
-    const actualDrawCount = Math.min(count, deck.length);
-    // Convert deck cards to PlayedCard objects with unique IDs
-    const newCards = deck.slice(0, actualDrawCount).map(c => ({
-        ...c,
-        id: uuidv4(),
-        isFaceUp: true
-    }));
+): { drawnCards: any[]; remainingDeck: any[]; newCards: any[]; newDiscard: any[]; reshuffled: boolean } {
+    let currentDeck = [...deck];
+    let currentDiscard = [...discard];
+    let newCards: any[] = [];
+    let reshuffled = false;
+
+    for (let i = 0; i < count; i++) {
+        if (currentDeck.length === 0) {
+            if (currentDiscard.length === 0) {
+                // No more cards anywhere
+                break;
+            }
+            // Reshuffle discard into deck
+            currentDeck = shuffleDeck(currentDiscard);
+            currentDiscard = [];
+            reshuffled = true;
+        }
+        const drawnCard = currentDeck.shift()!;
+        // Convert deck card to PlayedCard object with unique ID
+        newCards.push({
+            ...drawnCard,
+            id: uuidv4(),
+            isFaceUp: true
+        });
+    }
+
     const drawnCards = [...hand, ...newCards];
-    const remainingDeck = deck.slice(actualDrawCount);
-    return { drawnCards, remainingDeck, newCards };
+    return { drawnCards, remainingDeck: currentDeck, newCards, newDiscard: currentDiscard, reshuffled };
 }
 
 /**
@@ -128,9 +148,10 @@ export function executeDrawEffect(
         }
 
         // Jump to draw execution
-        const { drawnCards, remainingDeck, newCards } = drawCardsUtil(
+        const { drawnCards, remainingDeck, newCards, newDiscard, reshuffled } = drawCardsUtil(
             state[drawingPlayer].deck,
             state[drawingPlayer].hand,
+            state[drawingPlayer].discard,
             count
         );
 
@@ -139,7 +160,14 @@ export function executeDrawEffect(
             ...newState[drawingPlayer],
             deck: remainingDeck,
             hand: drawnCards,
+            discard: newDiscard,
         };
+
+        // Log reshuffle if it happened
+        if (reshuffled) {
+            const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
+            newState = log(newState, drawingPlayer, `${playerName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
+        }
 
         // Track cards drawn from effect in detailed stats (conditional path)
         if (newState.detailedGameStats && newCards.length > 0) {
@@ -389,6 +417,8 @@ export function executeDrawEffect(
     let drawnCards: any[];
     let remainingDeck: any[];
     let newCards: any[] = [];
+    let newDiscard: any[] = newState[sourcePlayer].discard;
+    let reshuffled = false;
 
     if (countType === 'all_matching' && params.valueFilter?.equals !== undefined) {
         // Draw all cards matching the value filter
@@ -499,17 +529,21 @@ export function executeDrawEffect(
         const result = drawCardsUtil(
             newState[sourcePlayer].deck,
             newState[drawingPlayer].hand,
+            newState[sourcePlayer].discard,
             count
         );
         drawnCards = result.drawnCards;
         remainingDeck = result.remainingDeck;
         newCards = result.newCards;
+        newDiscard = result.newDiscard;
+        reshuffled = result.reshuffled;
     }
 
-    // Update the source player's deck (might be opponent's deck!)
+    // Update the source player's deck and discard (might be opponent's deck!)
     newState[sourcePlayer] = {
         ...newState[sourcePlayer],
         deck: remainingDeck,
+        discard: newDiscard,
     };
 
     // Update the drawing player's hand
@@ -517,6 +551,12 @@ export function executeDrawEffect(
         ...newState[drawingPlayer],
         hand: drawnCards,
     };
+
+    // Log reshuffle if it happened
+    if (reshuffled) {
+        const sourcePlayerName = sourcePlayer === 'player' ? 'Player' : 'Opponent';
+        newState = log(newState, drawingPlayer, `${sourcePlayerName}'s deck is empty. Discard pile has been reshuffled into the deck.`);
+    }
 
     // Track cards drawn from effect in detailed stats
     if (newState.detailedGameStats && newCards.length > 0) {
@@ -535,17 +575,17 @@ export function executeDrawEffect(
 
     const playerName = drawingPlayer === 'player' ? 'Player' : 'Opponent';
 
-    // Check if no cards were drawn (empty deck)
+    // Check if no cards were drawn (both deck and discard were empty)
     if (newCards.length === 0) {
-        // Log that no cards could be drawn because deck is empty
+        // Log that no cards could be drawn because both deck and discard are empty
         if (source === 'opponent_deck') {
             const opponentName = sourcePlayer === 'player' ? "Player's" : "Opponent's";
-            newState = log(newState, drawingPlayer, `${opponentName} deck is empty. No cards drawn.`);
+            newState = log(newState, drawingPlayer, `${opponentName} deck and discard are empty. No cards drawn.`);
         } else if (source === 'own_deck' && drawingPlayer !== cardOwner) {
             const ownerName = cardOwner === 'player' ? "Player's" : "Opponent's";
-            newState = log(newState, drawingPlayer, `${ownerName} deck is empty. No cards drawn.`);
+            newState = log(newState, drawingPlayer, `${ownerName} deck and discard are empty. No cards drawn.`);
         } else {
-            newState = log(newState, drawingPlayer, `Deck is empty. No cards drawn.`);
+            newState = log(newState, drawingPlayer, `Deck and discard are empty. No cards drawn.`);
         }
         return { newState };
     }
