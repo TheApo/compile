@@ -423,6 +423,16 @@
   transform: rotateY(180deg);
 }
 
+/* CRITICAL FIX: Hide card-front content when flipped
+   backface-visibility: hidden is unreliable at small sizes in some browsers */
+.card-inner.is-flipped .card-front {
+  visibility: hidden;
+}
+
+.card-inner.is-flipped .card-back {
+  visibility: visible;
+}
+
 .card-face {
   position: absolute;
   width: 100%;
