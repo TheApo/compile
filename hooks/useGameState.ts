@@ -18,7 +18,12 @@ import { handleUncoverEffect, findCardOnBoard } from '../logic/game/helpers/acti
 import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
 import { executeCustomEffect } from '../logic/customProtocols/effectInterpreter';
 import { EffectContext } from '../types';
+import { AnimationQueueItem } from '../types/animation';
+import { createPlayAnimation } from '../logic/animation/animationHelpers';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
+
+// Feature flag for new animation queue system
+const USE_NEW_ANIMATION_SYSTEM = true;
 
 export const useGameState = (
     playerProtocols: string[],
@@ -27,7 +32,10 @@ export const useGameState = (
     difficulty: Difficulty,
     useControlMechanic: boolean,
     startingPlayer: Player = 'player',
-    trackPlayerRearrange?: (actor: 'player' | 'opponent') => void
+    trackPlayerRearrange?: (actor: 'player' | 'opponent') => void,
+    // NEW: Animation queue functions for the new animation system
+    enqueueAnimation?: (item: Omit<AnimationQueueItem, 'id'>) => void,
+    enqueueAnimations?: (items: Omit<AnimationQueueItem, 'id'>[]) => void
 ) => {
     const [gameState, setGameState] = useState<GameState>(() => {
         const initialState = stateManager.createInitialState(playerProtocols, opponentProtocols, useControlMechanic, startingPlayer);
@@ -226,6 +234,52 @@ export const useGameState = (
         const cardId = selectedCard;
         setSelectedCard(null);
 
+        // NEW: Use the new animation queue system if available and enabled
+        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+            // Get the card and its position in hand BEFORE state update
+            const card = gameState.player.hand.find(c => c.id === cardId);
+            const handIndex = gameState.player.hand.findIndex(c => c.id === cardId);
+
+            if (card) {
+                // Create and enqueue the play animation with the PRE-action state snapshot
+                const animation = createPlayAnimation(
+                    gameState,
+                    card,
+                    'player',
+                    laneIndex,
+                    true, // fromHand
+                    handIndex,
+                    isFaceUp // Pass through face-up state for animation
+                );
+                enqueueAnimation(animation);
+            }
+
+            // Update state immediately to final state (no setTimeout, no animationState)
+            setGameState(prev => {
+                const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+                const { newState, animationRequests } = resolvers.playCard(prev, cardId, laneIndex, isFaceUp, 'player', targetOwner);
+
+                // TODO: Handle animationRequests from effects (delete, flip, etc.) with new system
+                // For now, fall back to old processing if there are effect animations
+                if (animationRequests && animationRequests.length > 0) {
+                    // Process effect animations with old system for now
+                    const stateToProcess = { ...newState, animationState: null };
+                    processAnimationQueue(animationRequests, () => {
+                        setGameState(s_after_anim => turnProgressionCb(s_after_anim));
+                    });
+                    return stateToProcess;
+                }
+
+                if (newState.actionRequired) {
+                    return newState;
+                }
+
+                return turnProgressionCb(newState);
+            });
+            return;
+        }
+
+        // FALLBACK: Old animation system
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             // targetOwner determines whose lane the card is played into (for Corruption-0 play on opponent's side)
@@ -248,7 +302,7 @@ export const useGameState = (
                         });
                         return stateToProcess;
                     }
-                    
+
                     if (stateToProcess.actionRequired) {
                          return stateToProcess;
                     }
@@ -1143,7 +1197,7 @@ export const useGameState = (
                     resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
                     revealOpponentHand: resolvers.revealOpponentHand,
                     resolveCustomChoice: resolvers.resolveCustomChoice,
-                }, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                }, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
             }, 1500);
             return () => {
                 clearTimeout(timer);

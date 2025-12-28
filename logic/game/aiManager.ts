@@ -17,6 +17,11 @@ import { CardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
+import { AnimationQueueItem } from '../../types/animation';
+import { createPlayAnimation } from '../animation/animationHelpers';
+
+// Feature flag for new animation queue system in AI
+const USE_NEW_AI_ANIMATION_SYSTEM = true;
 
 type ActionDispatchers = {
     compileLane: (s: GameState, l: number) => GameState,
@@ -712,8 +717,144 @@ export const runOpponentTurn = (
     actions: ActionDispatchers,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     phaseManager: PhaseManager,
-    trackPlayerRearrange?: TrackPlayerRearrange
+    trackPlayerRearrange?: TrackPlayerRearrange,
+    enqueueAnimation?: (item: Omit<AnimationQueueItem, 'id'>) => void
 ) => {
+    // CRITICAL FIX: For new animation system, we need to enqueue animation BEFORE setGameState
+    // because React 18 batches state updates, causing the animation to appear "instant"
+
+    console.log('[AI Manager] runOpponentTurn called:', {
+        turn: currentGameState.turn,
+        phase: currentGameState.phase,
+        hasWinner: !!currentGameState.winner,
+        hasAnimationState: !!currentGameState.animationState,
+        hasActionRequired: !!currentGameState.actionRequired,
+        useNewSystem: USE_NEW_AI_ANIMATION_SYSTEM,
+        hasEnqueueFn: !!enqueueAnimation
+    });
+
+    // First, check if we should handle a playCard action with new animation system
+    // We do this OUTSIDE of setGameState to ensure proper animation timing
+    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+        const state = currentGameState;
+
+        // Check all conditions that would allow us to play a card
+        const canPlayCard =
+            state.turn === 'opponent' &&
+            !state.winner &&
+            !state.animationState &&
+            state.phase === 'action' &&
+            !state.actionRequired;
+
+        console.log('[AI Manager] canPlayCard check:', canPlayCard);
+
+        if (canPlayCard) {
+            const mainAction = getAIAction(state, null, difficulty);
+            console.log('[AI Manager] AI decision:', mainAction.type);
+
+            if (mainAction.type === 'playCard') {
+                console.log('[AI Manager] Using NEW animation system for playCard (pre-setGameState)');
+
+                // Find the card and its position in opponent's hand BEFORE state update
+                const card = state.opponent.hand.find(c => c.id === mainAction.cardId);
+                const handIndex = state.opponent.hand.findIndex(c => c.id === mainAction.cardId);
+
+                console.log('[AI Manager] Card found:', { cardId: mainAction.cardId, handIndex, hasCard: !!card });
+
+                // Enqueue animation BEFORE setGameState - this is the key fix!
+                if (card) {
+                    const animation = createPlayAnimation(
+                        state,
+                        card,
+                        'opponent',
+                        mainAction.laneIndex,
+                        true, // fromHand
+                        handIndex,
+                        mainAction.isFaceUp // Pass through face-up state for animation
+                    );
+                    console.log('[AI Manager] Enqueueing animation BEFORE setGameState:', animation.type);
+                    enqueueAnimation(animation);
+                }
+
+                // Now update the game state
+                setGameState(currentState => {
+                    // Re-verify we're still in the right state
+                    if (currentState.turn !== 'opponent' || currentState.winner || currentState.phase !== 'action') {
+                        return currentState;
+                    }
+
+                    // Run the play logic
+                    const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(currentState, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
+
+                    // Process on-play effect immediately
+                    let stateForOnPlay = { ...stateAfterPlayLogic };
+                    let onPlayResult: EffectResult = { newState: stateForOnPlay };
+
+                    if (!stateForOnPlay.actionRequired && stateForOnPlay.queuedEffect) {
+                        const { card: effectCard, laneIndex } = stateForOnPlay.queuedEffect;
+                        const onPlayContext: EffectContext = {
+                            cardOwner: 'opponent',
+                            actor: 'opponent',
+                            currentTurn: stateForOnPlay.turn,
+                            opponent: 'player',
+                            triggerType: 'play'
+                        };
+                        onPlayResult = executeOnPlayEffect(effectCard, laneIndex, stateForOnPlay, onPlayContext);
+                        onPlayResult.newState.queuedEffect = undefined;
+                    }
+
+                    const stateAfterOnPlayLogic = onPlayResult.newState;
+
+                    // Handle on-cover animations with old system for now
+                    const allAnims = [...(onCoverAnims || []), ...(onPlayResult.animationRequests || [])];
+                    if (allAnims.length > 0) {
+                        processAnimationQueue(allAnims, () => {
+                            setGameState(s => {
+                                if (s.queuedActions && s.queuedActions.length > 0) {
+                                    const stateAfterQueue = phaseManager.processEndOfAction(s);
+                                    if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
+                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    }
+                                    return stateAfterQueue;
+                                }
+                                if (s.actionRequired && s.turn === 'opponent') {
+                                    runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    return s;
+                                }
+                                return phaseManager.processEndOfAction(s);
+                            });
+                        });
+                        return stateAfterOnPlayLogic;
+                    }
+
+                    // No effect animations - process end of action
+                    if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
+                        const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
+                        if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
+                            setTimeout(() => {
+                                runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                            }, 100);
+                        }
+                        return stateAfterQueue;
+                    }
+
+                    if (stateAfterOnPlayLogic.actionRequired && stateAfterOnPlayLogic.turn === 'opponent') {
+                        setTimeout(() => {
+                            runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                        }, 100);
+                        return stateAfterOnPlayLogic;
+                    }
+
+                    return phaseManager.processEndOfAction(stateAfterOnPlayLogic);
+                });
+
+                // Return early - we've handled the playCard action
+                return;
+            }
+        }
+    }
+
+    // Standard path (non-playCard actions or old animation system)
     setGameState(currentState => {
         if (currentState.turn !== 'opponent' || currentState.winner || currentState.animationState) {
             return currentState;
@@ -751,7 +892,7 @@ export const runOpponentTurn = (
         }
 
         let state = { ...currentState };
-        
+
         // Handle resolution-type actions that don't require AI decisions first
         if (state.actionRequired) {
             if (state.actionRequired.type === 'reveal_opponent_hand') {
@@ -767,7 +908,7 @@ export const runOpponentTurn = (
         if (state.phase === 'start') {
             state = phaseManager.processStartOfTurn(state);
         }
-        
+
         // 2. If an action is required (e.g. from start phase), handle it.
         // This might result in a new state that needs further processing.
         if (state.actionRequired) {
@@ -786,7 +927,7 @@ export const runOpponentTurn = (
             }
             return stateAfterAction;
         }
-        
+
         // 3. Handle Compile Phase
         if (state.phase === 'compile' && state.compilableLanes.length > 0) {
             const compileAction = getAIAction(state, null, difficulty);
@@ -808,8 +949,8 @@ export const runOpponentTurn = (
                         return { ...finalState, animationState: null };
                     });
                 }, 1000);
-                return { 
-                    ...stateBeforeCompile, 
+                return {
+                    ...stateBeforeCompile,
                     animationState: { type: 'compile' as const, laneIndex },
                     compilableLanes: []
                 };
@@ -819,7 +960,7 @@ export const runOpponentTurn = (
         // 4. Handle Action Phase
         if (state.phase === 'action') {
             const mainAction = getAIAction(state, null, difficulty);
-    
+
             if (mainAction.type === 'fillHand') {
                 const stateAfterAction = resolvers.fillHand(state, 'opponent');
                 if (stateAfterAction.actionRequired) {
@@ -827,8 +968,100 @@ export const runOpponentTurn = (
                 }
                 return phaseManager.processEndOfAction(stateAfterAction);
             }
-            
+
             if (mainAction.type === 'playCard') {
+                // Check if we can use the new animation system
+                if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+                    console.log('[AI Manager] Using NEW animation system for playCard (inside setGameState)');
+
+                    // Find the card and create animation BEFORE playing
+                    const card = state.opponent.hand.find(c => c.id === mainAction.cardId);
+                    const handIndex = state.opponent.hand.findIndex(c => c.id === mainAction.cardId);
+
+                    if (card) {
+                        const animation = createPlayAnimation(
+                            state,
+                            card,
+                            'opponent',
+                            mainAction.laneIndex,
+                            true, // fromHand
+                            handIndex,
+                            mainAction.isFaceUp
+                        );
+                        // Enqueue animation via queueMicrotask to avoid React batching issues
+                        // The snapshot is already captured, so the animation data is correct
+                        queueMicrotask(() => {
+                            console.log('[AI Manager] Enqueueing animation (microtask from setGameState):', animation.type);
+                            enqueueAnimation(animation);
+                        });
+                    }
+
+                    // Now run the play logic - no animationState, state updates immediately
+                    const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(state, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
+
+                    // Process on-play effect immediately
+                    let stateForOnPlay = { ...stateAfterPlayLogic };
+                    let onPlayResult: EffectResult = { newState: stateForOnPlay };
+
+                    if (!stateForOnPlay.actionRequired && stateForOnPlay.queuedEffect) {
+                        const { card: effectCard, laneIndex } = stateForOnPlay.queuedEffect;
+                        const onPlayContext: EffectContext = {
+                            cardOwner: 'opponent',
+                            actor: 'opponent',
+                            currentTurn: stateForOnPlay.turn,
+                            opponent: 'player',
+                            triggerType: 'play'
+                        };
+                        onPlayResult = executeOnPlayEffect(effectCard, laneIndex, stateForOnPlay, onPlayContext);
+                        onPlayResult.newState.queuedEffect = undefined;
+                    }
+
+                    const stateAfterOnPlayLogic = onPlayResult.newState;
+
+                    // Handle on-cover animations with old system for now
+                    const allAnims = [...(onCoverAnims || []), ...(onPlayResult.animationRequests || [])];
+                    if (allAnims.length > 0) {
+                        processAnimationQueue(allAnims, () => {
+                            setGameState(s => {
+                                if (s.queuedActions && s.queuedActions.length > 0) {
+                                    const stateAfterQueue = phaseManager.processEndOfAction(s);
+                                    if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
+                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    }
+                                    return stateAfterQueue;
+                                }
+                                if (s.actionRequired && s.turn === 'opponent') {
+                                    runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    return s;
+                                }
+                                return phaseManager.processEndOfAction(s);
+                            });
+                        });
+                        return stateAfterOnPlayLogic;
+                    }
+
+                    // No effect animations - process end of action
+                    if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
+                        const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
+                        if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
+                            setTimeout(() => {
+                                runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                            }, 100);
+                        }
+                        return stateAfterQueue;
+                    }
+
+                    if (stateAfterOnPlayLogic.actionRequired && stateAfterOnPlayLogic.turn === 'opponent') {
+                        setTimeout(() => {
+                            runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                        }, 100);
+                        return stateAfterOnPlayLogic;
+                    }
+
+                    return phaseManager.processEndOfAction(stateAfterOnPlayLogic);
+                }
+
+                // FALLBACK: Old animation system
                 const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(state, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
                 const stateWithPlayAnimation = { ...stateAfterPlayLogic, animationState: { type: 'playCard' as const, cardId: mainAction.cardId, owner: 'opponent' as Player }};
 
@@ -837,7 +1070,7 @@ export const runOpponentTurn = (
                         setGameState(s_after_cover_anims => { // Renamed for clarity
                             let stateForOnPlay = { ...s_after_cover_anims };
                             let onPlayResult: EffectResult = { newState: stateForOnPlay };
-                
+
                             if (stateForOnPlay.actionRequired) {
                                 // An on-cover effect created an action. Do not process the on-play effect.
                             } else if (stateForOnPlay.queuedEffect) {
@@ -852,10 +1085,10 @@ export const runOpponentTurn = (
                                 onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, onPlayContext);
                                 onPlayResult.newState.queuedEffect = undefined;
                             }
-                            
+
                             const onPlayAnims = onPlayResult.animationRequests;
                             const stateAfterOnPlayLogic = onPlayResult.newState;
-                
+
                             const onAllAnimsComplete = () => {
                                 setGameState(s_after_all_anims => {
                                     // CRITICAL FIX: Process queuedActions before checking actionRequired
@@ -907,7 +1140,7 @@ export const runOpponentTurn = (
                             }
                         });
                     };
-                
+
                     setGameState(s => {
                         const stateAfterPlayAnim = { ...s, animationState: null };
                         if (onCoverAnims && onCoverAnims.length > 0) {
@@ -917,9 +1150,9 @@ export const runOpponentTurn = (
                         }
                         return stateAfterPlayAnim;
                     });
-                
+
                 }, 500);
-                
+
                 return stateWithPlayAnimation;
             }
         }

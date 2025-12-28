@@ -22,9 +22,10 @@ interface GameBoardProps {
     onOpponentHandCardPointerLeave: () => void;
     selectedCardId: string | null;
     sourceCardId: string | null;
+    animatingCardId?: string | null;  // Card being animated (hide via CSS)
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardId }) => {
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
@@ -430,15 +431,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     return (
         <div className="game-board">
             <div className="opponent-hand-area">
-                {opponent.hand.map(card => (
-                    <CardComponent
-                        key={card.id}
-                        card={card}
-                        isFaceUp={card.isRevealed || false}
-                        additionalClassName="in-hand"
-                        onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
-                    />
-                ))}
+                {opponent.hand.map(card => {
+                    // Hide the card if it's being animated (kept in DOM for position detection)
+                    const isBeingAnimated = animatingCardId === card.id;
+                    return (
+                        <CardComponent
+                            key={card.id}
+                            card={card}
+                            isFaceUp={card.isRevealed || false}
+                            additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                            onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
+                        />
+                    );
+                })}
             </div>
 
             {/* Opponent's Side */}

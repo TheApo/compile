@@ -30,6 +30,9 @@ import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
 import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
+import { AnimationQueueProvider, useAnimationQueue } from '../contexts/AnimationQueueContext';
+import { AnimationOverlay } from '../components/AnimationOverlay';
+import { snapshotToGameState } from '../utils/snapshotUtils';
 
 
 interface GameScreenProps {
@@ -72,7 +75,23 @@ const ACTIONS_REQUIRING_HAND_INTERACTION = new Set<ActionRequired['type']>([
 ]);
 
 
-export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
+/**
+ * GameScreen - Wrapper that provides AnimationQueueContext
+ */
+export function GameScreen(props: GameScreenProps) {
+  return (
+    <AnimationQueueProvider>
+      <GameScreenContent {...props} />
+    </AnimationQueueProvider>
+  );
+}
+
+/**
+ * GameScreenContent - Main game screen content
+ */
+function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
+  // Animation queue context for the new animation system
+  const { isAnimating, currentAnimation, enqueueAnimation, enqueueAnimations } = useAnimationQueue();
   // Determine starting player via coin flip on first mount
   const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
   const [showCoinFlip, setShowCoinFlip] = useState(true);
@@ -184,8 +203,40 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     difficulty,
     useControlMechanic,
     actualStartingPlayer ?? 'player',
-    trackPlayerRearrange
+    trackPlayerRearrange,
+    // NEW: Pass animation queue functions for the new animation system
+    enqueueAnimation,
+    enqueueAnimations
   );
+
+  // Compute the visual game state - uses snapshot data during animation
+  // This allows the SAME GameBoard to render both real state and animation snapshots
+  const visualGameState = useMemo(() => {
+    console.log('[GameScreen] Computing visualGameState:', {
+      isAnimating,
+      hasCurrentAnimation: !!currentAnimation,
+      hasSnapshot: !!currentAnimation?.snapshot,
+      animationType: currentAnimation?.type
+    });
+
+    if (isAnimating && currentAnimation?.snapshot) {
+      const baseState = snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
+      // NOTE: We do NOT filter out the animated card anymore!
+      // Instead, we hide it via CSS (see animatingCardId below).
+      // This is critical because filtering changes array indices,
+      // which breaks DOM position detection in AnimatedCard.
+      return baseState;
+    }
+    return gameState;
+  }, [isAnimating, currentAnimation, gameState, useControlMechanic]);
+
+  // Track which card is currently being animated - used to hide it via CSS
+  const animatingCardId = useMemo(() => {
+    if (isAnimating && currentAnimation?.animatingCard) {
+      return currentAnimation.animatingCard.card.id;
+    }
+    return null;
+  }, [isAnimating, currentAnimation]);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
   const [multiSelectedCardIds, setMultiSelectedCardIds] = useState<string[]>([]);
@@ -361,7 +412,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleLanePointerDown = (laneIndex: number, owner: Player) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (currentState.animationState || isAnimating) return;
 
     const { actionRequired, turn, phase, compilableLanes, player, opponent } = currentState;
 
@@ -485,7 +537,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handlePlayFaceDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (currentState.animationState || isAnimating) return;
 
     const { phase, actionRequired, player } = currentState;
 
@@ -510,7 +563,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleHandCardPointerDown = (card: PlayedCard) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (currentState.animationState || isAnimating) return;
 
     if (currentState.actionRequired) {
       // Check for discard action
@@ -568,7 +622,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleBoardCardPointerDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
       const currentState = gameStateRef.current;
-      if (currentState.animationState) return;
+      // Block input during animations (old system OR new queue system)
+      if (currentState.animationState || isAnimating) return;
 
       const { actionRequired, turn, phase, compilableLanes } = currentState;
 
@@ -828,17 +883,18 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     <h3>Select a Protocol to Compile</h3>
                   </div>
                 )}
-                <GameBoard 
-                  gameState={gameState}
+                <GameBoard
+                  gameState={visualGameState}
                   onLanePointerDown={handleLanePointerDown}
                   onPlayFaceDown={handlePlayFaceDown}
-                  selectedCardId={selectedCard}
+                  selectedCardId={isAnimating ? null : selectedCard}
                   onCardPointerDown={handleBoardCardPointerDown}
                   onCardPointerEnter={handleBoardCardPointerEnter}
                   onCardPointerLeave={handleBoardCardPointerLeave}
                   onOpponentHandCardPointerEnter={handleOpponentHandCardPointerEnter}
                   onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
-                  sourceCardId={sourceCardId}
+                  sourceCardId={isAnimating ? null : sourceCardId}
+                  animatingCardId={animatingCardId}
                 />
                 
                 <div className="player-action-area">
@@ -868,9 +924,11 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     multiSelectedCardIds={multiSelectedCardIds}
                     actionRequiredClass={actionRequiredClass}
                   />
-                  <div className={`player-hand-area ${handBackgroundClass}`}>
-                    {gameState.player.hand
+                  <div className={`player-hand-area ${isAnimating ? '' : handBackgroundClass}`}>
+                    {visualGameState.player.hand
                       .filter((card) => {
+                        // During animation, show all cards from the snapshot
+                        if (isAnimating) return true;
                         // When there's a selectableCardIds filter (Clarity-2 play effect),
                         // only show selectable cards - others stay hidden behind the banner
                         const action = gameState.actionRequired as any;
@@ -881,6 +939,19 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                         return true; // Show all cards normally
                       })
                       .map((card) => {
+                      // During animation: hide the animating card via CSS (visibility: hidden)
+                      // We keep it in DOM for position detection, just invisible
+                      const isBeingAnimated = animatingCardId === card.id;
+                      if (isAnimating) {
+                        return (
+                          <CardComponent
+                            key={card.id}
+                            card={card}
+                            isFaceUp={true}
+                            additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                          />
+                        );
+                      }
                       // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
                       const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
                         ? card.id === (gameState.actionRequired as any).cardInHandId
@@ -906,6 +977,9 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
         </div>
         {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
         {showDebugButton && <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} onForceWin={handleForceWin} onForceLose={handleForceLose} />}
+
+        {/* Animation Overlay - renders above game during animation queue playback */}
+        <AnimationOverlay />
     </div>
   );
 }
