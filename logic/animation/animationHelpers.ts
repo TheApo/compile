@@ -18,9 +18,17 @@ import {
     CardPosition,
     AnimatingCard,
     CompileAnimatingCard,
+    MultiAnimatingCard,
 } from '../../types/animation';
 import { createVisualSnapshot } from '../../utils/snapshotUtils';
-import { ANIMATION_DURATIONS, COMPILE_STAGGER_DELAY, getCardStartDelay } from '../../constants/animationTiming';
+import {
+    ANIMATION_DURATIONS,
+    COMPILE_STAGGER_DELAY,
+    getCardStartDelay,
+    TOTAL_DRAW_ANIMATION_DURATION,
+    calculateDrawDuration,
+    calculateDrawStagger,
+} from '../../constants/animationTiming';
 
 // =============================================================================
 // UNIQUE ID GENERATOR
@@ -112,6 +120,7 @@ export function getCardById(
  * @param fromHand - Whether the card comes from hand (true) or deck (false)
  * @param handIndex - The card's position in hand (required if fromHand is true)
  * @param isFaceUp - Whether the card is played face-up (default: true)
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createPlayAnimation(
     state: GameState,
@@ -120,7 +129,8 @@ export function createPlayAnimation(
     toLaneIndex: number,
     fromHand: boolean = true,
     handIndex?: number,
-    isFaceUp: boolean = true
+    isFaceUp: boolean = true,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -148,6 +158,7 @@ export function createPlayAnimation(
             fromPosition,
             toPosition,
             targetIsFaceUp: isFaceUp,  // Pass through the face-up state
+            isOpponentAction,
         },
         laneIndex: toLaneIndex,
     };
@@ -155,13 +166,16 @@ export function createPlayAnimation(
 
 /**
  * Creates a DELETE animation - card moves from lane to trash.
+ *
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createDeleteAnimation(
     state: GameState,
     card: PlayedCard,
     owner: Player,
     laneIndex: number,
-    cardIndex: number
+    cardIndex: number,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -186,6 +200,8 @@ export function createDeleteAnimation(
             card,
             fromPosition,
             toPosition,
+            targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
+            isOpponentAction,
         },
         laneIndex,
     };
@@ -228,6 +244,8 @@ export function createFlipAnimation(
 
 /**
  * Creates a SHIFT animation - card moves from one lane to another.
+ *
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createShiftAnimation(
     state: GameState,
@@ -235,7 +253,8 @@ export function createShiftAnimation(
     owner: Player,
     fromLaneIndex: number,
     fromCardIndex: number,
-    toLaneIndex: number
+    toLaneIndex: number,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -265,6 +284,7 @@ export function createShiftAnimation(
             card,
             fromPosition,
             toPosition,
+            isOpponentAction,
         },
         laneIndex: fromLaneIndex,
     };
@@ -272,13 +292,23 @@ export function createShiftAnimation(
 
 /**
  * Creates a RETURN animation - card moves from lane back to hand.
+ *
+ * @param state - Current game state (used for snapshot)
+ * @param card - The card being returned
+ * @param owner - Who owns the card ('player' or 'opponent')
+ * @param laneIndex - The lane the card is returning from
+ * @param cardIndex - The card's position in the lane
+ * @param setFaceDown - Whether to flip the card face-down (default: true)
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createReturnAnimation(
     state: GameState,
     card: PlayedCard,
     owner: Player,
     laneIndex: number,
-    cardIndex: number
+    cardIndex: number,
+    setFaceDown: boolean = true,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -305,6 +335,9 @@ export function createReturnAnimation(
             card,
             fromPosition,
             toPosition,
+            flipDirection: setFaceDown ? 'toFaceDown' : undefined,
+            targetIsFaceUp: !setFaceDown,
+            isOpponentAction,
         },
         laneIndex,
     };
@@ -312,12 +345,15 @@ export function createReturnAnimation(
 
 /**
  * Creates a DISCARD animation - card moves from hand to trash.
+ *
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createDiscardAnimation(
     state: GameState,
     card: PlayedCard,
     owner: Player,
-    handIndex: number
+    handIndex: number,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -341,18 +377,31 @@ export function createDiscardAnimation(
             card,
             fromPosition,
             toPosition,
+            targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
+            isOpponentAction,
         },
     };
 }
 
 /**
  * Creates a DRAW animation - card moves from deck to hand.
+ *
+ * @param state - Current game state (used for snapshot)
+ * @param card - The card being drawn
+ * @param owner - Who is drawing the card ('player' or 'opponent')
+ * @param targetHandIndex - The card's target position in hand
+ * @param customDuration - Optional custom duration (for dynamic timing with multiple draws)
+ * @param startDelay - Optional start delay (for staggered multi-card draws)
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createDrawAnimation(
     state: GameState,
     card: PlayedCard,
     owner: Player,
-    targetHandIndex: number
+    targetHandIndex: number,
+    customDuration?: number,
+    startDelay?: number,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -371,13 +420,88 @@ export function createDrawAnimation(
         id: generateAnimationId('draw'),
         type: 'draw',
         snapshot,
-        duration: ANIMATION_DURATIONS.draw,
+        duration: customDuration ?? ANIMATION_DURATIONS.draw,
         animatingCard: {
             card,
             fromPosition,
             toPosition,
+            startDelay: startDelay ?? 0,
+            isOpponentAction,
         },
     };
+}
+
+/**
+ * Creates a MULTI-DRAW animation - multiple cards fly from deck to hand SEQUENTIALLY.
+ * Each card has its own animation with a snapshot showing previously landed cards.
+ * This creates a visual effect of cards appearing one by one on the hand.
+ *
+ * @param state - Current game state BEFORE drawing (used for initial snapshot)
+ * @param cards - Array of cards being drawn
+ * @param owner - Who is drawing the cards ('player' or 'opponent')
+ * @param startingHandIndex - The first card's target position in hand
+ * @returns Array of animations to be enqueued sequentially
+ */
+export function createMultiDrawAnimation(
+    state: GameState,
+    cards: PlayedCard[],
+    owner: Player,
+    startingHandIndex: number
+): AnimationQueueItem {
+    // For backwards compatibility, return the first card's animation
+    // The caller should use createSequentialDrawAnimations for proper one-by-one effect
+    const animations = createSequentialDrawAnimations(state, cards, owner, startingHandIndex);
+    return animations[0] || createDrawAnimation(state, cards[0], owner, startingHandIndex);
+}
+
+/**
+ * Creates SEQUENTIAL draw animations - each card gets its own animation with proper snapshot.
+ * Each animation shows only the cards that have already landed on the hand.
+ *
+ * @param state - Current game state BEFORE drawing
+ * @param cards - Array of cards being drawn
+ * @param owner - Who is drawing the cards ('player' or 'opponent')
+ * @param startingHandIndex - The first card's target position in hand
+ * @returns Array of animations to be enqueued
+ */
+export function createSequentialDrawAnimations(
+    state: GameState,
+    cards: PlayedCard[],
+    owner: Player,
+    startingHandIndex: number
+): AnimationQueueItem[] {
+    // Calculate per-card duration from total draw time
+    // 5 cards = 1200ms total = 240ms per card
+    const cardCount = cards.length;
+    const SINGLE_CARD_DURATION = Math.max(100, Math.floor(TOTAL_DRAW_ANIMATION_DURATION / cardCount));
+
+    return cards.map((card, index) => {
+        // Create a snapshot that includes cards that have already "landed"
+        // For card 0: snapshot = original state (0 new cards on hand)
+        // For card 1: snapshot = state + card 0 on hand
+        // etc.
+        const previousCards = cards.slice(0, index);
+        const snapshotState = {
+            ...state,
+            [owner]: {
+                ...state[owner],
+                hand: [...state[owner].hand, ...previousCards],
+            },
+        };
+        const snapshot = createVisualSnapshot(snapshotState);
+
+        return {
+            id: generateAnimationId('draw'),
+            type: 'draw' as AnimationType,
+            snapshot,
+            duration: SINGLE_CARD_DURATION,
+            animatingCard: {
+                card,
+                fromPosition: { type: 'deck' as const, owner },
+                toPosition: { type: 'hand' as const, owner, handIndex: startingHandIndex + index },
+            },
+        };
+    });
 }
 
 /**
@@ -576,6 +700,7 @@ export function createBatchDeleteAnimations(
                     type: 'trash',
                     owner: item.owner,
                 },
+                targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
             },
             laneIndex: item.laneIndex,
         };
@@ -583,7 +708,8 @@ export function createBatchDeleteAnimations(
 }
 
 /**
- * Creates animations for multiple discards.
+ * Creates animations for multiple discards (old batch style - same snapshot for all).
+ * @deprecated Use createSequentialDiscardAnimations for proper one-by-one effect
  */
 export function createBatchDiscardAnimations(
     state: GameState,
@@ -608,6 +734,65 @@ export function createBatchDiscardAnimations(
                     type: 'trash',
                     owner: item.owner,
                 },
+                targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
+            },
+        };
+    });
+}
+
+/**
+ * Creates SEQUENTIAL discard animations - each card gets its own animation with proper snapshot.
+ * Each animation shows the hand state BEFORE that card was discarded.
+ * Total animation time is the same as a single discard (cards animate quickly in sequence).
+ *
+ * @param state - Current game state BEFORE discarding
+ * @param cards - Array of cards to discard (in order)
+ * @param owner - Who is discarding the cards ('player' or 'opponent')
+ * @returns Array of animations to be enqueued
+ */
+export function createSequentialDiscardAnimations(
+    state: GameState,
+    cards: PlayedCard[],
+    owner: Player
+): AnimationQueueItem[] {
+    const cardCount = cards.length;
+    // Fast per-card duration so total time ≈ single discard time
+    const SINGLE_CARD_DURATION = Math.max(100, Math.floor(ANIMATION_DURATIONS.discard / cardCount));
+
+    return cards.map((card, index) => {
+        // Create a snapshot that excludes cards already discarded (previous cards in array)
+        const previouslyDiscardedIds = new Set(cards.slice(0, index).map(c => c.id));
+        const handAfterPreviousDiscards = state[owner].hand.filter(c => !previouslyDiscardedIds.has(c.id));
+
+        // Find handIndex of this card in the current (filtered) hand
+        const handIndex = handAfterPreviousDiscards.findIndex(c => c.id === card.id);
+
+        const snapshotState = {
+            ...state,
+            [owner]: {
+                ...state[owner],
+                hand: handAfterPreviousDiscards,
+            },
+        };
+        const snapshot = createVisualSnapshot(snapshotState);
+
+        return {
+            id: generateAnimationId('discard'),
+            type: 'discard' as AnimationType,
+            snapshot,
+            duration: SINGLE_CARD_DURATION,
+            animatingCard: {
+                card,
+                fromPosition: {
+                    type: 'hand' as const,
+                    owner,
+                    handIndex: handIndex >= 0 ? handIndex : 0,
+                },
+                toPosition: {
+                    type: 'trash' as const,
+                    owner,
+                },
+                targetRotation: 90,
             },
         };
     });

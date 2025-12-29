@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useAnimationQueue } from '../contexts/AnimationQueueContext';
 import { AnimatedCard } from './AnimatedCard';
+import { ANIMATION_DURATIONS } from '../constants/animationTiming';
 import '../styles/animations.css';
 
 /**
@@ -42,13 +43,41 @@ export const AnimationOverlay: React.FC = () => {
 
     /**
      * Fallback timeout to ensure animations complete even if CSS events fail.
-     * Using generous timeout: highlight (500ms) + fly (1000ms) + buffer (500ms) = 2000ms
+     * Timeout matches the ACTUAL animation timing in AnimatedCard.tsx:
+     * - DOM_DETECTION_DELAY: 100ms
+     * - HIGHLIGHT_DURATION: 500ms (only for opponent actions)
+     * - flyDuration: from ANIMATION_DURATIONS (or custom duration for multi-card)
      */
     useEffect(() => {
         if (!currentAnimation) return;
 
-        // Generous fallback timeout - animation should complete well before this
-        const timeout = 2500; // 2.5 seconds max
+        // DOM detection delay before animation starts
+        const domDetectionDelay = 100;
+
+        // Fly duration: use custom duration if provided, otherwise use ANIMATION_DURATIONS
+        const flyDuration = currentAnimation.duration
+            || ANIMATION_DURATIONS[currentAnimation.type]
+            || 400;
+
+        // Check if this is an opponent action that needs highlight phase
+        const isOpponentAction = currentAnimation.animatingCard?.isOpponentAction ?? false;
+        const highlightTime = isOpponentAction ? 500 : 0;
+
+        // Buffer for safety
+        const buffer = 500;
+
+        // For multi-card animations (compile, draw), account for stagger delays
+        let staggerTime = 0;
+        if (currentAnimation.animatingCards) {
+            const maxDelay = Math.max(...currentAnimation.animatingCards.map(c => c.startDelay || 0));
+            staggerTime = maxDelay;
+        }
+        if (currentAnimation.multiAnimatingCards) {
+            const maxDelay = Math.max(...currentAnimation.multiAnimatingCards.map(c => c.startDelay || 0));
+            staggerTime = maxDelay;
+        }
+
+        const timeout = domDetectionDelay + highlightTime + flyDuration + staggerTime + buffer;
 
         const timer = setTimeout(() => {
             if (!animationCompleteRef.current) {
@@ -123,6 +152,23 @@ export const AnimationOverlay: React.FC = () => {
                     }}
                     startDelay={item.startDelay}
                     onComplete={index === currentAnimation.animatingCards!.length - 1 ? handleAnimationComplete : undefined}
+                />
+            ))}
+
+            {/* For multi-draw animations (multiAnimatingCards) */}
+            {currentAnimation.multiAnimatingCards && currentAnimation.multiAnimatingCards.map((item, index) => (
+                <AnimatedCard
+                    key={`multi-${item.card.id}-${index}`}
+                    animation={{
+                        ...currentAnimation,
+                        animatingCard: {
+                            card: item.card,
+                            fromPosition: item.fromPosition,
+                            toPosition: item.toPosition,
+                        },
+                    }}
+                    startDelay={item.startDelay}
+                    onComplete={index === currentAnimation.multiAnimatingCards!.length - 1 ? handleAnimationComplete : undefined}
                 />
             ))}
 

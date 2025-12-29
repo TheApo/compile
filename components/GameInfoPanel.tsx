@@ -18,11 +18,14 @@ interface GameInfoPanelProps {
 const PHASE_LABELS: Record<string, string> = {
   start: 'Start',
   control: 'Control',
-  action: 'Action',
   compile: 'Compile',
+  action: 'Action',
   hand_limit: 'Hand Limit',
   end: 'End',
 };
+
+// All phases in order for the TurnPhaseIndicator
+const ALL_PHASES = ['start', 'control', 'compile', 'action', 'hand_limit', 'end'];
 
 export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, animationState, difficulty, onPlayerClick, onOpponentClick }) => {
   const { player, opponent } = gameState;
@@ -73,10 +76,39 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
     );
   };
 
+  const difficultyLabel = difficulty ? ` (${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)})` : '';
+
   return (
     <div className="game-info-panel">
-      {renderInfoSection('opponent')}
-      {renderInfoSection('player')}
+      {/* Opponent Header - always visible */}
+      <div className="info-header opponent-header">
+        <h3>Opponent{difficultyLabel}</h3>
+      </div>
+
+      {/* Turn Phase Indicator - visible when DeckTrashArea is visible (> 850px) */}
+      <div className="turn-phase-indicator">
+        <div className="phase-list">
+          {ALL_PHASES.map(phase => (
+            <div
+              key={phase}
+              className={`phase-item ${phase === gameState.phase ? 'active' : ''} ${turn}-turn`}
+            >
+              {PHASE_LABELS[phase]}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Player Header - always visible */}
+      <div className="info-header player-header">
+        <h3>Player</h3>
+      </div>
+
+      {/* Old Hand/Deck/Trash Info - visible when DeckTrashArea is NOT visible (≤ 850px) */}
+      <div className="info-stats">
+        {renderInfoSection('opponent')}
+        {renderInfoSection('player')}
+      </div>
     </div>
   );
 };

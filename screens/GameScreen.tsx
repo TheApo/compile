@@ -221,6 +221,11 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
 
     if (isAnimating && currentAnimation?.snapshot) {
       const baseState = snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
+
+      // NOTE: For draw animations, we now use sequential animations where each
+      // animation has its own snapshot showing cards that have already landed.
+      // So we just use the snapshot directly - no need to override the hand.
+
       // NOTE: We do NOT filter out the animated card anymore!
       // Instead, we hide it via CSS (see animatingCardId below).
       // This is critical because filtering changes array indices,
@@ -234,6 +239,16 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const animatingCardId = useMemo(() => {
     if (isAnimating && currentAnimation?.animatingCard) {
       return currentAnimation.animatingCard.card.id;
+    }
+    return null;
+  }, [isAnimating, currentAnimation]);
+
+  // Extended animation info for correct hiding during shift animations
+  // Includes fromPosition so Lane can check if card is being animated FROM that lane
+  const animatingCardInfo = useMemo(() => {
+    if (isAnimating && currentAnimation?.animatingCard) {
+      const { card, fromPosition } = currentAnimation.animatingCard;
+      return { cardId: card.id, fromPosition };
     }
     return null;
   }, [isAnimating, currentAnimation]);
@@ -751,7 +766,8 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 difficulty={difficulty}
             />
         )}
-        {showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (
+        {/* Hide modals during animation */}
+        {!isAnimating && showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (
             <RearrangeProtocolsModal
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
@@ -765,7 +781,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {showSwapModal && gameState.actionRequired?.type === 'prompt_swap_protocols' && (
+        {!isAnimating && showSwapModal && gameState.actionRequired?.type === 'prompt_swap_protocols' && (
             <SwapProtocolsModal
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
@@ -775,7 +791,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {(gameState.actionRequired?.type === 'select_card_from_revealed_deck' || gameState.actionRequired?.type === 'reveal_deck_draw_protocol') && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && (gameState.actionRequired?.type === 'select_card_from_revealed_deck' || gameState.actionRequired?.type === 'reveal_deck_draw_protocol') && gameState.actionRequired.actor === 'player' && (
             <RevealedDeckModal
                 gameState={gameState}
                 onSelectCard={(cardId) => {
@@ -787,7 +803,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
             />
         )}
         {/* Time Protocol: Trash selection modals */}
-        {gameState.actionRequired?.type === 'select_card_from_trash_to_play' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_card_from_trash_to_play' && gameState.actionRequired.actor === 'player' && (
             <TrashSelectionModal
                 gameState={gameState}
                 onSelectCard={(cardIndex) => {
@@ -795,7 +811,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'select_card_from_trash_to_reveal' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_card_from_trash_to_reveal' && gameState.actionRequired.actor === 'player' && (
             <TrashSelectionModal
                 gameState={gameState}
                 onSelectCard={(cardIndex) => {
@@ -803,27 +819,27 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'prompt_optional_effect' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'prompt_optional_effect' && gameState.actionRequired.actor === 'player' && (
             <RevealedDeckTopModal
                 gameState={gameState}
                 onAccept={() => resolveOptionalEffectPrompt(true)}
                 onDecline={() => resolveOptionalEffectPrompt(false)}
             />
         )}
-        {gameState.actionRequired?.type === 'state_number' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'state_number' && gameState.actionRequired.actor === 'player' && (
             <StateNumberModal
                 gameState={gameState}
                 onConfirm={(number) => resolveStateNumber(number)}
             />
         )}
-        {gameState.actionRequired?.type === 'state_protocol' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'state_protocol' && gameState.actionRequired.actor === 'player' && (
             <StateProtocolModal
                 gameState={gameState}
                 availableProtocols={(gameState.actionRequired as any).availableProtocols || []}
                 onConfirm={(protocol) => resolveStateProtocol(protocol)}
             />
         )}
-        {gameState.actionRequired?.type === 'select_from_drawn_to_reveal' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_from_drawn_to_reveal' && gameState.actionRequired.actor === 'player' && (
             <SelectFromDrawnModal
                 gameState={gameState}
                 allDrawnCardIds={(gameState.actionRequired as any).allDrawnCardIds || []}
@@ -837,33 +853,36 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'confirm_deck_discard' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'confirm_deck_discard' && gameState.actionRequired.actor === 'player' && (
             <DeckDiscardModal
                 discardedCard={(gameState.actionRequired as any).discardedCard}
                 deckOwner={(gameState.actionRequired as any).deckOwner}
                 onConfirm={() => resolveConfirmDeckDiscard()}
             />
         )}
-        {gameState.actionRequired?.type === 'confirm_deck_play_preview' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'confirm_deck_play_preview' && gameState.actionRequired.actor === 'player' && (
             <DeckPlayPreviewModal
                 card={(gameState.actionRequired as any).drawnCard}
                 isFaceDown={(gameState.actionRequired as any).isFaceDown}
                 onConfirm={() => resolveConfirmDeckPlayPreview()}
             />
         )}
-        <div className="toaster-container">
-            {toasts.map((toast) => (
-                <Toaster key={toast.id} message={toast.message} player={toast.player} />
-            ))}
-        </div>
+        {/* Hide toasts during animation */}
+        {!isAnimating && (
+            <div className="toaster-container">
+                {toasts.map((toast) => (
+                    <Toaster key={toast.id} message={toast.message} player={toast.player} />
+                ))}
+            </div>
+        )}
         {showLog && <LogModal log={gameState.log} onClose={() => setShowLog(false)} />}
         <button className="btn log-button" onClick={() => setShowLog(true)}>Log</button>
         <div className="game-screen-layout">
             <div className="game-preview-container">
                 <h2 onClick={handleMainframeClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Click 5 times to toggle debug mode">Mainframe</h2>
                 <GameInfoPanel
-                    gameState={gameState}
-                    turn={gameState.actionRequired?.actor || gameState.turn}
+                    gameState={visualGameState}
+                    turn={gameState.actionRequired?.actor || visualGameState.turn}
                     animationState={gameState.animationState}
                     difficulty={difficulty}
                     onPlayerClick={() => setDebugModalPlayer('player')}
@@ -895,6 +914,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                   onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
                   sourceCardId={isAnimating ? null : sourceCardId}
                   animatingCardId={animatingCardId}
+                  animatingCardInfo={animatingCardInfo}
                   onDeckClick={(owner) => setDebugModalPlayer(owner)}
                   onTrashClick={(owner) => setDebugModalPlayer(owner)}
                   onTrashCardHover={(card, owner) => {

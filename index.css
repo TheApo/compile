@@ -824,6 +824,91 @@
   font-weight: 600;
 }
 
+/* --- Info Headers (Opponent/Player labels for new layout) --- */
+.info-header {
+  display: none;  /* Hidden by default, shown in media query */
+  padding: 0.25rem 0.75rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+
+.info-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.info-header.opponent-header h3 {
+  color: var(--danger-color);
+}
+
+.info-header.player-header h3 {
+  color: var(--primary-color);
+}
+
+/* --- Turn Phase Indicator --- */
+.turn-phase-indicator {
+  display: none;  /* Hidden by default, shown when DeckTrashArea is visible */
+}
+
+.phase-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.phase-item {
+  padding: 0.4rem 0.75rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  opacity: 0.4;
+  color: var(--text-muted);
+}
+
+.phase-item.active {
+  opacity: 1;
+  font-weight: bold;
+  background-color: var(--surface-color);
+}
+
+.phase-item.active.player-turn {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px var(--primary-color);
+  color: var(--primary-color);
+}
+
+.phase-item.active.opponent-turn {
+  border-color: var(--danger-color);
+  box-shadow: 0 0 8px var(--danger-color);
+  color: var(--danger-color);
+}
+
+/* Show TurnPhaseIndicator when DeckTrashArea is visible (> 850px) */
+@media (min-width: 851px) {
+  .game-info-panel {
+    gap: 0.25rem;  /* Reduce gap for new layout */
+  }
+
+  .info-header {
+    display: block;
+  }
+
+  .turn-phase-indicator {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    flex: 1;
+  }
+
+  .game-info-panel .info-stats {
+    display: none;  /* Hide Hand/Deck/Trash info when TurnPhaseIndicator is visible */
+  }
+}
+
 /* --- Toaster Notification --- */
 .toaster-container {
   position: fixed;

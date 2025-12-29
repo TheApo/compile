@@ -1,14 +1,158 @@
 # Animation-Queue-System Redesign für COMPILE Card Game
 
-## STATUS: Phase D.3 ABGESCHLOSSEN - Bereit für Phase E
+## STATUS: Phase E ABGESCHLOSSEN + Neue Features - Bereit für Phase F
 
-**Letzte Aktualisierung**: 2025-12-29 (Session beendet)
+**Letzte Aktualisierung**: 2025-12-29 (Session 2)
 
 ---
 
 # SUPER AUSFÜHRLICHE ANLEITUNG FÜR DIE NÄCHSTE SESSION
 
-## 1. WAS WURDE HEUTE (2025-12-29) ERLEDIGT?
+## 0. WAS WURDE IN SESSION 2 (2025-12-29) ERLEDIGT?
+
+### 0.1 Draw-Animation mit dynamischem Timing (700ms GESAMT)
+**Problem**: Beim Ziehen mehrerer Karten dauerte jede Karte 300ms, was bei 5 Karten 1500ms war.
+**Lösung**: Alle Karten fliegen innerhalb von 700ms GESAMT. Je mehr Karten, desto schneller pro Karte.
+
+**Neue Konstanten in `constants/animationTiming.ts`:**
+```typescript
+export const TOTAL_DRAW_ANIMATION_DURATION = 700; // ms
+
+export function calculateDrawDuration(cardCount: number): number {
+    if (cardCount <= 0) return 0;
+    if (cardCount === 1) return TOTAL_DRAW_ANIMATION_DURATION;
+    return Math.floor(TOTAL_DRAW_ANIMATION_DURATION / cardCount);
+}
+
+export function calculateDrawStagger(cardIndex: number, cardCount: number): number {
+    if (cardCount <= 1) return 0;
+    return Math.floor(cardIndex * (TOTAL_DRAW_ANIMATION_DURATION / cardCount));
+}
+```
+
+**Erweiterung in `types/animation.ts` - AnimatingCard Interface:**
+```typescript
+startDelay?: number;  // NEU: Für gestaffelte Multi-Karten-Animationen
+```
+
+**Erweiterung in `logic/animation/animationHelpers.ts` - createDrawAnimation:**
+```typescript
+export function createDrawAnimation(
+    state: GameState,
+    card: PlayedCard,
+    owner: Player,
+    targetHandIndex: number,
+    customDuration?: number,    // NEU
+    startDelay?: number         // NEU
+): AnimationQueueItem
+```
+
+### 0.2 Opponent Draw-Animation
+**Wo**: `logic/game/aiManager.ts` in `runOpponentTurn()` bei fillHand-Aktion
+**Logik**: Gleich wie Player, mit dynamischem Timing (700ms GESAMT)
+
+### 0.3 Opponent Shift-Animation
+**Wo**: `logic/game/aiManager.ts` in `handleRequiredAction()` bei selectLane-Entscheidung
+**Logik**: Prüft auf `select_lane_for_shift` und erstellt Animation bevor resolveActionWithLane aufgerufen wird
+
+### 0.4 Return-Animation erweitert
+**Wo**: `logic/animation/animationHelpers.ts` - `createReturnAnimation()`
+**Erweiterung**: `setFaceDown: boolean = true` Parameter hinzugefügt
+```typescript
+animatingCard: {
+    // ...
+    flipDirection: setFaceDown ? 'toFaceDown' : undefined,
+    targetIsFaceUp: !setFaceDown,
+}
+```
+
+**Integration**: `hooks/useGameState.ts` in `processAnimationQueue` bei return-Requests
+
+### 0.5 Trash-Rotation während Animation
+**Problem**: Karten flogen zum Trash ohne Rotation, aber Trash-Karten sind um 90° gedreht.
+**Lösung**: `targetRotation` in `AnimatingCard` Interface hinzugefügt
+
+**In `types/animation.ts`:**
+```typescript
+targetRotation?: number;  // Rotation am Ziel in Grad (z.B. 90 für Trash)
+```
+
+**In `logic/animation/animationHelpers.ts`:**
+```typescript
+// createDeleteAnimation + createDiscardAnimation
+animatingCard: {
+    // ...
+    targetRotation: owner === 'player' ? 90 : -90,  // Player 90°, Opponent -90°
+}
+```
+
+**In `components/AnimatedCard.tsx`:**
+```typescript
+const finalRotation = baseRotation + (targetRotation || 0);
+// ... mit CSS transition: transform ${flyDuration}ms ${easing}
+```
+
+### 0.6 Protokoll-Bars nur über Lanes zentrieren
+**Problem**: Protocol-Bars waren über gesamte Breite zentriert, inkl. DeckTrashArea.
+**Lösung**: CSS-Breite auf `calc(100% - 170px)` gesetzt
+
+**In `styles/layouts/game-screen.css`:**
+```css
+.protocol-bars-container {
+    width: calc(100% - 170px);
+    margin-left: auto;
+    margin-right: 0;
+}
+/* Responsive Breakpoints bei 1200px, 1000px, 850px */
+```
+
+### 0.7 Shift-Animation Card-Hiding Fix
+**Problem**: Bei Shift wurde die Karte in BEIDEN Lanes versteckt (alt + neu), statt nur in der alten.
+**Lösung**: `animatingCardInfo` mit `fromPosition` statt nur `animatingCardId`
+
+**In `screens/GameScreen.tsx`:**
+```typescript
+const animatingCardInfo = useMemo(() => {
+    if (isAnimating && currentAnimation?.animatingCard) {
+        const { card, fromPosition } = currentAnimation.animatingCard;
+        return { cardId: card.id, fromPosition };
+    }
+    return null;
+}, [isAnimating, currentAnimation]);
+```
+
+**In `components/Lane.tsx`:**
+```typescript
+let isBeingAnimated = false;
+if (animatingCardInfo?.cardId === card.id) {
+    if (animatingCardInfo.fromPosition.type === 'lane') {
+        isBeingAnimated = animatingCardInfo.fromPosition.laneIndex === laneIndex;
+    } else {
+        isBeingAnimated = true;
+    }
+}
+```
+
+### 0.8 UI während Animation verstecken
+**Wo**: `screens/GameScreen.tsx`
+**Änderung**: Alle Modals (RearrangeProtocols, SwapProtocols, RevealedDeck, etc.) und Toasts mit `!isAnimating &&` gewrappt
+
+```tsx
+{!isAnimating && showRearrangeModal && ... && (
+    <RearrangeProtocolsModal ... />
+)}
+{/* etc. für alle Modals */}
+
+{!isAnimating && (
+    <div className="toaster-container">
+        {toasts.map(...)}
+    </div>
+)}
+```
+
+---
+
+## 1. WAS WURDE IN SESSION 1 (2025-12-29) ERLEDIGT?
 
 ### 1.1 Delete-Animation Bugfix - KARTE NICHT MEHR DOPPELT SICHTBAR
 **Problem**: Beim Löschen einer Karte blieb sie auf dem Spielfeld sichtbar, während gleichzeitig eine fliegende Animation zum Trash lief. Dadurch war die Karte doppelt zu sehen.
@@ -185,18 +329,23 @@ const fillHand = () => {
 
 ### 3.1 Animationen (NEUES System)
 - [x] **Play-Animation** (Player & AI): Karte fliegt von Hand zu Lane
-- [x] **Delete-Animation**: Karte fliegt von Lane zu Trash
-- [x] **Discard-Animation**: Karte fliegt von Hand zu Trash
-- [x] **Draw-Animation**: Karte fliegt von Deck zu Hand
-- [x] **Shift-Animation**: Karte fliegt von Lane zu Lane
+- [x] **Delete-Animation**: Karte fliegt von Lane zu Trash (mit 90° Rotation)
+- [x] **Discard-Animation**: Karte fliegt von Hand zu Trash (mit 90° Rotation)
+- [x] **Draw-Animation** (Player & Opponent): Karte fliegt von Deck zu Hand (dynamisches 700ms Timing)
+- [x] **Shift-Animation** (Player & Opponent): Karte fliegt von Lane zu Lane
+- [x] **Return-Animation**: Karte fliegt von Lane zurück zu Hand (facedown)
 - [x] **Highlight-Phase für AI**: 400ms mit rotem Glow bevor Animation startet
 - [x] **Source-Card versteckt**: Karte während Animation via CSS unsichtbar
+- [x] **Trash-Rotation**: Karten drehen sich während Flug zum Trash (Player +90°, Opponent -90°)
+- [x] **Staggered Draw**: Multi-Card Draws mit gestaffeltem Timing
 
 ### 3.2 UI/Layout
 - [x] **DeckTrashArea**: Deck und Trash auf linker Seite angezeigt
 - [x] **Responsive Design**: DeckTrashArea skaliert mit Bildschirmgröße
 - [x] **Lanes klickbar**: pointer-events korrekt konfiguriert
 - [x] **Protocol-Namen sichtbar**: DeckTrashArea überdeckt nichts mehr
+- [x] **Protocol-Bars Zentrierung**: Nur über Lanes, nicht über DeckTrashArea
+- [x] **Modale/Toasts versteckt**: UI-Elemente während Animation ausgeblendet
 
 ---
 
@@ -204,7 +353,7 @@ const fillHand = () => {
 
 ### Phase E: Flip + Return Animationen
 
-#### E.1 Flip-Animation
+#### E.1 Flip-Animation (NOCH OFFEN)
 - **Problem**: Flip passiert an vielen Stellen im Code
 - **Lösung**: Zentrale Stelle finden wo Karten geflippt werden
 - **Dateien zu prüfen**:
@@ -215,12 +364,10 @@ const fillHand = () => {
 - **Timing**: 300ms
 - **CSS**: `@keyframes card-flip-rotate` existiert bereits in animations.css
 
-#### E.2 Return-Animation
-- **Problem**: Karte wird von Lane zurück zur Hand genommen
-- **Lösung**: `createReturnAnimation()` nutzen
-- **Dateien zu prüfen**:
-  - `logic/game/helpers/actionUtils.ts` - suche nach "return" oder "hand"
-- **Animation**: Karte fliegt von Lane zu Hand
+#### E.2 Return-Animation ✅ ERLEDIGT
+- **Implementation**: `createReturnAnimation()` mit `setFaceDown` Parameter
+- **Integration**: In `hooks/useGameState.ts` processAnimationQueue
+- **Animation**: Karte fliegt von Lane zu Hand (facedown)
 - **Timing**: 400ms
 
 ### Phase F: Altes Animation-System entfernen
@@ -465,12 +612,20 @@ Die Systeme laufen parallel. In Phase F wird das alte System komplett entfernt.
 - [x] **Phase D.1**: DeckTrashArea Komponente erstellt
 - [x] **Phase D.2**: Delete, Discard Animationen + DOM-Selektoren
 - [x] **Phase D.3**: Delete-Bugfix, Draw, Shift Animationen + Layout-Fixes
+- [x] **Phase E.2**: Return-Animation implementiert
+- [x] **Session 2 Features**:
+  - Draw-Animation dynamisches Timing (700ms GESAMT)
+  - Opponent Draw + Shift Animationen
+  - Trash-Rotation während Flug (90°/-90°)
+  - Protocol-Bars Zentrierung fix
+  - Shift-Animation Card-Hiding fix
+  - Modale/Toasts während Animation verstecken
 
 ---
 
 ## 13. OFFENE PHASEN
 
-- [ ] **Phase E**: Flip + Return Animationen
+- [ ] **Phase E.1**: Flip-Animation
 - [ ] **Phase F**: Altes Animation-System entfernen
 - [ ] **Phase G**: Compile-Animation
 - [ ] **Phase H**: Shuffle-Animation

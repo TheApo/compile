@@ -668,6 +668,8 @@ export interface GameState {
     detailedGameStats?: DetailedGameStats;
     /** Card that is currently committed (being played, not yet landed) - for rules compliance */
     _committedCardId?: string;
+    /** AI Double-Play Prevention - set when AI plays a card, cleared when phase changes */
+    _cardPlayedThisActionPhase?: boolean;
     /** Deferred parent effects stack - stores parent effects when child effects are executing
      *  This ensures correct effect chain order: Child completes ALL effects → Parent resumes
      *  Example: Smoke-1 (flip + shift) flips Test-1 (delete + delete + flip)

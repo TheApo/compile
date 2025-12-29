@@ -55,6 +55,9 @@ export interface AnimatingCard {
     toPosition: CardPosition;      // Ending position
     flipDirection?: 'toFaceUp' | 'toFaceDown'; // For flip animations
     targetIsFaceUp?: boolean;      // For play animations: how the card should be displayed at destination
+    targetRotation?: number;       // Rotation at destination in degrees (e.g., 90 for trash)
+    startDelay?: number;           // Delay before animation starts (for staggered animations)
+    isOpponentAction?: boolean;    // true when opponent is performing this action (for highlight phase)
 }
 
 /**
@@ -64,6 +67,13 @@ export interface CompileAnimatingCard {
     card: PlayedCard;
     owner: Player;
     startDelay: number;  // Staggered delay: 0, 75, 150, 225ms...
+}
+
+/**
+ * For multi-card animations (draw, refresh) with full position info
+ */
+export interface MultiAnimatingCard extends AnimatingCard {
+    startDelay: number;  // Required for multi-card animations
 }
 
 // =============================================================================
@@ -79,6 +89,8 @@ export interface VisualSnapshot {
     player: PlayerVisualState;
     opponent: PlayerVisualState;
     controlCardHolder: Player | null;
+    turn: Player;                      // Whose turn it is
+    phase: string;                     // Current game phase
 }
 
 /**
@@ -113,6 +125,7 @@ export interface AnimationQueueItem {
     // The card(s) being animated
     animatingCard?: AnimatingCard;           // For single-card animations
     animatingCards?: CompileAnimatingCard[]; // For multi-card animations (compile)
+    multiAnimatingCards?: MultiAnimatingCard[]; // For multi-card animations (draw, refresh)
 
     // Optional: For complex scenarios
     pauseAfter?: boolean;                    // Queue pauses after this animation

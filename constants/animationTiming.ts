@@ -16,18 +16,18 @@ import { AnimationType } from '../types/animation';
  * 2. Set fallback timeouts for animation completion detection
  */
 export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
-    play: 400,      // Card moves from hand/deck to lane
-    delete: 400,    // Card moves to trash (with fade/shrink)
-    flip: 300,      // Card rotates to reveal other side
-    shift: 500,     // Card moves between lanes (longer for visibility)
-    return: 400,    // Card returns from board to hand
-    discard: 300,   // Card moves from hand to trash
-    draw: 300,      // Card moves from deck to hand
-    compile: 800,   // Protocol glow + multiple card deletions
-    give: 500,      // Card moves to opponent's hand
-    reveal: 600,    // Card flips up briefly, then back
-    swap: 400,      // Protocol bars swap positions
-    refresh: 500,   // Hand refill (multiple draws)
+    play: 1000,     // Card moves from hand/deck to lane
+    delete: 1000,   // Card moves to trash (with fade/shrink)
+    flip: 500,      // Card rotates to reveal other side
+    shift: 1000,    // Card moves between lanes
+    return: 1000,   // Card returns from board to hand
+    discard: 800,   // Card moves from hand to trash
+    draw: 1200,     // Single card draw (or total for multi-card)
+    compile: 1200,  // Protocol glow + multiple card deletions
+    give: 800,      // Card moves to opponent's hand
+    reveal: 800,    // Card flips up briefly, then back
+    swap: 600,      // Protocol bars swap positions
+    refresh: 1200,  // Hand refill (multiple draws)
 } as const;
 
 // =============================================================================
@@ -45,6 +45,39 @@ export const STAGGER_DELAY = 75; // ms between cards
  * Slightly longer than normal stagger for dramatic effect.
  */
 export const COMPILE_STAGGER_DELAY = 100; // ms between cards
+
+/**
+ * Total duration for all draw animations combined.
+ * All cards should finish drawing within this time regardless of count.
+ * Change this value to adjust multi-card draw speed.
+ */
+export const TOTAL_DRAW_ANIMATION_DURATION = 1200; // ms
+
+/**
+ * Calculates duration per card for draw animation.
+ * Goal: All cards finish in TOTAL_DRAW_ANIMATION_DURATION ms.
+ *
+ * @param cardCount - Number of cards being drawn
+ * @returns Duration per card in milliseconds
+ */
+export function calculateDrawDuration(cardCount: number): number {
+    if (cardCount <= 0) return 0;
+    if (cardCount === 1) return TOTAL_DRAW_ANIMATION_DURATION;
+    return Math.floor(TOTAL_DRAW_ANIMATION_DURATION / cardCount);
+}
+
+/**
+ * Calculates stagger delay for a specific card in draw animation.
+ * Each card starts at a different time to create cascade effect.
+ *
+ * @param cardIndex - Index of the card (0-based)
+ * @param cardCount - Total number of cards being drawn
+ * @returns Start delay in milliseconds
+ */
+export function calculateDrawStagger(cardIndex: number, cardCount: number): number {
+    if (cardCount <= 1) return 0;
+    return Math.floor(cardIndex * (TOTAL_DRAW_ANIMATION_DURATION / cardCount));
+}
 
 // =============================================================================
 // TIMING HELPERS

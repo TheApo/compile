@@ -18,7 +18,7 @@ import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 import { AnimationQueueItem } from '../../types/animation';
-import { createPlayAnimation } from '../animation/animationHelpers';
+import { createPlayAnimation, createDrawAnimation, createSequentialDrawAnimations, createSequentialDiscardAnimations, createShiftAnimation, createDiscardAnimation } from '../animation/animationHelpers';
 
 // Feature flag for new animation queue system in AI
 const USE_NEW_AI_ANIMATION_SYSTEM = true;
@@ -96,9 +96,11 @@ const handleAIPlayCard = (
         'opponent'
     );
 
+    // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
     const stateWithPlayAnimation = {
         ...stateAfterPlayLogic,
-        animationState: { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player }
+        animationState: { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player },
+        _cardPlayedThisActionPhase: true
     };
 
     setTimeout(() => {
@@ -109,13 +111,14 @@ const handleAIPlayCard = (
                 processAnimationQueue(onCoverAnims, () => setGameState(s2 => {
                     // CRITICAL: Ensure animationState is cleared
                     const cleanState = { ...s2, animationState: null };
-                    if (isDuringOpponentTurn && cleanState.actionRequired) {
-                        runOpponentTurn(cleanState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                        return cleanState;
-                    }
+                    // CRITICAL FIX: If there's still an actionRequired after cover effects,
+                    // handle it via handleRequiredAction, NOT runOpponentTurn!
+                    // runOpponentTurn allows playing another card, which causes the double-play bug.
                     if (cleanState.actionRequired && cleanState.actionRequired.actor === 'opponent') {
+                        // Let the effect handling continue - don't start a new turn
                         return cleanState;
                     }
+                    // No more actionRequired - end the action phase (don't allow another card play)
                     const result = endActionForPhase(cleanState, phaseManager);
                     return { ...result, animationState: null };
                 }));
@@ -158,7 +161,8 @@ export const resolveRequiredOpponentAction = (
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     resolveActionWithCard: (s: GameState, c: string) => CardActionResult,
     resolveActionWithLane: (s: GameState, l: number) => LaneActionResult,
-    trackPlayerRearrange?: TrackPlayerRearrange
+    trackPlayerRearrange?: TrackPlayerRearrange,
+    enqueueAnimation?: (item: Omit<AnimationQueueItem, 'id'>) => void
 ) => {
     setGameState(state => {
         const action = state.actionRequired;
@@ -184,7 +188,21 @@ export const resolveRequiredOpponentAction = (
             const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
 
             if (cardIdsToDiscard.length !== aiDecision.cardIds.length) {
-                console.warn(`[AI Manager] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+                console.warn(`[AI-DEBUG] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+            }
+
+            // NEW: Enqueue sequential discard animations
+            if (enqueueAnimation) {
+                const cardsToDiscard = cardIdsToDiscard
+                    .map(id => state.opponent.hand.find(c => c.id === id))
+                    .filter((c): c is typeof state.opponent.hand[0] => c !== undefined);
+
+                if (cardsToDiscard.length > 0) {
+                    const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+                    queueMicrotask(() => {
+                        animations.forEach(anim => enqueueAnimation(anim));
+                    });
+                }
             }
 
             const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
@@ -370,7 +388,8 @@ const handleRequiredAction = (
     actions: ActionDispatchers,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     phaseManager: PhaseManager,
-    trackPlayerRearrange?: TrackPlayerRearrange
+    trackPlayerRearrange?: TrackPlayerRearrange,
+    enqueueAnimation?: (item: Omit<AnimationQueueItem, 'id'>) => void
 ): GameState => {
 
     const action = state.actionRequired!; // Action is guaranteed to exist here
@@ -520,6 +539,30 @@ const handleRequiredAction = (
     // GENERIC: Handle ALL selectLane decisions - no whitelist needed
     // The AI returns selectLane for any lane selection action, and resolveActionWithLane handles it
     if (aiDecision.type === 'selectLane') {
+        // NEW ANIMATION SYSTEM: Create shift animation for opponent
+        if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && action.type === 'select_lane_for_shift') {
+            const { cardToShiftId, cardOwner, originalLaneIndex } = action;
+            const targetLaneIndex = aiDecision.laneIndex;
+
+            // Only animate if shift is valid (not same lane)
+            if (originalLaneIndex !== targetLaneIndex) {
+                const cardToShift = state[cardOwner].lanes.flat().find(c => c.id === cardToShiftId);
+                const cardIndex = state[cardOwner].lanes[originalLaneIndex].findIndex(c => c.id === cardToShiftId);
+                if (cardToShift && cardIndex >= 0) {
+                    const animation = createShiftAnimation(
+                        state,
+                        cardToShift,
+                        cardOwner,
+                        originalLaneIndex,
+                        cardIndex,
+                        targetLaneIndex,
+                        true // isOpponentAction - triggers highlight phase
+                    );
+                    enqueueAnimation(animation);
+                }
+            }
+        }
+
         const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
@@ -529,7 +572,13 @@ const handleRequiredAction = (
                     const stateWithoutAnim = { ...s, animationState: null };
                     return onCompleteCallback(stateWithoutAnim, (finalState) => {
                         const cleanState = { ...finalState, animationState: null };
-                        const stateAfterAction = state.phase === 'start'
+                        // CRITICAL FIX: Use cleanState.phase, not the closure's state.phase!
+                        // Also check if turn already switched to prevent double-processing
+                        if (cleanState.turn !== 'opponent') {
+                            console.log('[AI-DEBUG] Async callback skipped - turn already switched to:', cleanState.turn);
+                            return cleanState;
+                        }
+                        const stateAfterAction = cleanState.phase === 'start'
                             ? phaseManager.continueTurnAfterStartPhaseAction(cleanState)
                             : phaseManager.processEndOfAction(cleanState);
                         const cleanAfterAction = { ...stateAfterAction, animationState: null };
@@ -566,18 +615,24 @@ const handleRequiredAction = (
                         // Ensure animationState stays null through all paths
                         const cleanState = { ...finalState, animationState: null };
 
+                        // CRITICAL FIX: Check if turn already switched to player
+                        if (cleanState.turn !== 'opponent') {
+                            console.log('[AI-DEBUG] flipCard/deleteCard callback skipped - turn already:', cleanState.turn);
+                            return cleanState;
+                        }
+
                         // CRITICAL FIX: Check for queuedActions BEFORE checking actionRequired
                         // Otherwise Gravity-2's shift gets skipped and AI plays another card
                         if (cleanState.queuedActions && cleanState.queuedActions.length > 0) {
                             const stateAfterQueue = phaseManager.processEndOfAction(cleanState);
                             if (stateAfterQueue.actionRequired) {
-                                runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                 return { ...stateAfterQueue, animationState: null };
                             }
                             return { ...stateAfterQueue, animationState: null };
                         }
                         if (cleanState.actionRequired) {
-                            runOpponentTurn(cleanState, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                            runOpponentTurn(cleanState, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                             return cleanState;
                         }
                         if (cleanState.phase === 'start') {
@@ -586,7 +641,7 @@ const handleRequiredAction = (
                             // CRITICAL FIX: Schedule continuation of opponent's turn after start phase action
                             if (!cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent' && !cleanAfterAction.winner) {
                                 setTimeout(() => {
-                                    runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                                    runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                 }, 500);
                             }
                             return cleanAfterAction;
@@ -624,7 +679,21 @@ const handleRequiredAction = (
         const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
 
         if (cardIdsToDiscard.length !== aiDecision.cardIds.length) {
-            console.warn(`[AI Manager] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+            console.warn(`[AI-DEBUG] Fixed discard count: AI wanted ${aiDecision.cardIds.length} but action.count=${action.count}`);
+        }
+
+        // NEW: Enqueue sequential discard animations
+        if (enqueueAnimation) {
+            const cardsToDiscard = cardIdsToDiscard
+                .map(id => state.opponent.hand.find(c => c.id === id))
+                .filter((c): c is typeof state.opponent.hand[0] => c !== undefined);
+
+            if (cardsToDiscard.length > 0) {
+                const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+                queueMicrotask(() => {
+                    animations.forEach(anim => enqueueAnimation(anim));
+                });
+            }
         }
 
         const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
@@ -723,14 +792,15 @@ export const runOpponentTurn = (
     // CRITICAL FIX: For new animation system, we need to enqueue animation BEFORE setGameState
     // because React 18 batches state updates, causing the animation to appear "instant"
 
-    console.log('[AI Manager] runOpponentTurn called:', {
+    console.log('[AI-DEBUG] runOpponentTurn called:', {
         turn: currentGameState.turn,
         phase: currentGameState.phase,
         hasWinner: !!currentGameState.winner,
         hasAnimationState: !!currentGameState.animationState,
         hasActionRequired: !!currentGameState.actionRequired,
         useNewSystem: USE_NEW_AI_ANIMATION_SYSTEM,
-        hasEnqueueFn: !!enqueueAnimation
+        hasEnqueueFn: !!enqueueAnimation,
+        _cardPlayedThisActionPhase: currentGameState._cardPlayedThisActionPhase
     });
 
     // First, check if we should handle a playCard action with new animation system
@@ -739,27 +809,34 @@ export const runOpponentTurn = (
         const state = currentGameState;
 
         // Check all conditions that would allow us to play a card
+        // CRITICAL: _cardPlayedThisActionPhase prevents double-play bug when effects trigger runOpponentTurn
         const canPlayCard =
             state.turn === 'opponent' &&
             !state.winner &&
             !state.animationState &&
             state.phase === 'action' &&
-            !state.actionRequired;
+            !state.actionRequired &&
+            !state._cardPlayedThisActionPhase;
 
-        console.log('[AI Manager] canPlayCard check:', canPlayCard);
+        console.log('[AI-DEBUG] canPlayCard check:', canPlayCard, {
+            turn: state.turn,
+            phase: state.phase,
+            hasActionRequired: !!state.actionRequired,
+            _cardPlayedThisActionPhase: state._cardPlayedThisActionPhase
+        });
 
         if (canPlayCard) {
             const mainAction = getAIAction(state, null, difficulty);
-            console.log('[AI Manager] AI decision:', mainAction.type);
+            console.log('[AI-DEBUG] AI decision:', mainAction.type);
 
             if (mainAction.type === 'playCard') {
-                console.log('[AI Manager] Using NEW animation system for playCard (pre-setGameState)');
+                console.log('[AI-DEBUG] Using NEW animation system for playCard (pre-setGameState)');
 
                 // Find the card and its position in opponent's hand BEFORE state update
                 const card = state.opponent.hand.find(c => c.id === mainAction.cardId);
                 const handIndex = state.opponent.hand.findIndex(c => c.id === mainAction.cardId);
 
-                console.log('[AI Manager] Card found:', { cardId: mainAction.cardId, handIndex, hasCard: !!card });
+                console.log('[AI-DEBUG] Card found:', { cardId: mainAction.cardId, handIndex, hasCard: !!card });
 
                 // Enqueue animation BEFORE setGameState - this is the key fix!
                 if (card) {
@@ -770,9 +847,10 @@ export const runOpponentTurn = (
                         mainAction.laneIndex,
                         true, // fromHand
                         handIndex,
-                        mainAction.isFaceUp // Pass through face-up state for animation
+                        mainAction.isFaceUp, // Pass through face-up state for animation
+                        true // isOpponentAction - triggers highlight phase
                     );
-                    console.log('[AI Manager] Enqueueing animation BEFORE setGameState:', animation.type);
+                    console.log('[AI-DEBUG] Enqueueing animation BEFORE setGameState:', animation.type);
                     enqueueAnimation(animation);
                 }
 
@@ -786,8 +864,12 @@ export const runOpponentTurn = (
                     // Run the play logic
                     const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(currentState, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
 
+                    // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
+                    const stateWithPlayFlag = { ...stateAfterPlayLogic, _cardPlayedThisActionPhase: true };
+                    console.log('[AI-DEBUG] Flag set after play (NEW path):', stateWithPlayFlag._cardPlayedThisActionPhase);
+
                     // Process on-play effect immediately
-                    let stateForOnPlay = { ...stateAfterPlayLogic };
+                    let stateForOnPlay = { ...stateWithPlayFlag };
                     let onPlayResult: EffectResult = { newState: stateForOnPlay };
 
                     if (!stateForOnPlay.actionRequired && stateForOnPlay.queuedEffect) {
@@ -801,24 +883,37 @@ export const runOpponentTurn = (
                         };
                         onPlayResult = executeOnPlayEffect(effectCard, laneIndex, stateForOnPlay, onPlayContext);
                         onPlayResult.newState.queuedEffect = undefined;
+                        console.log('[AI-DEBUG] Flag after executeOnPlayEffect:', onPlayResult.newState._cardPlayedThisActionPhase);
                     }
 
                     const stateAfterOnPlayLogic = onPlayResult.newState;
+                    console.log('[AI-DEBUG] Flag in stateAfterOnPlayLogic:', stateAfterOnPlayLogic._cardPlayedThisActionPhase);
 
                     // Handle on-cover animations with old system for now
                     const allAnims = [...(onCoverAnims || []), ...(onPlayResult.animationRequests || [])];
                     if (allAnims.length > 0) {
                         processAnimationQueue(allAnims, () => {
                             setGameState(s => {
+                                // CRITICAL FIX: Check if turn already switched to player
+                                if (s.turn !== 'opponent') {
+                                    console.log('[AI-DEBUG] allAnims callback (NEW path) skipped - turn already:', s.turn);
+                                    return s;
+                                }
                                 if (s.queuedActions && s.queuedActions.length > 0) {
                                     const stateAfterQueue = phaseManager.processEndOfAction(s);
                                     if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        // CRITICAL: Use setTimeout to prevent synchronous double-play
+                                        setTimeout(() => {
+                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        }, 0);
                                     }
                                     return stateAfterQueue;
                                 }
                                 if (s.actionRequired && s.turn === 'opponent') {
-                                    runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    // CRITICAL: Use setTimeout to prevent synchronous double-play
+                                    setTimeout(() => {
+                                        runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    }, 0);
                                     return s;
                                 }
                                 return phaseManager.processEndOfAction(s);
@@ -828,6 +923,11 @@ export const runOpponentTurn = (
                     }
 
                     // No effect animations - process end of action
+                    // CRITICAL FIX: Check if turn already switched to player
+                    if (stateAfterOnPlayLogic.turn !== 'opponent') {
+                        console.log('[AI-DEBUG] No-anim path (NEW) skipped - turn already:', stateAfterOnPlayLogic.turn);
+                        return stateAfterOnPlayLogic;
+                    }
                     if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
                         const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
                         if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
@@ -912,7 +1012,7 @@ export const runOpponentTurn = (
         // 2. If an action is required (e.g. from start phase), handle it.
         // This might result in a new state that needs further processing.
         if (state.actionRequired) {
-            const stateAfterAction = handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+            const stateAfterAction = handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
 
             // CRITICAL FIX: After handling required action, AI turn must continue!
             // Schedule continuation if AI is still active and no immediate action required
@@ -958,10 +1058,51 @@ export const runOpponentTurn = (
         }
 
         // 4. Handle Action Phase
-        if (state.phase === 'action') {
+        // CRITICAL: Check _cardPlayedThisActionPhase to prevent double-play bug.
+        // The NEW animation path (lines 795-924) already checks canPlayCard which includes this flag,
+        // but if that path doesn't return early (e.g., canPlayCard was false), we reach here.
+        // Without this check, the AI would play another card after effects complete.
+        console.log('[AI-DEBUG] Standard path action phase check:', {
+            phase: state.phase,
+            _cardPlayedThisActionPhase: state._cardPlayedThisActionPhase,
+            willEnterBlock: state.phase === 'action' && !state._cardPlayedThisActionPhase
+        });
+        if (state.phase === 'action' && !state._cardPlayedThisActionPhase) {
             const mainAction = getAIAction(state, null, difficulty);
 
             if (mainAction.type === 'fillHand') {
+                // NEW ANIMATION SYSTEM: Create SEQUENTIAL draw animations for opponent
+                // Each card gets its own animation with proper snapshot showing cards that already landed
+                if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+                    const prevHandIds = new Set(state.opponent.hand.map(c => c.id));
+                    let stateAfterAction = resolvers.fillHand(state, 'opponent');
+
+                    // Find newly drawn cards and create sequential animations
+                    const newCards = stateAfterAction.opponent.hand.filter(c => !prevHandIds.has(c.id));
+                    if (newCards.length > 0) {
+                        const animations = createSequentialDrawAnimations(
+                            state,  // Use pre-draw state for initial snapshot
+                            newCards,
+                            'opponent',
+                            state.opponent.hand.length  // Starting index in hand
+                        );
+                        // Enqueue all animations
+                        queueMicrotask(() => {
+                            animations.forEach(anim => enqueueAnimation(anim));
+                        });
+
+                        // CRITICAL: Clear animationState to prevent double-animation from useEffect
+                        // (drawForPlayer sets animationState, but we already created the animation here)
+                        stateAfterAction = { ...stateAfterAction, animationState: null };
+                    }
+
+                    if (stateAfterAction.actionRequired) {
+                        return stateAfterAction;
+                    }
+                    return phaseManager.processEndOfAction(stateAfterAction);
+                }
+
+                // FALLBACK: Old system without animation
                 const stateAfterAction = resolvers.fillHand(state, 'opponent');
                 if (stateAfterAction.actionRequired) {
                     return stateAfterAction;
@@ -972,7 +1113,7 @@ export const runOpponentTurn = (
             if (mainAction.type === 'playCard') {
                 // Check if we can use the new animation system
                 if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
-                    console.log('[AI Manager] Using NEW animation system for playCard (inside setGameState)');
+                    console.log('[AI-DEBUG] Using NEW animation system for playCard (inside setGameState)');
 
                     // Find the card and create animation BEFORE playing
                     const card = state.opponent.hand.find(c => c.id === mainAction.cardId);
@@ -986,12 +1127,13 @@ export const runOpponentTurn = (
                             mainAction.laneIndex,
                             true, // fromHand
                             handIndex,
-                            mainAction.isFaceUp
+                            mainAction.isFaceUp,
+                            true // isOpponentAction - triggers highlight phase
                         );
                         // Enqueue animation via queueMicrotask to avoid React batching issues
                         // The snapshot is already captured, so the animation data is correct
                         queueMicrotask(() => {
-                            console.log('[AI Manager] Enqueueing animation (microtask from setGameState):', animation.type);
+                            console.log('[AI-DEBUG] Enqueueing animation (microtask from setGameState):', animation.type);
                             enqueueAnimation(animation);
                         });
                     }
@@ -999,8 +1141,11 @@ export const runOpponentTurn = (
                     // Now run the play logic - no animationState, state updates immediately
                     const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(state, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
 
+                    // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
+                    const stateWithPlayFlag = { ...stateAfterPlayLogic, _cardPlayedThisActionPhase: true };
+
                     // Process on-play effect immediately
-                    let stateForOnPlay = { ...stateAfterPlayLogic };
+                    let stateForOnPlay = { ...stateWithPlayFlag };
                     let onPlayResult: EffectResult = { newState: stateForOnPlay };
 
                     if (!stateForOnPlay.actionRequired && stateForOnPlay.queuedEffect) {
@@ -1023,15 +1168,26 @@ export const runOpponentTurn = (
                     if (allAnims.length > 0) {
                         processAnimationQueue(allAnims, () => {
                             setGameState(s => {
+                                // CRITICAL FIX: Check if turn already switched to player
+                                if (s.turn !== 'opponent') {
+                                    console.log('[AI-DEBUG] allAnims callback (standard path) skipped - turn already:', s.turn);
+                                    return s;
+                                }
                                 if (s.queuedActions && s.queuedActions.length > 0) {
                                     const stateAfterQueue = phaseManager.processEndOfAction(s);
                                     if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        // CRITICAL: Use setTimeout to prevent synchronous double-play
+                                        setTimeout(() => {
+                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        }, 0);
                                     }
                                     return stateAfterQueue;
                                 }
                                 if (s.actionRequired && s.turn === 'opponent') {
-                                    runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    // CRITICAL: Use setTimeout to prevent synchronous double-play
+                                    setTimeout(() => {
+                                        runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                    }, 0);
                                     return s;
                                 }
                                 return phaseManager.processEndOfAction(s);
@@ -1041,6 +1197,11 @@ export const runOpponentTurn = (
                     }
 
                     // No effect animations - process end of action
+                    // CRITICAL FIX: Check if turn already switched to player
+                    if (stateAfterOnPlayLogic.turn !== 'opponent') {
+                        console.log('[AI-DEBUG] No-anim path (standard) skipped - turn already:', stateAfterOnPlayLogic.turn);
+                        return stateAfterOnPlayLogic;
+                    }
                     if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
                         const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
                         if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
@@ -1063,7 +1224,8 @@ export const runOpponentTurn = (
 
                 // FALLBACK: Old animation system
                 const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(state, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
-                const stateWithPlayAnimation = { ...stateAfterPlayLogic, animationState: { type: 'playCard' as const, cardId: mainAction.cardId, owner: 'opponent' as Player }};
+                // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
+                const stateWithPlayAnimation = { ...stateAfterPlayLogic, animationState: { type: 'playCard' as const, cardId: mainAction.cardId, owner: 'opponent' as Player }, _cardPlayedThisActionPhase: true };
 
                 setTimeout(() => { // Play card animation delay
                     const onAnimsComplete = () => {
@@ -1091,6 +1253,11 @@ export const runOpponentTurn = (
 
                             const onAllAnimsComplete = () => {
                                 setGameState(s_after_all_anims => {
+                                    // CRITICAL FIX: Check if turn already switched to player
+                                    if (s_after_all_anims.turn !== 'opponent') {
+                                        console.log('[AI-DEBUG] onAllAnimsComplete skipped - turn already:', s_after_all_anims.turn);
+                                        return s_after_all_anims;
+                                    }
                                     // CRITICAL FIX: Process queuedActions before checking actionRequired
                                     // This ensures multi-effect cards (like Gravity-2) complete all effects
                                     if (s_after_all_anims.queuedActions && s_after_all_anims.queuedActions.length > 0) {
@@ -1118,6 +1285,11 @@ export const runOpponentTurn = (
                                 processAnimationQueue(onPlayAnims, onAllAnimsComplete);
                                 return stateAfterOnPlayLogic;
                             } else {
+                                // CRITICAL FIX: Check if turn already switched to player
+                                if (stateAfterOnPlayLogic.turn !== 'opponent') {
+                                    console.log('[AI-DEBUG] else-branch skipped - turn already:', stateAfterOnPlayLogic.turn);
+                                    return stateAfterOnPlayLogic;
+                                }
                                 // CRITICAL FIX: Process queuedActions before checking actionRequired
                                 if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
                                     const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
@@ -1164,6 +1336,26 @@ export const runOpponentTurn = (
         if (state.phase === 'end' || state.phase === 'hand_limit') {
             return phaseManager.continueTurnProgression(state);
         }
+
+        // CRITICAL FIX: If we're in action phase but the flag is set (AI already played),
+        // we should advance to hand_limit phase but NOT trigger runOpponentTurn again.
+        // The issue was that processEndOfAction would process through ALL phases,
+        // then useGameState sees it's opponent's turn and calls runOpponentTurn again!
+        if (state.phase === 'action' && state._cardPlayedThisActionPhase) {
+            console.log('[AI-DEBUG] Action phase but flag set - advancing to hand_limit');
+            // Directly advance to hand_limit phase - this clears the flag (correct)
+            // and lets the normal turn progression handle the rest
+            const nextState = { ...state, phase: 'hand_limit' as const, _cardPlayedThisActionPhase: undefined };
+            // Now process hand_limit and beyond
+            const result = phaseManager.continueTurnProgression(nextState);
+            console.log('[AI-DEBUG] After continueTurnProgression:', {
+                turn: result.turn,
+                phase: result.phase,
+                hasActionRequired: !!result.actionRequired
+            });
+            return result;
+        }
+
         return phaseManager.processEndOfAction(state);
     });
 };

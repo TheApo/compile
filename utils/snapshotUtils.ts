@@ -26,6 +26,8 @@ export function createVisualSnapshot(state: GameState): VisualSnapshot {
         player: createPlayerVisualState(state, 'player'),
         opponent: createPlayerVisualState(state, 'opponent'),
         controlCardHolder: state.controlCardHolder,
+        turn: state.turn,
+        phase: state.phase,
     };
 }
 
@@ -290,8 +292,8 @@ export function snapshotToGameState(
     return {
         player: visualStateToPlayerState(snapshot.player),
         opponent: visualStateToPlayerState(snapshot.opponent),
-        turn: 'player',
-        phase: 'action',
+        turn: snapshot.turn,
+        phase: snapshot.phase,
         controlCardHolder: snapshot.controlCardHolder,
         useControlMechanic,
         winner: null,

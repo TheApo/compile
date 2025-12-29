@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
+import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext, AnimationRequest } from "../../../types";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent, completeEffectAction } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
@@ -750,7 +750,16 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     }
 
     let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;
-    let allAnimations = [...(resultAfterOnCover.animationRequests || [])];
+
+    // Create the shift animation request FIRST (before cover/uncover animations)
+    const shiftAnimRequest: AnimationRequest = {
+        type: 'shift',
+        cardId: cardToShiftId,
+        owner: cardOwner,
+        fromLane: originalLaneIndex,
+        toLane: targetLaneIndex,
+    };
+    let allAnimations: AnimationRequest[] = [shiftAnimRequest, ...(resultAfterOnCover.animationRequests || [])];
 
     // If we removed the top card from the original lane, trigger uncover effect there
     if (isRemovingTopCard) {

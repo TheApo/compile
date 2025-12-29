@@ -11,8 +11,8 @@ import { Player } from '../types';
 
 // Animation timing constants
 const HIGHLIGHT_DURATION = 500; // ms - only for opponent animations
-const FLY_DURATION = 1000; // ms - 1 second flight time
 const DOM_DETECTION_DELAY = 100; // ms - wait for React to render snapshot fully
+// Note: FLY_DURATION now comes from ANIMATION_DURATIONS based on animation type
 
 interface AnimatedCardProps {
     animation: AnimationQueueItem;
@@ -40,19 +40,24 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
     const animatingCard = animation.animatingCard;
     if (!animatingCard) return null;
 
-    const { card, fromPosition, toPosition, flipDirection } = animatingCard;
+    const { card, fromPosition, toPosition, flipDirection, targetRotation } = animatingCard;
 
-    // Determine if this is an opponent animation (needs highlight and rotation)
-    const isOpponentAnimation = fromPosition.owner === 'opponent';
-    // All opponent animations get highlight phase (except flip which happens in-place)
-    const hasHighlightPhase = isOpponentAnimation && animation.type !== 'flip';
+    // Determine if this is an opponent's card (needs rotation because opponent side is rotated 180°)
+    const isOpponentCard = fromPosition.owner === 'opponent';
+    // Highlight phase ONLY when OPPONENT is performing the action (so player sees what opponent selected)
+    // NOT when player targets opponent's card (player already knows what they selected)
+    // ALSO NOT for draw animations - card comes from deck, highlighting is useless (you don't know the card)
+    const isOpponentAction = animatingCard.isOpponentAction ?? false;
+    const hasHighlightPhase = isOpponentAction && animation.type !== 'flip' && animation.type !== 'draw';
 
     // Opponent's side is rotated 180° in CSS, so we need to rotate the animated card too
-    const needsRotation = isOpponentAnimation;
+    const needsRotation = isOpponentCard;
 
     // Animation configuration
-    const flyDuration = FLY_DURATION;
-    const easing = 'ease-in-out';
+    // Use custom duration if provided (for sequential multi-card animations)
+    // Otherwise use the correct duration from ANIMATION_DURATIONS based on type
+    const flyDuration = animation.duration || ANIMATION_DURATIONS[animation.type] || 400;
+    const easing = ANIMATION_EASINGS[animation.type] || 'ease-in-out';
 
     // Try to get real DOM positions on mount - BEFORE starting animation
     useLayoutEffect(() => {
@@ -87,6 +92,12 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
         // Only start animation after we've moved past 'waiting' phase
         if (animationPhase !== 'idle') return;
 
+        // CRITICAL: Combine prop startDelay with animatingCard.startDelay
+        // - prop startDelay: For sequential animations in queue
+        // - animatingCard.startDelay: For staggered multi-card animations (e.g., draw 5 cards)
+        const animStartDelay = animatingCard.startDelay || 0;
+        const totalDelay = startDelay + animStartDelay;
+
         // CRITICAL: Wait for the browser to render the element at the start position
         // before starting the transition. Without this, the transition appears instant
         // because the browser hasn't painted the start state yet.
@@ -103,10 +114,10 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
                     }
                 });
             });
-        }, startDelay);
+        }, totalDelay);
 
         return () => clearTimeout(startTimer);
-    }, [animationPhase, startDelay, hasHighlightPhase]);
+    }, [animationPhase, startDelay, hasHighlightPhase, animatingCard.startDelay]);
 
     // Progress through animation phases
     useEffect(() => {
@@ -160,49 +171,56 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
 
     // Determine which style to apply based on animation phase
     const currentStyle = useMemo((): React.CSSProperties => {
+        // Base rotation: 180° for opponent animations (their side is rotated in CSS)
+        const baseRotation = needsRotation ? 180 : 0;
+        // Final rotation includes target rotation (e.g., 90° for trash)
+        const finalRotation = baseRotation + (targetRotation || 0);
+
         const baseStyle: React.CSSProperties = {
             position: 'fixed',
             zIndex: 2000,
             pointerEvents: 'none',
             // CRITICAL: Clip overflow and contain the card
             overflow: 'hidden',
-            // CRITICAL: Rotate 180° for opponent animations (their side is rotated in CSS)
-            transform: needsRotation ? 'rotate(180deg)' : 'none',
         };
 
         if (animationPhase === 'waiting') {
             // Not ready yet - don't show anything
             return {
                 ...baseStyle,
+                transform: baseRotation ? `rotate(${baseRotation}deg)` : 'none',
                 opacity: 0,
                 visibility: 'hidden',
             };
         }
 
         if (animationPhase === 'idle' || animationPhase === 'highlight') {
-            // At start position
+            // At start position - use base rotation only
             return {
                 ...baseStyle,
                 ...startStyle,
+                transform: baseRotation ? `rotate(${baseRotation}deg)` : 'none',
                 transition: 'none',
             };
         } else if (animationPhase === 'flying') {
-            // Animating to end position
+            // Animating to end position - interpolate rotation
             return {
                 ...baseStyle,
                 ...endStyle,
-                transition: `left ${flyDuration}ms ${easing}, top ${flyDuration}ms ${easing}, width ${flyDuration}ms ${easing}, height ${flyDuration}ms ${easing}`,
+                transform: finalRotation ? `rotate(${finalRotation}deg)` : 'none',
+                transition: `left ${flyDuration}ms ${easing}, top ${flyDuration}ms ${easing}, width ${flyDuration}ms ${easing}, height ${flyDuration}ms ${easing}, transform ${flyDuration}ms ${easing}`,
             };
         } else {
-            // Complete - at end position
+            // Complete - at end position with final rotation
             return {
                 ...baseStyle,
                 ...endStyle,
+                transform: finalRotation ? `rotate(${finalRotation}deg)` : 'none',
                 transition: 'none',
                 opacity: 0, // Hide when complete
             };
         }
-    }, [animationPhase, startStyle, endStyle, flyDuration, easing, needsRotation]);
+    }, [animationPhase, startStyle, endStyle, flyDuration, easing, needsRotation, targetRotation]);
 
     // Highlight glow style is now handled by CSS class .is-highlighting
     // No inline styles needed - the class is added in animationClass
@@ -232,6 +250,12 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
 
     // Determine if card should show face-up or face-down
     const showFaceUp = useMemo(() => {
+        // CRITICAL: Opponent draw animations should ALWAYS show face-down
+        // Player should not see what opponent draws (they draw from their own deck)
+        if (animation.type === 'draw' && fromPosition.owner === 'opponent') {
+            return false; // Always face-down for opponent draws
+        }
+
         if (flipDirection === 'toFaceUp') {
             return animationPhase === 'flying' || animationPhase === 'complete';
         }
@@ -244,7 +268,7 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
             return animatingCard.targetIsFaceUp;
         }
         return card.isFaceUp;
-    }, [flipDirection, animationPhase, card.isFaceUp, animatingCard.targetIsFaceUp]);
+    }, [flipDirection, animationPhase, card.isFaceUp, animatingCard.targetIsFaceUp, animation.type, fromPosition.owner]);
 
     // Don't render until we have positions (during 'waiting' phase, we render but hidden)
     // Once we move to 'idle', we should have positions

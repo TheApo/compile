@@ -110,7 +110,8 @@ export const advancePhase = (state: GameState): GameState => {
              nextState = setLogSource(nextState, undefined);
              nextState = setLogPhase(nextState, undefined);
              nextState = { ...nextState, _logIndentLevel: 0 };
-             return { ...nextState, phase: 'hand_limit' };
+             // CRITICAL: Clear the double-play prevention flag when action phase ends
+             return { ...nextState, phase: 'hand_limit', _cardPlayedThisActionPhase: undefined };
 
         case 'hand_limit': {
             const playerState = nextState[turnPlayer];
@@ -189,6 +190,8 @@ export const advancePhase = (state: GameState): GameState => {
 
             // If no new action was generated, the turn is over.
             const nextTurn: Player = turnPlayer === 'player' ? 'opponent' : 'player';
+            console.log('[AI-DEBUG] advancePhase TURN SWITCH:', { from: turnPlayer, to: nextTurn, phase: 'end' });
+            console.trace('[AI-DEBUG] Turn switch callstack');
             // The `cannotCompile` flag applies for one turn. Now that this player's turn is over,
             // we can reset their flag so they are able to compile on their *next* turn.
             const endingPlayerState = {...nextState[turnPlayer], cannotCompile: false};
@@ -892,6 +895,8 @@ export const processEndOfAction = (state: GameState): GameState => {
 
                 // No more end effects - NOW end the turn
                 const nextTurn: Player = stateAfterEndRecheck.turn === 'player' ? 'opponent' : 'player';
+                console.log('[AI-DEBUG] processEndOfAction TURN SWITCH:', { from: stateAfterEndRecheck.turn, to: nextTurn });
+                console.trace('[AI-DEBUG] processEndOfAction turn switch callstack');
                 const endingPlayerState = {...stateAfterEndRecheck[stateAfterEndRecheck.turn], cannotCompile: false};
 
                 // CRITICAL: Clear ALL context before transitioning to the next turn
@@ -1134,7 +1139,9 @@ export const processEndOfAction = (state: GameState): GameState => {
     // Otherwise, start the end-of-turn sequence from the hand_limit phase.
     const startingPhase = state.phase === 'action' ? 'hand_limit' : state.phase;
     // FIX: Explicitly type `nextState` to prevent a type inference mismatch.
-    let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [] };
+    // CRITICAL: Clear the double-play prevention flag when transitioning from action phase
+    const clearPlayFlag = state.phase === 'action';
+    let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [], ...(clearPlayFlag ? { _cardPlayedThisActionPhase: undefined } : {}) };
 
     const originalTurn = state.turn;
 
@@ -1168,6 +1175,7 @@ export const processEndOfAction = (state: GameState): GameState => {
 };
 
 export const continueTurnProgression = (state: GameState): GameState => {
+    console.log('[AI-DEBUG] continueTurnProgression:', { turn: state.turn, phase: state.phase });
     if (state.winner) return state;
 
     let nextState = { ...state };
@@ -1180,16 +1188,24 @@ export const continueTurnProgression = (state: GameState): GameState => {
         delete nextState._interruptedPhase;
         nextState.turn = originalTurnPlayer;
         nextState.phase = originalPhase;
+        console.log('[AI-DEBUG] continueTurnProgression restored from interrupt:', { turn: nextState.turn, phase: nextState.phase });
     }
 
     const originalTurn = nextState.turn;
 
     // Process all automatic phases until an action is required or the turn ends.
+    let loopCount = 0;
     while (nextState.turn === originalTurn && !nextState.actionRequired && !nextState.winner) {
+        loopCount++;
         const currentPhase = nextState.phase;
+        console.log('[AI-DEBUG] continueTurnProgression loop', loopCount, ':', {
+            turn: nextState.turn,
+            phase: currentPhase
+        });
 
         // Stop if we reach a phase that requires user input.
         if (currentPhase === 'action') {
+            console.log('[AI-DEBUG] continueTurnProgression BREAK at action phase');
             break;
         }
 
@@ -1199,12 +1215,18 @@ export const continueTurnProgression = (state: GameState): GameState => {
             if (compilableLanes.length > 0) {
                 // Update state with compilable lanes and stop to wait for user input.
                 nextState = { ...nextState, compilableLanes };
+                console.log('[AI-DEBUG] continueTurnProgression BREAK at compile (compilable lanes)');
                 break;
             }
         }
 
         const oldPhase = nextState.phase;
         nextState = advancePhase(nextState);
+        console.log('[AI-DEBUG] continueTurnProgression advancePhase:', {
+            oldPhase,
+            newPhase: nextState.phase,
+            newTurn: nextState.turn
+        });
 
         // Safety break to prevent infinite loops.
         if (oldPhase === nextState.phase && !nextState.actionRequired) {
@@ -1219,6 +1241,12 @@ export const continueTurnProgression = (state: GameState): GameState => {
             break;
         }
     }
+    console.log('[AI-DEBUG] continueTurnProgression RESULT:', {
+        turn: nextState.turn,
+        phase: nextState.phase,
+        originalTurn,
+        reason: nextState.turn !== originalTurn ? 'turn changed' : nextState.actionRequired ? 'actionRequired' : 'break'
+    });
     // CRITICAL: Clear animationState when progressing to a new phase/state
     // Animation should never persist across phase transitions
     return { ...nextState, animationState: null };
@@ -1275,6 +1303,7 @@ export const continueTurnAfterStartPhaseAction = (state: GameState): GameState =
 };
 
 export const processStartOfTurn = (state: GameState): GameState => {
+    console.log('[AI-DEBUG] processStartOfTurn:', { turn: state.turn, phase: state.phase });
     if (state.winner) return state;
 
     let stateAfterStartEffects = { ...state, phase: 'start' as GamePhase };
@@ -1284,10 +1313,22 @@ export const processStartOfTurn = (state: GameState): GameState => {
     stateAfterStartEffects = recalculateAllLaneValues(stateAfterStartEffects);
 
     stateAfterStartEffects = advancePhase(stateAfterStartEffects);
+    console.log('[AI-DEBUG] processStartOfTurn after advancePhase:', {
+        turn: stateAfterStartEffects.turn,
+        phase: stateAfterStartEffects.phase,
+        actionRequired: !!stateAfterStartEffects.actionRequired
+    });
 
     if (stateAfterStartEffects.actionRequired) {
         return stateAfterStartEffects;
     }
 
-    return continueTurnProgression(stateAfterStartEffects);
+    console.log('[AI-DEBUG] processStartOfTurn calling continueTurnProgression');
+    const result = continueTurnProgression(stateAfterStartEffects);
+    console.log('[AI-DEBUG] processStartOfTurn after continueTurnProgression:', {
+        turn: result.turn,
+        phase: result.phase,
+        actionRequired: !!result.actionRequired
+    });
+    return result;
 };
