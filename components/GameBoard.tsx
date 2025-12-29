@@ -7,6 +7,7 @@ import React from 'react';
 import { GameState, PlayedCard, Player } from '../types';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
+import { DeckTrashArea } from './DeckTrashArea';
 import { isCardTargetable } from '../utils/targeting';
 import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
@@ -23,9 +24,14 @@ interface GameBoardProps {
     selectedCardId: string | null;
     sourceCardId: string | null;
     animatingCardId?: string | null;  // Card being animated (hide via CSS)
+    // Deck/Trash callbacks
+    onDeckClick?: (owner: Player) => void;
+    onTrashClick?: (owner: Player) => void;
+    onTrashCardHover?: (card: PlayedCard, owner: Player) => void;
+    onTrashCardLeave?: () => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardId }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardId, onDeckClick, onTrashClick, onTrashCardHover, onTrashCardLeave }) => {
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
@@ -448,6 +454,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
 
             {/* Opponent's Side */}
             <div className={`player-side opponent-side ${turn === 'opponent' ? 'active-turn' : ''}`}>
+                {/* Deck/Trash for opponent - inside opponent-side so it aligns with lanes */}
+                <DeckTrashArea
+                    owner="opponent"
+                    deckCount={opponent.deck.length}
+                    topTrashCard={opponent.discard.length > 0 ? opponent.discard[opponent.discard.length - 1] : null}
+                    trashCount={opponent.discard.length}
+                    onDeckClick={() => onDeckClick?.('opponent')}
+                    onTrashClick={() => onTrashClick?.('opponent')}
+                    onTrashCardHover={(card) => onTrashCardHover?.(card, 'opponent')}
+                    onTrashCardLeave={onTrashCardLeave}
+                />
                 <div className="lanes">
                     {opponent.lanes.map((laneCards, i) => {
                         const { isPlayable: oppIsPlayable, isMatching: oppIsMatching } = getOpponentLanePlayability(i);
@@ -469,6 +486,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
+                            animatingCardId={animatingCardId}
                         />
                     })}
                 </div>
@@ -509,6 +527,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
 
             {/* Player's Side */}
             <div className={`player-side ${turn === 'player' ? 'active-turn' : ''}`}>
+                {/* Deck/Trash for player - inside player-side so it aligns with lanes */}
+                <DeckTrashArea
+                    owner="player"
+                    deckCount={player.deck.length}
+                    topTrashCard={player.discard.length > 0 ? player.discard[player.discard.length - 1] : null}
+                    trashCount={player.discard.length}
+                    onDeckClick={() => onDeckClick?.('player')}
+                    onTrashClick={() => onTrashClick?.('player')}
+                    onTrashCardHover={(card) => onTrashCardHover?.(card, 'player')}
+                    onTrashCardLeave={onTrashCardLeave}
+                />
                 <div className="lanes">
                     {player.lanes.map((laneCards, i) => {
                         const { isPlayable, isMatching, isCompilable } = getLanePlayability(i);
@@ -531,6 +560,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
+                            animatingCardId={animatingCardId}
                         />
                     })}
                 </div>

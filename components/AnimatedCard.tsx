@@ -44,7 +44,8 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
 
     // Determine if this is an opponent animation (needs highlight and rotation)
     const isOpponentAnimation = fromPosition.owner === 'opponent';
-    const hasHighlightPhase = isOpponentAnimation && animation.type === 'play';
+    // All opponent animations get highlight phase (except flip which happens in-place)
+    const hasHighlightPhase = isOpponentAnimation && animation.type !== 'flip';
 
     // Opponent's side is rotated 180° in CSS, so we need to rotate the animated card too
     const needsRotation = isOpponentAnimation;
@@ -424,19 +425,27 @@ function getDOMPosition(position: CardPosition): DOMRect | null {
         }
 
         if (position.type === 'deck') {
-            // Deck area in GameInfoPanel
-            const realDeck = document.querySelector('.deck-area');
-            if (realDeck) {
-                return realDeck.getBoundingClientRect();
+            // Find the correct deck based on owner (from DeckTrashArea component)
+            const selector = `.deck-pile.${position.owner} .pile-card-wrapper`;
+            const deckArea = document.querySelector(selector);
+            if (deckArea) {
+                const rect = deckArea.getBoundingClientRect();
+                console.log(`[getDOMPosition] Deck ${position.owner} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+                return rect;
             }
+            console.warn(`[getDOMPosition] Deck selector not found: ${selector}`);
         }
 
         if (position.type === 'trash') {
-            // Trash area
-            const realTrash = document.querySelector('.trash-area');
-            if (realTrash) {
-                return realTrash.getBoundingClientRect();
+            // Find the correct trash based on owner (from DeckTrashArea component)
+            const selector = `.trash-pile.${position.owner} .pile-card-wrapper`;
+            const trashArea = document.querySelector(selector);
+            if (trashArea) {
+                const rect = trashArea.getBoundingClientRect();
+                console.log(`[getDOMPosition] Trash ${position.owner} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+                return rect;
             }
+            console.warn(`[getDOMPosition] Trash selector not found: ${selector}`);
         }
     } catch (e) {
         console.warn('[AnimatedCard] Could not get DOM position:', e);

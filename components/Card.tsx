@@ -51,6 +51,10 @@ export const CardComponent: React.FC<CardProps> = ({
     content: string;
     className?: string;
   }) => {
+    // Guard against undefined/null content
+    if (!content) {
+      return <div className={`card-rule-box ${className || ""}`} />;
+    }
     // Add size classes if content is too long for the box
     // Each line fits ~25 characters, boxes fit ~3-4 lines comfortably
     const textLength = getTextLength(content);

@@ -307,12 +307,39 @@ export function snapshotToGameState(
  * Converts PlayerVisualState to a minimal PlayerState.
  */
 function visualStateToPlayerState(visualState: PlayerVisualState): PlayerState {
+    // Create fake deck array with correct length (cards don't matter, just count)
+    const fakeDeck = Array(visualState.deckCount).fill(null).map((_, i) => ({
+        id: `fake-deck-${i}`,
+        protocol: 'Unknown',
+        value: 0,
+        isFaceUp: false,
+        bottomRule: '',
+        middleRule: '',
+    } as PlayedCard));
+
+    // Create fake discard array with top card if it exists
+    const fakeDiscard: PlayedCard[] = [];
+    if (visualState.topTrashCard) {
+        // Add placeholder cards for the count, with the real top card at the end
+        for (let i = 0; i < visualState.trashCount - 1; i++) {
+            fakeDiscard.push({
+                id: `fake-discard-${i}`,
+                protocol: 'Unknown',
+                value: 0,
+                isFaceUp: false,
+                bottomRule: '',
+                middleRule: '',
+            } as PlayedCard);
+        }
+        fakeDiscard.push(visualState.topTrashCard);
+    }
+
     return {
         protocols: visualState.protocols,
-        deck: [], // Not needed for rendering
+        deck: fakeDeck,
         hand: visualState.hand,
         lanes: visualState.lanes,
-        discard: [], // Not needed for rendering
+        discard: fakeDiscard,
         compiled: visualState.compiled,
         laneValues: visualState.laneValues,
         cannotCompile: false,

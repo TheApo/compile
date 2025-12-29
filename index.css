@@ -554,6 +554,7 @@
 
 /* --- In-Game Card Overrides --- */
 .lane-stack .card-component,
+.pile-card-wrapper .card-component,
 .player-hand-area .card-component.in-hand,
 .card-ticker-track .card-component.in-hand,
 .protocol-card-grid .card-component.in-hand,
@@ -563,6 +564,7 @@
     font-size: 0.6rem;
 }
 .lane-stack .card-front,
+.pile-card-wrapper .card-front,
 .player-hand-area .card-front,
 .card-ticker-track .card-front,
 .protocol-card-grid .card-front,
@@ -573,6 +575,7 @@
 }
 
 .lane-stack .card-component .card-header,
+.pile-card-wrapper .card-component .card-header,
 .player-hand-area .card-component.in-hand .card-header,
 .card-ticker-track .card-component.in-hand .card-header,
 .protocol-card-grid .card-component.in-hand .card-header,
@@ -584,6 +587,7 @@
 }
 
 .lane-stack .card-component .card-protocol,
+.pile-card-wrapper .card-component .card-protocol,
 .player-hand-area .card-component.in-hand .card-protocol,
 .card-ticker-track .card-component.in-hand .card-protocol,
 .protocol-card-grid .card-component.in-hand .card-protocol,
@@ -600,6 +604,7 @@
 }
 
 .lane-stack .card-component .card-value,
+.pile-card-wrapper .card-component .card-value,
 .player-hand-area .card-component.in-hand .card-value,
 .card-ticker-track .card-component.in-hand .card-value,
 .protocol-card-grid .card-component.in-hand .card-value,
@@ -612,6 +617,7 @@
 }
 
 .lane-stack .card-component .card-body,
+.pile-card-wrapper .card-component .card-body,
 .player-hand-area .card-component.in-hand .card-body,
 .card-ticker-track .card-component.in-hand .card-body,
 .protocol-card-grid .card-component.in-hand .card-body,
@@ -622,6 +628,7 @@
 }
 
 .lane-stack .card-component .card-rule-box,
+.pile-card-wrapper .card-component .card-rule-box,
 .player-hand-area .card-component.in-hand .card-rule-box,
 .card-ticker-track .card-component.in-hand .card-rule-box,
 .protocol-card-grid .card-component.in-hand .card-rule-box,
@@ -635,6 +642,8 @@
 
 .lane-stack .card-component .card-rule-box::before,
 .lane-stack .card-component .card-rule-box::after,
+.pile-card-wrapper .card-component .card-rule-box::before,
+.pile-card-wrapper .card-component .card-rule-box::after,
 .player-hand-area .card-component.in-hand .card-rule-box::before,
 .player-hand-area .card-component.in-hand .card-rule-box::after,
 .card-ticker-track .card-component.in-hand .card-rule-box::before,

@@ -25,9 +25,10 @@ interface LaneProps {
     laneIndex: number;
     sourceCardId: string | null;
     gameState: GameState;
+    animatingCardId?: string | null;  // NEW: Card ID being animated (should be hidden)
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, laneIndex, sourceCardId, gameState }) => {
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, laneIndex, sourceCardId, gameState, animatingCardId }) => {
 
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
@@ -57,6 +58,8 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                     const isRevealed = gameState.actionRequired?.type === 'prompt_shift_or_flip_for_light_2' && gameState.actionRequired.revealedCardId === card.id;
                     // Calculate effective face-down value for this specific card
                     const faceDownValue = getEffectiveCardValue(card, cards, gameState, laneIndex, owner);
+                    // NEW: Hide card if it's being animated (flying away)
+                    const isBeingAnimated = animatingCardId === card.id;
                     return (
                         <CardComponent
                             key={card.id}
@@ -75,6 +78,7 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                             isTargetable={isCardTargetable(card)}
                             isSourceOfEffect={card.id === sourceCardId}
                             faceDownValue={faceDownValue}
+                            additionalClassName={isBeingAnimated ? 'animating-hidden' : undefined}
                         />
                     );
                 })}

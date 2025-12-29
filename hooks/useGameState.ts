@@ -19,7 +19,14 @@ import { drawCards as drawCardsUtil } from '../utils/gameStateModifiers';
 import { executeCustomEffect } from '../logic/customProtocols/effectInterpreter';
 import { EffectContext } from '../types';
 import { AnimationQueueItem } from '../types/animation';
-import { createPlayAnimation } from '../logic/animation/animationHelpers';
+import {
+    createPlayAnimation,
+    createDeleteAnimation,
+    createDiscardAnimation,
+    createDrawAnimation,
+    createShiftAnimation,
+    findCardInLanes,
+} from '../logic/animation/animationHelpers';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
 // Feature flag for new animation queue system
@@ -106,7 +113,32 @@ export const useGameState = (
 
             // Handle different animation types
             if (nextRequest.type === 'delete') {
-                setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
+                // NEW ANIMATION SYSTEM: Create and enqueue delete animation
+                if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+                    setGameState(currentState => {
+                        const card = currentState.player.lanes.flat().find(c => c.id === nextRequest.cardId) ||
+                                     currentState.opponent.lanes.flat().find(c => c.id === nextRequest.cardId);
+                        if (card) {
+                            const cardPosition = findCardInLanes(currentState, nextRequest.cardId, nextRequest.owner);
+                            if (cardPosition) {
+                                const animation = createDeleteAnimation(
+                                    currentState,
+                                    card,
+                                    nextRequest.owner,
+                                    cardPosition.laneIndex,
+                                    cardPosition.cardIndex
+                                );
+                                queueMicrotask(() => enqueueAnimation(animation));
+                            }
+                        }
+                        return currentState; // Don't modify state, just enqueue animation
+                    });
+                }
+
+                // OLD ANIMATION SYSTEM - skip if new system is active
+                if (!USE_NEW_ANIMATION_SYSTEM || !enqueueAnimation) {
+                    setGameState(s => ({ ...s, animationState: { type: 'deleteCard', cardId: nextRequest.cardId, owner: nextRequest.owner } }));
+                }
 
                 setTimeout(() => {
                     setGameState(s => {
@@ -319,7 +351,23 @@ export const useGameState = (
         if (gameState.turn !== 'player' || gameState.phase !== 'action' || gameState.actionRequired) return;
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+            const prevHandIds = new Set(prev.player.hand.map(c => c.id));
             const newState = resolvers.fillHand(prev, 'player');
+
+            // NEW ANIMATION SYSTEM: Create draw animations for newly drawn cards
+            if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+                const newCards = newState.player.hand.filter(c => !prevHandIds.has(c.id));
+                newCards.forEach((card, index) => {
+                    const animation = createDrawAnimation(
+                        prev,  // Use prev state for snapshot (before cards were added)
+                        card,
+                        'player',
+                        prev.player.hand.length + index
+                    );
+                    queueMicrotask(() => enqueueAnimation(animation));
+                });
+            }
+
             if (newState.actionRequired) {
                 return newState;
             }
@@ -330,12 +378,29 @@ export const useGameState = (
     const discardCardFromHand = useCallback((cardId: string) => {
         setGameState(prev => {
             if (prev.actionRequired?.type !== 'discard' || prev.actionRequired.actor !== 'player') return prev;
+
+            // NEW ANIMATION SYSTEM: Create and enqueue discard animation
+            if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+                const card = prev.player.hand.find(c => c.id === cardId);
+                const handIndex = prev.player.hand.findIndex(c => c.id === cardId);
+                if (card && handIndex >= 0) {
+                    const animation = createDiscardAnimation(prev, card, 'player', handIndex);
+                    queueMicrotask(() => enqueueAnimation(animation));
+                }
+                // With new system active, skip old animation but still trigger the action
+                return {
+                    ...prev,
+                    animationState: { type: 'discardCard', owner: 'player', cardIds: [cardId], originalAction: prev.actionRequired }
+                };
+            }
+
+            // OLD ANIMATION SYSTEM (fallback)
             return {
                 ...prev,
                 animationState: { type: 'discardCard', owner: 'player', cardIds: [cardId], originalAction: prev.actionRequired }
             }
         });
-    }, []);
+    }, [enqueueAnimation]);
 
     const compileLane = useCallback((laneIndex: number) => {
         setGameState(prev => {
@@ -427,6 +492,28 @@ export const useGameState = (
     };
     
     const resolveActionWithLane = (targetLaneIndex: number) => {
+        // NEW ANIMATION SYSTEM: Create shift animation BEFORE setGameState (like playSelectedCard)
+        // This ensures the animation is enqueued synchronously before React updates
+        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation && gameState.actionRequired?.type === 'select_lane_for_shift') {
+            const { cardToShiftId, cardOwner, originalLaneIndex } = gameState.actionRequired;
+            // Only animate if shift is valid (not same lane)
+            if (originalLaneIndex !== targetLaneIndex) {
+                const cardToShift = gameState[cardOwner].lanes.flat().find(c => c.id === cardToShiftId);
+                const cardIndex = gameState[cardOwner].lanes[originalLaneIndex].findIndex(c => c.id === cardToShiftId);
+                if (cardToShift && cardIndex >= 0) {
+                    const animation = createShiftAnimation(
+                        gameState,  // Use current gameState, not prev
+                        cardToShift,
+                        cardOwner,
+                        originalLaneIndex,
+                        cardIndex,
+                        targetLaneIndex
+                    );
+                    enqueueAnimation(animation);  // Direct call, no queueMicrotask
+                }
+            }
+        }
+
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);

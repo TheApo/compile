@@ -895,6 +895,18 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                   onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
                   sourceCardId={isAnimating ? null : sourceCardId}
                   animatingCardId={animatingCardId}
+                  onDeckClick={(owner) => setDebugModalPlayer(owner)}
+                  onTrashClick={(owner) => setDebugModalPlayer(owner)}
+                  onTrashCardHover={(card, owner) => {
+                    if (!selectedCard) {
+                      setHoveredCard({ card, showContents: true });
+                    }
+                  }}
+                  onTrashCardLeave={() => {
+                    if (!selectedCard) {
+                      setHoveredCard(null);
+                    }
+                  }}
                 />
                 
                 <div className="player-action-area">
