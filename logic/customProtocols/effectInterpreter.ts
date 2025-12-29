@@ -453,7 +453,9 @@ export function executeCustomEffect(
                         hand: [...state[actor].hand, ...newHandCards],
                         deck: remainingDeck,
                         discard: newDiscard
-                    }
+                    },
+                    // Set animationState for draw animation
+                    animationState: { type: 'drawCard' as const, owner: actor, cardIds: newHandCards.map(c => c.id) }
                 };
 
                 // Only show card names to the player who drew them
@@ -519,7 +521,9 @@ export function executeCustomEffect(
                         [actor]: {
                             ...newState[actor],
                             hand: [...newState[actor].hand, ...newHandCards]
-                        }
+                        },
+                        // Set animationState for draw animation (actor draws from opponent's deck)
+                        animationState: { type: 'drawCard' as const, owner: actor, cardIds: newHandCards.map(c => c.id) }
                     };
 
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
@@ -557,7 +561,9 @@ export function executeCustomEffect(
                         [opponent]: {
                             ...newState[opponent],
                             hand: [...newState[opponent].hand, ...newHandCards]
-                        }
+                        },
+                        // Set animationState for draw animation (opponent draws from actor's deck)
+                        animationState: { type: 'drawCard' as const, owner: opponent, cardIds: newHandCards.map(c => c.id) }
                     };
 
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';

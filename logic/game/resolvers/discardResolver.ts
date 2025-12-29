@@ -105,7 +105,25 @@ const executeFollowUpAfterDiscard = (
     };
 
     const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
-    return result.newState;
+
+    // CRITICAL FIX: If draw animationRequests are present, set animationState so the
+    // useEffect hook in useGameState triggers the draw animation.
+    // Without this, animationRequests from followUpEffects (like Fire-4's "then draw") are lost!
+    let finalState = result.newState;
+    if (result.animationRequests && result.animationRequests.length > 0) {
+        const drawRequest = result.animationRequests.find(r => r.type === 'draw');
+        if (drawRequest) {
+            finalState = {
+                ...finalState,
+                animationState: {
+                    type: 'drawCard',
+                    owner: drawRequest.player,
+                    cardIds: [] // IDs are determined by useEffect from prevHand vs currentHand
+                }
+            };
+        }
+    }
+    return finalState;
 };
 
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {

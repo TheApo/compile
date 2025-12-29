@@ -1093,13 +1093,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const destination = (prev.actionRequired as any)?.destination as 'owner_hand' | 'actor_hand' | undefined;
 
             // CRITICAL: Validate that target card is uncovered (unless targetFilter explicitly allows covered)
+            // Use isCardUncovered which correctly handles committed cards:
+            // If a card above the target is "committed" (shifting/playing but not landed yet),
+            // the card below it counts as uncovered for targeting purposes.
             const targetCardInfo = findCardOnBoard(prev, targetCardId);
             if (targetCardInfo) {
-                const lane = prev[targetCardInfo.owner].lanes[targetCardInfo.laneIndex];
-                const isUncovered = lane[lane.length - 1]?.id === targetCardId;
+                const uncovered = isCardUncovered(prev, targetCardId);
                 const allowsCovered = targetFilter?.position === 'covered' || targetFilter?.position === 'any';
 
-                if (!isUncovered && !allowsCovered) {
+                if (!uncovered && !allowsCovered) {
                     console.error(`[cardResolver] Invalid return target: ${targetCardInfo.card.protocol}-${targetCardInfo.card.value} is covered`);
                     return { nextState: prev, requiresTurnEnd: false };
                 }

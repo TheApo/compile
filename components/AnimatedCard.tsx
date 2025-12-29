@@ -66,19 +66,6 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
             const startRect = getDOMPosition(fromPosition);
             const endRect = getDOMPosition(toPosition);
 
-            // Debug: Check if positions are valid and different
-            if (startRect && endRect) {
-                const dx = Math.abs(startRect.left - endRect.left);
-                const dy = Math.abs(startRect.top - endRect.top);
-                console.log('[AnimatedCard] Position delta:', { dx, dy, startRect, endRect });
-                if (dx < 5 && dy < 5) {
-                    console.warn('[AnimatedCard] WARNING: Start and end positions are nearly identical! Animation will appear instant.');
-                }
-            } else {
-                console.warn('[AnimatedCard] Missing position(s):', { hasStart: !!startRect, hasEnd: !!endRect });
-            }
-
-            console.log('[AnimatedCard] DOM positions:', { startRect, endRect, fromPosition, toPosition });
             setDomPositions({ start: startRect, end: endRect });
 
             // NOW we can move from 'waiting' to 'idle' state
@@ -119,6 +106,10 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
         return () => clearTimeout(startTimer);
     }, [animationPhase, startDelay, hasHighlightPhase, animatingCard.startDelay]);
 
+    // Store onComplete in a ref to avoid resetting timers when callback reference changes
+    const onCompleteRef = useRef(onComplete);
+    onCompleteRef.current = onComplete;
+
     // Progress through animation phases
     useEffect(() => {
         if (animationPhase === 'highlight') {
@@ -133,12 +124,12 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
                 setAnimationPhase('complete');
                 if (!onCompleteCalledRef.current) {
                     onCompleteCalledRef.current = true;
-                    onComplete?.();
+                    onCompleteRef.current?.();
                 }
             }, flyDuration);
             return () => clearTimeout(timer);
         }
-    }, [animationPhase, flyDuration, onComplete]);
+    }, [animationPhase, flyDuration]); // Removed onComplete - using ref instead
 
     // Calculate CSS positions based on CardPosition (with DOM fallback)
     const startStyle = useMemo((): React.CSSProperties => {
@@ -150,8 +141,7 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
                 height: domPositions.start.height,
             };
         }
-        // Fallback - but this shouldn't happen
-        console.warn('[AnimatedCard] No start DOM position found, using fallback');
+        // Fallback during initial render (before useLayoutEffect runs)
         return getPositionStyle(fromPosition);
     }, [fromPosition, domPositions.start]);
 
@@ -164,8 +154,7 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
                 height: domPositions.end.height,
             };
         }
-        // Fallback - but this shouldn't happen
-        console.warn('[AnimatedCard] No end DOM position found, using fallback');
+        // Fallback during initial render (before useLayoutEffect runs)
         return getPositionStyle(toPosition);
     }, [toPosition, domPositions.end]);
 
@@ -349,133 +338,88 @@ function getDOMPosition(position: CardPosition): DOMRect | null {
 
             if (handArea) {
                 const cards = handArea.querySelectorAll('.card-component');
-                console.log(`[getDOMPosition] Found ${cards.length} cards in ${position.owner} hand, looking for index ${position.handIndex}`);
                 if (cards[position.handIndex]) {
-                    const rect = cards[position.handIndex].getBoundingClientRect();
-                    console.log(`[getDOMPosition] Hand card ${position.handIndex} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-                    return rect;
+                    return cards[position.handIndex].getBoundingClientRect();
                 } else {
-                    console.warn(`[getDOMPosition] Hand card index ${position.handIndex} not found, max index is ${cards.length - 1}`);
+                    const dims = getCardDimensions();
+
+                    if (cards.length > 0) {
+                        const lastCard = cards[cards.length - 1];
+                        const lastRect = lastCard.getBoundingClientRect();
+                        const cardSpacing = dims.width * 0.35;
+                        const indexDiff = position.handIndex - (cards.length - 1);
+                        const newX = lastRect.left + (cardSpacing * indexDiff);
+                        return new DOMRect(newX, lastRect.top, lastRect.width, lastRect.height);
+                    } else {
+                        const handRect = handArea.getBoundingClientRect();
+                        const startX = handRect.left + (handRect.width - dims.width) / 2;
+                        const startY = handRect.top + (handRect.height - dims.height) / 2;
+                        return new DOMRect(startX, startY, dims.width, dims.height);
+                    }
                 }
-            } else {
-                console.warn(`[getDOMPosition] Hand area not found for ${position.owner}`);
             }
         }
 
         if (position.type === 'lane') {
-            // Find the lane in the game board
             const gameBoard = document.querySelector('.game-main-area .game-board');
             if (gameBoard) {
-                // Use more specific selector to find the correct side
                 const side = position.owner === 'player'
                     ? gameBoard.querySelector('.player-side:not(.opponent-side)')
                     : gameBoard.querySelector('.opponent-side');
 
-                console.log(`[getDOMPosition] Looking for ${position.owner} lane ${position.laneIndex}, side found:`, !!side);
-
                 if (side) {
-                    // Get all lanes (each Lane component has a .lane wrapper containing .lane-stack)
-                    const laneContainers = side.querySelectorAll('.lane');
                     const lanes = side.querySelectorAll('.lane-stack');
-                    console.log(`[getDOMPosition] Found ${lanes.length} lane-stacks, ${laneContainers.length} lane containers`);
 
                     if (lanes[position.laneIndex]) {
                         const lane = lanes[position.laneIndex] as HTMLElement;
                         const cards = lane.querySelectorAll('.card-component');
-                        console.log(`[getDOMPosition] Lane ${position.laneIndex} found with ${cards.length} cards, looking for cardIndex ${position.cardIndex}`);
 
                         if (cards[position.cardIndex]) {
-                            const rect = cards[position.cardIndex].getBoundingClientRect();
-                            console.log(`[getDOMPosition] Lane card ${position.cardIndex} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-                            return rect;
+                            return cards[position.cardIndex].getBoundingClientRect();
                         }
 
-                        // Card doesn't exist yet - calculate position based on existing cards or lane
                         const dims = getCardDimensions();
                         const laneRect = lane.getBoundingClientRect();
                         const centerX = laneRect.left + (laneRect.width - dims.width) / 2;
 
-                        // If there are existing cards, use the last one as reference
                         if (cards.length > 0) {
                             const lastCard = cards[cards.length - 1];
                             const lastCardRect = lastCard.getBoundingClientRect();
-
-                            // For opponent lanes (rotated 180°), cards stack UPWARD in viewport
-                            // For player lanes, cards stack DOWNWARD in viewport
                             const isOpponent = position.owner === 'opponent';
                             const offsetDirection = isOpponent ? -1 : 1;
                             const newTop = lastCardRect.top + (offsetDirection * dims.stackOffset);
-
-                            const calculatedRect = new DOMRect(centerX, newTop, dims.width, dims.height);
-                            console.log(`[getDOMPosition] Calculated from last card:`, {
-                                lastCardTop: lastCardRect.top,
-                                newTop,
-                                isOpponent,
-                                offsetDirection
-                            });
-                            return calculatedRect;
+                            return new DOMRect(centerX, newTop, dims.width, dims.height);
                         }
 
-                        // No existing cards - use lane position
-                        // For opponent lanes (rotated), the first card appears at the BOTTOM of the lane rect
-                        // For player lanes, the first card appears at the TOP of the lane rect
                         const isOpponent = position.owner === 'opponent';
-                        let calculatedTop: number;
-
-                        if (isOpponent) {
-                            // Opponent lane is rotated 180° - first card at bottom of viewport rect
-                            calculatedTop = laneRect.bottom - dims.height;
-                        } else {
-                            // Player lane - first card at top
-                            calculatedTop = laneRect.top;
-                        }
-
-                        const calculatedRect = new DOMRect(centerX, calculatedTop, dims.width, dims.height);
-                        console.log(`[getDOMPosition] Calculated lane position (empty lane):`, {
-                            laneRect: { left: laneRect.left, top: laneRect.top, bottom: laneRect.bottom },
-                            calculated: { left: calculatedRect.left, top: calculatedRect.top },
-                            isOpponent
-                        });
-                        return calculatedRect;
-                    } else {
-                        console.warn(`[getDOMPosition] Lane index ${position.laneIndex} not found, max index is ${lanes.length - 1}`);
+                        const calculatedTop = isOpponent
+                            ? laneRect.bottom - dims.height
+                            : laneRect.top;
+                        return new DOMRect(centerX, calculatedTop, dims.width, dims.height);
                     }
-                } else {
-                    console.warn(`[getDOMPosition] Player side not found in game-board`);
                 }
-            } else {
-                console.warn(`[getDOMPosition] Game board not found`);
             }
         }
 
         if (position.type === 'deck') {
-            // Find the correct deck based on owner (from DeckTrashArea component)
             const selector = `.deck-pile.${position.owner} .pile-card-wrapper`;
             const deckArea = document.querySelector(selector);
             if (deckArea) {
-                const rect = deckArea.getBoundingClientRect();
-                console.log(`[getDOMPosition] Deck ${position.owner} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-                return rect;
+                return deckArea.getBoundingClientRect();
             }
-            console.warn(`[getDOMPosition] Deck selector not found: ${selector}`);
         }
 
         if (position.type === 'trash') {
-            // Find the correct trash based on owner (from DeckTrashArea component)
             const selector = `.trash-pile.${position.owner} .pile-card-wrapper`;
             const trashArea = document.querySelector(selector);
             if (trashArea) {
-                const rect = trashArea.getBoundingClientRect();
-                console.log(`[getDOMPosition] Trash ${position.owner} rect:`, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-                return rect;
+                return trashArea.getBoundingClientRect();
             }
-            console.warn(`[getDOMPosition] Trash selector not found: ${selector}`);
         }
     } catch (e) {
         console.warn('[AnimatedCard] Could not get DOM position:', e);
     }
 
-    console.warn(`[getDOMPosition] Could not find element for position:`, position);
     return null;
 }
 

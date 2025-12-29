@@ -2102,15 +2102,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        // REMOVED: Legacy protocol-specific handlers - now using generic handlers:
-        // - select_own_card_to_return_for_water_4 -> select_card_to_return
-        // - select_card_to_shift_for_anarchy_0 -> select_card_to_shift
-        // - select_card_to_shift_for_anarchy_1 -> select_card_to_shift
-        // - select_card_to_shift_for_gravity_1 -> select_card_to_shift
-        // - select_card_to_flip_and_shift_for_gravity_2 -> select_card_to_flip
-        // - select_face_down_card_to_shift_for_gravity_4 -> select_card_to_shift
-        // - select_face_down_card_to_shift_for_darkness_4 -> select_card_to_shift
-
         case 'shift_flipped_card_optional': {
             // Darkness-1, Spirit-3: Shift the flipped card to another lane
             const cardId = (action as any).cardId;
@@ -2474,12 +2465,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // SMART: Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
             const scope = (action as any).scope;
+            const destinationRestriction = (action as any).destinationRestriction;
+            const targetLaneIndex = (action as any).targetLaneIndex; // Fixed destination (Gravity-4, etc.)
             const restrictedLaneIndex = scope === 'this_lane'
                 ? ((action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex)
                 : undefined;
             const cardOwner = action.actor;
             const sourceCardId = action.sourceCardId;
-            const positionFilter = targetFilter?.position || 'uncovered';
             const scoredTargets: { cardId: string; score: number }[] = [];
 
             for (const playerKey of ['player', 'opponent'] as const) {
@@ -2487,7 +2479,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
 
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
+                    // Scope restriction (Fear-3: only this lane)
                     if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+
+                    // CRITICAL: For 'to_this_lane' (Gravity-4), card must be FROM ANOTHER lane
+                    // Cannot shift a card from the destination lane to itself
+                    if (destinationRestriction?.type === 'to_this_lane' && targetLaneIndex !== undefined) {
+                        if (laneIdx === targetLaneIndex) continue; // Skip cards in destination lane
+                    }
 
                     const lane = state[playerKey].lanes[laneIdx];
                     const laneValue = state[playerKey].laneValues[laneIdx];

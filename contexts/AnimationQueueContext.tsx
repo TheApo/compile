@@ -45,17 +45,13 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
      */
     const processNextAnimation = useCallback(() => {
         if (isProcessingRef.current) {
-            console.log('[AnimationQueue] processNextAnimation: already processing, skipping');
             return;
         }
 
         setQueue(currentQueue => {
-            console.log('[AnimationQueue] processNextAnimation: queue length =', currentQueue.length);
-
             if (currentQueue.length === 0) {
                 currentAnimationRef.current = null;
                 setCurrentAnimation(null);
-                console.log('[AnimationQueue] Queue empty, animation complete');
                 return currentQueue;
             }
 
@@ -65,7 +61,6 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
             setCurrentAnimation(next);
             isProcessingRef.current = false;
 
-            console.log('[AnimationQueue] Started next animation:', next.type);
             return rest;
         });
     }, []);
@@ -79,38 +74,15 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
             id: uuidv4(),
         };
 
-        console.log('[AnimationQueue] enqueueAnimation called:', {
-            type: newItem.type,
-            hasSnapshot: !!newItem.snapshot,
-            animatingCard: newItem.animatingCard ? {
-                cardId: newItem.animatingCard.card.id,
-                from: newItem.animatingCard.fromPosition,
-                to: newItem.animatingCard.toPosition
-            } : null
-        });
-
         setQueue(currentQueue => {
-            // Use ref to get current animation state (avoids stale closure)
             const isCurrentlyAnimating = currentAnimationRef.current !== null;
 
-            console.log('[AnimationQueue] Inside setQueue:', {
-                isCurrentlyAnimating,
-                queueLength: currentQueue.length
-            });
-
-            // If nothing is currently animating, start this animation immediately
-            // This ensures currentAnimation is set SYNCHRONOUSLY to avoid flickering
             if (!isCurrentlyAnimating && currentQueue.length === 0) {
-                // Update ref immediately so subsequent calls know we're animating
                 currentAnimationRef.current = newItem;
-                // Set currentAnimation directly - don't add to queue
                 setCurrentAnimation(newItem);
-                console.log('[AnimationQueue] Started animation immediately:', newItem.type);
-                return currentQueue; // Queue stays empty, animation is now current
+                return currentQueue;
             }
 
-            // Otherwise, add to queue for later processing
-            console.log('[AnimationQueue] Added to queue (already animating)');
             return [...currentQueue, newItem];
         });
     }, []);
@@ -150,18 +122,12 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
      * Called by the animation renderer when the current animation completes.
      */
     const onAnimationComplete = useCallback(() => {
-        console.log('[AnimationQueue] onAnimationComplete called, current:', currentAnimationRef.current?.type);
-
-        // Check if we should pause (for user input scenarios)
         if (currentAnimationRef.current?.pauseAfter) {
             currentAnimationRef.current = null;
             setCurrentAnimation(null);
-            console.log('[AnimationQueue] Paused after animation');
-            // Queue remains - will resume when user completes their input
             return;
         }
 
-        // Process the next animation
         processNextAnimation();
     }, [processNextAnimation]);
 

@@ -78,11 +78,23 @@ export function executePlayEffect(
         // Create new cards to play (face-down)
         const newCardsToPlay = drawnCards.map((c: any) => ({ ...c, id: uuidv4(), isFaceUp: false }));
 
-        // Add cards to lanes
+        // Add cards to lanes and create play animations
         const newPlayerLanes = [...playerState.lanes];
+        const playAnimations: AnimationRequest[] = [];
+
         for (let i = 0; i < newCardsToPlay.length; i++) {
             const targetLaneIndex = otherLaneIndices[i];
             newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
+
+            // Add play animation for each card (from deck)
+            playAnimations.push({
+                type: 'play',
+                cardId: newCardsToPlay[i].id,
+                owner: actor,
+                toLane: targetLaneIndex,
+                fromDeck: true,
+                isFaceUp: false
+            });
         }
 
         const updatedPlayerState = {
@@ -118,7 +130,11 @@ export function executePlayEffect(
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
         newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down in other lines.`);
-        return { newState };
+
+        return {
+            newState,
+            animationRequests: playAnimations.length > 0 ? playAnimations : undefined
+        };
     }
 
     // NEW: Life-0 logic - Automatic play from deck to "each line where you/opponent have a card"
@@ -216,11 +232,14 @@ export function executePlayEffect(
             const targetLaneIndex = lanesWithCards[i];
             newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
 
-            // Add play animation for each card
+            // Add play animation for each card (from deck)
             playAnimations.push({
                 type: 'play',
                 cardId: newCardsToPlay[i].id,
-                owner: actor
+                owner: actor,
+                toLane: targetLaneIndex,
+                fromDeck: true,
+                isFaceUp: !faceDown
             });
         }
 
@@ -404,11 +423,25 @@ export function executePlayEffect(
             };
         }
 
+        // Create play animations for each card (played under this card)
+        const playAnimations: AnimationRequest[] = newCardsToPlay.map((c, i) => ({
+            type: 'play' as const,
+            cardId: c.id,
+            owner: actor,
+            toLane: laneIndex,
+            fromDeck: true,
+            isFaceUp: false
+        }));
+
         // Generic log message
         const sourceCardInfo = findCardOnBoard(state, card.id);
         const sourceCardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'a card effect';
         newState = log(newState, cardOwner, `${sourceCardName}: Plays ${drawnCards.length} card(s) face-down under itself.`);
-        return { newState };
+
+        return {
+            newState,
+            animationRequests: playAnimations.length > 0 ? playAnimations : undefined
+        };
     }
 
     // NEW: Gravity-6 logic - Automatic play from deck to specific lane
@@ -515,7 +548,20 @@ export function executePlayEffect(
         }
         newState = log(newState, cardOwner, logText);
 
-        return { newState };
+        // Create play animations for each card
+        const playAnimations: AnimationRequest[] = newCardsToPlay.map(c => ({
+            type: 'play' as const,
+            cardId: c.id,
+            owner: targetPlayer,
+            toLane: resolvedLaneIndex,
+            fromDeck: true,
+            isFaceUp: !faceDown
+        }));
+
+        return {
+            newState,
+            animationRequests: playAnimations.length > 0 ? playAnimations : undefined
+        };
     }
 
     // NEW: Smoke-3 logic - Play from hand to a lane with face-down cards

@@ -42,49 +42,31 @@ export const AnimationOverlay: React.FC = () => {
     }, [onAnimationComplete]);
 
     /**
-     * Fallback timeout to ensure animations complete even if CSS events fail.
-     * Timeout matches the ACTUAL animation timing in AnimatedCard.tsx:
-     * - DOM_DETECTION_DELAY: 100ms
-     * - HIGHLIGHT_DURATION: 500ms (only for opponent actions)
-     * - flyDuration: from ANIMATION_DURATIONS (or custom duration for multi-card)
+     * EMERGENCY Fallback timeout - only triggers if AnimatedCard's onComplete fails.
+     * This is NOT for timing the animation - AnimatedCard handles that.
+     * This is just a safety net to prevent stuck animations.
+     *
+     * Set to 2x the expected animation time to ensure AnimatedCard has
+     * plenty of time to call onComplete normally.
      */
     useEffect(() => {
         if (!currentAnimation) return;
 
-        // DOM detection delay before animation starts
-        const domDetectionDelay = 100;
-
-        // Fly duration: use custom duration if provided, otherwise use ANIMATION_DURATIONS
+        // Use 2x the animation duration as emergency fallback
+        // AnimatedCard should ALWAYS complete before this
         const flyDuration = currentAnimation.duration
             || ANIMATION_DURATIONS[currentAnimation.type]
             || 400;
 
-        // Check if this is an opponent action that needs highlight phase
-        const isOpponentAction = currentAnimation.animatingCard?.isOpponentAction ?? false;
-        const highlightTime = isOpponentAction ? 500 : 0;
-
-        // Buffer for safety
-        const buffer = 500;
-
-        // For multi-card animations (compile, draw), account for stagger delays
-        let staggerTime = 0;
-        if (currentAnimation.animatingCards) {
-            const maxDelay = Math.max(...currentAnimation.animatingCards.map(c => c.startDelay || 0));
-            staggerTime = maxDelay;
-        }
-        if (currentAnimation.multiAnimatingCards) {
-            const maxDelay = Math.max(...currentAnimation.multiAnimatingCards.map(c => c.startDelay || 0));
-            staggerTime = maxDelay;
-        }
-
-        const timeout = domDetectionDelay + highlightTime + flyDuration + staggerTime + buffer;
+        // Emergency timeout = 2x normal duration (generous safety margin)
+        const emergencyTimeout = flyDuration * 2 + 500;
 
         const timer = setTimeout(() => {
             if (!animationCompleteRef.current) {
-                console.warn(`[AnimationOverlay] Fallback timeout triggered for ${currentAnimation.type} animation after ${timeout}ms`);
+                console.error(`[AnimationOverlay] EMERGENCY fallback triggered for ${currentAnimation.type} after ${emergencyTimeout}ms - AnimatedCard.onComplete failed!`);
                 handleAnimationComplete();
             }
-        }, timeout);
+        }, emergencyTimeout);
 
         return () => clearTimeout(timer);
     }, [currentAnimation, handleAnimationComplete]);
@@ -95,7 +77,6 @@ export const AnimationOverlay: React.FC = () => {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && currentAnimation) {
-                console.log('[AnimationOverlay] Skipping animations via Escape key');
                 skipAllAnimations();
             }
         };
@@ -128,6 +109,7 @@ export const AnimationOverlay: React.FC = () => {
             {/* Render the animating card(s) */}
             {currentAnimation.animatingCard && (
                 <AnimatedCard
+                    key={currentAnimation.id}  // CRITICAL: Forces remount for each animation
                     animation={currentAnimation}
                     onComplete={handleAnimationComplete}
                 />
@@ -172,15 +154,6 @@ export const AnimationOverlay: React.FC = () => {
                 />
             ))}
 
-            {/* Debug info (only in development) */}
-            {process.env.NODE_ENV === 'development' && (
-                <div className="animation-debug-info">
-                    <span>Animation: {currentAnimation.type}</span>
-                    {currentAnimation.animatingCard && (
-                        <span>Card: {currentAnimation.animatingCard.card.protocol}-{currentAnimation.animatingCard.card.value}</span>
-                    )}
-                </div>
-            )}
         </div>
     );
 };

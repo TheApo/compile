@@ -126,6 +126,9 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
             currentState = { ...currentState, lastCustomEffectTargetCardId: null };
         }
 
+        // CRITICAL FIX: Collect animationRequests from all effects
+        let allAnimationRequests: any[] = [];
+
         // Execute all middle effects sequentially
         for (let i = 0; i < customCard.customEffects.middleEffects.length; i++) {
             const effectDef = customCard.customEffects.middleEffects[i];
@@ -151,9 +154,17 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
             const result = executeCustomEffect(card, laneIndex, currentState, context, effectDef);
             currentState = result.newState;
 
+            // CRITICAL FIX: Collect animationRequests from this effect
+            if (result.animationRequests && result.animationRequests.length > 0) {
+                allAnimationRequests = [...allAnimationRequests, ...result.animationRequests];
+            }
+
             // If an action is required, the remaining effects are already stored, just return
             if (currentState.actionRequired) {
-                return { newState: recalculateAllLaneValues(currentState) };
+                return {
+                    newState: recalculateAllLaneValues(currentState),
+                    animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
+                };
             }
 
             // Effect completed without actionRequired - clear pending effects ONLY if:
@@ -205,7 +216,10 @@ export function executeOnPlayEffect(card: PlayedCard, laneIndex: number, state: 
         }
 
         const stateWithRecalculatedValues = recalculateAllLaneValues(currentState);
-        return { newState: stateWithRecalculatedValues };
+        return {
+            newState: stateWithRecalculatedValues,
+            animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined
+        };
     }
 
     // Standard card - use registry

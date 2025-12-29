@@ -736,11 +736,11 @@ export type AIAction =
 
 export type AnimationRequest =
     | { type: 'delete'; cardId: string; owner: Player }
-    | { type: 'flip'; cardId: string }
+    | { type: 'flip'; cardId: string; owner?: Player; laneIndex?: number }
     | { type: 'shift'; cardId: string; fromLane: number; toLane: number; owner: Player }
     | { type: 'return'; cardId: string; owner: Player }
     | { type: 'discard'; cardId: string; owner: Player }
-    | { type: 'play'; cardId: string; owner: Player }
+    | { type: 'play'; cardId: string; owner: Player; toLane?: number; fromDeck?: boolean; isFaceUp?: boolean }
     | { type: 'draw'; player: Player; count: number }
     | {
         type: 'compile_delete';

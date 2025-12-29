@@ -212,13 +212,6 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   // Compute the visual game state - uses snapshot data during animation
   // This allows the SAME GameBoard to render both real state and animation snapshots
   const visualGameState = useMemo(() => {
-    console.log('[GameScreen] Computing visualGameState:', {
-      isAnimating,
-      hasCurrentAnimation: !!currentAnimation,
-      hasSnapshot: !!currentAnimation?.snapshot,
-      animationType: currentAnimation?.type
-    });
-
     if (isAnimating && currentAnimation?.snapshot) {
       const baseState = snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
 
@@ -244,7 +237,6 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   }, [isAnimating, currentAnimation]);
 
   // Extended animation info for correct hiding during shift animations
-  // Includes fromPosition so Lane can check if card is being animated FROM that lane
   const animatingCardInfo = useMemo(() => {
     if (isAnimating && currentAnimation?.animatingCard) {
       const { card, fromPosition } = currentAnimation.animatingCard;

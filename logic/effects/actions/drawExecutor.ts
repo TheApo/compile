@@ -658,10 +658,13 @@ export function executeDrawEffect(
         return { newState };
     }
 
-    // TEMPORARY FIX: Don't return animation for custom protocol draws to avoid blocking hand interactions
-    // The animation causes a race condition where Check Cache runs while animation is still playing
-    // TODO: Fix the async timing properly
-    // const animationRequests = drawnCards.length > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count: drawnCards.length }] : undefined;
+    // RE-ENABLED: Draw animations are now properly handled by the new animation queue system
+    // The race condition was caused by the old processAnimationQueue callbacks
+    // Now animations are enqueued synchronously and processed by AnimationQueueContext
+    // CRITICAL FIX: Use newCards.length (newly drawn cards), NOT drawnCards.length (entire hand)!
+    const animationRequests = newCards.length > 0
+        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length }]
+        : undefined;
 
-    return { newState };
+    return { newState, animationRequests };
 }

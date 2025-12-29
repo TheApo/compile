@@ -60,20 +60,16 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                     const isRevealed = gameState.actionRequired?.type === 'prompt_shift_or_flip_for_light_2' && gameState.actionRequired.revealedCardId === card.id;
                     // Calculate effective face-down value for this specific card
                     const faceDownValue = getEffectiveCardValue(card, cards, gameState, laneIndex, owner);
-                    // NEW: Hide card if it's being animated FROM this lane
-                    // For shift/delete animations, we need to check the fromPosition
-                    // IMPORTANT: Only hide if the animation is FROM THIS LANE specifically
-                    // Don't hide board cards when animation is from hand/deck (discard, draw)
+                    // Hide card if it's being animated FROM this lane
                     let isBeingAnimated = false;
                     if (animatingCardInfo?.cardId === card.id) {
-                        // Only hide if animation is FROM this specific lane
                         if (animatingCardInfo.fromPosition.type === 'lane') {
-                            isBeingAnimated = animatingCardInfo.fromPosition.laneIndex === laneIndex &&
-                                              animatingCardInfo.fromPosition.owner === owner;
+                            isBeingAnimated =
+                                animatingCardInfo.fromPosition.owner === owner &&
+                                animatingCardInfo.fromPosition.laneIndex === laneIndex &&
+                                animatingCardInfo.fromPosition.cardIndex === index;
                         }
-                        // If animation is from hand/deck, don't hide board cards (they're different cards)
                     } else if (animatingCardId === card.id) {
-                        // Fallback: If card ID matches, hide it (for face-down cards that match by ID)
                         isBeingAnimated = true;
                     }
                     return (

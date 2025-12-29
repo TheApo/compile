@@ -335,8 +335,10 @@ export function createReturnAnimation(
             card,
             fromPosition,
             toPosition,
-            flipDirection: setFaceDown ? 'toFaceDown' : undefined,
-            targetIsFaceUp: !setFaceDown,
+            // NO flipDirection - card stays as it was on the field during animation
+            // The card's isFaceUp property already reflects its state on the board
+            // The actual face-down state on hand is handled by the game state update
+            targetIsFaceUp: card.isFaceUp,
             isOpponentAction,
         },
         laneIndex,
