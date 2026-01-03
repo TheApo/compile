@@ -6,6 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult, EffectContext } from '../../../types';
 import { AnimationQueueItem } from '../../../types/animation';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
+import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
 // NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
@@ -531,22 +532,13 @@ export const resolveActionWithCard = (
             newState = log(newState, actor, `Deleting ${cardName}.`);
 
             const { owner, laneIndex } = cardInfo;
-            const wasTopCard = prev[owner].lanes[laneIndex][prev[owner].lanes[laneIndex].length - 1].id === cardToDeleteId;
+            const lane = prev[owner].lanes[laneIndex];
+            const wasTopCard = lane[lane.length - 1].id === cardToDeleteId;
 
-            // Delete the card
-            const lane = [...prev[owner].lanes[laneIndex]];
-            const cardIndex = lane.findIndex(c => c.id === cardToDeleteId);
-            lane.splice(cardIndex, 1);
+            // Delete the card (removes from board, adds to trash)
+            newState = deleteCardFromBoard(prev, cardToDeleteId);
 
-            const newLanes = [...prev[owner].lanes];
-            newLanes[laneIndex] = lane;
-
-            let stateAfterDelete = {
-                ...prev,
-                [owner]: { ...prev[owner], lanes: newLanes },
-            };
-
-            newState = phaseManager.queuePendingCustomEffects(stateAfterDelete);
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
@@ -653,6 +645,9 @@ export const resolveActionWithCard = (
             const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+
+            // CRITICAL: Actually delete the card from board and add to trash
+            newState = deleteCardFromBoard(newState, targetCardId);
 
             newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;

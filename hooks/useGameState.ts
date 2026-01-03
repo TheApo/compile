@@ -140,43 +140,15 @@ export const useGameState = (
 
             // Handle different animation types
             if (nextRequest.type === 'delete') {
-                // ANIMATION ONLY - state was already updated in cardResolver.ts
-                // Use snapshot data from the request (card is already deleted from state)
-                if (enqueueAnimation) {
-                    const { cardSnapshot, laneIndex, cardIndex, owner, preDeleteSnapshot } = nextRequest as any;
-
-                    if (!cardSnapshot || laneIndex === undefined || cardIndex === undefined) {
-                        console.warn('[DELETE ANIM] Missing snapshot data in request, skipping animation');
-                        setTimeout(() => processNext(rest), 0);
-                        return;
+                // Delete animation was already created BEFORE setGameState in resolveActionWithCard
+                // Just wait for the animation to complete, then process next/callback
+                setTimeout(() => {
+                    if (rest.length > 0) {
+                        processNext(rest);
+                    } else {
+                        onComplete();
                     }
-
-                    // Create animation using PRE-delete snapshot (shows correct board state BEFORE card was removed)
-                    setGameState(currentState => {
-                        // Use preDeleteSnapshot if available, otherwise fall back to currentState
-                        const snapshotState = preDeleteSnapshot ? { player: preDeleteSnapshot.player, opponent: preDeleteSnapshot.opponent } as any : currentState;
-                        const animation = createDeleteAnimation(
-                            snapshotState,  // PRE-delete state for board layout snapshot
-                            cardSnapshot,   // Card data from request (already deleted from state)
-                            owner,
-                            laneIndex,
-                            cardIndex
-                        );
-                        enqueueAnimation(animation);
-
-                        // DO NOT modify state - the delete already happened in cardResolver.ts!
-                        return currentState;
-                    });
-
-                    // Wait for animation to complete, then process next
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, ANIMATION_DURATIONS.delete);
-                }
+                }, ANIMATION_DURATIONS.delete);
             } else if (nextRequest.type === 'return') {
                 // NEW ANIMATION SYSTEM: Create animation and update state IMMEDIATELY
                 if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
@@ -655,43 +627,7 @@ export const useGameState = (
 
                 return turnProgressionCb(newState);
             });
-            return;
         }
-
-        // FALLBACK: Old animation system
-        setGameState(prev => {
-            const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            // targetOwner determines whose lane the card is played into (for Corruption-0 play on opponent's side)
-            const { newState, animationRequests } = resolvers.playCard(prev, cardId, laneIndex, isFaceUp, 'player', targetOwner);
-
-            const stateWithAnimation = { ...newState, animationState: { type: 'playCard' as const, cardId, owner: 'player' as Player }};
-
-            setTimeout(() => {
-                setGameState(s => {
-                    let stateToProcess = { ...s, animationState: null };
-
-                    if (animationRequests && animationRequests.length > 0) {
-                        // The original action is the implicit 'play card' action.
-                        // We pass a dummy action object here. This part could be improved if more complex
-                        // post-animation logic is needed for on-cover effects.
-                        const dummyPlayAction: ActionRequired = { type: 'select_card_from_hand_to_play', disallowedLaneIndex: -1, sourceCardId: cardId, actor: 'player' };
-                        // FIX: Changed processAnimationQueue call to use a callback instead of originalAction, which is a more flexible pattern used elsewhere.
-                        processAnimationQueue(animationRequests, () => {
-                            setGameState(s_after_anim => turnProgressionCb(s_after_anim));
-                        });
-                        return stateToProcess;
-                    }
-
-                    if (stateToProcess.actionRequired) {
-                         return stateToProcess;
-                    }
-
-                    return turnProgressionCb(stateToProcess);
-                });
-            }, 500);
-
-            return stateWithAnimation;
-        });
     };
 
     const fillHand = () => {
@@ -833,6 +769,36 @@ export const useGameState = (
                     }
                     if (found) break;
                 }
+            }
+        }
+
+        // NEW: Create delete animation BEFORE setGameState (card is still in gameState)
+        const isDeleteAction = actionType === 'select_cards_to_delete' ||
+                               actionType === 'select_face_down_card_to_delete' ||
+                               actionType === 'select_low_value_card_to_delete' ||
+                               actionType === 'select_card_from_other_lanes_to_delete';
+
+        if (enqueueAnimation && isDeleteAction) {
+            // Find the card to delete in current gameState (before it's removed)
+            for (const owner of ['player', 'opponent'] as Player[]) {
+                let found = false;
+                for (const [laneIdx, lane] of gameState[owner].lanes.entries()) {
+                    const cardIndex = lane.findIndex(c => c.id === targetCardId);
+                    if (cardIndex >= 0) {
+                        const card = lane[cardIndex];
+                        const animation = createDeleteAnimation(
+                            gameState,
+                            card,
+                            owner,
+                            laneIdx,
+                            cardIndex
+                        );
+                        enqueueAnimation(animation);
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
             }
         }
 
