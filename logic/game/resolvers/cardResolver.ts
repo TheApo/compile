@@ -4,6 +4,7 @@
  */
 
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult, EffectContext } from '../../../types';
+import { AnimationQueueItem } from '../../../types/animation';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
@@ -186,7 +187,11 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
     return null;
 }
 
-export const resolveActionWithCard = (prev: GameState, targetCardId: string): CardActionResult => {
+export const resolveActionWithCard = (
+    prev: GameState,
+    targetCardId: string,
+    enqueueAnimation?: (item: AnimationQueueItem) => void
+): CardActionResult => {
     if (!prev.actionRequired) return { nextState: prev };
 
     let newState: GameState = { ...prev };
@@ -221,7 +226,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
             const draws = 'draws' in prev.actionRequired ? prev.actionRequired.draws : 0;
 
-            newState = internalResolveTargetedFlip(prev, targetCardId);
+            newState = internalResolveTargetedFlip(prev, targetCardId, null, enqueueAnimation);
 
             // CRITICAL: Save this value to restore after handleOnFlipToFaceUp
             const savedTargetCardId = targetCardId;
@@ -1249,7 +1254,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 };
             }
 
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, nextActionInChain);
+            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, nextActionInChain, enqueueAnimation);
 
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const onFlipResult = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);

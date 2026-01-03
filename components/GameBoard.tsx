@@ -24,7 +24,7 @@ interface GameBoardProps {
     onOpponentHandCardPointerLeave: () => void;
     selectedCardId: string | null;
     sourceCardId: string | null;
-    animatingCardId?: string | null;  // Card being animated (hide via CSS)
+    animatingCardIds?: Set<string>;  // Cards being animated (hide via CSS)
     animatingCardInfo?: { cardId: string; fromPosition: CardPosition } | null;  // Extended info for shift animation hiding
     // Deck/Trash callbacks
     onDeckClick?: (owner: Player) => void;
@@ -33,7 +33,7 @@ interface GameBoardProps {
     onTrashCardLeave?: () => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardId, animatingCardInfo, onDeckClick, onTrashClick, onTrashCardHover, onTrashCardLeave }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardIds, animatingCardInfo, onDeckClick, onTrashClick, onTrashCardHover, onTrashCardLeave }) => {
     const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
@@ -441,7 +441,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
             <div className="opponent-hand-area">
                 {opponent.hand.map(card => {
                     // Hide the card if it's being animated (kept in DOM for position detection)
-                    const isBeingAnimated = animatingCardId === card.id;
+                    const isBeingAnimated = animatingCardIds?.has(card.id);
                     return (
                         <CardComponent
                             key={card.id}
@@ -488,7 +488,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
-                            animatingCardId={animatingCardId}
+                            animatingCardIds={animatingCardIds}
                             animatingCardInfo={animatingCardInfo}
                         />
                     })}
@@ -563,7 +563,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
-                            animatingCardId={animatingCardId}
+                            animatingCardIds={animatingCardIds}
                             animatingCardInfo={animatingCardInfo}
                         />
                     })}

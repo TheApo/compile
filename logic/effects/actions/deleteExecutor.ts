@@ -162,6 +162,9 @@ export function executeDeleteEffect(
     // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
     const position = targetFilter.position || 'uncovered';
 
+    // DEBUG: Log delete effect parameters for Hate-4 debugging
+    console.log(`[DELETE DEBUG] Card: ${card.protocol}-${card.value}, laneIndex: ${laneIndex}, position: ${position}, scope: ${params.scope?.type}, triggerType: ${context.triggerType}`);
+
     const validTargets: string[] = [];
     for (const player of ['player', 'opponent'] as const) {
         for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
@@ -225,9 +228,12 @@ export function executeDeleteEffect(
                 }
 
                 validTargets.push(c.id);
+                console.log(`[DELETE DEBUG] Valid target: ${c.protocol}-${c.value} (id: ${c.id.slice(0,8)}), player: ${player}, lane: ${laneIdx}, cardIdx: ${cardIdx}`);
             }
         }
     }
+
+    console.log(`[DELETE DEBUG] Total validTargets: ${validTargets.length}`);
 
     // If no valid targets, skip the effect
     if (validTargets.length === 0) {
@@ -288,13 +294,20 @@ export function executeDeleteEffect(
         // Keep only cards with that value
         filteredTargets = validTargets.filter(id => cardValues.get(id) === targetValue);
 
+        console.log(`[DELETE DEBUG] After ${targetFilter.calculation} filter: targetValue=${targetValue}, filteredTargets=${filteredTargets.length}`);
+        for (const id of filteredTargets) {
+            const info = findCardOnBoard(state, id);
+            if (info) console.log(`[DELETE DEBUG]   - ${info.card.protocol}-${info.card.value} (id: ${id.slice(0,8)})`);
+        }
     }
 
     // NEW: Auto-execute (Hate-4: automatically delete lowest value card without user selection)
     if (params.autoExecute) {
+        console.log(`[DELETE DEBUG] autoExecute=true, count=${count}, will delete first ${Math.min(count, filteredTargets.length)} from filteredTargets`);
 
         // Take first N cards from filteredTargets (or all if count >= length)
         const cardsToDelete = filteredTargets.slice(0, count);
+        console.log(`[DELETE DEBUG] cardsToDelete: ${cardsToDelete.map(id => id.slice(0,8)).join(', ')}`);
 
         let newState = state;
         const animationRequests: any[] = [];
@@ -341,8 +354,15 @@ export function executeDeleteEffect(
             const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
             newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
-            // Add animation request
-            animationRequests.push({ type: 'delete', cardId, owner });
+            // Add animation request with snapshot data (card already deleted from state)
+            animationRequests.push({
+                type: 'delete',
+                cardId,
+                owner,
+                cardSnapshot: { ...targetCard },
+                laneIndex: targetLaneIndex,
+                cardIndex
+            });
 
             // Handle uncover if was top card AND not an on_cover delete
             // (new card will be placed immediately after an on_cover delete)
@@ -426,7 +446,15 @@ export function executeDeleteEffect(
         newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
         // CRITICAL: Create animation request for delete animation (Death-1)
-        const animationRequests: AnimationRequest[] = [{ type: 'delete', cardId: card.id, owner }];
+        // Include snapshot data since card is already deleted from state
+        const animationRequests: AnimationRequest[] = [{
+            type: 'delete',
+            cardId: card.id,
+            owner,
+            cardSnapshot: { ...card },
+            laneIndex,
+            cardIndex: currentCardIndex
+        } as AnimationRequest];
 
         // Handle uncover ONLY if:
         // 1. Card was the top card

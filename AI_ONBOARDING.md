@@ -274,6 +274,129 @@ When creating new custom protocols:
 
 3. **Test with AI** to ensure the effect works correctly
 
+## Animation System (KRITISCH!)
+
+### Architektur-Überblick
+
+Das Spiel verwendet eine **Queue-basierte Animation-Architektur** die Game-Logik (synchron) von Animationen (asynchron) trennt:
+
+```
+Game Logic (synchron)     Animation System (asynchron)
+        │                          │
+        ├─► Effekt ausführen       │
+        ├─► State ändern           │
+        ├─► AnimationRequest       │
+        │   erstellen              │
+        │         │                │
+        │         └───────────────►├─► Snapshot erstellen
+        │                          ├─► Animation in Queue
+        │                          ├─► Animation abspielen
+        │                          └─► Nächste Animation
+        │                          │
+        └─► Warten bis Queue leer ─┘
+```
+
+### Kern-Konzepte
+
+1. **Synchrone Logik-Ausführung**: Die gesamte Game-Logik läuft **sofort und synchron** durch. Der State ändert sich **bevor** die Animation startet.
+
+2. **Snapshots**: Jede Animation speichert einen `VisualSnapshot` des Board-Zustands **vor** der Änderung. Die Animation zeigt dann den Übergang vom Snapshot zum neuen State.
+
+3. **Animation Queue**: Animationen werden in eine Queue eingereiht und **sequentiell** abgespielt. Keine Animation startet bevor die vorherige fertig ist.
+
+4. **Synchrone Refs**: `isAnimatingRef`, `pendingAnimationRef` ermöglichen synchrone Prüfung ob Animationen laufen (wichtig für Race Conditions).
+
+### Kern-Dateien
+
+| Datei | Zweck |
+|-------|-------|
+| `contexts/AnimationQueueContext.tsx` | Queue-Management, enqueueAnimation() |
+| `types/animation.ts` | AnimationQueueItem, AnimationType, VisualSnapshot |
+| `logic/animation/animationHelpers.ts` | Factory-Funktionen für Animationen |
+| `constants/animationTiming.ts` | Dauer pro Animationstyp |
+| `utils/snapshotUtils.ts` | Snapshot-Erstellung und -Konvertierung |
+| `components/AnimationOverlay.tsx` | Visuelle Darstellung der Animation |
+
+### Animation-Typen
+
+```typescript
+type AnimationType =
+  | 'play'      // Hand/Deck → Lane
+  | 'delete'    // Lane → Trash
+  | 'flip'      // Karte dreht sich
+  | 'shift'     // Lane → andere Lane
+  | 'return'    // Lane → Hand
+  | 'discard'   // Hand → Trash
+  | 'draw'      // Deck → Hand
+  | 'compile'   // Lane löschen + Protocol flippen
+  | 'give'      // Hand → Gegner-Hand
+  | 'reveal'    // Karte kurz zeigen
+  | 'swap'      // Protocols tauschen
+  | 'refresh'   // Mehrere Draws
+  | 'phaseTransition'  // Phasenwechsel
+```
+
+### AnimationQueueItem Struktur
+
+```typescript
+interface AnimationQueueItem {
+    id: string                    // Eindeutige ID
+    type: AnimationType           // Animation-Typ
+    snapshot: VisualSnapshot      // Board-Zustand VOR Animation
+    duration: number              // Dauer in ms
+    animatingCard?: AnimatingCard // Einzelne Karte
+    animatingCards?: CompileAnimatingCard[]  // Mehrere (Compile)
+    multiAnimatingCards?: MultiAnimatingCard[] // Mehrere (Draw)
+    pauseAfter?: boolean          // Queue pausieren danach
+}
+```
+
+### Flow: Wie Animationen erstellt werden
+
+```typescript
+// 1. Effekt wird ausgeführt (synchron)
+const newState = deleteCard(state, cardId);
+
+// 2. AnimationRequest wird zurückgegeben
+return {
+    newState,
+    animationRequests: [{ type: 'delete', cardId, owner }]
+};
+
+// 3. useGameState ruft processAnimationQueue auf
+processAnimationQueue(animationRequests, (onComplete) => {
+    // 4. Für jeden Request wird Animation erstellt
+    const animation = createDeleteAnimation(state, card, owner, laneIndex);
+
+    // 5. Animation wird in Queue eingereiht
+    enqueueAnimation(animation);
+});
+
+// 6. AnimationOverlay zeigt fliegende Karte
+// 7. Nach Animation-Ende: onAnimationComplete()
+// 8. Nächste Animation in Queue startet
+```
+
+### Factory-Funktionen (animationHelpers.ts)
+
+```typescript
+createPlayAnimation(state, card, owner, laneIndex, fromHand, handIndex, faceUp)
+createDeleteAnimation(state, card, owner, laneIndex, cardIndex)
+createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp)
+createShiftAnimation(state, card, owner, fromLane, fromIndex, toLane, toIndex)
+createReturnAnimation(state, card, owner, laneIndex, cardIndex)
+createDrawAnimation(state, card, owner, handIndex)
+createSequentialDrawAnimations(state, cards, owner)  // Mehrere mit Stagger
+createCompileDeleteAnimations(state, cards, laneIndex)
+```
+
+### Wichtig für neue Features
+
+1. **Immer Snapshot erstellen**: Jede Animation braucht den Board-Zustand **vor** der Änderung
+2. **enqueueAnimation nutzen**: Nie Animationen direkt abspielen
+3. **Auf Queue-Ende warten**: `getIsAnimatingSync()` prüft ob Queue leer
+4. **Staggering für Multi-Card**: Bei mehreren Karten `startDelay` verwenden
+
 ## Effect Action Types Reference
 
 ### Draw

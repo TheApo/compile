@@ -10,6 +10,36 @@ import { ANIMATION_DURATIONS } from '../constants/animationTiming';
 import '../styles/animations.css';
 
 /**
+ * PhaseTransitionTimer - Helper component for phase transition animations.
+ * Just runs a timer and calls onComplete - no visual rendering needed.
+ * The GameInfoPanel handles the visual animation via props.
+ */
+const PhaseTransitionTimer: React.FC<{
+    duration: number;
+    onComplete: () => void;
+    animationId: string;
+}> = ({ duration, onComplete, animationId }) => {
+    const hasCompletedRef = useRef(false);
+
+    useEffect(() => {
+        hasCompletedRef.current = false;
+
+        const timer = setTimeout(() => {
+            if (!hasCompletedRef.current) {
+                hasCompletedRef.current = true;
+                onComplete();
+            }
+        }, duration);
+
+        return () => clearTimeout(timer);
+    }, [duration, onComplete, animationId]);
+
+    // Return null - no visual element needed
+    // Input blocking happens at GameScreen level based on isAnimating
+    return null;
+};
+
+/**
  * AnimationOverlay - Renders the flying card animation on top of the game board.
  *
  * This component:
@@ -88,6 +118,18 @@ export const AnimationOverlay: React.FC = () => {
     // Don't render if no animation is playing
     if (!currentAnimation) {
         return null;
+    }
+
+    // Special handling for phaseTransition - no card animation, just timer
+    // The GameInfoPanel handles the visual animation via props
+    if (currentAnimation.type === 'phaseTransition') {
+        return (
+            <PhaseTransitionTimer
+                duration={currentAnimation.duration}
+                onComplete={handleAnimationComplete}
+                animationId={currentAnimation.id}
+            />
+        );
     }
 
     return (

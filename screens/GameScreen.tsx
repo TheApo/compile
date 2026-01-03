@@ -91,7 +91,7 @@ export function GameScreen(props: GameScreenProps) {
  */
 function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
   // Animation queue context for the new animation system
-  const { isAnimating, currentAnimation, enqueueAnimation, enqueueAnimations } = useAnimationQueue();
+  const { isAnimating, currentAnimation, enqueueAnimation, enqueueAnimations, getIsAnimatingSync, getAnimationSync } = useAnimationQueue();
   // Determine starting player via coin flip on first mount
   const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
   const [showCoinFlip, setShowCoinFlip] = useState(true);
@@ -167,23 +167,12 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveActionWithHandCard,
     skipAction,
     resolveOptionalDrawPrompt,
-    resolveDeath1Prompt,
-    resolveLove1Prompt,
-    resolvePlague2Discard,
-    resolvePlague4Flip,
-    resolveFire3Prompt,
     resolveOptionalDiscardCustomPrompt,
     resolveOptionalEffectPrompt,
-    resolveFire4Discard,
-    resolveHate1Discard,
-    resolveLight2Prompt,
+    resolveVariableDiscard,
     resolveRevealBoardCardPrompt,
     resolveRearrangeProtocols,
-    resolveSpirit1Prompt,
-    resolveSpirit3Prompt,
     resolveSwapProtocols,
-    resolveSpeed3Prompt,
-    resolvePsychic4Prompt,
     resolveControlMechanicPrompt,
     resolveCustomChoice,
     resolveSelectRevealedDeckCard,
@@ -206,35 +195,98 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     trackPlayerRearrange,
     // NEW: Pass animation queue functions for the new animation system
     enqueueAnimation,
-    enqueueAnimations
+    enqueueAnimations,
+    // NEW: Pass animation state so AI waits for phase transitions
+    isAnimating
   );
+
+  // CRITICAL: Track the last valid animation state to prevent flashing gameState during transitions
+  // When animation A completes and animation B starts, there's a brief gap where refs are stale
+  // This ref persists through that gap to prevent showing the real gameState
+  const lastValidAnimationRef = useRef<{
+    snapshot: ReturnType<typeof getAnimationSync> extends { snapshot: infer S } ? S : never;
+    cardIds: Set<string>;
+  } | null>(null);
 
   // Compute the visual game state - uses snapshot data during animation
   // This allows the SAME GameBoard to render both real state and animation snapshots
+  // CRITICAL: Check synchronous refs FIRST to handle race conditions
+  // When animation is enqueued, refs are set immediately but React state lags behind
   const visualGameState = useMemo(() => {
+    // FIRST: Check synchronous animation state (handles race conditions)
+    const syncAnimation = getAnimationSync();
+    const isSyncAnimating = getIsAnimatingSync();
+
+    if (isSyncAnimating && syncAnimation?.snapshot) {
+      // Update last valid state
+      const cardIds = new Set<string>();
+      if (syncAnimation.animatingCard) cardIds.add(syncAnimation.animatingCard.card.id);
+      if (syncAnimation.animatingCards) syncAnimation.animatingCards.forEach(item => cardIds.add(item.card.id));
+      lastValidAnimationRef.current = { snapshot: syncAnimation.snapshot, cardIds };
+      return snapshotToGameState(syncAnimation.snapshot, useControlMechanic);
+    }
+
+    // Check React state
     if (isAnimating && currentAnimation?.snapshot) {
-      const baseState = snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
-
-      // NOTE: For draw animations, we now use sequential animations where each
-      // animation has its own snapshot showing cards that have already landed.
-      // So we just use the snapshot directly - no need to override the hand.
-
-      // NOTE: We do NOT filter out the animated card anymore!
-      // Instead, we hide it via CSS (see animatingCardId below).
-      // This is critical because filtering changes array indices,
-      // which breaks DOM position detection in AnimatedCard.
-      return baseState;
+      // Update last valid state
+      const cardIds = new Set<string>();
+      if (currentAnimation.animatingCard) cardIds.add(currentAnimation.animatingCard.card.id);
+      if (currentAnimation.animatingCards) currentAnimation.animatingCards.forEach(item => cardIds.add(item.card.id));
+      lastValidAnimationRef.current = { snapshot: currentAnimation.snapshot, cardIds };
+      return snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
     }
+
+    // CRITICAL FALLBACK: If we think we're animating but don't have a current snapshot,
+    // use the last valid snapshot to prevent flashing the real gameState during transitions
+    if ((isSyncAnimating || isAnimating) && lastValidAnimationRef.current?.snapshot) {
+      return snapshotToGameState(lastValidAnimationRef.current.snapshot, useControlMechanic);
+    }
+
+    // Truly not animating - clear the last valid state and show real gameState
+    lastValidAnimationRef.current = null;
     return gameState;
-  }, [isAnimating, currentAnimation, gameState, useControlMechanic]);
+  }, [isAnimating, currentAnimation, gameState, useControlMechanic, getAnimationSync, getIsAnimatingSync]);
 
-  // Track which card is currently being animated - used to hide it via CSS
-  const animatingCardId = useMemo(() => {
-    if (isAnimating && currentAnimation?.animatingCard) {
-      return currentAnimation.animatingCard.card.id;
+  // Track which cards are currently being animated - used to hide them via CSS
+  // This handles both single-card animations (animatingCard) and multi-card animations (animatingCards)
+  // CRITICAL: Check sync refs FIRST to handle race condition where React state hasn't updated yet
+  const animatingCardIds = useMemo(() => {
+    // FIRST: Check synchronous animation state (handles race conditions)
+    const isSyncAnimating = getIsAnimatingSync();
+    const syncAnimation = getAnimationSync();
+
+    if (isSyncAnimating && syncAnimation) {
+      const ids = new Set<string>();
+      if (syncAnimation.animatingCard) {
+        ids.add(syncAnimation.animatingCard.card.id);
+      }
+      if (syncAnimation.animatingCards) {
+        syncAnimation.animatingCards.forEach(item => ids.add(item.card.id));
+      }
+      return ids;
     }
-    return null;
-  }, [isAnimating, currentAnimation]);
+
+    // Check React state
+    if (isAnimating && currentAnimation) {
+      const ids = new Set<string>();
+      if (currentAnimation.animatingCard) {
+        ids.add(currentAnimation.animatingCard.card.id);
+      }
+      if (currentAnimation.animatingCards) {
+        currentAnimation.animatingCards.forEach(item => ids.add(item.card.id));
+      }
+      return ids;
+    }
+
+    // CRITICAL FALLBACK: Use last valid card IDs during animation transitions
+    // This prevents cards from briefly appearing when transitioning between animations
+    if ((isSyncAnimating || isAnimating) && lastValidAnimationRef.current?.cardIds) {
+      return lastValidAnimationRef.current.cardIds;
+    }
+
+    // Truly not animating
+    return new Set<string>();
+  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync]);
 
   // Extended animation info for correct hiding during shift animations
   const animatingCardInfo = useMemo(() => {
@@ -244,6 +296,17 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     }
     return null;
   }, [isAnimating, currentAnimation]);
+
+  // Extract phase transition animation data for GameInfoPanel
+  const phaseTransitionAnimation = useMemo(() => {
+    if (currentAnimation?.type === 'phaseTransition' && currentAnimation.phaseTransitionData) {
+      return {
+        phaseSequence: currentAnimation.phaseTransitionData.phaseSequence,
+        duration: currentAnimation.duration,
+      };
+    }
+    return null;
+  }, [currentAnimation]);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
   const [multiSelectedCardIds, setMultiSelectedCardIds] = useState<string[]>([]);
@@ -877,6 +940,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                     turn={gameState.actionRequired?.actor || visualGameState.turn}
                     animationState={gameState.animationState}
                     difficulty={difficulty}
+                    phaseTransitionAnimation={phaseTransitionAnimation}
                     onPlayerClick={() => setDebugModalPlayer('player')}
                     onOpponentClick={() => setDebugModalPlayer('opponent')}
                 />
@@ -905,7 +969,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                   onOpponentHandCardPointerEnter={handleOpponentHandCardPointerEnter}
                   onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
                   sourceCardId={isAnimating ? null : sourceCardId}
-                  animatingCardId={animatingCardId}
+                  animatingCardIds={animatingCardIds}
                   animatingCardInfo={animatingCardInfo}
                   onDeckClick={(owner) => setDebugModalPlayer(owner)}
                   onTrashClick={(owner) => setDebugModalPlayer(owner)}
@@ -927,21 +991,10 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onFillHand={fillHand}
                     onSkipAction={skipAction}
                     onResolveOptionalDrawPrompt={resolveOptionalDrawPrompt}
-                    onResolveDeath1Prompt={resolveDeath1Prompt}
-                    onResolveLove1Prompt={resolveLove1Prompt}
-                    onResolvePlague2Discard={resolvePlague2Discard}
-                    onResolvePlague4Flip={resolvePlague4Flip}
-                    onResolveFire3Prompt={resolveFire3Prompt}
                     onResolveOptionalDiscardCustomPrompt={resolveOptionalDiscardCustomPrompt}
                     onResolveOptionalEffectPrompt={resolveOptionalEffectPrompt}
-                    onResolveSpeed3Prompt={resolveSpeed3Prompt}
-                    onResolveFire4Discard={resolveFire4Discard}
-                    onResolveHate1Discard={resolveHate1Discard}
-                    onResolveLight2Prompt={resolveLight2Prompt}
+                    onResolveVariableDiscard={resolveVariableDiscard}
                     onResolveRevealBoardCardPrompt={resolveRevealBoardCardPrompt}
-                    onResolvePsychic4Prompt={resolvePsychic4Prompt}
-                    onResolveSpirit1Prompt={resolveSpirit1Prompt}
-                    onResolveSpirit3Prompt={resolveSpirit3Prompt}
                     onResolveControlMechanicPrompt={resolveControlMechanicPrompt}
                     onResolveCustomChoice={resolveCustomChoice}
                     selectedCardId={selectedCard}
@@ -965,7 +1018,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                       .map((card) => {
                       // During animation: hide the animating card via CSS (visibility: hidden)
                       // We keep it in DOM for position detection, just invisible
-                      const isBeingAnimated = animatingCardId === card.id;
+                      const isBeingAnimated = animatingCardIds.has(card.id);
                       if (isAnimating) {
                         return (
                           <CardComponent

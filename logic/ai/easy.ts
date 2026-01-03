@@ -1106,14 +1106,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: scored[0].cardId };
         }
 
-        case 'plague_2_opponent_discard': {
-            // Discard weakest card
-            if (state.opponent.hand.length === 0) return { type: 'skip' };
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            return { type: 'discardCards', cardIds: [sortedHand[0].id] };
-        }
-
-        // REMOVED: Legacy handlers 'select_cards_from_hand_to_discard_for_fire_4' and
+        // REMOVED: Legacy handlers 'plague_2_opponent_discard', 'select_cards_from_hand_to_discard_for_fire_4',
         // 'select_cards_from_hand_to_discard_for_hate_1' - now using generic 'discard' with variableCount
 
         case 'select_card_from_hand_to_play': {
@@ -2595,31 +2588,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
 
-        case 'plague_4_opponent_delete': {
-            // Plague-4: Opponent (AI) must delete their OWN uncovered face-down card
-            // IMPORTANT: Only UNCOVERED (top) cards can be deleted, not covered ones!
-            const ownFaceDownUncovered: PlayedCard[] = [];
-            state.opponent.lanes.forEach((lane) => {
-                if (lane.length > 0) {
-                    const topCard = lane[lane.length - 1]; // UNCOVERED card
-                    if (!topCard.isFaceUp) {
-                        ownFaceDownUncovered.push(topCard);
-                    }
-                }
-            });
-
-            if (ownFaceDownUncovered.length > 0) {
-                // Delete lowest value face-down UNCOVERED card (minimize loss)
-                ownFaceDownUncovered.sort((a, b) => a.value - b.value);
-                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
-            }
-            return { type: 'skip' };
-        }
-
+        // REMOVED: plague_4_opponent_delete - Plague-4 now uses generic select_cards_to_delete with actorChooses: card_owner
         // flip_self_for_water_0 is handled by the generic flip_self case above
 
         case 'reveal_opponent_hand':
-        case 'plague_2_player_discard':
         case 'delete_self': {
             // These actions don't require AI decisions - handled automatically
             return { type: 'skip' };

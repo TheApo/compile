@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PlayedCard, Player, ActionRequired } from './index';
+import { PlayedCard, Player, ActionRequired, GamePhase } from './index';
 
 // =============================================================================
 // ANIMATION TYPE DEFINITIONS
@@ -14,18 +14,19 @@ import { PlayedCard, Player, ActionRequired } from './index';
  * Each type corresponds to a specific visual transition.
  */
 export type AnimationType =
-    | 'play'      // Card moves from hand/deck to a lane
-    | 'delete'    // Card moves to trash (deleted from board)
-    | 'flip'      // Card flips face-up/face-down
-    | 'shift'     // Card moves from one lane to another
-    | 'return'    // Card returns from board to hand
-    | 'discard'   // Card moves from hand to trash
-    | 'draw'      // Card(s) move from deck to hand
-    | 'compile'   // Lane compiles (multiple cards to trash + protocol glow)
-    | 'give'      // Card moves from one player's hand to opponent's hand
-    | 'reveal'    // Card is briefly shown (then flipped back or kept)
-    | 'swap'      // Protocols swap positions
-    | 'refresh';  // Hand is refilled (multiple draws)
+    | 'play'            // Card moves from hand/deck to a lane
+    | 'delete'          // Card moves to trash (deleted from board)
+    | 'flip'            // Card flips face-up/face-down
+    | 'shift'           // Card moves from one lane to another
+    | 'return'          // Card returns from board to hand
+    | 'discard'         // Card moves from hand to trash
+    | 'draw'            // Card(s) move from deck to hand
+    | 'compile'         // Lane compiles (multiple cards to trash + protocol glow)
+    | 'give'            // Card moves from one player's hand to opponent's hand
+    | 'reveal'          // Card is briefly shown (then flipped back or kept)
+    | 'swap'            // Protocols swap positions
+    | 'refresh'         // Hand is refilled (multiple draws)
+    | 'phaseTransition'; // Turn/phase indicator animates through phases on turn change
 
 // =============================================================================
 // CARD POSITION TYPES
@@ -74,6 +75,18 @@ export interface CompileAnimatingCard {
  */
 export interface MultiAnimatingCard extends AnimatingCard {
     startDelay: number;  // Required for multi-card animations
+}
+
+/**
+ * Data for phase transition animations.
+ * Contains the sequence of phases to animate through during turn changes.
+ */
+export interface PhaseTransitionData {
+    fromPhase: GamePhase;
+    toPhase: GamePhase;
+    fromTurn: Player;
+    toTurn: Player;
+    phaseSequence: Array<{ phase: GamePhase; turn: Player }>;
 }
 
 // =============================================================================
@@ -137,6 +150,7 @@ export interface AnimationQueueItem {
         indices: [number, number];
         target: Player;
     };
+    phaseTransitionData?: PhaseTransitionData;  // For phaseTransition: phase sequence to animate
 }
 
 // =============================================================================
@@ -159,6 +173,10 @@ export interface AnimationQueueContextValue {
 
     // Methods for animation renderer
     onAnimationComplete: () => void;
+
+    // Synchronous check for animation state (for race condition prevention)
+    getIsAnimatingSync: () => boolean;
+    getAnimationSync: () => AnimationQueueItem | null;
 
     // Debug/Testing methods
     skipCurrentAnimation: () => void;
@@ -187,6 +205,7 @@ export const DEFAULT_ANIMATION_DURATIONS: Record<AnimationType, number> = {
     reveal: 600,
     swap: 400,
     refresh: 500,
+    phaseTransition: 400,  // Per phase step (not used - actual values in animationTiming.ts)
 };
 
 /**

@@ -36,8 +36,18 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
     const currentAnimationRef = useRef<AnimationQueueItem | null>(null);
     currentAnimationRef.current = currentAnimation;
 
-    // Derived state
+    // CRITICAL: Synchronous refs for animation state - set IMMEDIATELY when animation enqueued
+    // This prevents race conditions where gameState renders before isAnimating updates
+    const isAnimatingRef = useRef(false);
+    const pendingAnimationRef = useRef<AnimationQueueItem | null>(null);
+
+    // Derived state (for React re-renders)
     const isAnimating = currentAnimation !== null || queue.length > 0;
+
+    // NOTE: We intentionally do NOT clear isAnimatingRef in the render body!
+    // Clearing it here causes race conditions where the ref is set to false
+    // during animation transitions (between animation A completing and B starting).
+    // The ref is cleared in clearQueue() and skipAllAnimations() only.
 
     /**
      * Start processing the next animation in the queue.
@@ -50,7 +60,10 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
 
         setQueue(currentQueue => {
             if (currentQueue.length === 0) {
+                // Queue is empty - truly done animating
                 currentAnimationRef.current = null;
+                pendingAnimationRef.current = null;
+                isAnimatingRef.current = false;  // NOW we can safely set to false
                 setCurrentAnimation(null);
                 return currentQueue;
             }
@@ -58,6 +71,7 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
             isProcessingRef.current = true;
             const [next, ...rest] = currentQueue;
             currentAnimationRef.current = next;
+            pendingAnimationRef.current = null;  // Clear pending, it's now current
             setCurrentAnimation(next);
             isProcessingRef.current = false;
 
@@ -67,6 +81,7 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
 
     /**
      * Enqueue a single animation.
+     * Uses queueMicrotask to avoid "Cannot update component while rendering" React error.
      */
     const enqueueAnimation = useCallback((item: Omit<AnimationQueueItem, 'id'>) => {
         const newItem: AnimationQueueItem = {
@@ -74,47 +89,71 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
             id: uuidv4(),
         };
 
-        setQueue(currentQueue => {
-            const isCurrentlyAnimating = currentAnimationRef.current !== null;
+        // CRITICAL: Set refs SYNCHRONOUSLY before async state update
+        // This ensures animation state is available immediately for visualGameState
+        isAnimatingRef.current = true;
+        if (!pendingAnimationRef.current && !currentAnimationRef.current) {
+            pendingAnimationRef.current = newItem;
+        }
 
-            if (!isCurrentlyAnimating && currentQueue.length === 0) {
-                currentAnimationRef.current = newItem;
-                setCurrentAnimation(newItem);
-                return currentQueue;
-            }
+        // Defer state update to avoid "Cannot update component while rendering" error
+        queueMicrotask(() => {
+            setQueue(currentQueue => {
+                const isCurrentlyAnimating = currentAnimationRef.current !== null;
 
-            return [...currentQueue, newItem];
+                if (!isCurrentlyAnimating && currentQueue.length === 0) {
+                    currentAnimationRef.current = newItem;
+                    pendingAnimationRef.current = null; // Clear pending, it's now current
+                    setCurrentAnimation(newItem);
+                    return currentQueue;
+                }
+
+                return [...currentQueue, newItem];
+            });
         });
     }, []);
 
     /**
      * Enqueue multiple animations at once.
      * More efficient than calling enqueueAnimation multiple times.
+     * Uses queueMicrotask to avoid "Cannot update component while rendering" React error.
      */
     const enqueueAnimations = useCallback((items: Omit<AnimationQueueItem, 'id'>[]) => {
         if (items.length === 0) return;
+
+        // CRITICAL: Set ref SYNCHRONOUSLY before async state update
+        isAnimatingRef.current = true;
 
         const newItems: AnimationQueueItem[] = items.map(item => ({
             ...item,
             id: uuidv4(),
         }));
 
-        setQueue(currentQueue => {
-            // Use ref to get current animation state (avoids stale closure)
-            const isCurrentlyAnimating = currentAnimationRef.current !== null;
+        // Set pending animation ref for the first item
+        if (!pendingAnimationRef.current && !currentAnimationRef.current && newItems.length > 0) {
+            pendingAnimationRef.current = newItems[0];
+        }
 
-            // If nothing is currently animating, start the first animation immediately
-            // This ensures currentAnimation is set SYNCHRONOUSLY to avoid flickering
-            if (!isCurrentlyAnimating && currentQueue.length === 0) {
-                const [first, ...rest] = newItems;
-                // Update ref immediately so subsequent calls know we're animating
-                currentAnimationRef.current = first;
-                setCurrentAnimation(first);
-                return rest; // Remaining items go to queue
-            }
+        // Defer state update to avoid "Cannot update component while rendering" error
+        queueMicrotask(() => {
+            setQueue(currentQueue => {
+                // Use ref to get current animation state (avoids stale closure)
+                const isCurrentlyAnimating = currentAnimationRef.current !== null;
 
-            // Otherwise, add all to queue
-            return [...currentQueue, ...newItems];
+                // If nothing is currently animating, start the first animation immediately
+                // This ensures currentAnimation is set SYNCHRONOUSLY to avoid flickering
+                if (!isCurrentlyAnimating && currentQueue.length === 0) {
+                    const [first, ...rest] = newItems;
+                    // Update ref immediately so subsequent calls know we're animating
+                    currentAnimationRef.current = first;
+                    pendingAnimationRef.current = null;  // Clear pending, it's now current
+                    setCurrentAnimation(first);
+                    return rest; // Remaining items go to queue
+                }
+
+                // Otherwise, add all to queue
+                return [...currentQueue, ...newItems];
+            });
         });
     }, []);
 
@@ -123,7 +162,10 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
      */
     const onAnimationComplete = useCallback(() => {
         if (currentAnimationRef.current?.pauseAfter) {
+            // Pausing - but still "animating" until resumed
             currentAnimationRef.current = null;
+            pendingAnimationRef.current = null;
+            // NOTE: Don't set isAnimatingRef to false - we're paused, not done
             setCurrentAnimation(null);
             return;
         }
@@ -147,6 +189,8 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
         setQueue([]);
         setCurrentAnimation(null);
         currentAnimationRef.current = null;
+        pendingAnimationRef.current = null;
+        isAnimatingRef.current = false;
         isProcessingRef.current = false;
     }, []);
 
@@ -159,6 +203,24 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
         setCurrentAnimation(null);
         currentAnimationRef.current = null;
         isProcessingRef.current = false;
+        isAnimatingRef.current = false;
+    }, []);
+
+    /**
+     * Synchronous check for animation state.
+     * Use this when you need to check animation state without waiting for React render.
+     * This prevents race conditions where gameState renders before isAnimating updates.
+     */
+    const getIsAnimatingSync = useCallback(() => {
+        return isAnimatingRef.current;
+    }, []);
+
+    /**
+     * Get the pending or current animation synchronously.
+     * Used by visualGameState to get snapshot before async state update completes.
+     */
+    const getAnimationSync = useCallback(() => {
+        return pendingAnimationRef.current || currentAnimationRef.current;
     }, []);
 
     // Context value
@@ -169,6 +231,8 @@ export const AnimationQueueProvider: React.FC<AnimationQueueProviderProps> = ({ 
         enqueueAnimation,
         enqueueAnimations,
         onAnimationComplete,
+        getIsAnimatingSync,
+        getAnimationSync,
         skipCurrentAnimation,
         skipAllAnimations,
         clearQueue,

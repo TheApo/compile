@@ -18,7 +18,7 @@ import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 import { AnimationQueueItem } from '../../types/animation';
-import { createPlayAnimation, createDrawAnimation, createSequentialDrawAnimations, createSequentialDiscardAnimations, createShiftAnimation, createDiscardAnimation, findCardInLanes, createDeleteAnimation, createReturnAnimation } from '../animation/animationHelpers';
+import { createPlayAnimation, createDrawAnimation, createSequentialDrawAnimations, createSequentialDiscardAnimations, createShiftAnimation, createDiscardAnimation, findCardInLanes, createDeleteAnimation, createReturnAnimation, createFlipAnimation } from '../animation/animationHelpers';
 
 // Feature flag for new animation queue system in AI
 const USE_NEW_AI_ANIMATION_SYSTEM = true;
@@ -26,12 +26,16 @@ const USE_NEW_AI_ANIMATION_SYSTEM = true;
 /**
  * Convert AnimationRequest[] to AnimationQueueItem[] and enqueue them
  * This bridges the old animationRequests system with the new animation queue
+ * Uses queueMicrotask to avoid "Cannot update component while rendering" React error
  */
 function enqueueAnimationsFromRequests(
     state: GameState,
     animationRequests: AnimationRequest[],
     enqueueAnimation: (animation: Omit<AnimationQueueItem, 'id'>) => void
 ): void {
+    // Collect all animations first, then enqueue them in a microtask
+    const animations: Omit<AnimationQueueItem, 'id'>[] = [];
+
     for (const request of animationRequests) {
         if (request.type === 'play' && request.fromDeck && request.toLane !== undefined) {
             // Play from deck animation
@@ -47,7 +51,7 @@ function enqueueAnimationsFromRequests(
                     request.isFaceUp ?? false,
                     request.owner === 'opponent'
                 );
-                enqueueAnimation(animation);
+                animations.push(animation);
             }
         } else if (request.type === 'shift') {
             const shiftCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
@@ -61,7 +65,7 @@ function enqueueAnimationsFromRequests(
                     fromCardIndex,
                     request.toLane
                 );
-                enqueueAnimation(animation);
+                animations.push(animation);
             }
         } else if (request.type === 'delete') {
             const deleteCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
@@ -74,7 +78,7 @@ function enqueueAnimationsFromRequests(
                     cardPosition.laneIndex,
                     cardPosition.cardIndex
                 );
-                enqueueAnimation(animation);
+                animations.push(animation);
             }
         } else if (request.type === 'draw') {
             // Draw X cards animation (from effects like "Draw 2 cards")
@@ -83,13 +87,13 @@ function enqueueAnimationsFromRequests(
             const startIndex = hand.length - request.count;
 
             if (newCards.length > 0) {
-                const animations = createSequentialDrawAnimations(
+                const drawAnimations = createSequentialDrawAnimations(
                     state,  // Use current state - cards are already in hand
                     newCards,
                     request.player,
                     startIndex
                 );
-                animations.forEach(anim => enqueueAnimation(anim));
+                animations.push(...drawAnimations);
             }
         } else if (request.type === 'return') {
             // Return card animation (from effects like "Return 1 card")
@@ -104,10 +108,15 @@ function enqueueAnimationsFromRequests(
                     cardPosition.cardIndex,
                     true  // setFaceDown
                 );
-                enqueueAnimation(animation);
+                animations.push(animation);
             }
         }
         // Other types (flip, discard) can be added as needed
+    }
+
+    // Enqueue all animations (AnimationQueueContext handles queueMicrotask internally)
+    if (animations.length > 0) {
+        animations.forEach(anim => enqueueAnimation(anim));
     }
 }
 
@@ -121,26 +130,17 @@ type ActionDispatchers = {
     returnCard: (s: GameState, c: string) => GameState,
     skipAction: (s: GameState) => GameState,
     resolveOptionalDrawPrompt: (s: GameState, a: boolean) => GameState,
-    resolveDeath1Prompt: (s: GameState, a: boolean) => GameState,
-    resolveLove1Prompt: (s: GameState, a: boolean) => GameState,
-    resolvePlague2Discard: (s: GameState, cardIds: string[]) => GameState,
-    resolvePlague2OpponentDiscard: (s: GameState, cardIds: string[]) => GameState,
-    resolvePlague4Flip: (s: GameState, a: boolean, p: Player) => GameState,
-    resolveFire3Prompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalDiscardCustomPrompt: (s: GameState, a: boolean) => GameState,
     resolveOptionalEffectPrompt: (s: GameState, a: boolean) => GameState,
-    resolveFire4Discard: (s: GameState, cardIds: string[]) => GameState,
-    resolveHate1Discard: (s: GameState, cardIds: string[]) => GameState,
+    resolveVariableDiscard: (s: GameState, cardIds: string[]) => GameState,
     resolveRearrangeProtocols: (s: GameState, newOrder: string[]) => GameState,
     resolveActionWithHandCard: (s: GameState, cardId: string) => GameState,
-    resolvePsychic4Prompt: (s: GameState, a: boolean) => GameState,
-    resolveSpirit1Prompt: (s: GameState, choice: 'discard' | 'flip') => GameState,
     resolveSwapProtocols: (s: GameState, indices: [number, number]) => GameState,
     revealOpponentHand: (s: GameState) => GameState,
     resolveCustomChoice: (s: GameState, choiceIndex: number) => GameState,
 }
 
-type OpponentActionDispatchers = Pick<ActionDispatchers, 'playCard' | 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'resolveLove1Prompt' | 'resolveHate1Discard' | 'resolvePlague2OpponentDiscard' | 'revealOpponentHand' | 'resolveRearrangeProtocols' | 'resolveSpirit1Prompt' | 'resolvePsychic4Prompt'>;
+type OpponentActionDispatchers = Pick<ActionDispatchers, 'playCard' | 'discardCards' | 'flipCard' | 'returnCard' | 'deleteCard' | 'resolveActionWithHandCard' | 'revealOpponentHand' | 'resolveRearrangeProtocols'>;
 
 
 type PhaseManager = {
@@ -173,9 +173,30 @@ const handleAIPlayCard = (
     actions: Pick<ActionDispatchers, 'playCard'>,
     processAnimationQueue: (queue: AnimationRequest[], onComplete: () => void) => void,
     phaseManager: PhaseManager,
-    isDuringOpponentTurn: boolean
+    isDuringOpponentTurn: boolean,
+    enqueueAnimation?: (animation: Omit<AnimationQueueItem, 'id'>) => void
 ): GameState => {
     const { cardId, laneIndex, isFaceUp } = aiDecision;
+
+    // NEW: Create play animation BEFORE state update using new animation system
+    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+        const card = state.opponent.hand.find(c => c.id === cardId);
+        const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
+        if (card) {
+            const animation = createPlayAnimation(
+                state,
+                card,
+                'opponent',
+                laneIndex,
+                true, // fromHand
+                handIndex,
+                isFaceUp,
+                true // isOpponentAction - triggers highlight phase
+            );
+            enqueueAnimation(animation);
+        }
+    }
+
     const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(
         { ...state, actionRequired: null },
         cardId,
@@ -187,10 +208,21 @@ const handleAIPlayCard = (
     // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
     const stateWithPlayAnimation = {
         ...stateAfterPlayLogic,
-        animationState: { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player },
+        animationState: USE_NEW_AI_ANIMATION_SYSTEM ? null : { type: 'playCard' as const, cardId: cardId, owner: 'opponent' as Player },
         _cardPlayedThisActionPhase: true
     };
 
+    // NEW: Use new animation system for on-cover effects
+    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && onCoverAnims && onCoverAnims.length > 0) {
+        enqueueAnimationsFromRequests(stateAfterPlayLogic, onCoverAnims, enqueueAnimation);
+        // Return state - Hook 1 will continue after animations complete
+        if (stateWithPlayAnimation.actionRequired) {
+            return stateWithPlayAnimation;
+        }
+        return endActionForPhase(stateWithPlayAnimation, phaseManager);
+    }
+
+    // FALLBACK: Old animation system with setTimeout
     setTimeout(() => {
         setGameState(s => {
             let stateToProcess = { ...s, animationState: null };
@@ -214,7 +246,7 @@ const handleAIPlayCard = (
             }
 
             if (isDuringOpponentTurn && stateToProcess.actionRequired) {
-                runOpponentTurn(stateToProcess, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                runOpponentTurn(stateToProcess, setGameState, difficulty, actions as ActionDispatchers, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                 return stateToProcess;
             }
             if (stateToProcess.actionRequired && stateToProcess.actionRequired.actor === 'opponent') {
@@ -365,6 +397,7 @@ export const resolveRequiredOpponentAction = (
         // --- Generic Card Selection Handler ---
         if (aiDecision.type === 'deleteCard' || aiDecision.type === 'flipCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
             // NEW ANIMATION SYSTEM: Create return animation for opponent during interrupts
+            let returnAnimationCreated = false;
             if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && aiDecision.type === 'returnCard') {
                 const cardPosition = findCardInLanes(state, aiDecision.cardId, 'player') || findCardInLanes(state, aiDecision.cardId, 'opponent');
                 if (cardPosition) {
@@ -381,11 +414,40 @@ export const resolveRequiredOpponentAction = (
                             true   // isOpponentAction - triggers highlight phase
                         );
                         enqueueAnimation(animation);
+                        returnAnimationCreated = true;
                     }
                 }
             }
 
-            const { nextState, requiresAnimation } = resolveActionWithCard(state, aiDecision.cardId);
+            // NEW ANIMATION SYSTEM: Create flip animation for opponent during interrupts
+            let flipAnimationCreated = false;
+            if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && aiDecision.type === 'flipCard') {
+                const cardPosition = findCardInLanes(state, aiDecision.cardId, 'player') || findCardInLanes(state, aiDecision.cardId, 'opponent');
+                if (cardPosition) {
+                    const owner = state.player.lanes.flat().some(c => c.id === aiDecision.cardId) ? 'player' : 'opponent';
+                    const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
+                    if (card) {
+                        const toFaceUp = !card.isFaceUp;
+                        const animation = createFlipAnimation(
+                            state,
+                            card,
+                            owner,
+                            cardPosition.laneIndex,
+                            cardPosition.cardIndex,
+                            toFaceUp
+                        );
+                        enqueueAnimation(animation);
+                        flipAnimationCreated = true;
+                    }
+                }
+            }
+
+            // Don't pass enqueueAnimation if we already created the animation - prevents double creation
+            const { nextState, requiresAnimation } = resolvers.resolveActionWithCard(
+                state,
+                aiDecision.cardId,
+                (flipAnimationCreated || returnAnimationCreated) ? undefined : enqueueAnimation
+            );
 
             if (requiresAnimation) {
                 const wasStartPhase = state.phase === 'start';
@@ -413,7 +475,7 @@ export const resolveRequiredOpponentAction = (
 
         // --- Play Card from Hand Handler (Speed-0, Darkness-3 interrupt during player turn) ---
         if (aiDecision.type === 'playCard' && action.type === 'select_card_from_hand_to_play') {
-            return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, false);
+            return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, false, enqueueAnimation);
         }
 
         // --- Luck Protocol Handlers (during interrupts) ---
@@ -516,7 +578,7 @@ const handleRequiredAction = (
         // Schedule a recursive call to runOpponentTurn to handle the next phase (action/compile).
         if (!stateAfterSkip.actionRequired && stateAfterSkip.turn === 'opponent' && !stateAfterSkip.winner) {
             setTimeout(() => {
-                runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                runOpponentTurn(stateAfterSkip, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
             }, 500);
         } else {
         }
@@ -648,7 +710,9 @@ const handleRequiredAction = (
     // GENERIC: Handle ALL selectLane decisions - no whitelist needed
     // The AI returns selectLane for any lane selection action, and resolveActionWithLane handles it
     if (aiDecision.type === 'selectLane') {
-        // NEW ANIMATION SYSTEM: Create shift animation for opponent
+        // NEW ANIMATION SYSTEM: Create shift animation for opponent BEFORE state change
+        // CRITICAL: Create animation with BEFORE state, then let resolver update state
+        let shiftAnimationCreated = false;
         if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && action.type === 'select_lane_for_shift') {
             const { cardToShiftId, cardOwner, originalLaneIndex } = action;
             const targetLaneIndex = aiDecision.laneIndex;
@@ -659,7 +723,7 @@ const handleRequiredAction = (
                 const cardIndex = state[cardOwner].lanes[originalLaneIndex].findIndex(c => c.id === cardToShiftId);
                 if (cardToShift && cardIndex >= 0) {
                     const animation = createShiftAnimation(
-                        state,
+                        state,  // BEFORE state - correct snapshot!
                         cardToShift,
                         cardOwner,
                         originalLaneIndex,
@@ -668,17 +732,57 @@ const handleRequiredAction = (
                         true // isOpponentAction - triggers highlight phase
                     );
                     enqueueAnimation(animation);
+                    shiftAnimationCreated = true;
                 }
             }
         }
 
         const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
+
+        // CRITICAL FIX: Capture flag BEFORE animation to prevent React state race condition
+        const preserveCardPlayedFlagLane = state._cardPlayedThisActionPhase;
+
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
-            processAnimationQueue(animationRequests, () => {
+
+            // NEW: Filter out shift requests if we already created the animation
+            const filteredRequests = shiftAnimationCreated
+                ? animationRequests.filter(r => r.type !== 'shift')
+                : animationRequests;
+
+            // If using new system and we have filtered requests, use new system
+            if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && filteredRequests.length > 0) {
+                // Convert remaining requests to new animation system
+                enqueueAnimationsFromRequests(state, filteredRequests, enqueueAnimation);
+            }
+
+            // Still need old system for callback timing (but skip if all requests filtered)
+            if (filteredRequests.length === 0 && shiftAnimationCreated) {
+                // All animations handled by new system - just call callback after animation completes
+                // The callback will be triggered when isAnimating becomes false
                 setGameState(s => {
+                    const stateWithFlag = preserveCardPlayedFlagLane
+                        ? { ...s, _cardPlayedThisActionPhase: true }
+                        : s;
+                    return onCompleteCallback(stateWithFlag, (finalState) => {
+                        if (finalState.turn !== 'opponent') return finalState;
+                        const stateAfterAction = finalState.phase === 'start'
+                            ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
+                            : phaseManager.processEndOfAction(finalState);
+                        return stateAfterAction;
+                    });
+                });
+                return nextState;
+            }
+
+            processAnimationQueue(filteredRequests, () => {
+                setGameState(s => {
+                    // CRITICAL FIX: Restore flag that may have been lost due to React batching
+                    const stateWithFlag = preserveCardPlayedFlagLane
+                        ? { ...s, _cardPlayedThisActionPhase: true }
+                        : s;
                     // CRITICAL: Clear animationState before processing to prevent softlock
-                    const stateWithoutAnim = { ...s, animationState: null };
+                    const stateWithoutAnim = { ...stateWithFlag, animationState: null };
                     return onCompleteCallback(stateWithoutAnim, (finalState) => {
                         const cleanState = { ...finalState, animationState: null };
                         // CRITICAL FIX: Use cleanState.phase, not the closure's state.phase!
@@ -693,12 +797,12 @@ const handleRequiredAction = (
                         // Schedule continuation after animated action completes
                         if (!cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent' && !cleanAfterAction.winner) {
                             setTimeout(() => {
-                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                             }, 500);
                         } else if (cleanAfterAction.actionRequired && cleanAfterAction.turn === 'opponent') {
                             // There's another action to handle
                             setTimeout(() => {
-                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                                runOpponentTurn(cleanAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                             }, 300);
                         }
                         return cleanAfterAction;
@@ -713,6 +817,7 @@ const handleRequiredAction = (
 
     if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
         // NEW ANIMATION SYSTEM: Create return animation for opponent
+        let returnAnimationCreatedAction = false;
         if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && aiDecision.type === 'returnCard') {
             const cardPosition = findCardInLanes(state, aiDecision.cardId, 'player') || findCardInLanes(state, aiDecision.cardId, 'opponent');
             if (cardPosition) {
@@ -729,17 +834,59 @@ const handleRequiredAction = (
                         true   // isOpponentAction - triggers highlight phase
                     );
                     enqueueAnimation(animation);
+                    returnAnimationCreatedAction = true;
                 }
             }
         }
 
-        const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(state, aiDecision.cardId);
+        // NEW ANIMATION SYSTEM: Create flip animation for opponent
+        let flipAnimationCreatedAction = false;
+        if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && aiDecision.type === 'flipCard') {
+            const cardPosition = findCardInLanes(state, aiDecision.cardId, 'player') || findCardInLanes(state, aiDecision.cardId, 'opponent');
+            if (cardPosition) {
+                const owner = state.player.lanes.flat().some(c => c.id === aiDecision.cardId) ? 'player' : 'opponent';
+                const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
+                if (card) {
+                    const toFaceUp = !card.isFaceUp;
+                    const animation = createFlipAnimation(
+                        state,
+                        card,
+                        owner,
+                        cardPosition.laneIndex,
+                        cardPosition.cardIndex,
+                        toFaceUp
+                    );
+                    enqueueAnimation(animation);
+                    flipAnimationCreatedAction = true;
+                }
+            }
+        }
+
+        // Don't pass enqueueAnimation if we already created the animation - prevents double creation
+        const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(
+            state,
+            aiDecision.cardId,
+            (flipAnimationCreatedAction || returnAnimationCreatedAction) ? undefined : enqueueAnimation
+        );
+
+        // CRITICAL FIX: Capture flag BEFORE animation to prevent React state race condition
+        // When React batches state updates, the callback's `s` may lose _cardPlayedThisActionPhase
+        const preserveCardPlayedFlag = state._cardPlayedThisActionPhase;
+
          if (requiresAnimation) {
             const { animationRequests, onCompleteCallback } = requiresAnimation;
-            processAnimationQueue(animationRequests, () => {
+            // NEW: Filter out flip requests if we already created the animation
+            const filteredRequestsAction = flipAnimationCreatedAction
+                ? animationRequests.filter(r => r.type !== 'flip')
+                : animationRequests;
+            processAnimationQueue(filteredRequestsAction, () => {
                 setGameState(s => {
+                    // CRITICAL FIX: Restore flag that may have been lost due to React batching
+                    const stateWithFlag = preserveCardPlayedFlag
+                        ? { ...s, _cardPlayedThisActionPhase: true }
+                        : s;
                     // CRITICAL: Clear animationState before processing to prevent softlock
-                    const stateWithoutAnim = { ...s, animationState: null };
+                    const stateWithoutAnim = { ...stateWithFlag, animationState: null };
                     return onCompleteCallback(stateWithoutAnim, (finalState) => {
                         // Ensure animationState stays null through all paths
                         const cleanState = { ...finalState, animationState: null };
@@ -797,7 +944,7 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'playCard' && action.type === 'select_card_from_hand_to_play') {
-        return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, true);
+        return handleAIPlayCard(state, aiDecision, setGameState, difficulty, actions, processAnimationQueue, phaseManager, true, enqueueAnimation);
     }
 
     if (aiDecision.type === 'discardCards' && action.type === 'discard') {
@@ -994,19 +1141,27 @@ export const runOpponentTurn = (
                     const allAnims = [...(onCoverAnims || []), ...(onPlayResult.animationRequests || [])];
 
                     // NEW: Convert animationRequests to new animation queue system
-                    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+                    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && allAnims.length > 0) {
                         enqueueAnimationsFromRequests(stateAfterOnPlayLogic, allAnims, enqueueAnimation);
+                        // WICHTIG: Early return - NICHT auch processAnimationQueue aufrufen!
+                        // Das würde doppelte Animationen erzeugen.
+                        // State-Progression passiert über Hook 1 wenn isAnimating false wird.
+                        return stateAfterOnPlayLogic;
                     }
 
+                    // FALLBACK: Altes System nur wenn neues nicht verfügbar
                     if (allAnims.length > 0) {
                         processAnimationQueue(allAnims, () => {
                             setGameState(s => {
+                                // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
+                                // React batching may have lost this flag
+                                const stateWithFlag = { ...s, _cardPlayedThisActionPhase: true };
                                 // CRITICAL FIX: Check if turn already switched to player
-                                if (s.turn !== 'opponent') {
-                                    return s;
+                                if (stateWithFlag.turn !== 'opponent') {
+                                    return stateWithFlag;
                                 }
-                                if (s.queuedActions && s.queuedActions.length > 0) {
-                                    const stateAfterQueue = phaseManager.processEndOfAction(s);
+                                if (stateWithFlag.queuedActions && stateWithFlag.queuedActions.length > 0) {
+                                    const stateAfterQueue = phaseManager.processEndOfAction(stateWithFlag);
                                     if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
                                         // CRITICAL: Use setTimeout to prevent synchronous double-play
                                         setTimeout(() => {
@@ -1015,14 +1170,14 @@ export const runOpponentTurn = (
                                     }
                                     return stateAfterQueue;
                                 }
-                                if (s.actionRequired && s.turn === 'opponent') {
+                                if (stateWithFlag.actionRequired && stateWithFlag.turn === 'opponent') {
                                     // CRITICAL: Use setTimeout to prevent synchronous double-play
                                     setTimeout(() => {
-                                        runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        runOpponentTurn(stateWithFlag, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                     }, 0);
-                                    return s;
+                                    return stateWithFlag;
                                 }
-                                return phaseManager.processEndOfAction(s);
+                                return phaseManager.processEndOfAction(stateWithFlag);
                             });
                         });
                         return stateAfterOnPlayLogic;
@@ -1083,9 +1238,6 @@ export const runOpponentTurn = (
             let isPlayerAction = false;
             if (action.type === 'discard' && action.actor === 'player') {
                 isPlayerAction = true;
-            } else if (action.type === 'plague_4_opponent_delete' && action.actor === 'opponent') {
-                // The AI's card makes the player delete a card.
-                isPlayerAction = true;
             } else if ('actor' in action && action.actor === 'player') {
                 // General case: The action is for the human player to resolve.
                 isPlayerAction = true;
@@ -1126,7 +1278,7 @@ export const runOpponentTurn = (
                 // Don't continue if we just finished the turn (hand_limit phase)
                 if (stateAfterAction.phase !== 'hand_limit') {
                     setTimeout(() => {
-                        runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange);
+                        runOpponentTurn(stateAfterAction, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                     }, 300);
                 }
             }
@@ -1229,11 +1381,9 @@ export const runOpponentTurn = (
                             mainAction.isFaceUp,
                             true // isOpponentAction - triggers highlight phase
                         );
-                        // Enqueue animation via queueMicrotask to avoid React batching issues
-                        // The snapshot is already captured, so the animation data is correct
-                        queueMicrotask(() => {
-                            enqueueAnimation(animation);
-                        });
+                        // Enqueue animation DIRECTLY (not via queueMicrotask!)
+                        // queueMicrotask caused effect animations to be enqueued BEFORE play animation
+                        enqueueAnimation(animation);
                     }
 
                     // Now run the play logic - no animationState, state updates immediately
@@ -1265,19 +1415,27 @@ export const runOpponentTurn = (
                     const allAnims = [...(onCoverAnims || []), ...(onPlayResult.animationRequests || [])];
 
                     // NEW: Convert animationRequests to new animation queue system
-                    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation) {
+                    if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && allAnims.length > 0) {
                         enqueueAnimationsFromRequests(stateAfterOnPlayLogic, allAnims, enqueueAnimation);
+                        // WICHTIG: Early return - NICHT auch processAnimationQueue aufrufen!
+                        // Das würde doppelte Animationen erzeugen.
+                        // State-Progression passiert über Hook 1 wenn isAnimating false wird.
+                        return stateAfterOnPlayLogic;
                     }
 
+                    // FALLBACK: Altes System nur wenn neues nicht verfügbar
                     if (allAnims.length > 0) {
                         processAnimationQueue(allAnims, () => {
                             setGameState(s => {
+                                // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
+                                // React batching may have lost this flag
+                                const stateWithFlag = { ...s, _cardPlayedThisActionPhase: true };
                                 // CRITICAL FIX: Check if turn already switched to player
-                                if (s.turn !== 'opponent') {
-                                    return s;
+                                if (stateWithFlag.turn !== 'opponent') {
+                                    return stateWithFlag;
                                 }
-                                if (s.queuedActions && s.queuedActions.length > 0) {
-                                    const stateAfterQueue = phaseManager.processEndOfAction(s);
+                                if (stateWithFlag.queuedActions && stateWithFlag.queuedActions.length > 0) {
+                                    const stateAfterQueue = phaseManager.processEndOfAction(stateWithFlag);
                                     if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
                                         // CRITICAL: Use setTimeout to prevent synchronous double-play
                                         setTimeout(() => {
@@ -1286,14 +1444,14 @@ export const runOpponentTurn = (
                                     }
                                     return stateAfterQueue;
                                 }
-                                if (s.actionRequired && s.turn === 'opponent') {
+                                if (stateWithFlag.actionRequired && stateWithFlag.turn === 'opponent') {
                                     // CRITICAL: Use setTimeout to prevent synchronous double-play
                                     setTimeout(() => {
-                                        runOpponentTurn(s, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        runOpponentTurn(stateWithFlag, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                     }, 0);
-                                    return s;
+                                    return stateWithFlag;
                                 }
-                                return phaseManager.processEndOfAction(s);
+                                return phaseManager.processEndOfAction(stateWithFlag);
                             });
                         });
                         return stateAfterOnPlayLogic;
@@ -1332,7 +1490,9 @@ export const runOpponentTurn = (
                 setTimeout(() => { // Play card animation delay
                     const onAnimsComplete = () => {
                         setGameState(s_after_cover_anims => { // Renamed for clarity
-                            let stateForOnPlay = { ...s_after_cover_anims };
+                            // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
+                            // React batching may have lost this flag
+                            let stateForOnPlay = { ...s_after_cover_anims, _cardPlayedThisActionPhase: true };
                             let onPlayResult: EffectResult = { newState: stateForOnPlay };
 
                             if (stateForOnPlay.actionRequired) {
@@ -1355,29 +1515,31 @@ export const runOpponentTurn = (
 
                             const onAllAnimsComplete = () => {
                                 setGameState(s_after_all_anims => {
+                                    // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
+                                    const stateWithFlag = { ...s_after_all_anims, _cardPlayedThisActionPhase: true };
                                     // CRITICAL FIX: Check if turn already switched to player
-                                    if (s_after_all_anims.turn !== 'opponent') {
-                                        return s_after_all_anims;
+                                    if (stateWithFlag.turn !== 'opponent') {
+                                        return stateWithFlag;
                                     }
                                     // CRITICAL FIX: Process queuedActions before checking actionRequired
                                     // This ensures multi-effect cards (like Gravity-2) complete all effects
-                                    if (s_after_all_anims.queuedActions && s_after_all_anims.queuedActions.length > 0) {
-                                        const stateAfterQueue = phaseManager.processEndOfAction(s_after_all_anims);
+                                    if (stateWithFlag.queuedActions && stateWithFlag.queuedActions.length > 0) {
+                                        const stateAfterQueue = phaseManager.processEndOfAction(stateWithFlag);
                                         // BUG FIX: Only continue opponent turn if it's still opponent's turn
                                         if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                         }
                                         return stateAfterQueue;
                                     }
                                     // BUG FIX: Only continue opponent turn if it's still opponent's turn
-                                    if (s_after_all_anims.actionRequired && s_after_all_anims.turn === 'opponent') {
-                                        runOpponentTurn(s_after_all_anims, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
-                                        return s_after_all_anims;
+                                    if (stateWithFlag.actionRequired && stateWithFlag.turn === 'opponent') {
+                                        runOpponentTurn(stateWithFlag, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
+                                        return stateWithFlag;
                                     } else {
                                         // CRITICAL FIX: Return the phase-advanced state directly instead of
                                         // calling nested setGameState. This prevents race conditions where
                                         // the old state (still in 'action' phase) triggers another AI turn.
-                                        return phaseManager.processEndOfAction(s_after_all_anims);
+                                        return phaseManager.processEndOfAction(stateWithFlag);
                                     }
                                 });
                             };
@@ -1395,13 +1557,13 @@ export const runOpponentTurn = (
                                     const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
                                     // BUG FIX: Only continue opponent turn if it's still opponent's turn
                                     if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                     }
                                     return stateAfterQueue;
                                 }
                                 // BUG FIX: Only continue opponent turn if it's still opponent's turn
                                 if (stateAfterOnPlayLogic.actionRequired && stateAfterOnPlayLogic.turn === 'opponent') {
-                                    runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager);
+                                    runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
                                     return stateAfterOnPlayLogic;
                                 } else {
                                     // CRITICAL FIX: Return the phase-advanced state directly instead of
@@ -1414,7 +1576,8 @@ export const runOpponentTurn = (
                     };
 
                     setGameState(s => {
-                        const stateAfterPlayAnim = { ...s, animationState: null };
+                        // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
+                        const stateAfterPlayAnim = { ...s, animationState: null, _cardPlayedThisActionPhase: true };
                         if (onCoverAnims && onCoverAnims.length > 0) {
                             processAnimationQueue(onCoverAnims, onAnimsComplete);
                         } else {
@@ -1448,4 +1611,530 @@ export const runOpponentTurn = (
 
         return phaseManager.processEndOfAction(state);
     });
+};
+
+// =============================================================================
+// NEW SYNCHRONOUS AI SYSTEM
+// =============================================================================
+
+/**
+ * SYNCHRONOUS version of handleRequiredAction.
+ * Handles a single actionRequired and returns the new state.
+ * Does NOT use setTimeout or callbacks - all logic is synchronous.
+ * Animations are enqueued but NOT waited for.
+ */
+const handleRequiredActionSync = (
+    state: GameState,
+    difficulty: Difficulty,
+    actions: ActionDispatchers,
+    phaseManager: PhaseManager,
+    enqueueAnimation: (item: Omit<AnimationQueueItem, 'id'>) => void
+): GameState => {
+    const action = state.actionRequired!;
+    const aiDecision = getAIAction(state, action, difficulty);
+
+    // --- SKIP ---
+    if (aiDecision.type === 'skip') {
+        const newState = actions.skipAction(state);
+        return state.phase === 'start'
+            ? phaseManager.continueTurnAfterStartPhaseAction(newState)
+            : phaseManager.processEndOfAction(newState);
+    }
+
+    // --- SELECT LANE (for shift, play from deck, etc.) ---
+    if (aiDecision.type === 'selectLane') {
+        // Create shift animation BEFORE state change if this is a shift action
+        if (action.type === 'select_lane_for_shift') {
+            const { cardToShiftId, cardOwner, originalLaneIndex } = action;
+            const targetLaneIndex = aiDecision.laneIndex;
+
+            if (originalLaneIndex !== targetLaneIndex) {
+                const cardToShift = state[cardOwner].lanes.flat().find(c => c.id === cardToShiftId);
+                const cardIndex = state[cardOwner].lanes[originalLaneIndex].findIndex(c => c.id === cardToShiftId);
+                if (cardToShift && cardIndex >= 0) {
+                    const animation = createShiftAnimation(
+                        state,
+                        cardToShift,
+                        cardOwner,
+                        originalLaneIndex,
+                        cardIndex,
+                        targetLaneIndex,
+                        true // isOpponentAction
+                    );
+                    enqueueAnimation(animation);
+                }
+            }
+        }
+
+        // Execute lane selection synchronously
+        const { nextState } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
+
+        if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {
+            return nextState; // More actions to handle - loop will continue
+        }
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- SELECT CARD (flip, delete, return, shift) ---
+    if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
+        // Create animation BEFORE state change
+        const cardPosition = findCardInLanes(state, aiDecision.cardId, 'player') || findCardInLanes(state, aiDecision.cardId, 'opponent');
+        if (cardPosition) {
+            const owner = state.player.lanes.flat().some(c => c.id === aiDecision.cardId) ? 'player' : 'opponent';
+            const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
+
+            if (card) {
+                if (aiDecision.type === 'returnCard') {
+                    const animation = createReturnAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex, true, true);
+                    enqueueAnimation(animation);
+                } else if (aiDecision.type === 'flipCard') {
+                    const toFaceUp = !card.isFaceUp;
+                    const animation = createFlipAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex, toFaceUp);
+                    enqueueAnimation(animation);
+                } else if (aiDecision.type === 'deleteCard') {
+                    const animation = createDeleteAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex);
+                    enqueueAnimation(animation);
+                }
+            }
+        }
+
+        // Execute card action synchronously (don't pass enqueueAnimation - we already created animation)
+        const { nextState, requiresTurnEnd } = resolvers.resolveActionWithCard(state, aiDecision.cardId);
+
+        if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {
+            return nextState; // More actions to handle - loop will continue
+        }
+        if (requiresTurnEnd || (nextState.queuedActions && nextState.queuedActions.length > 0)) {
+            return endActionForPhase(nextState, phaseManager);
+        }
+        return nextState;
+    }
+
+    // --- DISCARD CARDS ---
+    if (aiDecision.type === 'discardCards' && action.type === 'discard') {
+        const isVariableCount = (action as any).variableCount === true;
+        const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
+        const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
+
+        // Create discard animations
+        const cardsToDiscard = cardIdsToDiscard
+            .map(id => state.opponent.hand.find(c => c.id === id))
+            .filter((c): c is typeof state.opponent.hand[0] => c !== undefined);
+
+        if (cardsToDiscard.length > 0) {
+            const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+            animations.forEach(anim => enqueueAnimation(anim));
+        }
+
+        const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- REARRANGE PROTOCOLS ---
+    if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
+        const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- OPTIONAL PROMPTS ---
+    if (aiDecision.type === 'resolveOptionalEffectPrompt') {
+        if (action.type === 'prompt_optional_draw') {
+            const nextState = actions.resolveOptionalDrawPrompt(state, aiDecision.accept);
+            if (nextState.actionRequired) return nextState;
+            return endActionForPhase(nextState, phaseManager);
+        }
+        const nextState = actions.resolveOptionalEffectPrompt(state, aiDecision.accept);
+        if (nextState.actionRequired) return nextState;
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- CUSTOM CHOICE ---
+    if (aiDecision.type === 'resolveCustomChoice' && action.type === 'custom_choice') {
+        const nextState = actions.resolveCustomChoice(state, aiDecision.optionIndex);
+        if (nextState.actionRequired) return nextState;
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- SWAP PROTOCOLS ---
+    if (aiDecision.type === 'resolveSwapProtocols' && action.type === 'prompt_swap_protocols') {
+        const nextState = actions.resolveSwapProtocols(state, aiDecision.indices);
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- CONTROL MECHANIC ---
+    if (aiDecision.type === 'resolveControlMechanicPrompt' && action.type === 'prompt_use_control_mechanic') {
+        const { choice } = aiDecision;
+        const { originalAction, actor } = action;
+
+        if (choice === 'skip') {
+            let stateAfterSkip = log(state, actor, "Opponent skips rearranging protocols.");
+            stateAfterSkip.actionRequired = null;
+            stateAfterSkip = { ...stateAfterSkip, _logIndentLevel: 0 };
+
+            if (originalAction.type === 'compile') {
+                // Return state - compile will be handled by main loop
+                return { ...stateAfterSkip, phase: 'compile' as GamePhase };
+            } else if (originalAction.type === 'fill_hand') {
+                const stateAfterFill = actions.fillHand(stateAfterSkip, actor);
+                return phaseManager.processEndOfAction(stateAfterFill);
+            } else {
+                return phaseManager.processEndOfAction(stateAfterSkip);
+            }
+        } else {
+            const target = choice;
+            const actorName = 'Opponent';
+            const targetName = target === 'opponent' ? "the player's" : "their own";
+            let stateWithChoice = log(state, actor, `${actorName} chooses to rearrange ${targetName} protocols.`);
+            stateWithChoice.actionRequired = {
+                type: 'prompt_rearrange_protocols',
+                sourceCardId: 'CONTROL_MECHANIC',
+                target,
+                actor,
+                originalAction,
+            };
+            return stateWithChoice;
+        }
+    }
+
+    // --- PLAY CARD FROM HAND (Speed-0, Darkness-3) ---
+    if (aiDecision.type === 'playCard' && action.type === 'select_card_from_hand_to_play') {
+        const { cardId, laneIndex, isFaceUp } = aiDecision;
+
+        // Create play animation BEFORE state change
+        const card = state.opponent.hand.find(c => c.id === cardId);
+        const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
+        if (card) {
+            const animation = createPlayAnimation(state, card, 'opponent', laneIndex, true, handIndex, isFaceUp, true);
+            enqueueAnimation(animation);
+        }
+
+        // Execute play logic
+        const { newState: stateAfterPlay, animationRequests } = actions.playCard(
+            { ...state, actionRequired: null },
+            cardId, laneIndex, isFaceUp, 'opponent'
+        );
+
+        // Enqueue effect animations
+        if (animationRequests && animationRequests.length > 0) {
+            enqueueAnimationsFromRequests(stateAfterPlay, animationRequests, enqueueAnimation);
+        }
+
+        const stateWithFlag = { ...stateAfterPlay, _cardPlayedThisActionPhase: true };
+
+        if (stateWithFlag.actionRequired) {
+            return stateWithFlag;
+        }
+        return endActionForPhase(stateWithFlag, phaseManager);
+    }
+
+    // --- LUCK PROTOCOL HANDLERS ---
+    if (aiDecision.type === 'stateNumber' && action.type === 'state_number') {
+        const newState = resolvers.resolveStateNumberAction(state, aiDecision.number);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    if (aiDecision.type === 'stateProtocol' && action.type === 'state_protocol') {
+        const newState = resolvers.resolveStateProtocolAction(state, aiDecision.protocol);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    if (aiDecision.type === 'selectFromDrawnToReveal' && action.type === 'select_from_drawn_to_reveal') {
+        const newState = resolvers.resolveSelectFromDrawnToReveal(state, aiDecision.cardId);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    if (aiDecision.type === 'confirmDeckDiscard' && action.type === 'confirm_deck_discard') {
+        const newState = resolvers.resolveConfirmDeckDiscard(state);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    if (aiDecision.type === 'confirmDeckPlayPreview' && action.type === 'confirm_deck_play_preview') {
+        const newState = resolvers.resolveConfirmDeckPlayPreview(state);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- TIME PROTOCOL HANDLERS ---
+    if (aiDecision.type === 'selectTrashCard' && action.type === 'select_card_from_trash_to_play') {
+        const newState = resolvers.resolveSelectTrashCardToPlay(state, aiDecision.cardIndex);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    if (aiDecision.type === 'selectTrashCard' && action.type === 'select_card_from_trash_to_reveal') {
+        const newState = resolvers.resolveSelectTrashCardToReveal(state, aiDecision.cardIndex);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- GIVE CARD ---
+    if (aiDecision.type === 'giveCard' && action.type === 'select_card_from_hand_to_give') {
+        const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- REVEAL CARD ---
+    if (aiDecision.type === 'revealCard' && action.type === 'select_card_from_hand_to_reveal') {
+        const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
+        return newState; // Should create a new action to flip
+    }
+
+    // --- REVEAL DECK DRAW PROTOCOL (Unity-4) ---
+    if (aiDecision.type === 'confirmRevealDeckDrawProtocol' && action.type === 'reveal_deck_draw_protocol') {
+        const newState = resolvers.resolveRevealDeckDrawProtocol(state);
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- SELECT REVEALED DECK CARD (Clarity-2/3) ---
+    if (aiDecision.type === 'selectRevealedDeckCard' && action.type === 'select_card_from_revealed_deck') {
+        const newState = resolvers.resolveSelectRevealedDeckCard(state, aiDecision.cardId);
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- REVEAL BOARD CARD PROMPT (shift or flip) ---
+    if (aiDecision.type === 'resolveRevealBoardCardPrompt' &&
+        (action.type === 'prompt_shift_or_flip_revealed_card' || action.type === 'prompt_shift_or_flip_board_card_custom')) {
+        const nextState = resolvers.resolveRevealBoardCardPrompt(state, aiDecision.choice);
+        if (nextState.actionRequired) return nextState;
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- OPTIONAL SHUFFLE TRASH (Clarity-4) ---
+    if (aiDecision.type === 'resolvePrompt' && action.type === 'prompt_optional_shuffle_trash') {
+        if (!aiDecision.accept) {
+            let skippedState = { ...state, actionRequired: null };
+            skippedState = log(skippedState, action.actor, `Opponent skips shuffling trash into deck.`);
+            return endActionForPhase(skippedState, phaseManager);
+        }
+        const nextState = performShuffleTrash(state, action.actor, `Clarity-4`);
+        return endActionForPhase(nextState.newState, phaseManager);
+    }
+
+    // --- OPTIONAL DISCARD CUSTOM ---
+    if (aiDecision.type === 'resolveOptionalDiscardCustomPrompt' && action.type === 'prompt_optional_discard_custom') {
+        const nextState = actions.resolveOptionalDiscardCustomPrompt(state, aiDecision.accept);
+        if (nextState.actionRequired) return nextState;
+        return endActionForPhase(nextState, phaseManager);
+    }
+
+    // --- EXECUTE CONDITIONAL FOLLOWUP ---
+    if (action.type === 'execute_conditional_followup') {
+        const { sourceCardId, laneIndex, followUpEffect, context: effectContext, actor, logSource, logPhase, logIndentLevel } = action as any;
+        const sourceCard = findCardOnBoard(state, sourceCardId);
+
+        if (!sourceCard) {
+            let newState = { ...state };
+            if (logSource !== undefined) newState._currentEffectSource = logSource;
+            if (logPhase !== undefined) newState._currentPhaseContext = logPhase;
+            if (logIndentLevel !== undefined) newState._logIndentLevel = logIndentLevel;
+            newState = log(newState, actor, `Follow-up effect skipped (source no longer active).`);
+            newState.actionRequired = null;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        let newState = { ...state, actionRequired: null };
+        const result = executeCustomEffect(sourceCard.card, laneIndex, newState, effectContext, followUpEffect);
+        newState = result.newState;
+
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
+    // --- UNKNOWN ACTION ---
+    console.warn(`[SYNC] AI has no logic for action: ${action.type}, decision: ${JSON.stringify(aiDecision)}`);
+    return endActionForPhase({ ...state, actionRequired: null }, phaseManager);
+};
+
+/**
+ * SYNCHRONOUS version of runOpponentTurn.
+ * Processes the ENTIRE AI turn in one synchronous call.
+ * Returns the final state after all AI actions are complete.
+ * Animations are enqueued but NOT waited for.
+ *
+ * This function uses a while loop to handle all AI actions:
+ * 1. Start phase effects
+ * 2. actionRequired handling (shift, flip, etc.)
+ * 3. Compile phase
+ * 4. Action phase (play card or fill hand)
+ * 5. End phase
+ *
+ * The loop continues until no more AI actions are needed.
+ */
+export const runOpponentTurnSync = (
+    initialState: GameState,
+    difficulty: Difficulty,
+    actions: ActionDispatchers,
+    phaseManager: PhaseManager,
+    enqueueAnimation: (item: Omit<AnimationQueueItem, 'id'>) => void,
+    onCompileLane?: (state: GameState, laneIndex: number) => GameState
+): GameState => {
+    let state = { ...initialState };
+
+    // Safety counter to prevent infinite loops
+    let iterations = 0;
+    const MAX_ITERATIONS = 50;
+
+    while (iterations < MAX_ITERATIONS) {
+        iterations++;
+
+        // Exit conditions
+        if (state.winner) return state;
+        if (state.turn !== 'opponent') return state;
+
+        // 1. Process start phase effects (first iteration only)
+        if (state.phase === 'start' && !state.actionRequired) {
+            state = phaseManager.processStartOfTurn(state);
+            // After start phase, continue to check for actions
+        }
+
+        // 2. Handle actionRequired for opponent
+        if (state.actionRequired) {
+            const action = state.actionRequired;
+
+            // Check if this action is for the player (opponent should wait)
+            const isPlayerAction = 'actor' in action && action.actor === 'player';
+
+            if (isPlayerAction) {
+                // Player needs to act - return current state
+                return state;
+            }
+
+            // Handle opponent action synchronously
+            state = handleRequiredActionSync(state, difficulty, actions, phaseManager, enqueueAnimation);
+            continue; // Loop back to check for more actions
+        }
+
+        // 3. Handle compile phase
+        if (state.phase === 'compile' && state.compilableLanes.length > 0) {
+            const decision = getAIAction(state, null, difficulty);
+            if (decision.type === 'compile') {
+                const laneIndex = decision.laneIndex;
+
+                // Use provided compile function or default
+                if (onCompileLane) {
+                    state = onCompileLane(state, laneIndex);
+                } else {
+                    state = actions.compileLane(state, laneIndex);
+                }
+
+                if (state.winner) return state;
+
+                // Process end of compile action
+                state = phaseManager.processEndOfAction(state);
+                continue; // Check for control mechanic prompt
+            }
+        }
+
+        // 4. Handle action phase
+        if (state.phase === 'action' && !state._cardPlayedThisActionPhase) {
+            const decision = getAIAction(state, null, difficulty);
+
+            // Fill hand
+            if (decision.type === 'fillHand') {
+                const prevHandIds = new Set(state.opponent.hand.map(c => c.id));
+                state = resolvers.fillHand(state, 'opponent');
+
+                // Create draw animations
+                const newCards = state.opponent.hand.filter(c => !prevHandIds.has(c.id));
+                if (newCards.length > 0) {
+                    const animations = createSequentialDrawAnimations(
+                        initialState, // Use pre-draw state for snapshot
+                        newCards,
+                        'opponent',
+                        initialState.opponent.hand.length
+                    );
+                    animations.forEach(anim => enqueueAnimation(anim));
+                }
+
+                // Clear animationState since we handle animations directly
+                state = { ...state, animationState: null };
+
+                if (state.actionRequired) continue;
+                state = phaseManager.processEndOfAction(state);
+                continue;
+            }
+
+            // Play card
+            if (decision.type === 'playCard') {
+                const { cardId, laneIndex, isFaceUp } = decision;
+
+                // Create play animation BEFORE state change
+                const card = state.opponent.hand.find(c => c.id === cardId);
+                const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
+                if (card) {
+                    const animation = createPlayAnimation(
+                        state, card, 'opponent', laneIndex, true, handIndex, isFaceUp, true
+                    );
+                    enqueueAnimation(animation);
+                }
+
+                // Execute play logic
+                const { newState: stateAfterPlay, animationRequests } = actions.playCard(
+                    state, cardId, laneIndex, isFaceUp, 'opponent'
+                );
+
+                state = { ...stateAfterPlay, _cardPlayedThisActionPhase: true };
+
+                // Enqueue effect animations (on-cover)
+                if (animationRequests && animationRequests.length > 0) {
+                    enqueueAnimationsFromRequests(state, animationRequests, enqueueAnimation);
+                }
+
+                // Process on-play effect if queued
+                if (!state.actionRequired && state.queuedEffect) {
+                    const { card: effectCard, laneIndex: effectLane } = state.queuedEffect;
+                    const onPlayContext: EffectContext = {
+                        cardOwner: 'opponent',
+                        actor: 'opponent',
+                        currentTurn: state.turn,
+                        opponent: 'player',
+                        triggerType: 'play'
+                    };
+                    const onPlayResult = executeOnPlayEffect(effectCard, effectLane, state, onPlayContext);
+                    state = { ...onPlayResult.newState, queuedEffect: undefined };
+
+                    // Enqueue on-play effect animations
+                    if (onPlayResult.animationRequests && onPlayResult.animationRequests.length > 0) {
+                        enqueueAnimationsFromRequests(state, onPlayResult.animationRequests, enqueueAnimation);
+                    }
+                }
+
+                // Continue to check for actionRequired from effects
+                continue;
+            }
+        }
+
+        // 5. No more actions in current phase - advance phase
+        // Check if we need to process queuedActions
+        if (state.queuedActions && state.queuedActions.length > 0) {
+            state = phaseManager.processEndOfAction(state);
+            continue;
+        }
+
+        // Process end of action/phase
+        if (state.phase === 'action' && state._cardPlayedThisActionPhase) {
+            // Card was played, advance to hand_limit
+            state = { ...state, phase: 'hand_limit' as GamePhase, _cardPlayedThisActionPhase: undefined };
+        }
+
+        // Continue turn progression
+        state = phaseManager.continueTurnProgression(state);
+
+        // If turn switched to player, we're done
+        if (state.turn === 'player') {
+            return state;
+        }
+
+        // If we're still in opponent's turn but no action to take, continue loop
+        // (This handles phase transitions like end -> start of next turn)
+    }
+
+    console.error('[SYNC] AI turn exceeded max iterations, returning current state');
+    return state;
 };

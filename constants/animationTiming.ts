@@ -28,6 +28,7 @@ export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
     reveal: 800,    // Card flips up briefly, then back
     swap: 600,      // Protocol bars swap positions
     refresh: 1200,  // Hand refill (multiple draws)
+    phaseTransition: 400,  // Per phase step (total duration calculated dynamically)
 } as const;
 
 // =============================================================================
@@ -45,6 +46,12 @@ export const STAGGER_DELAY = 75; // ms between cards
  * Slightly longer than normal stagger for dramatic effect.
  */
 export const COMPILE_STAGGER_DELAY = 100; // ms between cards
+
+/**
+ * Duration per card for compile delete animations.
+ * Each card animates for this duration, staggered sequentially.
+ */
+export const COMPILE_DELETE_DURATION = 200; // ms per card
 
 /**
  * Total duration for all draw animations combined.
@@ -169,6 +176,12 @@ export const ANIMATION_EASINGS = {
  * Ensures onAnimationEnd event has time to fire before fallback triggers.
  */
 export const ANIMATION_TIMEOUT_BUFFER = 50; // ms
+
+/**
+ * Duration for each phase transition in the turn phase indicator.
+ * Controls how fast the phases animate through during turn changes.
+ */
+export const PHASE_TRANSITION_DURATION = 400; // ms
 
 /**
  * Gets the fallback timeout duration for animation completion detection.

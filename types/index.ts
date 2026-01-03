@@ -467,16 +467,12 @@ export type ActionRequired =
           'select_opponent_face_down_card_to_shift' | 'select_own_card_to_shift_for_speed_3' |
           'gravity_2_shift_after_flip' | 'speed_3_self_flip_after_shift' |
           'anarchy_0_conditional_draw' | 'execute_remaining_custom_effects' |
-          'prompt_death_1_effect' | 'prompt_give_card_for_love_1' | 'prompt_fire_3_discard' |
-          'prompt_shift_for_speed_3' | 'prompt_return_for_psychic_4' | 'prompt_spirit_1_start' |
-          'prompt_shift_for_spirit_3' | 'plague_2_opponent_discard' | 'plague_4_player_flip_optional' |
-          'select_cards_from_hand_to_discard_for_fire_4' | 'select_cards_from_hand_to_discard_for_hate_1' |
           'prompt_shift_or_flip_board_card_custom' | 'discard_completed' |
           'delete_self' | 'select_face_down_card_to_delete' | 'select_low_value_card_to_delete' |
-          'select_card_from_other_lanes_to_delete' | 'plague_4_opponent_delete' |
+          'select_card_from_other_lanes_to_delete' |
           'select_opponent_card_to_return' | 'select_any_card_to_flip' |
-          'prompt_shift_or_flip_for_light_2' | 'select_board_card_to_reveal_custom' |
-          'plague_2_player_discard' | 'select_lane_to_shift_revealed_board_card_custom' |
+          'select_board_card_to_reveal_custom' |
+          'select_lane_to_shift_revealed_board_card_custom' |
           'select_lane_for_water_3' | 'prompt_optional_draw';
     actor: Player;
     sourceCardId?: string;

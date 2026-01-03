@@ -4,6 +4,7 @@
  */
 
 import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext, AnimationRequest } from "../../../types";
+import { AnimationQueueItem } from "../../../types/animation";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent, completeEffectAction } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
@@ -13,6 +14,7 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
 import { rememberFlippedCard } from '../../ai/cardMemory';
+import { createFlipAnimation } from '../../animation/animationHelpers';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex?: number } | null {
     if (!cardId) return null;
@@ -327,22 +329,31 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     return newState;
 }
 
-export function internalResolveTargetedFlip(state: GameState, targetCardId: string, nextAction: ActionRequired = null): GameState {
+export function internalResolveTargetedFlip(
+    state: GameState,
+    targetCardId: string,
+    nextAction: ActionRequired = null,
+    enqueueAnimation?: (item: AnimationQueueItem) => void
+): GameState {
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (!cardInfo) return state;
 
     const { card, owner } = cardInfo;
 
+    // Find which lane and card index the card is in (needed for animation)
+    let laneIndex = -1;
+    let cardIndex = -1;
+    for (let i = 0; i < state[owner].lanes.length; i++) {
+        const idx = state[owner].lanes[i].findIndex(c => c.id === targetCardId);
+        if (idx !== -1) {
+            laneIndex = i;
+            cardIndex = idx;
+            break;
+        }
+    }
+
     // NEW: Check passive rules for flip restrictions (Frost-1, custom cards with block_flips rule)
     if (!card.isFaceUp) {
-        // Find which lane the card is in
-        let laneIndex = -1;
-        for (let i = 0; i < state[owner].lanes.length; i++) {
-            if (state[owner].lanes[i].some(c => c.id === targetCardId)) {
-                laneIndex = i;
-                break;
-            }
-        }
         if (laneIndex !== -1) {
             const flipCheck = canFlipCard(state, laneIndex);
             if (!flipCheck.allowed) {
@@ -383,8 +394,20 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
         newState = rememberFlippedCard(newState, card);
     }
 
+    // NEW ANIMATION SYSTEM: Create flip animation before state change
+    if (enqueueAnimation && laneIndex !== -1 && cardIndex !== -1) {
+        const toFaceUp = !card.isFaceUp;
+        const flipAnim = createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp);
+        enqueueAnimation(flipAnim);
+    }
+
     newState = findAndFlipCards(new Set([targetCardId]), newState);
-    newState.animationState = { type: 'flipCard', cardId: targetCardId };
+
+    // Only set old animationState as fallback when new system not used
+    if (!enqueueAnimation) {
+        newState.animationState = { type: 'flipCard', cardId: targetCardId };
+    }
+
     newState.actionRequired = nextAction;
     return newState;
 }

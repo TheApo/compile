@@ -6,6 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired, EffectContext } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
+import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent } from '../../utils/log';
 import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
@@ -1147,7 +1148,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.position === 'uncovered' && !isUncovered) continue;
                     if (targetFilter.position === 'covered' && isUncovered) continue;
 
-                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                    // CRITICAL: Include snapshot data for animation - card will be deleted from state immediately
+                    cardsToDelete.push({
+                        type: 'delete',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                     deletedCardIds.add(card.id);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
@@ -1167,6 +1176,13 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const newPlayerState = { ...newState[actor], stats: newStats };
                 newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
             }
+
+            // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
+            // The animation system will use the cardSnapshot data to show cards flying to trash
+            for (const req of cardsToDelete) {
+                newState = deleteCardFromBoard(newState, req.cardId);
+            }
+            newState = recalculateAllLaneValues(newState);
 
             // CRITICAL: Queue pending custom effects before clearing actionRequired
             newState = queuePendingCustomEffects(newState);
@@ -1384,14 +1400,30 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             const cardsToDelete: AnimationRequest[] = [];
             for (const p of ['player', 'opponent'] as Player[]) {
-                for (const card of prev[p].lanes[targetLaneIndex]) {
-                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                const laneCards = prev[p].lanes[targetLaneIndex];
+                for (let cardIdx = 0; cardIdx < laneCards.length; cardIdx++) {
+                    const card = laneCards[cardIdx];
+                    // CRITICAL: Include snapshot data for animation - card will be deleted from state immediately
+                    cardsToDelete.push({
+                        type: 'delete',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                 }
             }
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
+            for (const req of cardsToDelete) {
+                newState = deleteCardFromBoard(newState, req.cardId);
+            }
+            newState = recalculateAllLaneValues(newState);
 
             newState = queuePendingCustomEffects(newState);
             newState.actionRequired = null;

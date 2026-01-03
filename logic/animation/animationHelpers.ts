@@ -11,7 +11,7 @@
  * then creates a properly structured animation item with snapshot.
  */
 
-import { GameState, Player, PlayedCard } from '../../types';
+import { GameState, Player, PlayedCard, GamePhase } from '../../types';
 import {
     AnimationQueueItem,
     AnimationType,
@@ -19,15 +19,18 @@ import {
     AnimatingCard,
     CompileAnimatingCard,
     MultiAnimatingCard,
+    PhaseTransitionData,
 } from '../../types/animation';
 import { createVisualSnapshot } from '../../utils/snapshotUtils';
 import {
     ANIMATION_DURATIONS,
     COMPILE_STAGGER_DELAY,
+    COMPILE_DELETE_DURATION,
     getCardStartDelay,
     TOTAL_DRAW_ANIMATION_DURATION,
     calculateDrawDuration,
     calculateDrawStagger,
+    PHASE_TRANSITION_DURATION,
 } from '../../constants/animationTiming';
 
 // =============================================================================
@@ -536,6 +539,50 @@ export function createCompileAnimation(
 }
 
 /**
+ * Creates sequential DELETE animations for compile.
+ * Each card gets its own delete animation with staggered timing.
+ *
+ * @param state - Game state BEFORE the compile (for snapshot)
+ * @param deletedCards - Array of cards that were deleted with their positions
+ * @returns Array of AnimationQueueItems for sequential playback
+ */
+export function createCompileDeleteAnimations(
+    state: GameState,
+    deletedCards: { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[]
+): AnimationQueueItem[] {
+    const snapshot = createVisualSnapshot(state);
+
+    return deletedCards.map((item, index) => {
+        const fromPosition: CardPosition = {
+            type: 'lane',
+            owner: item.owner,
+            laneIndex: item.laneIndex,
+            cardIndex: item.cardIndex,
+        };
+
+        const toPosition: CardPosition = {
+            type: 'trash',
+            owner: item.owner,
+        };
+
+        return {
+            id: generateAnimationId('delete'),
+            type: 'delete' as AnimationType,
+            snapshot,
+            duration: COMPILE_DELETE_DURATION,
+            animatingCard: {
+                card: item.card,
+                fromPosition,
+                toPosition,
+                targetRotation: 90,
+                startDelay: index * COMPILE_DELETE_DURATION,
+            },
+            laneIndex: item.laneIndex,
+        };
+    });
+}
+
+/**
  * Creates a GIVE animation - card moves from own hand to opponent's hand.
  */
 export function createGiveAnimation(
@@ -798,4 +845,77 @@ export function createSequentialDiscardAnimations(
             },
         };
     });
+}
+
+// =============================================================================
+// PHASE TRANSITION ANIMATION
+// =============================================================================
+
+/**
+ * All phases in order for phase transition animations.
+ */
+const ALL_PHASES: GamePhase[] = ['start', 'control', 'compile', 'action', 'hand_limit', 'end'];
+
+/**
+ * Creates a phase transition animation for turn changes.
+ * Animates through all remaining phases of the old turn, then to 'start' of the new turn.
+ *
+ * @param prevState - The game state BEFORE the turn change (used for snapshot)
+ * @param fromPhase - The phase where the previous turn was (before turn change)
+ * @param fromTurn - The player whose turn is ending
+ * @param toTurn - The player whose turn is starting
+ * @returns AnimationQueueItem for the phase transition
+ */
+export function createPhaseTransitionAnimation(
+    prevState: GameState,
+    fromPhase: GamePhase,
+    fromTurn: Player,
+    toTurn: Player,
+    toPhase?: GamePhase  // Optional: target phase (defaults to actual game phase)
+): AnimationQueueItem {
+    // Create snapshot from the current state (board is correct after turn change)
+    const snapshot = createVisualSnapshot(prevState);
+
+    // Build phase sequence
+    const sequence: Array<{ phase: GamePhase; turn: Player }> = [];
+    const currentPhaseIndex = ALL_PHASES.indexOf(fromPhase);
+
+    // Determine target phase - use provided toPhase or default to current game phase
+    const targetPhase = toPhase || (prevState.phase as GamePhase);
+    const targetPhaseIndex = ALL_PHASES.indexOf(targetPhase);
+
+    if (fromTurn === toTurn) {
+        // Same turn - animate from fromPhase to toPhase within same turn
+        for (let i = currentPhaseIndex + 1; i <= targetPhaseIndex; i++) {
+            sequence.push({ phase: ALL_PHASES[i], turn: fromTurn });
+        }
+    } else {
+        // Turn change - animate remaining phases of old turn, then phases of new turn
+        // Add remaining phases of current turn (excluding current phase since it's already displayed)
+        for (let i = currentPhaseIndex + 1; i < ALL_PHASES.length; i++) {
+            sequence.push({ phase: ALL_PHASES[i], turn: fromTurn });
+        }
+
+        // Add phases of new turn from 'start' up to and including target phase
+        for (let i = 0; i <= targetPhaseIndex; i++) {
+            sequence.push({ phase: ALL_PHASES[i], turn: toTurn });
+        }
+    }
+
+    // Calculate total duration based on number of phase steps
+    const duration = sequence.length * PHASE_TRANSITION_DURATION;
+
+    return {
+        id: generateAnimationId('phaseTransition'),
+        type: 'phaseTransition',
+        snapshot,
+        duration,
+        phaseTransitionData: {
+            fromPhase,
+            toPhase: targetPhase,
+            fromTurn,
+            toTurn,
+            phaseSequence: sequence,
+        },
+    };
 }

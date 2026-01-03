@@ -217,7 +217,20 @@ export function executeDrawEffect(
             newState = oppReactiveResult.newState;
         }
 
-        // Add draw animation request
+        // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
+        // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
+        if (newCards.length > 0) {
+            newState = {
+                ...newState,
+                animationState: {
+                    type: 'drawCard' as const,
+                    owner: drawingPlayer,
+                    cardIds: newCards.map(c => c.id)
+                }
+            };
+        }
+
+        // Also return animationRequests for backwards compatibility
         const animationRequests = count > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count }] : undefined;
 
         return { newState, animationRequests };
@@ -658,10 +671,20 @@ export function executeDrawEffect(
         return { newState };
     }
 
-    // RE-ENABLED: Draw animations are now properly handled by the new animation queue system
-    // The race condition was caused by the old processAnimationQueue callbacks
-    // Now animations are enqueued synchronously and processed by AnimationQueueContext
-    // CRITICAL FIX: Use newCards.length (newly drawn cards), NOT drawnCards.length (entire hand)!
+    // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
+    // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
+    if (newCards.length > 0) {
+        newState = {
+            ...newState,
+            animationState: {
+                type: 'drawCard' as const,
+                owner: drawingPlayer,
+                cardIds: newCards.map(c => c.id)
+            }
+        };
+    }
+
+    // Also return animationRequests for backwards compatibility with other callers
     const animationRequests = newCards.length > 0
         ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length }]
         : undefined;
