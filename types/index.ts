@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { Card } from "../data/cards";
+import type { AnimationQueueItem } from "./animation";
 // FIX: Export the Card type so it can be imported by other modules.
 export type { Card };
 
@@ -675,6 +676,8 @@ export interface GameState {
     _pendingCustomEffects?: any[];
     /** Suspended queued actions during effect execution */
     _suspendedQueuedActions?: ActionRequired[];
+    /** Pending animations from SYNC effects - complete AnimationQueueItems for direct enqueue */
+    _pendingAnimations?: AnimationQueueItem[];
     /**
      * AI Card Memory - Tracks known values of face-down cards
      * Key: cardId, Value: known card value (0-6)

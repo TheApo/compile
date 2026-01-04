@@ -16,13 +16,16 @@ import { queuePendingCustomEffects } from '../phaseManager';
 import { rememberFlippedCard } from '../../ai/cardMemory';
 import { createFlipAnimation } from '../../animation/animationHelpers';
 
-export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex?: number } | null {
+export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex: number, cardIndex: number } | null {
     if (!cardId) return null;
-    for (const p of ['player', 'opponent'] as Player[]) {
-        for (let i = 0; i < state[p].lanes.length; i++) {
-            const lane = state[p].lanes[i];
-            const card = lane.find(c => c.id === cardId);
-            if (card) return { card, owner: p, laneIndex: i };
+    for (const owner of ['player', 'opponent'] as Player[]) {
+        for (let laneIndex = 0; laneIndex < state[owner].lanes.length; laneIndex++) {
+            const lane = state[owner].lanes[laneIndex];
+            for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
+                if (lane[cardIndex].id === cardId) {
+                    return { card: lane[cardIndex], owner, laneIndex, cardIndex };
+                }
+            }
         }
     }
     return null;

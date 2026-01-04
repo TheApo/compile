@@ -13,7 +13,7 @@ import * as resolvers from './resolvers';
 import { executeOnPlayEffect } from '../effectExecutor';
 import { findCardOnBoard } from './helpers/actionUtils';
 import { performShuffleTrash } from '../effects/actions/shuffleExecutor';
-import { CardActionResult } from './resolvers/cardResolver';
+import { CardActionResult, applyCardActionResult } from './resolvers/cardResolver';
 import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
@@ -376,16 +376,37 @@ export const resolveRequiredOpponentAction = (
             const { nextState, requiresAnimation } = resolveActionWithLane(state, aiDecision.laneIndex);
             if (requiresAnimation) {
                 const wasStartPhase = state.phase === 'start';
+                const originalTurn = state.turn;
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
                         // CRITICAL: Ensure animationState is cleared before processing
                         const stateWithoutAnimation = { ...s, animationState: null };
-                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, s2 => s2);
-                        if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
+
+                        // FIX: Create real turn progression callback (like useGameState.ts)
+                        const endTurnCb = (stateToProgress: GameState): GameState => {
+                            if (stateToProgress.actionRequired && stateToProgress.actionRequired.actor === 'opponent') {
+                                return stateToProgress;
+                            }
+                            if (stateToProgress.turn !== originalTurn) {
+                                return stateToProgress;
+                            }
+                            return wasStartPhase
+                                ? phaseManager.continueTurnAfterStartPhaseAction(stateToProgress)
+                                : phaseManager.processEndOfAction(stateToProgress);
+                        };
+
+                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, endTurnCb);
+
+                        if (finalState.actionRequired) {
                             return { ...finalState, animationState: null };
                         }
-                        // Use saved phase info since state might have changed
-                        const resultState = wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        if (finalState.turn !== originalTurn) {
+                            return { ...finalState, animationState: null };
+                        }
+
+                        const resultState = wasStartPhase
+                            ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
+                            : phaseManager.processEndOfAction(finalState);
                         return { ...resultState, animationState: null };
                     });
                 });
@@ -449,24 +470,67 @@ export const resolveRequiredOpponentAction = (
                 (flipAnimationCreated || returnAnimationCreated) ? undefined : enqueueAnimation
             );
 
+            console.log('[AI DEBUG 1] resolveActionWithCard result:', {
+                hasRequiresAnimation: !!requiresAnimation,
+                hasNextStateActionRequired: !!nextState.actionRequired,
+                nextStateActionType: nextState.actionRequired?.type,
+                aiDecisionType: aiDecision.type,
+                cardId: aiDecision.cardId
+            });
+
             if (requiresAnimation) {
+                console.log('[AI DEBUG 2] requiresAnimation path - will call processAnimationQueue');
                 const wasStartPhase = state.phase === 'start';
+                const originalTurn = state.turn;
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
+                    console.log('[AI DEBUG 3] Animation complete callback fired');
                     setGameState(s => {
                         // CRITICAL: Ensure animationState is cleared before processing
                         const stateWithoutAnimation = { ...s, animationState: null };
-                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, s2 => s2);
-                        if (finalState.actionRequired && finalState.actionRequired.actor === 'opponent') {
+
+                        // FIX: Create real turn progression callback (like useGameState.ts)
+                        // This fixes Death-1's "then delete this card" followUpEffect
+                        const endTurnCb = (stateToProgress: GameState): GameState => {
+                            console.log('[AI DEBUG 4] endTurnCb called inside onCompleteCallback');
+                            if (stateToProgress.actionRequired && stateToProgress.actionRequired.actor === 'opponent') {
+                                console.log('[AI DEBUG 4a] returning stateToProgress (opponent action)');
+                                return stateToProgress;
+                            }
+                            if (stateToProgress.turn !== originalTurn) {
+                                console.log('[AI DEBUG 4b] returning stateToProgress (turn changed)');
+                                return stateToProgress;
+                            }
+                            console.log('[AI DEBUG 4c] calling phaseManager progression');
+                            return wasStartPhase
+                                ? phaseManager.continueTurnAfterStartPhaseAction(stateToProgress)
+                                : phaseManager.processEndOfAction(stateToProgress);
+                        };
+
+                        const finalState = requiresAnimation.onCompleteCallback(stateWithoutAnimation, endTurnCb);
+                        console.log('[AI DEBUG 5] onCompleteCallback returned:', {
+                            hasActionRequired: !!finalState.actionRequired,
+                            actionType: finalState.actionRequired?.type,
+                            turn: finalState.turn,
+                            originalTurn
+                        });
+
+                        if (finalState.actionRequired) {
                             return { ...finalState, animationState: null };
                         }
-                        // Use saved phase info since state might have changed
-                        const resultState = wasStartPhase ? phaseManager.continueTurnAfterStartPhaseAction(finalState) : phaseManager.processEndOfAction(finalState);
+                        if (finalState.turn !== originalTurn) {
+                            return { ...finalState, animationState: null };
+                        }
+
+                        const resultState = wasStartPhase
+                            ? phaseManager.continueTurnAfterStartPhaseAction(finalState)
+                            : phaseManager.processEndOfAction(finalState);
                         return { ...resultState, animationState: null };
                     });
                 });
                 return nextState;
             }
 
+            console.log('[AI DEBUG 6] NO requiresAnimation - direct path');
             if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {
                 return nextState;
             }
@@ -568,6 +632,7 @@ const handleRequiredAction = (
     // NOTE: discard_completed is now handled directly in discardResolver via executeFollowUpAfterDiscard
 
     const aiDecision = getAIAction(state, state.actionRequired, difficulty);
+    console.log('[HANDLE REQ ACTION] actionType:', action.type, 'aiDecision:', aiDecision.type, 'cardId:', (aiDecision as any).cardId);
 
     if (aiDecision.type === 'skip') {
         const newState = actions.skipAction(state);
@@ -816,6 +881,7 @@ const handleRequiredAction = (
     }
 
     if (aiDecision.type === 'flipCard' || aiDecision.type === 'deleteCard' || aiDecision.type === 'returnCard' || aiDecision.type === 'shiftCard' || aiDecision.type === 'selectCard') {
+        console.log('[AI TURN DEBUG 1] Handling card selection:', aiDecision.type, aiDecision.cardId);
         // NEW ANIMATION SYSTEM: Create return animation for opponent
         let returnAnimationCreatedAction = false;
         if (USE_NEW_AI_ANIMATION_SYSTEM && enqueueAnimation && aiDecision.type === 'returnCard') {
@@ -869,17 +935,26 @@ const handleRequiredAction = (
             (flipAnimationCreatedAction || returnAnimationCreatedAction) ? undefined : enqueueAnimation
         );
 
+        console.log('[AI TURN DEBUG 2] resolveActionWithCard result:', {
+            hasRequiresAnimation: !!requiresAnimation,
+            requiresTurnEnd,
+            hasNextStateActionRequired: !!nextState.actionRequired,
+            nextStateActionType: nextState.actionRequired?.type
+        });
+
         // CRITICAL FIX: Capture flag BEFORE animation to prevent React state race condition
         // When React batches state updates, the callback's `s` may lose _cardPlayedThisActionPhase
         const preserveCardPlayedFlag = state._cardPlayedThisActionPhase;
 
          if (requiresAnimation) {
+            console.log('[AI TURN DEBUG 3] requiresAnimation path taken');
             const { animationRequests, onCompleteCallback } = requiresAnimation;
             // NEW: Filter out flip requests if we already created the animation
             const filteredRequestsAction = flipAnimationCreatedAction
                 ? animationRequests.filter(r => r.type !== 'flip')
                 : animationRequests;
             processAnimationQueue(filteredRequestsAction, () => {
+                console.log('[AI TURN DEBUG 4] Animation complete, calling onCompleteCallback');
                 setGameState(s => {
                     // CRITICAL FIX: Restore flag that may have been lost due to React batching
                     const stateWithFlag = preserveCardPlayedFlag
@@ -888,6 +963,7 @@ const handleRequiredAction = (
                     // CRITICAL: Clear animationState before processing to prevent softlock
                     const stateWithoutAnim = { ...stateWithFlag, animationState: null };
                     return onCompleteCallback(stateWithoutAnim, (finalState) => {
+                        console.log('[AI TURN DEBUG 5] endTurnCb called, finalState.actionRequired:', finalState.actionRequired?.type);
                         // Ensure animationState stays null through all paths
                         const cleanState = { ...finalState, animationState: null };
 
@@ -1064,6 +1140,7 @@ export const runOpponentTurn = (
     trackPlayerRearrange?: TrackPlayerRearrange,
     enqueueAnimation?: (item: Omit<AnimationQueueItem, 'id'>) => void
 ) => {
+    console.log('[RUN OPP TURN ENTRY] phase:', currentGameState.phase, 'turn:', currentGameState.turn, 'actionRequired:', currentGameState.actionRequired?.type);
     // CRITICAL FIX: For new animation system, we need to enqueue animation BEFORE setGameState
     // because React 18 batches state updates, causing the animation to appear "instant"
 
@@ -1263,12 +1340,15 @@ export const runOpponentTurn = (
 
         // 1. Process start phase effects. This may create an action.
         if (state.phase === 'start') {
+            console.log('[RUN OPP TURN] Before processStartOfTurn, actionRequired:', state.actionRequired?.type);
             state = phaseManager.processStartOfTurn(state);
+            console.log('[RUN OPP TURN] After processStartOfTurn, actionRequired:', state.actionRequired?.type, 'actor:', (state.actionRequired as any)?.actor);
         }
 
         // 2. If an action is required (e.g. from start phase), handle it.
         // This might result in a new state that needs further processing.
         if (state.actionRequired) {
+            console.log('[RUN OPP TURN] Calling handleRequiredAction for:', state.actionRequired.type);
             const stateAfterAction = handleRequiredAction(state, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
 
             // CRITICAL FIX: After handling required action, AI turn must continue!
@@ -1632,6 +1712,7 @@ const handleRequiredActionSync = (
 ): GameState => {
     const action = state.actionRequired!;
     const aiDecision = getAIAction(state, action, difficulty);
+    console.log('[HANDLE REQ ACTION SYNC] actionType:', action.type, 'aiDecision:', aiDecision.type, 'cardId:', (aiDecision as any).cardId);
 
     // --- SKIP ---
     if (aiDecision.type === 'skip') {
@@ -1699,15 +1780,43 @@ const handleRequiredActionSync = (
         }
 
         // Execute card action synchronously (don't pass enqueueAnimation - we already created animation)
-        const { nextState, requiresTurnEnd } = resolvers.resolveActionWithCard(state, aiDecision.cardId);
+        const result = resolvers.resolveActionWithCard(state, aiDecision.cardId);
 
-        if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {
-            return nextState; // More actions to handle - loop will continue
+        // CRITICAL: Use applyCardActionResult to ensure followUpEffects are ALWAYS processed
+        // This is where Death-1's "then delete this card" etc. gets executed
+        const endTurnCb = (stateToProgress: GameState): GameState => {
+            if (stateToProgress.actionRequired && stateToProgress.actionRequired.actor === 'opponent') {
+                return stateToProgress;
+            }
+            return state.phase === 'start'
+                ? phaseManager.continueTurnAfterStartPhaseAction(stateToProgress)
+                : phaseManager.processEndOfAction(stateToProgress);
+        };
+        let stateAfterCallback = applyCardActionResult(result, endTurnCb);
+
+        // CRITICAL: Enqueue any pending animations collected during sync execution
+        // These are complete AnimationQueueItems with proper snapshots from BEFORE the delete
+        if (stateAfterCallback._pendingAnimations && stateAfterCallback._pendingAnimations.length > 0) {
+            console.log('[PENDING ANIMS] Found', stateAfterCallback._pendingAnimations.length, 'complete animation items');
+            for (const animItem of stateAfterCallback._pendingAnimations) {
+                console.log('[PENDING ANIMS] Enqueueing:', animItem.type, 'hasSnapshot:', !!animItem.snapshot, 'hasAnimatingCard:', !!animItem.animatingCard);
+                // AnimationQueueItems are complete - enqueue directly (without 'id' as it will be assigned)
+                const { id, ...itemWithoutId } = animItem;
+                enqueueAnimation(itemWithoutId);
+            }
+            // Clear pending animations after enqueueing
+            stateAfterCallback = { ...stateAfterCallback, _pendingAnimations: undefined };
+        } else {
+            console.log('[PENDING ANIMS] No pending animations found');
         }
-        if (requiresTurnEnd || (nextState.queuedActions && nextState.queuedActions.length > 0)) {
-            return endActionForPhase(nextState, phaseManager);
+
+        if (stateAfterCallback.actionRequired && stateAfterCallback.actionRequired.actor === 'opponent') {
+            return stateAfterCallback;
         }
-        return nextState;
+        if (result.requiresTurnEnd || (stateAfterCallback.queuedActions && stateAfterCallback.queuedActions.length > 0)) {
+            return endActionForPhase(stateAfterCallback, phaseManager);
+        }
+        return stateAfterCallback;
     }
 
     // --- DISCARD CARDS ---
@@ -1974,6 +2083,7 @@ export const runOpponentTurnSync = (
     enqueueAnimation: (item: Omit<AnimationQueueItem, 'id'>) => void,
     onCompileLane?: (state: GameState, laneIndex: number) => GameState
 ): GameState => {
+    console.log('[RUN OPP TURN SYNC] Entry, phase:', initialState.phase, 'actionRequired:', initialState.actionRequired?.type);
     let state = { ...initialState };
 
     // Safety counter to prevent infinite loops
@@ -1982,6 +2092,7 @@ export const runOpponentTurnSync = (
 
     while (iterations < MAX_ITERATIONS) {
         iterations++;
+        console.log('[RUN OPP TURN SYNC] Iteration', iterations, 'phase:', state.phase, 'actionRequired:', state.actionRequired?.type);
 
         // Exit conditions
         if (state.winner) return state;

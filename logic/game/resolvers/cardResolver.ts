@@ -6,6 +6,7 @@
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult, EffectContext } from '../../../types';
 import { AnimationQueueItem } from '../../../types/animation';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
+import { createDeleteAnimation, convertAnimationRequestsToQueueItems } from '../../animation/animationHelpers';
 import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
@@ -187,6 +188,22 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
     }
     return null;
 }
+
+/**
+ * Helper function that applies the CardActionResult's callback synchronously.
+ * This ensures the LOGIC always runs, regardless of animation.
+ * Use this for any code path that doesn't need animation (AI sync, tests, etc.)
+ */
+export const applyCardActionResult = (
+    result: CardActionResult,
+    endTurnCb: (s: GameState) => GameState = (s) => s
+): GameState => {
+    if (result.requiresAnimation && result.requiresAnimation.onCompleteCallback) {
+        // Apply the callback synchronously - this is where followUpEffects etc. are processed
+        return result.requiresAnimation.onCompleteCallback(result.nextState, endTurnCb);
+    }
+    return result.nextState;
+};
 
 export const resolveActionWithCard = (
     prev: GameState,
@@ -654,9 +671,15 @@ export const resolveActionWithCard = (
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
                 onCompleteCallback: (s, endTurnCb) => {
+                    console.log('[CALLBACK DEBUG 1] onCompleteCallback called for delete');
                     const deletingPlayer = prev.actionRequired.actor;
                     const originalAction = prev.actionRequired;
-
+                    console.log('[CALLBACK DEBUG 2] originalAction:', {
+                        type: originalAction.type,
+                        sourceCardId: originalAction.sourceCardId,
+                        actor: originalAction.actor,
+                        hasFollowUpEffect: !!(originalAction as any).followUpEffect
+                    });
 
                     // Trigger reactive effects after delete (Hate-3 custom protocol)
                     const reactiveResult = processReactiveEffects(s, 'after_delete', { player: deletingPlayer });
@@ -672,6 +695,7 @@ export const resolveActionWithCard = (
 
                     // Check if there's a follow-up effect (Death-1: "then delete this card")
                     const followUpEffect = (originalAction as any).followUpEffect;
+                    console.log('[CALLBACK DEBUG 3] followUpEffect:', followUpEffect, 'sourceCardInfo:', !!sourceCardInfo);
 
                     // CRITICAL: Multi-step effects (like Hate-1) require the source to be UNCOVERED AND face-up
                     if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
@@ -785,10 +809,17 @@ export const resolveActionWithCard = (
 
                     // CRITICAL: Handle followUpEffect (Death-1: "then delete this card") when delete is complete
                     // This only applies when we DON'T have a nextStepOfDeleteAction (i.e., this was the last/only delete)
+                    console.log('[CALLBACK DEBUG 4] followUpEffect check:', {
+                        hasFollowUpEffect: !!followUpEffect,
+                        hasNextStepOfDeleteAction: !!nextStepOfDeleteAction,
+                        willExecuteFollowUp: !!(followUpEffect && !nextStepOfDeleteAction)
+                    });
                     if (followUpEffect && !nextStepOfDeleteAction) {
+                        console.log('[CALLBACK DEBUG 5] Executing followUpEffect path');
 
                         // If there's already an actionRequired (from uncover effect), queue the followUp for later
                         if (stateAfterTriggers.actionRequired) {
+                            console.log('[CALLBACK DEBUG 5a] Queueing followUpEffect (has actionRequired)');
 
                             // Find source card info for context
                             const sourceCardForQueue = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
@@ -832,11 +863,14 @@ export const resolveActionWithCard = (
                                 followUpAction
                             ];
                         } else {
+                            console.log('[CALLBACK DEBUG 5b] Executing followUpEffect immediately (no actionRequired)');
                             // No current actionRequired - execute followUpEffect immediately
                             const sourceCardForFollowUp = findCardOnBoard(stateAfterTriggers, originalAction.sourceCardId);
                             const opponent: Player = originalAction.actor === 'player' ? 'opponent' : 'player';
+                            console.log('[CALLBACK DEBUG 5c] sourceCardForFollowUp:', !!sourceCardForFollowUp, 'sourceCardId:', originalAction.sourceCardId);
 
                             if (sourceCardForFollowUp) {
+                                console.log('[CALLBACK DEBUG 5d] Source card found, executing followUpEffect');
                                 const followUpLaneIndex = stateAfterTriggers[sourceCardForFollowUp.owner].lanes.findIndex(
                                     l => l.some(c => c.id === originalAction.sourceCardId)
                                 );
@@ -855,6 +889,9 @@ export const resolveActionWithCard = (
                                 stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
                                 stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
+                                // CRITICAL: Capture state BEFORE effect for proper animation snapshots
+                                const stateBeforeFollowUp = stateAfterTriggers;
+
                                 const followUpResult = executeCustomEffect(
                                     sourceCardForFollowUp.card,
                                     followUpLaneIndex,
@@ -863,6 +900,23 @@ export const resolveActionWithCard = (
                                     followUpEffect
                                 );
                                 stateAfterTriggers = followUpResult.newState;
+
+                                // CRITICAL: Convert AnimationRequests to AnimationQueueItems using PRE-effect state
+                                // This ensures snapshots capture cards in their original positions
+                                if (followUpResult.animationRequests && followUpResult.animationRequests.length > 0) {
+                                    console.log('[CALLBACK] Converting', followUpResult.animationRequests.length, 'animations from followUpResult');
+                                    const queueItems = convertAnimationRequestsToQueueItems(
+                                        stateBeforeFollowUp,  // Use state BEFORE effect!
+                                        followUpResult.animationRequests,
+                                        true  // isOpponentAction
+                                    );
+                                    if (queueItems.length > 0) {
+                                        stateAfterTriggers._pendingAnimations = [
+                                            ...(stateAfterTriggers._pendingAnimations || []),
+                                            ...queueItems
+                                        ];
+                                    }
+                                }
 
                                 // Queue any pending effects from the follow-up
                                 stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
@@ -876,10 +930,31 @@ export const resolveActionWithCard = (
                                     stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
                                     stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
-                                    // Execute delete_self directly
-                                    const deleteResult = internalDeleteCard(stateAfterTriggers, originalAction.sourceCardId);
-                                    stateAfterTriggers = deleteResult.newState;
-                                    stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Deletes itself.`);
+                                    // CRITICAL: Find card info BEFORE deleting for animation
+                                    const cardToDelete = findCardOnBoard(stateAfterTriggers, (originalAction as any).sourceCardId);
+                                    console.log('[CALLBACK] delete_self - cardToDelete found:', !!cardToDelete, 'sourceCardId:', (originalAction as any).sourceCardId);
+                                    if (cardToDelete) {
+                                        const { card, owner, laneIndex, cardIndex } = cardToDelete;
+                                        // CRITICAL: Create COMPLETE AnimationQueueItem BEFORE delete
+                                        // The snapshot captures the state WITH the card still present
+                                        const deleteAnimation = createDeleteAnimation(
+                                            stateAfterTriggers,  // State WITH card - snapshot will include it
+                                            card,
+                                            owner,
+                                            laneIndex,
+                                            cardIndex,
+                                            true  // isOpponentAction - AI is always opponent
+                                        );
+                                        console.log('[CALLBACK] Creating delete_self AnimationQueueItem for:', card.protocol + '-' + card.value);
+                                        stateAfterTriggers._pendingAnimations = [
+                                            ...(stateAfterTriggers._pendingAnimations || []),
+                                            deleteAnimation
+                                        ];
+                                    }
+
+                                    // Execute delete_self directly using deleteCardFromBoard
+                                    stateAfterTriggers = deleteCardFromBoard(stateAfterTriggers, (originalAction as any).sourceCardId);
+                                    stateAfterTriggers = log(stateAfterTriggers, (originalAction as any).actor, `Deletes itself.`);
                                 }
                             }
                         }

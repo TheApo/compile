@@ -604,6 +604,13 @@ export function executeDeleteEffect(
 
     // Set actionRequired for player to select cards
     // FLEXIBLE: Pass actorChooses so AI can determine who selects targets
+    console.log('[DELETE EXECUTOR] Setting actionRequired:', {
+        actor,
+        sourceCardId: card.id,
+        hasConditional: !!conditional,
+        hasThenEffect: !!conditional?.thenEffect,
+        followUpEffect: conditional?.thenEffect
+    });
     newState.actionRequired = {
         type: 'select_cards_to_delete',  // CRITICAL: Always use generic type, AI reads targetFilter
         count,

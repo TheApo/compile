@@ -595,7 +595,11 @@ export function executeCustomEffect(
             break;
 
         case 'delete':
-            result = executeDeleteEffect(card, laneIndex, state, context, params);
+            // CRITICAL: Pass _conditional for follow-up effects (Death-1: "delete other, then delete self")
+            result = executeDeleteEffect(card, laneIndex, state, context, {
+                ...params,
+                _conditional: effectDef.conditional
+            });
             break;
 
         case 'discard':

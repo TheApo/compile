@@ -11,7 +11,7 @@
  * then creates a properly structured animation item with snapshot.
  */
 
-import { GameState, Player, PlayedCard, GamePhase } from '../../types';
+import { GameState, Player, PlayedCard, GamePhase, AnimationRequest } from '../../types';
 import {
     AnimationQueueItem,
     AnimationType,
@@ -918,4 +918,201 @@ export function createPhaseTransitionAnimation(
             phaseSequence: sequence,
         },
     };
+}
+
+// =============================================================================
+// ANIMATION REQUEST CONVERTER
+// =============================================================================
+
+/**
+ * Converts an AnimationRequest to a complete AnimationQueueItem.
+ *
+ * CRITICAL: The state parameter MUST be the state BEFORE the animation effect is applied.
+ * This ensures the snapshot captures the card in its original position.
+ *
+ * This is the central function for converting all AnimationRequest types to
+ * proper AnimationQueueItems with snapshots and positioning data.
+ *
+ * @param state - The game state BEFORE the effect (card still in original position)
+ * @param request - The animation request to convert
+ * @param isOpponentAction - Whether this is an opponent action (for highlight phase)
+ * @returns Complete AnimationQueueItem, or null if card not found
+ */
+export function convertAnimationRequestToQueueItem(
+    state: GameState,
+    request: AnimationRequest,
+    isOpponentAction: boolean = false
+): AnimationQueueItem | null {
+    switch (request.type) {
+        case 'delete': {
+            const position = findCardInLanes(state, request.cardId, request.owner);
+            if (!position) {
+                console.warn('[convertAnimationRequest] delete: Card not found in lanes:', request.cardId);
+                return null;
+            }
+            const card = state[request.owner].lanes[position.laneIndex][position.cardIndex];
+            if (!card) {
+                console.warn('[convertAnimationRequest] delete: Card object not found:', request.cardId);
+                return null;
+            }
+            return createDeleteAnimation(state, card, request.owner, position.laneIndex, position.cardIndex, isOpponentAction);
+        }
+
+        case 'flip': {
+            const owner = request.owner || (state.player.lanes.flat().some(c => c.id === request.cardId) ? 'player' : 'opponent');
+            const position = findCardInLanes(state, request.cardId, owner);
+            if (!position) {
+                console.warn('[convertAnimationRequest] flip: Card not found in lanes:', request.cardId);
+                return null;
+            }
+            const card = state[owner].lanes[position.laneIndex][position.cardIndex];
+            if (!card) {
+                console.warn('[convertAnimationRequest] flip: Card object not found:', request.cardId);
+                return null;
+            }
+            // Flip animation: card is currently faceUp, so flip to faceDown, and vice versa
+            const toFaceUp = !card.isFaceUp;
+            return createFlipAnimation(state, card, owner, position.laneIndex, position.cardIndex, toFaceUp);
+        }
+
+        case 'shift': {
+            const fromPosition = findCardInLanes(state, request.cardId, request.owner);
+            if (!fromPosition) {
+                console.warn('[convertAnimationRequest] shift: Card not found in lanes:', request.cardId);
+                return null;
+            }
+            const card = state[request.owner].lanes[fromPosition.laneIndex][fromPosition.cardIndex];
+            if (!card) {
+                console.warn('[convertAnimationRequest] shift: Card object not found:', request.cardId);
+                return null;
+            }
+            return createShiftAnimation(state, card, request.owner, request.fromLane, fromPosition.cardIndex, request.toLane, isOpponentAction);
+        }
+
+        case 'return': {
+            const position = findCardInLanes(state, request.cardId, request.owner);
+            if (!position) {
+                console.warn('[convertAnimationRequest] return: Card not found in lanes:', request.cardId);
+                return null;
+            }
+            const card = state[request.owner].lanes[position.laneIndex][position.cardIndex];
+            if (!card) {
+                console.warn('[convertAnimationRequest] return: Card object not found:', request.cardId);
+                return null;
+            }
+            return createReturnAnimation(state, card, request.owner, position.laneIndex, position.cardIndex, isOpponentAction);
+        }
+
+        case 'discard': {
+            const handIndex = findCardInHand(state, request.cardId, request.owner);
+            if (handIndex < 0) {
+                console.warn('[convertAnimationRequest] discard: Card not found in hand:', request.cardId);
+                return null;
+            }
+            const card = state[request.owner].hand[handIndex];
+            if (!card) {
+                console.warn('[convertAnimationRequest] discard: Card object not found:', request.cardId);
+                return null;
+            }
+            return createDiscardAnimation(state, card, request.owner, handIndex, isOpponentAction);
+        }
+
+        case 'play': {
+            // Play can be from hand or from deck
+            if (request.fromDeck && request.toLane !== undefined) {
+                // From deck - card is already in the lane after the effect
+                const position = findCardInLanes(state, request.cardId, request.owner);
+                if (!position) {
+                    console.warn('[convertAnimationRequest] play (from deck): Card not found in lanes:', request.cardId);
+                    return null;
+                }
+                const card = state[request.owner].lanes[position.laneIndex][position.cardIndex];
+                if (!card) {
+                    console.warn('[convertAnimationRequest] play (from deck): Card object not found:', request.cardId);
+                    return null;
+                }
+                return createPlayAnimation(state, card, request.owner, request.toLane, false, undefined, request.isFaceUp ?? false, isOpponentAction);
+            } else {
+                // From hand
+                const handIndex = findCardInHand(state, request.cardId, request.owner);
+                const toLane = request.toLane ?? 0;
+                if (handIndex >= 0) {
+                    const card = state[request.owner].hand[handIndex];
+                    return createPlayAnimation(state, card, request.owner, toLane, true, handIndex, request.isFaceUp ?? true, isOpponentAction);
+                }
+                // Card might already be in lane (after effect applied)
+                const position = findCardInLanes(state, request.cardId, request.owner);
+                if (position) {
+                    const card = state[request.owner].lanes[position.laneIndex][position.cardIndex];
+                    return createPlayAnimation(state, card, request.owner, toLane, true, 0, request.isFaceUp ?? true, isOpponentAction);
+                }
+                console.warn('[convertAnimationRequest] play: Card not found:', request.cardId);
+                return null;
+            }
+        }
+
+        case 'draw': {
+            // Draw animations require actual card objects, which aren't in the AnimationRequest
+            // These should be handled at the effect level where cards are available
+            console.warn('[convertAnimationRequest] draw: Cannot convert - need actual card objects');
+            return null;
+        }
+
+        case 'compile_delete': {
+            // Convert the request format to the expected format
+            const deletedCardsData: { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] = [];
+            for (const item of request.deletedCards) {
+                const position = findCardInLanes(state, item.cardId, item.owner);
+                if (position) {
+                    const card = state[item.owner].lanes[position.laneIndex][position.cardIndex];
+                    if (card) {
+                        deletedCardsData.push({
+                            card,
+                            owner: item.owner,
+                            laneIndex: position.laneIndex,
+                            cardIndex: position.cardIndex
+                        });
+                    }
+                }
+            }
+            if (deletedCardsData.length === 0) {
+                console.warn('[convertAnimationRequest] compile_delete: No cards found');
+                return null;
+            }
+            const animations = createCompileDeleteAnimations(state, deletedCardsData);
+            return animations.length > 0 ? animations[0] : null;
+        }
+
+        default:
+            console.warn('[convertAnimationRequest] Unknown animation type:', (request as any).type);
+            return null;
+    }
+}
+
+/**
+ * Converts an array of AnimationRequests to AnimationQueueItems.
+ * Filters out any null results (cards not found).
+ *
+ * CRITICAL: The state parameter MUST be the state BEFORE any effects are applied.
+ *
+ * @param state - The game state BEFORE effects (cards in original positions)
+ * @param requests - Array of animation requests to convert
+ * @param isOpponentAction - Whether these are opponent actions
+ * @returns Array of complete AnimationQueueItems
+ */
+export function convertAnimationRequestsToQueueItems(
+    state: GameState,
+    requests: AnimationRequest[],
+    isOpponentAction: boolean = false
+): AnimationQueueItem[] {
+    const items: AnimationQueueItem[] = [];
+
+    for (const request of requests) {
+        const item = convertAnimationRequestToQueueItem(state, request, isOpponentAction);
+        if (item) {
+            items.push(item);
+        }
+    }
+
+    return items;
 }

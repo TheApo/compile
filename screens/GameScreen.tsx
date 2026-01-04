@@ -251,31 +251,38 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   // This handles both single-card animations (animatingCard) and multi-card animations (animatingCards)
   // CRITICAL: Check sync refs FIRST to handle race condition where React state hasn't updated yet
   const animatingCardIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    // CRITICAL: Also hide cards from animationState.cardIds (drawCard)
+    // This handles the race condition BEFORE the queue animation starts
+    const animState = gameState.animationState as any;
+    if (animState?.type === 'drawCard' && animState.cardIds) {
+      animState.cardIds.forEach((id: string) => ids.add(id));
+    }
+
     // FIRST: Check synchronous animation state (handles race conditions)
     const isSyncAnimating = getIsAnimatingSync();
     const syncAnimation = getAnimationSync();
 
     if (isSyncAnimating && syncAnimation) {
-      const ids = new Set<string>();
       if (syncAnimation.animatingCard) {
         ids.add(syncAnimation.animatingCard.card.id);
       }
       if (syncAnimation.animatingCards) {
         syncAnimation.animatingCards.forEach(item => ids.add(item.card.id));
       }
-      return ids;
+      if (ids.size > 0) return ids;
     }
 
     // Check React state
     if (isAnimating && currentAnimation) {
-      const ids = new Set<string>();
       if (currentAnimation.animatingCard) {
         ids.add(currentAnimation.animatingCard.card.id);
       }
       if (currentAnimation.animatingCards) {
         currentAnimation.animatingCards.forEach(item => ids.add(item.card.id));
       }
-      return ids;
+      if (ids.size > 0) return ids;
     }
 
     // CRITICAL FALLBACK: Use last valid card IDs during animation transitions
@@ -284,9 +291,9 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
       return lastValidAnimationRef.current.cardIds;
     }
 
-    // Truly not animating
-    return new Set<string>();
-  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync]);
+    // Return whatever we have (could be just animationState cardIds or empty)
+    return ids;
+  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync, gameState.animationState]);
 
   // Extended animation info for correct hiding during shift animations
   const animatingCardInfo = useMemo(() => {
