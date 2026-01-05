@@ -246,10 +246,13 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
         }
 
         if (flipDirection === 'toFaceUp') {
+            // Start face-down (waiting/idle/highlight), flip to face-up during flying/complete
             return animationPhase === 'flying' || animationPhase === 'complete';
         }
         if (flipDirection === 'toFaceDown') {
-            return animationPhase === 'idle' || animationPhase === 'highlight';
+            // Start face-up (waiting/idle/highlight), flip to face-down during flying/complete
+            // CRITICAL: Include 'waiting' to ensure correct state even before visible
+            return animationPhase === 'waiting' || animationPhase === 'idle' || animationPhase === 'highlight';
         }
         // For play animation, use targetIsFaceUp if provided, otherwise fall back to card.isFaceUp
         // targetIsFaceUp tells us how the card will be displayed at its destination

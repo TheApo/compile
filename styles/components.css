@@ -423,14 +423,31 @@
   transform: rotateY(180deg);
 }
 
-/* CRITICAL FIX: Hide card-front content when flipped
-   backface-visibility: hidden is unreliable at small sizes in some browsers */
+/* CRITICAL FIX: Visibility switching for reliable card flips
+   backface-visibility: hidden is unreliable at small sizes in some browsers.
+   We use visibility with a delayed transition so the switch happens at 50% of the flip. */
+
+/* When NOT flipped (face-up): show front, hide back */
+.card-inner:not(.is-flipped) .card-front {
+  visibility: visible;
+  /* No delay - front shows immediately when flipping back to face-up */
+  transition: visibility 0s 0.3s; /* Delay = half of flip duration (0.6s / 2) */
+}
+
+.card-inner:not(.is-flipped) .card-back {
+  visibility: hidden;
+  transition: visibility 0s 0.3s;
+}
+
+/* When flipped (face-down): hide front, show back */
 .card-inner.is-flipped .card-front {
   visibility: hidden;
+  transition: visibility 0s 0.3s;
 }
 
 .card-inner.is-flipped .card-back {
   visibility: visible;
+  transition: visibility 0s 0.3s;
 }
 
 .card-face {

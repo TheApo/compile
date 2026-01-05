@@ -132,6 +132,36 @@ export const AnimationOverlay: React.FC = () => {
         );
     }
 
+    // Special handling for delay - no visual, just waits (for AI "thinking" time)
+    if (currentAnimation.type === 'delay') {
+        return (
+            <PhaseTransitionTimer
+                duration={currentAnimation.duration}
+                onComplete={handleAnimationComplete}
+                animationId={currentAnimation.id}
+            />
+        );
+    }
+
+    // Special handling for flip animations:
+    // - Player flips: card stays in place, board's CSS transition animates it
+    // - Opponent flips (isOpponentAction): use AnimatedCard for highlight phase
+    if (currentAnimation.type === 'flip') {
+        const isOpponentFlip = currentAnimation.animatingCard?.isOpponentAction;
+
+        if (!isOpponentFlip) {
+            // Player flip: just timer, board CSS handles animation
+            return (
+                <PhaseTransitionTimer
+                    duration={currentAnimation.duration}
+                    onComplete={handleAnimationComplete}
+                    animationId={currentAnimation.id}
+                />
+            );
+        }
+        // Opponent flip: fall through to render AnimatedCard with highlight
+    }
+
     return (
         <div
             className="animation-overlay"

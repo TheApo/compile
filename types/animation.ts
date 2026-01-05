@@ -26,7 +26,8 @@ export type AnimationType =
     | 'reveal'          // Card is briefly shown (then flipped back or kept)
     | 'swap'            // Protocols swap positions
     | 'refresh'         // Hand is refilled (multiple draws)
-    | 'phaseTransition'; // Turn/phase indicator animates through phases on turn change
+    | 'phaseTransition' // Turn/phase indicator animates through phases on turn change
+    | 'delay';          // Silent delay (no visual, just waits - for AI "thinking" time)
 
 // =============================================================================
 // CARD POSITION TYPES
@@ -144,6 +145,12 @@ export interface AnimationQueueItem {
     pauseAfter?: boolean;                    // Queue pauses after this animation
     requiresUserInput?: ActionRequired;      // User input needed after animation
 
+    // Log message to display as toast when this animation starts
+    logMessage?: {
+        message: string;
+        player: Player;
+    };
+
     // Additional data for specific animations
     laneIndex?: number;            // For compile: which lane is compiling
     protocolSwap?: {               // For swap: which protocols are swapping
@@ -206,6 +213,7 @@ export const DEFAULT_ANIMATION_DURATIONS: Record<AnimationType, number> = {
     swap: 400,
     refresh: 500,
     phaseTransition: 400,  // Per phase step (not used - actual values in animationTiming.ts)
+    delay: 1000,           // Silent delay for AI "thinking" time
 };
 
 /**

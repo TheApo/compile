@@ -10,7 +10,7 @@ import { CardComponent } from '../components/Card';
 import { useGameState } from '../hooks/useGameState';
 import { GameBoard } from '../components/GameBoard';
 import { PhaseController } from '../components/PhaseController';
-import { GameState, Player, PlayedCard, Difficulty, ActionRequired } from '../types';
+import { GameState, Player, PlayedCard, Difficulty, ActionRequired, GamePhase } from '../types';
 import { GameInfoPanel } from '../components/GameInfoPanel';
 import { LogModal } from '../components/LogModal';
 import { isCardTargetable } from '../utils/targeting';
@@ -217,6 +217,16 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     const syncAnimation = getAnimationSync();
     const isSyncAnimating = getIsAnimatingSync();
 
+    // SPECIAL CASE: Player flip animations use the REAL gameState (not snapshot)
+    // because the card stays in place and we want the board's CSS transition to animate it.
+    // Opponent flips (isOpponentAction) use snapshot + AnimatedCard for highlight phase.
+    const activeAnim = syncAnimation || currentAnimation;
+    const isPlayerFlip = activeAnim?.type === 'flip' && !activeAnim.animatingCard?.isOpponentAction;
+    if (isPlayerFlip) {
+      lastValidAnimationRef.current = null;
+      return gameState;
+    }
+
     if (isSyncAnimating && syncAnimation?.snapshot) {
       // Update last valid state
       const cardIds = new Set<string>();
@@ -253,16 +263,25 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const animatingCardIds = useMemo(() => {
     const ids = new Set<string>();
 
+    // FIRST: Check synchronous animation state (handles race conditions)
+    const isSyncAnimating = getIsAnimatingSync();
+    const syncAnimation = getAnimationSync();
+
+    // SPECIAL CASE: Player flip animations do NOT hide the card
+    // The card stays in place and flips via its own CSS transition.
+    // Opponent flips (isOpponentAction) DO hide the card (AnimatedCard shows it).
+    const activeAnimForIds = syncAnimation || currentAnimation;
+    const isPlayerFlipForIds = activeAnimForIds?.type === 'flip' && !activeAnimForIds.animatingCard?.isOpponentAction;
+    if (isPlayerFlipForIds) {
+      return ids; // Return empty set - don't hide any cards
+    }
+
     // CRITICAL: Also hide cards from animationState.cardIds (drawCard)
     // This handles the race condition BEFORE the queue animation starts
     const animState = gameState.animationState as any;
     if (animState?.type === 'drawCard' && animState.cardIds) {
       animState.cardIds.forEach((id: string) => ids.add(id));
     }
-
-    // FIRST: Check synchronous animation state (handles race conditions)
-    const isSyncAnimating = getIsAnimatingSync();
-    const syncAnimation = getAnimationSync();
 
     if (isSyncAnimating && syncAnimation) {
       if (syncAnimation.animatingCard) {
@@ -313,6 +332,27 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
       };
     }
     return null;
+  }, [currentAnimation]);
+
+  // Extract override phase/turn for non-phaseTransition animations
+  // During ANY animation (except phaseTransition), use snapshot's phase/turn
+  // This prevents the phase display from jumping to the final state during animations
+  const { overridePhase, overrideTurn } = useMemo(() => {
+    // During phaseTransition: let the animated sequence handle it (don't override)
+    if (currentAnimation?.type === 'phaseTransition') {
+      return { overridePhase: undefined, overrideTurn: undefined };
+    }
+
+    // During ANY other animation: use snapshot phase (static display)
+    if (currentAnimation?.snapshot) {
+      return {
+        overridePhase: currentAnimation.snapshot.phase as GamePhase,
+        overrideTurn: currentAnimation.snapshot.turn as Player,
+      };
+    }
+
+    // No animation: don't override (use gameState defaults)
+    return { overridePhase: undefined, overrideTurn: undefined };
   }, [currentAnimation]);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
@@ -417,22 +457,43 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   // Priority: 1) User hover, 2) Effect source card, 3) Last played card
   const previewState = hoveredCard || sourceCardInfo || lastPlayedCardInfo;
 
+  // NEW TOAST SYSTEM: Synchronized with animations
+  // Effect 1: Show toast when animation with logMessage starts
+  useEffect(() => {
+    if (currentAnimation?.logMessage) {
+        const { message, player } = currentAnimation.logMessage;
+        const newToast = { message, player, id: uuidv4() };
+        setToasts(currentToasts => [...currentToasts, newToast]);
+
+        // Remove after 5 seconds
+        setTimeout(() => {
+            setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
+        }, 5000);
+    }
+  }, [currentAnimation?.id]); // Trigger when animation changes
+
+  // Effect 2: For log entries WITHOUT animation - show immediately when NOT animating
   useEffect(() => {
     if (gameState.log.length > lastLogLengthRef.current) {
         const newLogs = gameState.log.slice(lastLogLengthRef.current);
-        newLogs.forEach(logEntry => {
-            if (logEntry.message !== 'Game Started.') {
-                const newToast = { message: logEntry.message, player: logEntry.player, id: uuidv4() };
-                setToasts(currentToasts => [...currentToasts, newToast]);
 
-                setTimeout(() => {
-                    setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
-                }, 5000);
-            }
-        });
+        // Only show immediately if NOT animating
+        // If animating, log messages should be attached to animations via logMessage property
+        if (!getIsAnimatingSync()) {
+            newLogs.forEach(logEntry => {
+                if (logEntry.message !== 'Game Started.') {
+                    const newToast = { message: logEntry.message, player: logEntry.player, id: uuidv4() };
+                    setToasts(currentToasts => [...currentToasts, newToast]);
+
+                    setTimeout(() => {
+                        setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
+                    }, 5000);
+                }
+            });
+        }
     }
     lastLogLengthRef.current = gameState.log.length;
-  }, [gameState.log]);
+  }, [gameState.log, getIsAnimatingSync]);
 
   useEffect(() => {
     const isVariableDiscard = gameState.actionRequired?.type === 'discard' && gameState.actionRequired?.variableCount;
@@ -929,14 +990,12 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 onConfirm={() => resolveConfirmDeckPlayPreview()}
             />
         )}
-        {/* Hide toasts during animation */}
-        {!isAnimating && (
-            <div className="toaster-container">
-                {toasts.map((toast) => (
-                    <Toaster key={toast.id} message={toast.message} player={toast.player} />
-                ))}
-            </div>
-        )}
+        {/* Toasts are now synchronized with animations - always show */}
+        <div className="toaster-container">
+            {toasts.map((toast) => (
+                <Toaster key={toast.id} message={toast.message} player={toast.player} />
+            ))}
+        </div>
         {showLog && <LogModal log={gameState.log} onClose={() => setShowLog(false)} />}
         <button className="btn log-button" onClick={() => setShowLog(true)}>Log</button>
         <div className="game-screen-layout">
@@ -948,6 +1007,8 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                     animationState={gameState.animationState}
                     difficulty={difficulty}
                     phaseTransitionAnimation={phaseTransitionAnimation}
+                    overridePhase={overridePhase}
+                    overrideTurn={overrideTurn}
                     onPlayerClick={() => setDebugModalPlayer('player')}
                     onOpponentClick={() => setDebugModalPlayer('opponent')}
                 />

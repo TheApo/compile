@@ -212,6 +212,8 @@ export function createDeleteAnimation(
 
 /**
  * Creates a FLIP animation - card flips to reveal or hide.
+ *
+ * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
  */
 export function createFlipAnimation(
     state: GameState,
@@ -219,7 +221,8 @@ export function createFlipAnimation(
     owner: Player,
     laneIndex: number,
     cardIndex: number,
-    toFaceUp: boolean
+    toFaceUp: boolean,
+    isOpponentAction: boolean = false
 ): AnimationQueueItem {
     const snapshot = createVisualSnapshot(state);
 
@@ -240,6 +243,7 @@ export function createFlipAnimation(
             fromPosition: position,
             toPosition: position,
             flipDirection: toFaceUp ? 'toFaceUp' : 'toFaceDown',
+            isOpponentAction,
         },
         laneIndex,
     };
@@ -681,6 +685,30 @@ export function createSwapAnimation(
         duration: ANIMATION_DURATIONS.swap,
         // Swap animations don't have a single animating card
         // The snapshot renderer will handle showing the swap
+    };
+}
+
+/**
+ * Creates a DELAY animation - silent pause with no visual effect.
+ * Used for AI "thinking" time before actions.
+ *
+ * @param state - Current game state (used for snapshot)
+ * @param duration - Delay duration in milliseconds (default: 1000ms)
+ * @param logMessage - Optional log message to display as toast when animation starts
+ */
+export function createDelayAnimation(
+    state: GameState,
+    duration: number = ANIMATION_DURATIONS.delay,
+    logMessage?: { message: string; player: Player }
+): AnimationQueueItem {
+    const snapshot = createVisualSnapshot(state);
+
+    return {
+        id: generateAnimationId('delay'),
+        type: 'delay',
+        snapshot,
+        duration,
+        logMessage,
     };
 }
 

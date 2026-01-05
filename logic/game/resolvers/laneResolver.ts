@@ -17,6 +17,7 @@ import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { executeOnPlayEffect, executeOnCoverEffect } from '../../effectExecutor';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
 import { canShiftCard, hasAnyProtocolPlayRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
+import { queueFollowUpEffectSync, isFollowUpAlreadyQueued } from './followUpHelper';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -254,6 +255,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             // CRITICAL: Check if the shift created an interrupt (e.g., uncover effect)
             const uncoverCreatedInterrupt = newState.actionRequired !== null;
 
+            // DEBUG: Log shift details
+            console.log('[SHIFT DEBUG] ===== SHIFT COMPLETED =====');
+            console.log('[SHIFT DEBUG] cardToShiftId:', cardToShiftId);
+            console.log('[SHIFT DEBUG] uncoverCreatedInterrupt:', uncoverCreatedInterrupt);
+            console.log('[SHIFT DEBUG] prev.actionRequired:', prev.actionRequired?.type);
+            console.log('[SHIFT DEBUG] prev.actionRequired.followUpEffect:', (prev.actionRequired as any)?.followUpEffect);
+            console.log('[SHIFT DEBUG] prev.actionRequired.sourceCardId:', prev.actionRequired?.sourceCardId);
+            console.log('[SHIFT DEBUG] sourceEffect:', sourceEffect);
+            console.log('[SHIFT DEBUG] shiftResult.animationRequests:', shiftResult.animationRequests);
+
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // Using central helper to prevent async timing bugs (AI runs sync, never waits for callbacks)
+            const wasActionExecuted = !!cardToShiftId;  // Did the shift actually happen?
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, wasActionExecuted);
+
             if (shiftResult.animationRequests) {
                 // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip and Anarchy-0's conditional draw after animations.
                 requiresAnimation = {
@@ -264,6 +280,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // CRITICAL: If uncover created an interrupt, we need to queue the follow-up effects
                         if (uncoverCreatedInterrupt) {
                             // LEGACY: Speed-3's speed_3_end effect
+                            // NOTE: This is kept for backwards compatibility with old Speed-3 protocol
+                            // The generic followUpEffect handling is now done synchronously BEFORE this callback
                             if (sourceEffect === 'speed_3_end') {
                                 const speed3CardId = prev.actionRequired.sourceCardId;
                                 const speed3FlipAction: ActionRequired = {
@@ -277,35 +295,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 ];
                             }
 
-                            // NEW: Queue generic followUpEffect for custom protocols (Speed-3 "If you do, flip this card")
-                            // This ensures the followUp executes AFTER the uncover interrupt resolves
-                            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
-                            const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                            if (followUpEffect && sourceCardId) {
-                                const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
-                                if (shouldExecute) {
-                                    // Get source card name for log context (state context may already be cleared)
-                                    const sourceCardForLog = findCardOnBoard(finalState, sourceCardId);
-                                    // Determine phase from state (could be 'start' or 'end')
-                                    const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
-                                    const queuedFollowUp = {
-                                        type: 'execute_follow_up_effect',
-                                        sourceCardId: sourceCardId,
-                                        followUpEffect: followUpEffect,
-                                        actor: actor,
-                                        // CRITICAL: Store card name explicitly since state context may be cleared
-                                        logContext: {
-                                            indentLevel: 1,  // Follow-ups are always indented
-                                            sourceCardName: sourceCardForLog ? `${sourceCardForLog.card.protocol}-${sourceCardForLog.card.value}` : undefined,
-                                            phase: phaseContext,
-                                        },
-                                    };
-                                    finalState.queuedActions = [
-                                        ...(finalState.queuedActions || []),
-                                        queuedFollowUp
-                                    ];
-                                }
-                            }
+                            // NOTE: Generic followUpEffect queueing has been moved to SYNCHRONOUS execution
+                            // BEFORE this callback to fix the timing bug where turn changed before callback was called.
+                            // See the code block at line ~257-291.
 
                             const sourceCard = findCardOnBoard(finalState, sourceCardId);
                             // CRITICAL: Only queue Anarchy-0 draw if it's still uncovered AND face-up
@@ -404,6 +396,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NEW: Handle generic followUpEffect for custom protocols ("Shift 1. If you do, draw 2.")
                         const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                         const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                        console.log('[SHIFT CALLBACK DEBUG] ===== IN CALLBACK =====');
+                        console.log('[SHIFT CALLBACK DEBUG] followUpEffect:', followUpEffect);
+                        console.log('[SHIFT CALLBACK DEBUG] conditionalType:', conditionalType);
+                        console.log('[SHIFT CALLBACK DEBUG] sourceCardId:', sourceCardId);
+                        console.log('[SHIFT CALLBACK DEBUG] uncoverCreatedInterrupt:', uncoverCreatedInterrupt);
                         if (followUpEffect && sourceCardId) {
                             // For 'if_executed' conditionals, only execute if the shift actually happened
                             const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId; // shift happened if cardToShiftId exists
@@ -579,6 +576,10 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // This handles "Shift 1. If you do, flip this card." like Speed-3
                     const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                     const conditionalType = (prev.actionRequired as any)?.conditionalType;
+                    console.log('[SHIFT NO-ANIM DEBUG] ===== NO ANIMATION PATH =====');
+                    console.log('[SHIFT NO-ANIM DEBUG] followUpEffect:', followUpEffect);
+                    console.log('[SHIFT NO-ANIM DEBUG] conditionalType:', conditionalType);
+                    console.log('[SHIFT NO-ANIM DEBUG] sourceCardId:', sourceCardId);
                     if (followUpEffect && sourceCardId) {
                         // For 'if_executed' conditionals, only execute if the shift actually happened
                         const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;

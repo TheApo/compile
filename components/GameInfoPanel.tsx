@@ -17,6 +17,9 @@ interface GameInfoPanelProps {
     phaseSequence: Array<{ phase: GamePhase; turn: Player }>;
     duration: number;
   } | null;
+  // Override phase/turn during non-phaseTransition animations (from snapshot)
+  overridePhase?: GamePhase;
+  overrideTurn?: Player;
   onPlayerClick?: () => void;
   onOpponentClick?: () => void;
 }
@@ -33,7 +36,7 @@ const PHASE_LABELS: Record<string, string> = {
 // All phases in order for the TurnPhaseIndicator
 const ALL_PHASES: GamePhase[] = ['start', 'control', 'compile', 'action', 'hand_limit', 'end'];
 
-export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, animationState, difficulty, phaseTransitionAnimation, onPlayerClick, onOpponentClick }) => {
+export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, animationState, difficulty, phaseTransitionAnimation, overridePhase, overrideTurn, onPlayerClick, onOpponentClick }) => {
   const { player, opponent } = gameState;
 
   // State for animated phase display
@@ -49,48 +52,54 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
       animationTimeoutRef.current = null;
     }
 
-    if (!phaseTransitionAnimation) {
-      // No animation active - immediately sync to current game state
-      setDisplayedPhase(gameState.phase);
-      setDisplayedTurn(turn);
-      return;
-    }
+    // Priority 1: Phase transition animation (animated sequence)
+    if (phaseTransitionAnimation) {
+      const { phaseSequence, duration } = phaseTransitionAnimation;
 
-    // Animation is active - animate through the provided phase sequence
-    const { phaseSequence, duration } = phaseTransitionAnimation;
+      if (phaseSequence.length === 0) {
+        return;
+      }
 
-    if (phaseSequence.length === 0) {
-      return;
-    }
+      // Calculate step duration based on total duration and number of steps
+      const stepDuration = duration / phaseSequence.length;
 
-    // Calculate step duration based on total duration and number of steps
-    const stepDuration = duration / phaseSequence.length;
-
-    let stepIndex = 0;
-    const animateNextStep = () => {
-      if (stepIndex < phaseSequence.length) {
-        const step = phaseSequence[stepIndex];
-        setDisplayedPhase(step.phase);
-        setDisplayedTurn(step.turn);
-        stepIndex++;
-
-        // Schedule next step if there are more
+      let stepIndex = 0;
+      const animateNextStep = () => {
         if (stepIndex < phaseSequence.length) {
-          animationTimeoutRef.current = setTimeout(animateNextStep, stepDuration);
+          const step = phaseSequence[stepIndex];
+          setDisplayedPhase(step.phase);
+          setDisplayedTurn(step.turn);
+          stepIndex++;
+
+          // Schedule next step if there are more
+          if (stepIndex < phaseSequence.length) {
+            animationTimeoutRef.current = setTimeout(animateNextStep, stepDuration);
+          }
         }
-      }
-    };
+      };
 
-    // Start animation immediately
-    animateNextStep();
+      // Start animation immediately
+      animateNextStep();
 
-    return () => {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-        animationTimeoutRef.current = null;
-      }
-    };
-  }, [phaseTransitionAnimation, gameState.phase, turn]);
+      return () => {
+        if (animationTimeoutRef.current) {
+          clearTimeout(animationTimeoutRef.current);
+          animationTimeoutRef.current = null;
+        }
+      };
+    }
+
+    // Priority 2: Override phase/turn from animation snapshot (non-phaseTransition animations)
+    if (overridePhase) {
+      setDisplayedPhase(overridePhase);
+      setDisplayedTurn(overrideTurn ?? turn);
+      return;
+    }
+
+    // Priority 3: No animation active - sync to current game state
+    setDisplayedPhase(gameState.phase);
+    setDisplayedTurn(turn);
+  }, [phaseTransitionAnimation, gameState.phase, turn, overridePhase, overrideTurn]);
 
   // Cleanup on unmount
   useEffect(() => {

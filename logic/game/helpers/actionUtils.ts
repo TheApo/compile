@@ -15,6 +15,7 @@ import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
 import { rememberFlippedCard } from '../../ai/cardMemory';
 import { createFlipAnimation } from '../../animation/animationHelpers';
+import { flipCardMessage } from '../../utils/logMessages';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex: number, cardIndex: number } | null {
     if (!cardId) return null;
@@ -401,7 +402,8 @@ export function internalResolveTargetedFlip(
     if (enqueueAnimation && laneIndex !== -1 && cardIndex !== -1) {
         const toFaceUp = !card.isFaceUp;
         const flipAnim = createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp);
-        enqueueAnimation(flipAnim);
+        const logMsg = flipCardMessage(card, toFaceUp);
+        enqueueAnimation({ ...flipAnim, logMessage: { message: logMsg, player: actor } });
     }
 
     newState = findAndFlipCards(new Set([targetCardId]), newState);

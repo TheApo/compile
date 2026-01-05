@@ -1250,7 +1250,9 @@ export const continueTurnProgression = (state: GameState): GameState => {
             break;
         }
     }
-    return { ...nextState, animationState: null };
+    // CRITICAL FIX: Preserve animationState if it was set (e.g., by refreshHandForPlayer)
+    // This ensures draw animations work after rearrange protocols + fill hand
+    return nextState.animationState ? nextState : { ...nextState, animationState: null };
 };
 
 export const continueTurnAfterStartPhaseAction = (state: GameState): GameState => {

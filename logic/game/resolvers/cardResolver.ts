@@ -16,6 +16,7 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { canFlipSpecificCard } from '../passiveRuleChecker';
 import { getMiddleEffects } from '../../effects/actions/copyEffectExecutor';
+import { queueFollowUpEffectSync, isFollowUpAlreadyQueued } from './followUpHelper';
 
 export type CardActionResult = {
     nextState: GameState;
@@ -667,6 +668,12 @@ export const resolveActionWithCard = (
             newState = deleteCardFromBoard(newState, targetCardId);
 
             newState = phaseManager.queuePendingCustomEffects(newState);
+
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // This fixes "Delete 1. If you do, flip this card" not working for AI
+            // because AI runs synchronously and never waits for async callbacks.
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, true);
+
             newState.actionRequired = null;
             requiresAnimation = {
                 animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
@@ -809,12 +816,16 @@ export const resolveActionWithCard = (
 
                     // CRITICAL: Handle followUpEffect (Death-1: "then delete this card") when delete is complete
                     // This only applies when we DON'T have a nextStepOfDeleteAction (i.e., this was the last/only delete)
+                    // NOTE: followUpEffect may have been queued synchronously already (by queueFollowUpEffectSync)
+                    // to fix the async bug where AI runs sync and never waits for callbacks.
+                    const followUpAlreadyQueued = isFollowUpAlreadyQueued(stateAfterTriggers, originalAction.sourceCardId);
                     console.log('[CALLBACK DEBUG 4] followUpEffect check:', {
                         hasFollowUpEffect: !!followUpEffect,
                         hasNextStepOfDeleteAction: !!nextStepOfDeleteAction,
-                        willExecuteFollowUp: !!(followUpEffect && !nextStepOfDeleteAction)
+                        followUpAlreadyQueued,
+                        willExecuteFollowUp: !!(followUpEffect && !nextStepOfDeleteAction && !followUpAlreadyQueued)
                     });
-                    if (followUpEffect && !nextStepOfDeleteAction) {
+                    if (followUpEffect && !nextStepOfDeleteAction && !followUpAlreadyQueued) {
                         console.log('[CALLBACK DEBUG 5] Executing followUpEffect path');
 
                         // If there's already an actionRequired (from uncover effect), queue the followUp for later
@@ -1184,6 +1195,12 @@ export const resolveActionWithCard = (
 
             const result = internalReturnCard(prev, targetCardId, destination);
             newState = result.newState;
+
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // This fixes "Return 1. If you do, flip this card" not working for AI
+            // because AI runs synchronously and never waits for async callbacks.
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, true);
+
             if (result.animationRequests) {
                  requiresAnimation = {
                     animationRequests: result.animationRequests,
@@ -1193,7 +1210,9 @@ export const resolveActionWithCard = (
                         let finalState = s;
 
                         // NEW: Handle generic followUpEffect for custom protocols ("Return 1. If you do, flip 1.")
-                        if (followUpEffect && sourceCardId) {
+                        // NOTE: Check if already queued synchronously (async bug fix)
+                        const followUpAlreadyQueued = isFollowUpAlreadyQueued(finalState, sourceCardId);
+                        if (followUpEffect && sourceCardId && !followUpAlreadyQueued) {
                             const shouldExecute = conditionalType !== 'if_executed' || targetCardId;
 
                             if (shouldExecute) {
@@ -1222,7 +1241,9 @@ export const resolveActionWithCard = (
                 };
             } else {
                 // No animation - execute followUp immediately if present
-                if (followUpEffect && sourceCardId) {
+                // NOTE: Check if already queued synchronously (async bug fix)
+                const followUpAlreadyQueuedNoAnim = isFollowUpAlreadyQueued(newState, sourceCardId);
+                if (followUpEffect && sourceCardId && !followUpAlreadyQueuedNoAnim) {
                     const shouldExecute = conditionalType !== 'if_executed' || targetCardId;
 
                     if (shouldExecute) {

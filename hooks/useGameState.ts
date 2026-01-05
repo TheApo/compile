@@ -34,11 +34,18 @@ import {
     createPhaseTransitionAnimation,
 } from '../logic/animation/animationHelpers';
 import { ANIMATION_DURATIONS } from '../constants/animationTiming';
+import {
+    playCardMessage,
+    shiftCardMessage,
+    shiftAllCardsMessage,
+    deleteCardMessage,
+    returnAllCardsMessage,
+    drawCardsMessage,
+    discardCardMessage,
+    refreshHandMessage,
+    compileProtocolMessage,
+} from '../logic/utils/logMessages';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
-
-// Animation system: New queue-based system is always enabled
-// NOTE: Keeping this constant for now, will be removed after cleaning up all references
-const USE_NEW_ANIMATION_SYSTEM = true;
 
 export const useGameState = (
     playerProtocols: string[],
@@ -150,8 +157,8 @@ export const useGameState = (
                     }
                 }, ANIMATION_DURATIONS.delete);
             } else if (nextRequest.type === 'return') {
-                // NEW ANIMATION SYSTEM: Create animation and update state IMMEDIATELY
-                if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+                // Create animation and update state IMMEDIATELY
+                if (enqueueAnimation) {
                     setGameState(currentState => {
                         const card = currentState[nextRequest.owner].lanes.flat().find(c => c.id === nextRequest.cardId);
                         if (!card) {
@@ -221,53 +228,9 @@ export const useGameState = (
                     return; // Exit early - new system handled everything
                 }
 
-                // OLD ANIMATION SYSTEM (fallback)
-                setGameState(s => ({ ...s, animationState: { type: 'returnCard', cardId: nextRequest.cardId, owner: nextRequest.owner } as any }));
-
-                setTimeout(() => {
-                    setGameState(s => {
-                        const laneIndex = s[nextRequest.owner].lanes.findIndex(l => l.some(c => c.id === nextRequest.cardId));
-                        const wasTopCard = laneIndex !== -1 &&
-                                           s[nextRequest.owner].lanes[laneIndex].length > 0 &&
-                                           s[nextRequest.owner].lanes[laneIndex][s[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
-
-                        // Find and remove card from board, add to hand
-                        const card = s[nextRequest.owner].lanes.flat().find(c => c.id === nextRequest.cardId);
-                        if (!card) {
-                            return { ...s, animationState: null };
-                        }
-
-                        const newLanes = s[nextRequest.owner].lanes.map(lane => lane.filter(c => c.id !== nextRequest.cardId));
-                        let stateAfterReturn = {
-                            ...s,
-                            [nextRequest.owner]: {
-                                ...s[nextRequest.owner],
-                                lanes: newLanes,
-                                hand: [...s[nextRequest.owner].hand, card]
-                            }
-                        };
-                        stateAfterReturn = stateManager.recalculateAllLaneValues(stateAfterReturn);
-
-                        // CRITICAL: Trigger uncover effect if the returned card was a top card
-                        if (wasTopCard && laneIndex !== -1 && stateAfterReturn[nextRequest.owner].lanes[laneIndex].length > 0) {
-                            const uncoverResult = handleUncoverEffect(stateAfterReturn, nextRequest.owner, laneIndex);
-                            stateAfterReturn = uncoverResult.newState;
-                        }
-
-                        return { ...stateAfterReturn, animationState: null };
-                    });
-
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, 10);
-                }, 500);
             } else if (nextRequest.type === 'play') {
-                // NEW ANIMATION SYSTEM: Create play animation for deck-to-lane plays
-                if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation && nextRequest.fromDeck && nextRequest.toLane !== undefined) {
+                // Create play animation for deck-to-lane plays
+                if (enqueueAnimation && nextRequest.fromDeck && nextRequest.toLane !== undefined) {
                     setGameState(currentState => {
                         const owner = nextRequest.owner;
                         const toLane = nextRequest.toLane!;
@@ -321,23 +284,9 @@ export const useGameState = (
                     return; // Exit early - new system handled everything
                 }
 
-                // OLD ANIMATION SYSTEM (fallback for non-deck plays)
-                setGameState(s => ({ ...s, animationState: { type: 'playCard', cardId: nextRequest.cardId, owner: nextRequest.owner } as any }));
-
-                setTimeout(() => {
-                    setGameState(s => ({ ...s, animationState: null }));
-
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, 10);
-                }, 500);
             } else if (nextRequest.type === 'draw') {
-                // NEW ANIMATION SYSTEM: Create sequential draw animations
-                if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimations) {
+                // Create sequential draw animations
+                if (enqueueAnimations) {
                     // Use drawnCardIds if provided (preferred - avoids state timing issues)
                     // Otherwise fall back to finding cards by count in current state
                     const drawnCardIds = (nextRequest as any).drawnCardIds as string[] | undefined;
@@ -382,6 +331,11 @@ export const useGameState = (
                                 player,
                                 startIndex
                             );
+                            // Add logMessage to first animation
+                            if (animations.length > 0) {
+                                const logMsg = drawCardsMessage(player, newCards.length);
+                                animations[0] = { ...animations[0], logMessage: { message: logMsg, player } };
+                            }
                             enqueueAnimations(animations);
                         }
 
@@ -401,25 +355,11 @@ export const useGameState = (
                     return; // Exit early - new system handled everything
                 }
 
-                // OLD ANIMATION SYSTEM (fallback)
-                setGameState(s => ({ ...s, animationState: { type: 'drawCard', owner: nextRequest.player, cardIds: [] } as any }));
-
-                setTimeout(() => {
-                    setGameState(s => ({ ...s, animationState: null }));
-
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, 10);
-                }, 500);
             } else if (nextRequest.type === 'shift') {
                 // Handle shift animation for reactive effects that DON'T go through resolveActionWithLane
                 // NOTE: For select_lane_for_shift, shift_flipped_card_optional, and playSelectedCard,
                 // animations are created BEFORE setGameState. This handler is for other cases.
-                if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation && !(nextRequest as any)._animationAlreadyCreated) {
+                if (enqueueAnimation && !(nextRequest as any)._animationAlreadyCreated) {
                     setGameState(currentState => {
                         // Card has already been shifted, so it's now in toLane
                         const card = currentState[nextRequest.owner].lanes[nextRequest.toLane]?.find(c => c.id === nextRequest.cardId);
@@ -448,7 +388,7 @@ export const useGameState = (
                             onComplete();
                         }
                     }, 10);
-                }, USE_NEW_ANIMATION_SYSTEM ? 1000 : 10); // 1s for animation if new system, otherwise quick
+                }, 1000); // 1s for animation
             } else {
                 // Skip unknown animation types
                 setTimeout(() => {
@@ -470,14 +410,18 @@ export const useGameState = (
         const cardId = selectedCard;
         setSelectedCard(null);
 
-        // NEW: Use the new animation queue system if available and enabled
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation) {
+        // Use the animation queue system if available
+        if (enqueueAnimation) {
             // Get the card and its position in hand BEFORE state update
             const card = gameState.player.hand.find(c => c.id === cardId);
             const handIndex = gameState.player.hand.findIndex(c => c.id === cardId);
 
             if (card) {
-                // Create and enqueue the play animation with the PRE-action state snapshot
+                const protocolName = targetOwner === 'player'
+                    ? gameState.player.protocols[laneIndex]
+                    : gameState.opponent.protocols[laneIndex];
+                const logMsg = playCardMessage('player', card, protocolName, isFaceUp, targetOwner);
+
                 const animation = createPlayAnimation(
                     gameState,
                     card,
@@ -485,9 +429,9 @@ export const useGameState = (
                     laneIndex,
                     true, // fromHand
                     handIndex,
-                    isFaceUp // Pass through face-up state for animation
+                    isFaceUp
                 );
-                enqueueAnimation(animation);
+                enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'player' } });
             }
 
             // Update state immediately to final state (no setTimeout, no animationState)
@@ -637,9 +581,9 @@ export const useGameState = (
             const prevHandIds = new Set(prev.player.hand.map(c => c.id));
             let newState = resolvers.fillHand(prev, 'player');
 
-            // NEW ANIMATION SYSTEM: Create SEQUENTIAL draw animations
+            // Create SEQUENTIAL draw animations
             // Each card gets its own animation with proper snapshot showing cards that already landed
-            if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimations) {
+            if (enqueueAnimations) {
                 const newCards = newState.player.hand.filter(c => !prevHandIds.has(c.id));
                 if (newCards.length > 0) {
                     // Create sequential animations - each shows previously landed cards
@@ -649,6 +593,11 @@ export const useGameState = (
                         'player',
                         prev.player.hand.length  // Starting index in hand
                     );
+                    // Add logMessage to first animation (refresh hand)
+                    if (animations.length > 0) {
+                        const logMsg = refreshHandMessage('player', newCards.length);
+                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'player' } };
+                    }
                     enqueueAnimations(animations);
 
                     // CRITICAL: Clear animationState to prevent double-animation from useEffect
@@ -716,6 +665,14 @@ export const useGameState = (
                         // Create delete animations using the state BEFORE compile for correct positions
                         const deleteAnims = createCompileDeleteAnimations(currentState, compileAnimationData);
                         console.log('[COMPILE DEBUG] Created animations:', deleteAnims.length);
+
+                        // Add compile message to the first animation
+                        if (deleteAnims.length > 0) {
+                            const protocolName = currentState.player.protocols[laneIndex];
+                            const logMsg = compileProtocolMessage('player', protocolName);
+                            deleteAnims[0] = { ...deleteAnims[0], logMessage: { message: logMsg, player: 'player' } };
+                        }
+
                         enqueueAnimations(deleteAnims);
 
                         // Clean up animation marker from state
@@ -736,10 +693,10 @@ export const useGameState = (
     }, [onEndGame, getTurnProgressionCallback]);
 
     const resolveActionWithCard = (targetCardId: string) => {
-        // NEW ANIMATION SYSTEM: Create return animation BEFORE setGameState
+        // Create return animation BEFORE setGameState
         // This ensures the animation is enqueued synchronously before React updates
         const actionType = gameState.actionRequired?.type;
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation &&
+        if (enqueueAnimation &&
             (actionType === 'select_card_to_return' || actionType === 'select_opponent_card_to_return')) {
             // CRITICAL FIX: Only create animation if the card is actually allowed to be returned
             // Check allowedIds from actionRequired (set by the effect executor based on filters like valueEquals)
@@ -786,6 +743,8 @@ export const useGameState = (
                     const cardIndex = lane.findIndex(c => c.id === targetCardId);
                     if (cardIndex >= 0) {
                         const card = lane[cardIndex];
+                        const logMsg = deleteCardMessage(card);
+
                         const animation = createDeleteAnimation(
                             gameState,
                             card,
@@ -793,7 +752,7 @@ export const useGameState = (
                             laneIdx,
                             cardIndex
                         );
-                        enqueueAnimation(animation);
+                        enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                         found = true;
                         break;
                     }
@@ -861,7 +820,7 @@ export const useGameState = (
         // Multi-card shift action
         const isMultiShiftAction = actionType === 'select_lane_for_shift_all';
 
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation && isSingleShiftAction) {
+        if (enqueueAnimation && isSingleShiftAction) {
             // Get card info based on action type
             let cardToShiftId: string | undefined;
             let cardOwner: Player | undefined;
@@ -907,27 +866,32 @@ export const useGameState = (
                 const cardToShift = gameState[cardOwner].lanes[originalLaneIndex]?.find(c => c.id === cardToShiftId);
                 const cardIndex = gameState[cardOwner].lanes[originalLaneIndex]?.findIndex(c => c.id === cardToShiftId) ?? -1;
                 if (cardToShift && cardIndex >= 0) {
+                    const fromProtocol = gameState[cardOwner].protocols[originalLaneIndex];
+                    const toProtocol = gameState[cardOwner].protocols[targetLaneIndex];
+                    const logMsg = shiftCardMessage(cardOwner, cardToShift, fromProtocol, toProtocol);
+
                     const animation = createShiftAnimation(
-                        gameState,  // Use current gameState (before update)
+                        gameState,
                         cardToShift,
                         cardOwner,
                         originalLaneIndex,
                         cardIndex,
                         targetLaneIndex
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: cardOwner } });
                 }
             }
         }
 
         // Handle multi-card shift (select_lane_for_shift_all)
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimations && isMultiShiftAction) {
+        if (enqueueAnimations && isMultiShiftAction) {
             const req = gameState.actionRequired as any;
             const sourceLaneIndex = req.sourceLaneIndex;
             const cardsToShift = req.cardsToShift as { cardId: string; owner: Player }[] | undefined;
 
             if (cardsToShift && sourceLaneIndex !== targetLaneIndex) {
                 const animations: Omit<AnimationQueueItem, 'id'>[] = [];
+                let isFirstCard = true;
                 for (const { cardId, owner } of cardsToShift) {
                     const cardIndex = gameState[owner].lanes[sourceLaneIndex]?.findIndex(c => c.id === cardId) ?? -1;
                     const card = gameState[owner].lanes[sourceLaneIndex]?.[cardIndex];
@@ -940,7 +904,16 @@ export const useGameState = (
                             cardIndex,
                             targetLaneIndex
                         );
-                        animations.push(animation);
+                        // Add logMessage only to first card (represents the shift-all action)
+                        if (isFirstCard) {
+                            const fromProtocol = gameState[owner].protocols[sourceLaneIndex];
+                            const toProtocol = gameState[owner].protocols[targetLaneIndex];
+                            const logMsg = shiftAllCardsMessage(fromProtocol, toProtocol);
+                            animations.push({ ...animation, logMessage: { message: logMsg, player: owner } });
+                            isFirstCard = false;
+                        } else {
+                            animations.push(animation);
+                        }
                     }
                 }
                 if (animations.length > 0) {
@@ -955,7 +928,7 @@ export const useGameState = (
         const isPlayFromHandAction = actionType === 'select_lane_for_play' &&
                                      (gameState.actionRequired as any)?.cardInHandId;
 
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation && isPlayFromHandAction) {
+        if (enqueueAnimation && isPlayFromHandAction) {
             const req = gameState.actionRequired as any;
             const cardInHandId = req.cardInHandId;
             const actor = req.actor || 'player';
@@ -978,6 +951,9 @@ export const useGameState = (
                                    cardToPlay.protocol === gameState[opponentId].protocols[targetLaneIndex];
                 }
 
+                const protocolName = gameState[actor].protocols[targetLaneIndex];
+                const logMsg = playCardMessage(actor, cardToPlay, protocolName, canPlayFaceUp);
+
                 const animation = createPlayAnimation(
                     gameState,  // Use current gameState (before update)
                     cardToPlay,
@@ -988,7 +964,7 @@ export const useGameState = (
                     canPlayFaceUp,
                     actor === 'opponent'
                 );
-                enqueueAnimation(animation);
+                enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: actor } });
                 console.log('[useGameState] Created play animation BEFORE setGameState:', {
                     cardId: cardInHandId,
                     actor,
@@ -999,11 +975,12 @@ export const useGameState = (
             }
         }
 
-        // NEW ANIMATION SYSTEM: Create return animations for all cards in lane
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimations && gameState.actionRequired?.type === 'select_lane_for_return') {
+        // Create return animations for all cards in lane
+        if (enqueueAnimations && gameState.actionRequired?.type === 'select_lane_for_return') {
             const req = gameState.actionRequired as any;
             const owner = req.cardOwner || req.actor || 'player';
             const lane = gameState[owner].lanes[targetLaneIndex];
+            const protocolName = gameState[owner].protocols[targetLaneIndex];
 
             // Create return animations for all cards in the lane (bottom to top)
             const animations: Omit<AnimationQueueItem, 'id'>[] = [];
@@ -1016,7 +993,13 @@ export const useGameState = (
                     cardIndex,
                     true  // setFaceDown
                 );
-                animations.push(animation);
+                // Add logMessage to first card only
+                if (cardIndex === 0) {
+                    const logMsg = returnAllCardsMessage(owner, protocolName);
+                    animations.push({ ...animation, logMessage: { message: logMsg, player: owner } });
+                } else {
+                    animations.push(animation);
+                }
             });
 
             if (animations.length > 0) {
@@ -1054,7 +1037,7 @@ export const useGameState = (
                     // No animation requests left, just call the callback
                     setTimeout(() => {
                         setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
-                    }, USE_NEW_ANIMATION_SYSTEM ? 1000 : 10);
+                    }, 1000);
                 }
                 return nextState;
             }
@@ -1098,9 +1081,9 @@ export const useGameState = (
     };
 
     const resolveActionWithHandCard = (cardId: string) => {
-        // NEW ANIMATION SYSTEM: Create reveal animation BEFORE setGameState
+        // Create reveal animation BEFORE setGameState
         const actionType = gameState.actionRequired?.type;
-        if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimation &&
+        if (enqueueAnimation &&
             actionType === 'select_card_from_hand_to_reveal') {
             const card = gameState.player.hand.find(c => c.id === cardId);
             const handIndex = gameState.player.hand.findIndex(c => c.id === cardId);
@@ -1718,7 +1701,13 @@ export const useGameState = (
     }, [gameState.animationState]);
 
     // Update previous hand refs when hand changes
+    // CRITICAL: Don't update refs when animationState.type === 'drawCard' because
+    // the draw animation effect needs the OLD refs to determine which cards are new.
+    // The draw animation effect will update refs after creating animations.
     useEffect(() => {
+        if (gameState.animationState?.type === 'drawCard') {
+            return; // Skip ref update - draw animation effect will handle it
+        }
         prevPlayerHandRef.current = new Set(gameState.player.hand.map(c => c.id));
         prevOpponentHandRef.current = new Set(gameState.opponent.hand.map(c => c.id));
         prevPlayerHandLengthRef.current = gameState.player.hand.length;
@@ -1728,8 +1717,8 @@ export const useGameState = (
     useEffect(() => {
         const animState = gameState.animationState;
         if (animState?.type === 'discardCard' && animState.owner === 'player') {
-            // NEW ANIMATION SYSTEM: Create sequential discard animations
-            if (USE_NEW_ANIMATION_SYSTEM && enqueueAnimations) {
+            // Create sequential discard animations
+            if (enqueueAnimations) {
                 const { cardIds, originalAction } = animState;
                 if (!originalAction) return;
 
@@ -1745,6 +1734,11 @@ export const useGameState = (
                         cardsToDiscard,
                         'player'
                     );
+                    // Add logMessage to first animation
+                    if (animations.length > 0 && cardsToDiscard[0]) {
+                        const logMsg = discardCardMessage('player', cardsToDiscard[0]);
+                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'player' } };
+                    }
 
                     // Apply the discard immediately
                     setGameState(s => {
@@ -1761,7 +1755,11 @@ export const useGameState = (
                             stateAfterDiscard = resolvers.discardCards(s, cardIds, 'player');
                         }
 
-                        stateAfterDiscard.animationState = null;
+                        // CRITICAL FIX: Only clear discard animation, preserve draw animation from followUpEffect!
+                        // If animationState is 'drawCard' (from "then draw" effect), keep it so the draw animation plays.
+                        if (stateAfterDiscard.animationState?.type === 'discardCard') {
+                            stateAfterDiscard.animationState = null;
+                        }
 
                         if (stateAfterDiscard.actionRequired) {
                             return stateAfterDiscard;
@@ -1776,33 +1774,6 @@ export const useGameState = (
                 return;
             }
 
-            // OLD ANIMATION SYSTEM (fallback)
-            const timer = setTimeout(() => {
-                setGameState(s => {
-                    const currentAnim = s.animationState;
-                    if (currentAnim?.type !== 'discardCard' || !currentAnim.originalAction) return s;
-
-                    const { cardIds, originalAction } = currentAnim;
-                    const turnProgressionCb = getTurnProgressionCallback(s.phase);
-
-                    let stateAfterDiscard;
-                    if (originalAction.type === 'discard' && (originalAction.count > 1 || (originalAction as any).variableCount)) {
-                        // Variable count or batch discard - use resolveVariableDiscard for proper followUpEffect handling
-                        stateAfterDiscard = resolvers.resolveVariableDiscard(s, cardIds);
-                    } else {
-                        stateAfterDiscard = resolvers.discardCards(s, cardIds, 'player');
-                    }
-
-                    stateAfterDiscard.animationState = null;
-
-                    if (stateAfterDiscard.actionRequired) {
-                        return stateAfterDiscard;
-                    }
-
-                    return turnProgressionCb(stateAfterDiscard);
-                });
-            }, 500);
-            return () => clearTimeout(timer);
         }
     }, [gameState.animationState, getTurnProgressionCallback, enqueueAnimations, gameState]);
 
@@ -1813,15 +1784,34 @@ export const useGameState = (
     useEffect(() => {
         const animState = gameState.animationState;
         if (animState?.type !== 'drawCard') return;
-        if (!USE_NEW_ANIMATION_SYSTEM || !enqueueAnimations) return;
+        if (!enqueueAnimations) return;
 
-        const { owner, cardIds } = animState;
-        if (!cardIds || cardIds.length === 0) return;
+        const { owner } = animState;
+        let { cardIds } = animState;
+
+        // CRITICAL FIX: If cardIds is empty, calculate from hand comparison
+        // This handles cases like "Discard 1+, then draw 1 more" where discardResolver
+        // sets cardIds: [] and expects us to determine new cards from prevHand vs currentHand
+        const prevHandIds = owner === 'player' ? prevPlayerHandRef.current : prevOpponentHandRef.current;
+        if (!cardIds || cardIds.length === 0) {
+            // Find new cards in hand that weren't there before
+            const newCardIds = gameState[owner].hand
+                .filter(c => !prevHandIds.has(c.id))
+                .map(c => c.id);
+            if (newCardIds.length === 0) {
+                // No new cards - just clear animationState
+                setGameState(s => {
+                    if (s.animationState?.type !== 'drawCard') return s;
+                    return { ...s, animationState: null };
+                });
+                return;
+            }
+            cardIds = newCardIds;
+        }
 
         // CRITICAL: Check if animations were already created for these cards.
         // Other code paths (like fillHand at line 711) may have already created animations
         // and updated the refs. If all cardIds are already in the refs, skip animation creation.
-        const prevHandIds = owner === 'player' ? prevPlayerHandRef.current : prevOpponentHandRef.current;
         const allCardsAlreadyTracked = cardIds.every(id => prevHandIds.has(id));
         if (allCardsAlreadyTracked) {
             // Animations already created elsewhere - just clear animationState
@@ -1858,6 +1848,11 @@ export const useGameState = (
             owner,
             startIndex
         );
+        // Add logMessage to first animation
+        if (animations.length > 0) {
+            const logMsg = drawCardsMessage(owner, drawnCards.length);
+            animations[0] = { ...animations[0], logMessage: { message: logMsg, player: owner } };
+        }
         enqueueAnimations(animations);
 
         // Clear animationState to prevent double-animation
@@ -1933,19 +1928,27 @@ export const useGameState = (
     useEffect(() => {
         // CRITICAL FIX: Don't trigger if an interrupt is active (_interruptedTurn is set)
         // Interrupts are handled by Hook 2, not Hook 1
+        // CRITICAL FIX #2: Don't trigger if there's an actionRequired for the PLAYER
+        // (e.g., "Your opponent discards 1 card" - player needs to act, not AI)
+        const hasPlayerAction = gameState.actionRequired &&
+            'actor' in gameState.actionRequired &&
+            gameState.actionRequired.actor === 'player';
+
         if (gameState.turn === 'opponent' &&
             !gameState.winner &&
             !gameState.animationState &&
             !isAnimating &&  // Wait for all animations (incl. phase transition) to complete
             !isAnimationPendingRef.current &&  // Synchronous check - blocks until phase animation is enqueued
             !gameState._interruptedTurn &&  // Don't trigger during interrupts
+            !hasPlayerAction &&  // Don't trigger if player needs to act
             !isProcessingAIRef.current) {
 
             isProcessingAIRef.current = true;
             const currentScenarioVersion = scenarioVersionRef.current;
 
-            // Small delay before AI acts (for visual feedback)
-            const timer = setTimeout(() => {
+            // Execute immediately - delay animation is handled inside runOpponentTurnSync
+            // Using queueMicrotask to avoid React state update issues
+            queueMicrotask(() => {
                 // Check if scenario has changed - if so, abort this callback
                 if (scenarioVersionRef.current !== currentScenarioVersion) {
                     isProcessingAIRef.current = false;
@@ -1954,7 +1957,7 @@ export const useGameState = (
 
                 // NEW: Use synchronous AI turn processing
                 // The entire AI turn runs synchronously - all animations are enqueued
-                // but the state is immediately updated to the final state
+                // The delay animation is created at the start of runOpponentTurnSync
                 const finalState = aiManager.runOpponentTurnSync(
                     gameState,
                     difficulty,
@@ -1988,12 +1991,7 @@ export const useGameState = (
                 // Set the final state directly
                 setGameState(finalState);
                 isProcessingAIRef.current = false;
-            }, 1500);
-
-            return () => {
-                clearTimeout(timer);
-                isProcessingAIRef.current = false;
-            };
+            });
         }
     }, [gameState.turn, gameState.phase, gameState.winner, gameState.animationState, isAnimating, gameState._interruptedTurn, difficulty, onEndGame, enqueueAnimation, gameState.actionRequired]);
 

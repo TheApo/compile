@@ -4632,6 +4632,58 @@ export const scenario88_UnityAITest: TestScenario = {
     }
 };
 
+/**
+ * Scenario 89: Speed-3 Test (Opponent)
+ */
+export const scenario89_Speed3Test: TestScenario = {
+    name: "Speed-3 End Test (Opponent)",
+    description: "Speed-3 End Test",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Fire', 'Water', 'Spirit'];
+        const opponentProtocols = ['Speed', 'Death', 'Light'];
+
+        let newState = initScenarioBase(
+            state,
+            playerProtocols,
+            opponentProtocols,
+            'opponent',
+            'end'
+        );
+
+        // Player hand
+        const playerHand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 2, true),
+            createCard('Spirit', 3, true),
+        ];
+        newState.player.hand = playerHand;
+
+        // Opponent: Unity cards in hand for AI to play
+        const opponentHand = [
+            createCard('Speed', 0, true),
+            createCard('Speed', 1, true),
+            createCard('Speed', 2, true),
+            createCard('Speed', 5, true),
+        ];
+        newState.opponent.hand = opponentHand;
+
+        // Place some cards on board - including a Unity card to enable conditionals
+        newState = placeCard(newState, 'opponent', 0, createCard('Speed', 3, true)); // Enables same_protocol_on_field
+		newState = placeCard(newState, 'opponent', 1, createCard('Death', 5, true)); // Enables same_protocol_on_field
+		newState = placeCard(newState, 'opponent', 2, createCard('Light', 5, true)); // Enables same_protocol_on_field
+        newState = placeCard(newState, 'player', 1, createCard('Fire', 4, true));
+
+        // Build remaining decks
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        return finalizeScenario(newState);
+    }
+};
+
+
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
     scenario1_Psychic3Uncover,
@@ -4721,4 +4773,5 @@ export const allScenarios: TestScenario[] = [
     scenario86_DiversityAITest,
     scenario87_UnityCustomPlayground,
     scenario88_UnityAITest,
+	scenario89_Speed3Test,
 ];

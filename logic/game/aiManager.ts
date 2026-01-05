@@ -18,7 +18,17 @@ import { LaneActionResult } from './resolvers/laneResolver';
 import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 import { AnimationQueueItem } from '../../types/animation';
-import { createPlayAnimation, createDrawAnimation, createSequentialDrawAnimations, createSequentialDiscardAnimations, createShiftAnimation, createDiscardAnimation, findCardInLanes, createDeleteAnimation, createReturnAnimation, createFlipAnimation } from '../animation/animationHelpers';
+import { createPlayAnimation, createDrawAnimation, createSequentialDrawAnimations, createSequentialDiscardAnimations, createShiftAnimation, createDiscardAnimation, findCardInLanes, createDeleteAnimation, createReturnAnimation, createFlipAnimation, createDelayAnimation } from '../animation/animationHelpers';
+import {
+    playCardMessage,
+    shiftCardMessage,
+    returnCardMessage,
+    flipCardMessage,
+    deleteCardMessage,
+    drawCardsMessage,
+    discardCardMessage,
+    refreshHandMessage,
+} from '../utils/logMessages';
 
 // Feature flag for new animation queue system in AI
 const USE_NEW_AI_ANIMATION_SYSTEM = true;
@@ -27,16 +37,30 @@ const USE_NEW_AI_ANIMATION_SYSTEM = true;
  * Convert AnimationRequest[] to AnimationQueueItem[] and enqueue them
  * This bridges the old animationRequests system with the new animation queue
  * Uses queueMicrotask to avoid "Cannot update component while rendering" React error
+ *
+ * @param state - Current game state (used for card positions and log messages)
+ * @param animationRequests - Array of animation requests to convert
+ * @param enqueueAnimation - Function to enqueue animations
+ * @param lastProcessedLogIndex - Optional: Index of last processed log entry (for log message association)
  */
 function enqueueAnimationsFromRequests(
     state: GameState,
     animationRequests: AnimationRequest[],
-    enqueueAnimation: (animation: Omit<AnimationQueueItem, 'id'>) => void
+    enqueueAnimation: (animation: Omit<AnimationQueueItem, 'id'>) => void,
+    lastProcessedLogIndex?: number
 ): void {
     // Collect all animations first, then enqueue them in a microtask
     const animations: Omit<AnimationQueueItem, 'id'>[] = [];
 
+    // Track log index for associating log messages with animations
+    let logIndex = lastProcessedLogIndex ?? (state.log.length - animationRequests.length);
+    if (logIndex < 0) logIndex = 0;
+
     for (const request of animationRequests) {
+        // Get the corresponding log message for this animation
+        const logEntry = state.log[logIndex];
+        const logMessage = logEntry ? { message: logEntry.message, player: logEntry.player } : undefined;
+        logIndex++;
         if (request.type === 'play' && request.fromDeck && request.toLane !== undefined) {
             // Play from deck animation
             const playCard = state[request.owner].lanes[request.toLane]?.find(c => c.id === request.cardId);
@@ -51,7 +75,7 @@ function enqueueAnimationsFromRequests(
                     request.isFaceUp ?? false,
                     request.owner === 'opponent'
                 );
-                animations.push(animation);
+                animations.push({ ...animation, logMessage });
             }
         } else if (request.type === 'shift') {
             const shiftCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
@@ -65,7 +89,7 @@ function enqueueAnimationsFromRequests(
                     fromCardIndex,
                     request.toLane
                 );
-                animations.push(animation);
+                animations.push({ ...animation, logMessage });
             }
         } else if (request.type === 'delete') {
             const deleteCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
@@ -78,7 +102,7 @@ function enqueueAnimationsFromRequests(
                     cardPosition.laneIndex,
                     cardPosition.cardIndex
                 );
-                animations.push(animation);
+                animations.push({ ...animation, logMessage });
             }
         } else if (request.type === 'draw') {
             // Draw X cards animation (from effects like "Draw 2 cards")
@@ -93,7 +117,11 @@ function enqueueAnimationsFromRequests(
                     request.player,
                     startIndex
                 );
-                animations.push(...drawAnimations);
+                // Add logMessage to first draw animation only (represents the draw action)
+                if (drawAnimations.length > 0) {
+                    animations.push({ ...drawAnimations[0], logMessage });
+                    animations.push(...drawAnimations.slice(1));
+                }
             }
         } else if (request.type === 'return') {
             // Return card animation (from effects like "Return 1 card")
@@ -108,7 +136,7 @@ function enqueueAnimationsFromRequests(
                     cardPosition.cardIndex,
                     true  // setFaceDown
                 );
-                animations.push(animation);
+                animations.push({ ...animation, logMessage });
             }
         }
         // Other types (flip, discard) can be added as needed
@@ -183,6 +211,9 @@ const handleAIPlayCard = (
         const card = state.opponent.hand.find(c => c.id === cardId);
         const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
         if (card) {
+            const protocolName = state.opponent.protocols[laneIndex];
+            const logMsg = playCardMessage('opponent', card, protocolName, isFaceUp);
+
             const animation = createPlayAnimation(
                 state,
                 card,
@@ -191,9 +222,9 @@ const handleAIPlayCard = (
                 true, // fromHand
                 handIndex,
                 isFaceUp,
-                true // isOpponentAction - triggers highlight phase
+                true // isOpponentAction
             );
-            enqueueAnimation(animation);
+            enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'opponent' } });
         }
     }
 
@@ -319,6 +350,11 @@ export const resolveRequiredOpponentAction = (
 
                 if (cardsToDiscard.length > 0) {
                     const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+                    // Add logMessage to first animation
+                    if (animations.length > 0 && cardsToDiscard[0]) {
+                        const logMsg = discardCardMessage('opponent', cardsToDiscard[0]);
+                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
+                    }
                     queueMicrotask(() => {
                         animations.forEach(anim => enqueueAnimation(anim));
                     });
@@ -425,6 +461,8 @@ export const resolveRequiredOpponentAction = (
                     const owner = state.player.lanes.flat().some(c => c.id === aiDecision.cardId) ? 'player' : 'opponent';
                     const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
                     if (card) {
+                        const logMsg = returnCardMessage(card);
+
                         const animation = createReturnAnimation(
                             state,
                             card,
@@ -432,9 +470,9 @@ export const resolveRequiredOpponentAction = (
                             cardPosition.laneIndex,
                             cardPosition.cardIndex,
                             true,  // setFaceDown
-                            true   // isOpponentAction - triggers highlight phase
+                            true   // isOpponentAction
                         );
-                        enqueueAnimation(animation);
+                        enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                         returnAnimationCreated = true;
                     }
                 }
@@ -449,15 +487,18 @@ export const resolveRequiredOpponentAction = (
                     const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
                     if (card) {
                         const toFaceUp = !card.isFaceUp;
+                        const logMsg = flipCardMessage(card, toFaceUp);
+
                         const animation = createFlipAnimation(
                             state,
                             card,
                             owner,
                             cardPosition.laneIndex,
                             cardPosition.cardIndex,
-                            toFaceUp
+                            toFaceUp,
+                            true  // isOpponentAction - show highlight before flip
                         );
-                        enqueueAnimation(animation);
+                        enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                         flipAnimationCreated = true;
                     }
                 }
@@ -787,16 +828,20 @@ const handleRequiredAction = (
                 const cardToShift = state[cardOwner].lanes.flat().find(c => c.id === cardToShiftId);
                 const cardIndex = state[cardOwner].lanes[originalLaneIndex].findIndex(c => c.id === cardToShiftId);
                 if (cardToShift && cardIndex >= 0) {
+                    const fromProtocol = state[cardOwner].protocols[originalLaneIndex];
+                    const toProtocol = state[cardOwner].protocols[targetLaneIndex];
+                    const logMsg = shiftCardMessage(cardOwner, cardToShift, fromProtocol, toProtocol);
+
                     const animation = createShiftAnimation(
-                        state,  // BEFORE state - correct snapshot!
+                        state,
                         cardToShift,
                         cardOwner,
                         originalLaneIndex,
                         cardIndex,
                         targetLaneIndex,
-                        true // isOpponentAction - triggers highlight phase
+                        true // isOpponentAction
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: cardOwner } });
                     shiftAnimationCreated = true;
                 }
             }
@@ -890,16 +935,17 @@ const handleRequiredAction = (
                 const owner = state.player.lanes.flat().some(c => c.id === aiDecision.cardId) ? 'player' : 'opponent';
                 const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
                 if (card) {
+                    const logMsg = returnCardMessage(card);
                     const animation = createReturnAnimation(
                         state,
                         card,
                         owner,
                         cardPosition.laneIndex,
                         cardPosition.cardIndex,
-                        true,  // setFaceDown
-                        true   // isOpponentAction - triggers highlight phase
+                        true,
+                        true
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                     returnAnimationCreatedAction = true;
                 }
             }
@@ -914,15 +960,17 @@ const handleRequiredAction = (
                 const card = state[owner].lanes[cardPosition.laneIndex][cardPosition.cardIndex];
                 if (card) {
                     const toFaceUp = !card.isFaceUp;
+                    const logMsg = flipCardMessage(card, toFaceUp);
                     const animation = createFlipAnimation(
                         state,
                         card,
                         owner,
                         cardPosition.laneIndex,
                         cardPosition.cardIndex,
-                        toFaceUp
+                        toFaceUp,
+                        true  // isOpponentAction - show highlight before flip
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                     flipAnimationCreatedAction = true;
                 }
             }
@@ -1041,6 +1089,11 @@ const handleRequiredAction = (
 
             if (cardsToDiscard.length > 0) {
                 const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+                // Add logMessage to first animation
+                if (animations.length > 0 && cardsToDiscard[0]) {
+                    const logMsg = discardCardMessage('opponent', cardsToDiscard[0]);
+                    animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
+                }
                 queueMicrotask(() => {
                     animations.forEach(anim => enqueueAnimation(anim));
                 });
@@ -1167,8 +1220,11 @@ export const runOpponentTurn = (
                 const card = state.opponent.hand.find(c => c.id === mainAction.cardId);
                 const handIndex = state.opponent.hand.findIndex(c => c.id === mainAction.cardId);
 
-                // Enqueue animation BEFORE setGameState - this is the key fix!
+                // Enqueue animation BEFORE setGameState
                 if (card) {
+                    const protocolName = state.opponent.protocols[mainAction.laneIndex];
+                    const logMsg = playCardMessage('opponent', card, protocolName, mainAction.isFaceUp);
+
                     const animation = createPlayAnimation(
                         state,
                         card,
@@ -1176,10 +1232,10 @@ export const runOpponentTurn = (
                         mainAction.laneIndex,
                         true, // fromHand
                         handIndex,
-                        mainAction.isFaceUp, // Pass through face-up state for animation
-                        true // isOpponentAction - triggers highlight phase
+                        mainAction.isFaceUp,
+                        true // isOpponentAction
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'opponent' } });
                 }
 
                 // Now update the game state
@@ -1418,6 +1474,11 @@ export const runOpponentTurn = (
                             'opponent',
                             state.opponent.hand.length  // Starting index in hand
                         );
+                        // Add logMessage to first animation (refresh hand)
+                        if (animations.length > 0) {
+                            const logMsg = refreshHandMessage('opponent', newCards.length);
+                            animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
+                        }
                         // Enqueue all animations
                         queueMicrotask(() => {
                             animations.forEach(anim => enqueueAnimation(anim));
@@ -1451,6 +1512,8 @@ export const runOpponentTurn = (
                     const handIndex = state.opponent.hand.findIndex(c => c.id === mainAction.cardId);
 
                     if (card) {
+                        const protocolName = state.opponent.protocols[mainAction.laneIndex];
+                        const logMsg = playCardMessage('opponent', card, protocolName, mainAction.isFaceUp);
                         const animation = createPlayAnimation(
                             state,
                             card,
@@ -1463,7 +1526,7 @@ export const runOpponentTurn = (
                         );
                         // Enqueue animation DIRECTLY (not via queueMicrotask!)
                         // queueMicrotask caused effect animations to be enqueued BEFORE play animation
-                        enqueueAnimation(animation);
+                        enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'opponent' } });
                     }
 
                     // Now run the play logic - no animationState, state updates immediately
@@ -1766,15 +1829,18 @@ const handleRequiredActionSync = (
 
             if (card) {
                 if (aiDecision.type === 'returnCard') {
+                    const logMsg = returnCardMessage(card);
                     const animation = createReturnAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex, true, true);
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                 } else if (aiDecision.type === 'flipCard') {
                     const toFaceUp = !card.isFaceUp;
-                    const animation = createFlipAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex, toFaceUp);
-                    enqueueAnimation(animation);
+                    const logMsg = flipCardMessage(card, toFaceUp);
+                    const animation = createFlipAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex, toFaceUp, true);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                 } else if (aiDecision.type === 'deleteCard') {
+                    const logMsg = deleteCardMessage(card);
                     const animation = createDeleteAnimation(state, card, owner, cardPosition.laneIndex, cardPosition.cardIndex);
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: owner } });
                 }
             }
         }
@@ -1832,6 +1898,11 @@ const handleRequiredActionSync = (
 
         if (cardsToDiscard.length > 0) {
             const animations = createSequentialDiscardAnimations(state, cardsToDiscard, 'opponent');
+            // Add logMessage to first animation
+            if (animations.length > 0 && cardsToDiscard[0]) {
+                const logMsg = discardCardMessage('opponent', cardsToDiscard[0]);
+                animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
+            }
             animations.forEach(anim => enqueueAnimation(anim));
         }
 
@@ -1914,8 +1985,10 @@ const handleRequiredActionSync = (
         const card = state.opponent.hand.find(c => c.id === cardId);
         const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
         if (card) {
+            const protocolName = state.opponent.protocols[laneIndex];
+            const logMsg = playCardMessage('opponent', card, protocolName, isFaceUp);
             const animation = createPlayAnimation(state, card, 'opponent', laneIndex, true, handIndex, isFaceUp, true);
-            enqueueAnimation(animation);
+            enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'opponent' } });
         }
 
         // Execute play logic
@@ -2055,6 +2128,46 @@ const handleRequiredActionSync = (
         return endActionForPhase(newState, phaseManager);
     }
 
+    // --- EXECUTE FOLLOW UP EFFECT ---
+    // This handles "If you do, flip this card" effects from queueFollowUpEffectSync
+    if (action.type === 'execute_follow_up_effect') {
+        const { sourceCardId, followUpEffect, actor, logContext } = action as any;
+        const sourceCardInfo = findCardOnBoard(state, sourceCardId);
+
+        if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+            let newState = { ...state };
+            if (logContext?.sourceCardName) newState._currentEffectSource = logContext.sourceCardName;
+            if (logContext?.phase) newState._currentPhaseContext = logContext.phase;
+            if (logContext?.indentLevel !== undefined) newState._logIndentLevel = logContext.indentLevel;
+            const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
+            const reason = !sourceCardInfo ? 'deleted' : 'flipped face-down';
+            newState = log(newState, actor, `Follow-up effect from ${cardName} skipped (${reason}).`);
+            newState.actionRequired = null;
+            return endActionForPhase(newState, phaseManager);
+        }
+
+        const lane = state[sourceCardInfo.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
+        const laneIdx = state[sourceCardInfo.owner].lanes.indexOf(lane!);
+        const context = {
+            cardOwner: sourceCardInfo.owner,
+            actor: actor,
+            currentTurn: state.turn,
+            opponent: (sourceCardInfo.owner === 'player' ? 'opponent' : 'player') as Player,
+        };
+
+        // Restore log context
+        let newState = { ...state, actionRequired: null };
+        if (logContext?.sourceCardName) newState._currentEffectSource = logContext.sourceCardName;
+        if (logContext?.phase) newState._currentPhaseContext = logContext.phase;
+        if (logContext?.indentLevel !== undefined) newState._logIndentLevel = logContext.indentLevel;
+
+        const result = executeCustomEffect(sourceCardInfo.card, laneIdx, newState, context, followUpEffect);
+        newState = result.newState;
+
+        if (newState.actionRequired) return newState;
+        return endActionForPhase(newState, phaseManager);
+    }
+
     // --- UNKNOWN ACTION ---
     console.warn(`[SYNC] AI has no logic for action: ${action.type}, decision: ${JSON.stringify(aiDecision)}`);
     return endActionForPhase({ ...state, actionRequired: null }, phaseManager);
@@ -2085,6 +2198,11 @@ export const runOpponentTurnSync = (
 ): GameState => {
     console.log('[RUN OPP TURN SYNC] Entry, phase:', initialState.phase, 'actionRequired:', initialState.actionRequired?.type);
     let state = { ...initialState };
+
+    // Enqueue a delay animation at the start of opponent's turn (AI "thinking" time)
+    // This replaces the old 1500ms setTimeout delay and shows the correct game state during the wait
+    const delayAnimation = createDelayAnimation(state, 1000);
+    enqueueAnimation(delayAnimation);
 
     // Safety counter to prevent infinite loops
     let iterations = 0;
@@ -2160,6 +2278,11 @@ export const runOpponentTurnSync = (
                         'opponent',
                         initialState.opponent.hand.length
                     );
+                    // Add logMessage to first animation (refresh hand)
+                    if (animations.length > 0) {
+                        const logMsg = refreshHandMessage('opponent', newCards.length);
+                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
+                    }
                     animations.forEach(anim => enqueueAnimation(anim));
                 }
 
@@ -2179,10 +2302,12 @@ export const runOpponentTurnSync = (
                 const card = state.opponent.hand.find(c => c.id === cardId);
                 const handIndex = state.opponent.hand.findIndex(c => c.id === cardId);
                 if (card) {
+                    const protocolName = state.opponent.protocols[laneIndex];
+                    const logMsg = playCardMessage('opponent', card, protocolName, isFaceUp);
                     const animation = createPlayAnimation(
                         state, card, 'opponent', laneIndex, true, handIndex, isFaceUp, true
                     );
-                    enqueueAnimation(animation);
+                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'opponent' } });
                 }
 
                 // Execute play logic
@@ -2235,6 +2360,11 @@ export const runOpponentTurnSync = (
         }
 
         // Continue turn progression
+        // CRITICAL: Clear animationState before calling continueTurnProgression
+        // AI handles animations via enqueueAnimation, not via animationState.
+        // If we don't clear it, the AI loop can get stuck because continueTurnProgression
+        // now preserves animationState (fix for player draw animations).
+        state = { ...state, animationState: null };
         state = phaseManager.continueTurnProgression(state);
 
         // If turn switched to player, we're done

@@ -18,7 +18,7 @@ import { AnimationType } from '../types/animation';
 export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
     play: 1000,     // Card moves from hand/deck to lane
     delete: 1000,   // Card moves to trash (with fade/shrink)
-    flip: 500,      // Card rotates to reveal other side
+    flip: 600,      // Card rotates to reveal other side (matches CSS transition)
     shift: 1000,    // Card moves between lanes
     return: 1000,   // Card returns from board to hand
     discard: 800,   // Card moves from hand to trash
@@ -29,6 +29,7 @@ export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
     swap: 600,      // Protocol bars swap positions
     refresh: 1200,  // Hand refill (multiple draws)
     phaseTransition: 400,  // Per phase step (total duration calculated dynamically)
+    delay: 1000,    // Silent delay (no visual, just waits - for AI "thinking" time)
 } as const;
 
 // =============================================================================
@@ -169,6 +170,8 @@ export const ANIMATION_EASINGS = {
     reveal: 'ease-in-out',
     swap: 'ease-in-out',
     refresh: 'ease-out',
+    phaseTransition: 'ease-in-out',
+    delay: 'linear',  // No visual animation, just timing
 } as const;
 
 /**
