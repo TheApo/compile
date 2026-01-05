@@ -213,6 +213,34 @@ export const playCard = (prevState: GameState, cardId: string, laneIndex: number
     }
     const stateAfterOnCover = onCoverResult.newState;
 
+    // CRITICAL: For on_cover delete animations, create a snapshot state that includes
+    // the new card already in the stack. This ensures the delete animation shows
+    // the correct visual state (new card visible, to-be-deleted card sliding out).
+    if (onCoverResult.animationRequests && onCoverResult.animationRequests.length > 0) {
+        // Create a simulated state for delete animations:
+        // - The committed card (new card) is already in the stack
+        // - The cards to be deleted are still present
+        const snapshotStateForOnCover = {
+            ...stateWithCommitted,
+            [targetOwner]: {
+                ...stateWithCommitted[targetOwner],
+                lanes: stateWithCommitted[targetOwner].lanes.map((lane, i) =>
+                    i === laneIndex
+                        ? [...lane, { ...cardToPlay, isFaceUp, isRevealed: false }]
+                        : lane
+                )
+            }
+        };
+
+        // Add snapshotState to all delete requests
+        onCoverResult.animationRequests = onCoverResult.animationRequests.map(req => {
+            if (req.type === 'delete') {
+                return { ...req, _snapshotState: snapshotStateForOnCover };
+            }
+            return req;
+        });
+    }
+
     // 2. Physically play the card onto the board from the state returned by the onCover effect.
     // Card is removed from player's hand and placed into targetOwner's lane
     const newCardOnBoard: PlayedCard = { ...cardToPlay, isFaceUp, isRevealed: false };

@@ -171,6 +171,7 @@ export function createPlayAnimation(
  * Creates a DELETE animation - card moves from lane to trash.
  *
  * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
+ * @param hiddenCardIds - Optional set of card IDs to exclude from snapshot (for sequential animations)
  */
 export function createDeleteAnimation(
     state: GameState,
@@ -178,9 +179,10 @@ export function createDeleteAnimation(
     owner: Player,
     laneIndex: number,
     cardIndex: number,
-    isOpponentAction: boolean = false
+    isOpponentAction: boolean = false,
+    hiddenCardIds?: Set<string>
 ): AnimationQueueItem {
-    const snapshot = createVisualSnapshot(state);
+    const snapshot = createVisualSnapshot(state, hiddenCardIds);
 
     const fromPosition: CardPosition = {
         type: 'lane',
@@ -307,6 +309,7 @@ export function createShiftAnimation(
  * @param cardIndex - The card's position in the lane
  * @param setFaceDown - Whether to flip the card face-down (default: true)
  * @param isOpponentAction - Whether this is an opponent's action (triggers highlight phase)
+ * @param hiddenCardIds - Optional set of card IDs to exclude from snapshot (for sequential animations)
  */
 export function createReturnAnimation(
     state: GameState,
@@ -315,9 +318,10 @@ export function createReturnAnimation(
     laneIndex: number,
     cardIndex: number,
     setFaceDown: boolean = true,
-    isOpponentAction: boolean = false
+    isOpponentAction: boolean = false,
+    hiddenCardIds?: Set<string>
 ): AnimationQueueItem {
-    const snapshot = createVisualSnapshot(state);
+    const snapshot = createVisualSnapshot(state, hiddenCardIds);
 
     const fromPosition: CardPosition = {
         type: 'lane',
@@ -545,6 +549,7 @@ export function createCompileAnimation(
 /**
  * Creates sequential DELETE animations for compile.
  * Each card gets its own delete animation with staggered timing.
+ * CRITICAL: Each animation has its own snapshot that excludes previously animated cards.
  *
  * @param state - Game state BEFORE the compile (for snapshot)
  * @param deletedCards - Array of cards that were deleted with their positions
@@ -554,9 +559,16 @@ export function createCompileDeleteAnimations(
     state: GameState,
     deletedCards: { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[]
 ): AnimationQueueItem[] {
-    const snapshot = createVisualSnapshot(state);
+    // Track which cards should be hidden in each subsequent animation
+    const hiddenCardIds = new Set<string>();
 
     return deletedCards.map((item, index) => {
+        // Create snapshot that excludes all previously animated cards
+        const snapshot = createVisualSnapshot(state, hiddenCardIds);
+
+        // Add this card to hidden set for the NEXT animation
+        hiddenCardIds.add(item.card.id);
+
         const fromPosition: CardPosition = {
             type: 'lane',
             owner: item.owner,

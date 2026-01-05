@@ -8,7 +8,7 @@ import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRe
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
 import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent } from '../../utils/log';
-import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
+import { findCardOnBoard, internalShiftCard, handleUncoverEffect, internalReturnCard } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
 // NOTE: Old hardcoded effects removed - all protocols now use custom effects
@@ -1290,7 +1290,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const faceDownValueInLane = playerState.lanes[targetLaneIndex]
                     .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
 
-                for (const card of playerState.lanes[targetLaneIndex]) {
+                const laneCards = playerState.lanes[targetLaneIndex];
+                for (let cardIdx = 0; cardIdx < laneCards.length; cardIdx++) {
+                    const card = laneCards[cardIdx];
                     // Apply targetFilter to determine if card should be returned
                     const value = card.isFaceUp ? card.value : faceDownValueInLane;
 
@@ -1307,7 +1309,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.owner === 'own' && p !== actor) continue;
                     if (targetFilter.owner === 'opponent' && p === actor) continue;
 
-                    cardsToReturn.push({ type: 'return', cardId: card.id, owner: p });
+                    // CRITICAL: Include snapshot data for animation - card will be returned from state immediately
+                    cardsToReturn.push({
+                        type: 'return',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
                     returnedCardNames.push(`${ownerName} ${cardName}`);
@@ -1325,6 +1335,14 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (returnedCardNames.length > 0) {
                 newState = log(newState, actor, `${sourceCardName}: Returning ${returnedCardNames.join(', ')}.`);
             }
+
+            // CRITICAL: Return ALL cards to hand IMMEDIATELY - logic must be independent of animation!
+            // The animation system will use the cardSnapshot data to show cards flying to hand
+            for (const req of cardsToReturn) {
+                const returnResult = internalReturnCard(newState, req.cardId);
+                newState = returnResult.newState;
+            }
+            newState = recalculateAllLaneValues(newState);
 
             // CRITICAL: Queue pending custom effects before clearing actionRequired
             newState = queuePendingCustomEffects(newState);

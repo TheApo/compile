@@ -146,7 +146,17 @@ export const useGameState = (
             console.log('[ANIM QUEUE] Processing request type:', nextRequest.type, 'enqueueAnimation defined:', !!enqueueAnimation);
 
             // Handle different animation types
-            if (nextRequest.type === 'delete') {
+            if (nextRequest.type === 'flip') {
+                // Flip animation was already created in handleFlipCard via enqueueAnimation
+                // Just wait for the animation to complete, then process next/callback
+                setTimeout(() => {
+                    if (rest.length > 0) {
+                        processNext(rest);
+                    } else {
+                        onComplete();
+                    }
+                }, ANIMATION_DURATIONS.flip);
+            } else if (nextRequest.type === 'delete') {
                 // Delete animation was already created BEFORE setGameState in resolveActionWithCard
                 // Just wait for the animation to complete, then process next/callback
                 setTimeout(() => {
@@ -157,77 +167,16 @@ export const useGameState = (
                     }
                 }, ANIMATION_DURATIONS.delete);
             } else if (nextRequest.type === 'return') {
-                // Create animation and update state IMMEDIATELY
-                if (enqueueAnimation) {
-                    setGameState(currentState => {
-                        const card = currentState[nextRequest.owner].lanes.flat().find(c => c.id === nextRequest.cardId);
-                        if (!card) {
-                            return currentState;
-                        }
-
-                        const laneIndex = currentState[nextRequest.owner].lanes.findIndex(
-                            l => l.some(c => c.id === nextRequest.cardId)
-                        );
-                        const cardIndex = currentState[nextRequest.owner].lanes[laneIndex]?.findIndex(
-                            c => c.id === nextRequest.cardId
-                        ) ?? -1;
-
-                        if (laneIndex < 0 || cardIndex < 0) {
-                            return currentState;
-                        }
-
-                        // Check if card was top card BEFORE removing it
-                        const wasTopCard = currentState[nextRequest.owner].lanes[laneIndex].length > 0 &&
-                                          currentState[nextRequest.owner].lanes[laneIndex][currentState[nextRequest.owner].lanes[laneIndex].length - 1].id === nextRequest.cardId;
-
-                        // Create animation with SNAPSHOT of current state (before changes)
-                        const animation = createReturnAnimation(
-                            currentState,
-                            card,
-                            nextRequest.owner,
-                            laneIndex,
-                            cardIndex,
-                            true  // setFaceDown
-                        );
-                        enqueueAnimation(animation);
-
-                        // Update state IMMEDIATELY - animation shows the snapshot
-                        const newLanes = currentState[nextRequest.owner].lanes.map(
-                            lane => lane.filter(c => c.id !== nextRequest.cardId)
-                        );
-                        const cardToReturn = { ...card, isFaceUp: false };
-
-                        let stateAfterReturn = {
-                            ...currentState,
-                            [nextRequest.owner]: {
-                                ...currentState[nextRequest.owner],
-                                lanes: newLanes,
-                                hand: [...currentState[nextRequest.owner].hand, cardToReturn]
-                            },
-                            animationState: null
-                        };
-                        stateAfterReturn = stateManager.recalculateAllLaneValues(stateAfterReturn);
-
-                        // CRITICAL: Trigger uncover effect if the returned card was a top card
-                        if (wasTopCard && stateAfterReturn[nextRequest.owner].lanes[laneIndex].length > 0) {
-                            const uncoverResult = handleUncoverEffect(stateAfterReturn, nextRequest.owner, laneIndex);
-                            stateAfterReturn = uncoverResult.newState;
-                        }
-
-                        return stateAfterReturn;
-                    });
-
-                    // Wait for animation to complete
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, ANIMATION_DURATIONS.return);
-                    return; // Exit early - new system handled everything
-                }
-
+                // Return animation was already created BEFORE setGameState in resolveActionWithLane
+                // State was already changed in the resolver via internalReturnCard
+                // Just wait for the animation to complete, then process next/callback
+                setTimeout(() => {
+                    if (rest.length > 0) {
+                        processNext(rest);
+                    } else {
+                        onComplete();
+                    }
+                }, ANIMATION_DURATIONS.return);
             } else if (nextRequest.type === 'play') {
                 // Create play animation for deck-to-lane plays
                 if (enqueueAnimation && nextRequest.fromDeck && nextRequest.toLane !== undefined) {
@@ -464,11 +413,15 @@ export const useGameState = (
                         } else if (request.type === 'flip') {
                             // Flip animations handled elsewhere
                         } else if (request.type === 'delete') {
-                            const deleteCard = prev[request.owner].lanes.flat().find(c => c.id === request.cardId);
-                            const cardPosition = findCardInLanes(prev, request.cardId, request.owner);
+                            // For on_cover deletes: Use the snapshot state that includes the new card
+                            // This ensures the delete animation shows the covering card already in place
+                            const stateForSnapshot = (request as any)._snapshotState || prev;
+
+                            const deleteCard = stateForSnapshot[request.owner].lanes.flat().find(c => c.id === request.cardId);
+                            const cardPosition = findCardInLanes(stateForSnapshot, request.cardId, request.owner);
                             if (deleteCard && cardPosition) {
                                 const animation = createDeleteAnimation(
-                                    prev,
+                                    stateForSnapshot,
                                     deleteCard,
                                     request.owner,
                                     cardPosition.laneIndex,
@@ -975,26 +928,56 @@ export const useGameState = (
             }
         }
 
-        // Create return animations for all cards in lane
+        // Create return animations for matching cards in lane (respecting targetFilter)
         if (enqueueAnimations && gameState.actionRequired?.type === 'select_lane_for_return') {
             const req = gameState.actionRequired as any;
-            const owner = req.cardOwner || req.actor || 'player';
-            const lane = gameState[owner].lanes[targetLaneIndex];
-            const protocolName = gameState[owner].protocols[targetLaneIndex];
+            const actor = req.cardOwner || req.actor || 'player';
+            const targetFilter = req.targetFilter || {};
+            const protocolName = gameState.player.protocols[targetLaneIndex];
 
-            // Create return animations for all cards in the lane (bottom to top)
+            // Collect matching cards from BOTH players' lanes (like laneResolver does)
+            const matchingCards: { card: PlayedCard; owner: Player; cardIndex: number }[] = [];
+
+            for (const owner of ['player', 'opponent'] as Player[]) {
+                const lane = gameState[owner].lanes[targetLaneIndex];
+                const faceDownValueInLane = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
+
+                lane.forEach((card, cardIndex) => {
+                    const value = card.isFaceUp ? card.value : faceDownValueInLane;
+
+                    // Apply the same filters as laneResolver.ts
+                    if (targetFilter.valueEquals !== undefined && value !== targetFilter.valueEquals) return;
+                    if (targetFilter.faceState === 'face_up' && !card.isFaceUp) return;
+                    if (targetFilter.faceState === 'face_down' && card.isFaceUp) return;
+                    if (targetFilter.owner === 'own' && owner !== actor) return;
+                    if (targetFilter.owner === 'opponent' && owner === actor) return;
+
+                    matchingCards.push({ card, owner, cardIndex });
+                });
+            }
+
+            // Create return animations only for matching cards
+            // CRITICAL: Each animation must exclude previously animated cards from its snapshot
             const animations: Omit<AnimationQueueItem, 'id'>[] = [];
-            lane.forEach((card, cardIndex) => {
+            const hiddenCardIds = new Set<string>();
+
+            matchingCards.forEach(({ card, owner, cardIndex }, idx) => {
                 const animation = createReturnAnimation(
                     gameState,
                     card,
                     owner,
                     targetLaneIndex,
                     cardIndex,
-                    true  // setFaceDown
+                    true,  // setFaceDown
+                    false, // isOpponentAction
+                    hiddenCardIds  // Pass hidden cards for sequential animation
                 );
+
+                // Add this card to hidden set for the NEXT animation
+                hiddenCardIds.add(card.id);
+
                 // Add logMessage to first card only
-                if (cardIndex === 0) {
+                if (idx === 0) {
                     const logMsg = returnAllCardsMessage(owner, protocolName);
                     animations.push({ ...animation, logMessage: { message: logMsg, player: owner } });
                 } else {
@@ -1012,13 +995,14 @@ export const useGameState = (
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);
 
             if (requiresAnimation) {
-                // FIX: For shift/play actions, the animation was already created BEFORE setGameState
+                // FIX: For shift/play/return actions, the animation was already created BEFORE setGameState
                 // Filter out those requests to prevent double animation
                 const actionType = prev.actionRequired?.type || '';
                 // Check if action type contains 'shift' (covers all shift variants)
                 const isShiftAction = actionType.toLowerCase().includes('shift');
                 const isPlayFromHandAction = actionType === 'select_lane_for_play' &&
                                              (prev.actionRequired as any)?.cardInHandId;
+                const isReturnAction = actionType === 'select_lane_for_return';
 
                 let filteredRequests = requiresAnimation.animationRequests;
                 if (isShiftAction) {
@@ -1026,6 +1010,9 @@ export const useGameState = (
                 }
                 if (isPlayFromHandAction) {
                     filteredRequests = filteredRequests.filter(r => r.type !== 'play');
+                }
+                if (isReturnAction) {
+                    filteredRequests = filteredRequests.filter(r => r.type !== 'return');
                 }
 
                 // Only call processAnimationQueue if there are remaining requests
@@ -1934,6 +1921,12 @@ export const useGameState = (
             'actor' in gameState.actionRequired &&
             gameState.actionRequired.actor === 'player';
 
+        // CRITICAL FIX #3: Also block if ANY actionRequired exists that's not for opponent
+        // This handles cases like Spirit-3's after_draw during refresh, where the turn might
+        // have already switched to opponent but player still needs to respond to a prompt
+        const hasAnyBlockingAction = gameState.actionRequired &&
+            (!('actor' in gameState.actionRequired) || gameState.actionRequired.actor !== 'opponent');
+
         if (gameState.turn === 'opponent' &&
             !gameState.winner &&
             !gameState.animationState &&
@@ -1941,6 +1934,7 @@ export const useGameState = (
             !isAnimationPendingRef.current &&  // Synchronous check - blocks until phase animation is enqueued
             !gameState._interruptedTurn &&  // Don't trigger during interrupts
             !hasPlayerAction &&  // Don't trigger if player needs to act
+            !hasAnyBlockingAction &&  // Don't trigger if there's ANY action not for opponent
             !isProcessingAIRef.current) {
 
             isProcessingAIRef.current = true;

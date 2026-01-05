@@ -19,12 +19,14 @@ import {
  * This snapshot contains only the data needed for rendering animations.
  *
  * @param state - The current game state
+ * @param hiddenCardIds - Optional set of card IDs to exclude from the snapshot
+ *                        Used for sequential animations where earlier cards should not appear
  * @returns A visual snapshot for animation rendering
  */
-export function createVisualSnapshot(state: GameState): VisualSnapshot {
+export function createVisualSnapshot(state: GameState, hiddenCardIds?: Set<string>): VisualSnapshot {
     return {
-        player: createPlayerVisualState(state, 'player'),
-        opponent: createPlayerVisualState(state, 'opponent'),
+        player: createPlayerVisualState(state, 'player', hiddenCardIds),
+        opponent: createPlayerVisualState(state, 'opponent', hiddenCardIds),
         controlCardHolder: state.controlCardHolder,
         turn: state.turn,
         phase: state.phase,
@@ -36,18 +38,23 @@ export function createVisualSnapshot(state: GameState): VisualSnapshot {
  *
  * @param state - The current game state
  * @param player - Which player to create state for
+ * @param hiddenCardIds - Optional set of card IDs to exclude from lanes/hand
  * @returns Visual state for the player
  */
-function createPlayerVisualState(state: GameState, player: Player): PlayerVisualState {
+function createPlayerVisualState(state: GameState, player: Player, hiddenCardIds?: Set<string>): PlayerVisualState {
     const playerState = state[player];
 
-    // Deep clone lanes to prevent mutation issues
+    // Deep clone lanes, filtering out hidden cards if specified
     const lanes = playerState.lanes.map(lane =>
-        lane.map(card => ({ ...card }))
+        lane
+            .filter(card => !hiddenCardIds || !hiddenCardIds.has(card.id))
+            .map(card => ({ ...card }))
     );
 
-    // Deep clone hand
-    const hand = playerState.hand.map(card => ({ ...card }));
+    // Deep clone hand, filtering out hidden cards if specified
+    const hand = playerState.hand
+        .filter(card => !hiddenCardIds || !hiddenCardIds.has(card.id))
+        .map(card => ({ ...card }));
 
     // Get top trash card if exists
     const topTrashCard = playerState.discard.length > 0

@@ -234,8 +234,13 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
             classes.push('is-complete');
         }
 
+        // For flip animations: Add direction class for CSS to use correct keyframes
+        if (flipDirection === 'toFaceUp') {
+            classes.push('flip-to-face-up');
+        }
+
         return classes.join(' ');
-    }, [animation.type, animationPhase]);
+    }, [animation.type, animationPhase, flipDirection]);
 
     // Determine if card should show face-up or face-down
     const showFaceUp = useMemo(() => {
@@ -245,15 +250,15 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = ({
             return false; // Always face-down for opponent draws
         }
 
-        if (flipDirection === 'toFaceUp') {
-            // Start face-down (waiting/idle/highlight), flip to face-up during flying/complete
-            return animationPhase === 'flying' || animationPhase === 'complete';
+        // FLIP ANIMATIONS: Show ORIGINAL state (before flip) - CSS 3D rotation handles the visual flip
+        // card.isFaceUp is the state BEFORE the flip in the snapshot
+        // CSS rotates the container: 0° → 180° (toFaceDown) or 180° → 0° (toFaceUp)
+        // backface-visibility: hidden ensures only the correct face is visible during rotation
+        if (flipDirection) {
+            // Always show the original face - CSS does the rotation to reveal the other side
+            return card.isFaceUp;
         }
-        if (flipDirection === 'toFaceDown') {
-            // Start face-up (waiting/idle/highlight), flip to face-down during flying/complete
-            // CRITICAL: Include 'waiting' to ensure correct state even before visible
-            return animationPhase === 'waiting' || animationPhase === 'idle' || animationPhase === 'highlight';
-        }
+
         // For play animation, use targetIsFaceUp if provided, otherwise fall back to card.isFaceUp
         // targetIsFaceUp tells us how the card will be displayed at its destination
         if (animatingCard.targetIsFaceUp !== undefined) {

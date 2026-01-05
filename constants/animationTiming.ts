@@ -18,7 +18,7 @@ import { AnimationType } from '../types/animation';
 export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
     play: 1000,     // Card moves from hand/deck to lane
     delete: 1000,   // Card moves to trash (with fade/shrink)
-    flip: 600,      // Card rotates to reveal other side (matches CSS transition)
+    flip: 400,      // Card rotates to reveal other side (fast flip animation)
     shift: 1000,    // Card moves between lanes
     return: 1000,   // Card returns from board to hand
     discard: 800,   // Card moves from hand to trash

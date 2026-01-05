@@ -158,25 +158,43 @@
     perspective: 1000px;
 }
 
-.animation-flip .card-component {
+.animation-flip .animated-card-inner {
     transform-style: preserve-3d;
-    transition: transform 300ms ease-in-out;
 }
 
-.animation-flip.is-animating .card-component {
-    animation: card-flip-rotate 300ms ease-in-out;
+/* CRITICAL: Deactivate normal card-inner CSS transition during animation */
+.animation-flip .card-inner {
+    transition: none !important;
+    transform: none !important;
 }
 
-@keyframes card-flip-rotate {
-    0% {
-        transform: rotateY(0deg);
-    }
-    50% {
-        transform: rotateY(90deg);
-    }
-    100% {
-        transform: rotateY(180deg);
-    }
+/* CRITICAL: Both faces must be visible - NO visibility:hidden which causes disappearing */
+.animation-flip .card-front,
+.animation-flip .card-back {
+    visibility: visible !important;
+    backface-visibility: hidden;
+}
+
+/* The card-back is already rotated 180deg in components.css */
+
+/* Animation: Rotate the container during flying phase */
+.animation-flip.is-flying .animated-card-inner {
+    animation: flip-card-rotate 400ms ease-in-out forwards;
+}
+
+/* Reverse animation for flipping TO face-up (card was face-down) */
+.animation-flip.is-flying.flip-to-face-up .animated-card-inner {
+    animation: flip-card-rotate-reverse 400ms ease-in-out forwards;
+}
+
+@keyframes flip-card-rotate {
+    0% { transform: rotateY(0deg); }
+    100% { transform: rotateY(180deg); }
+}
+
+@keyframes flip-card-rotate-reverse {
+    0% { transform: rotateY(180deg); }
+    100% { transform: rotateY(0deg); }
 }
 
 /* --- SHIFT Animation --- */

@@ -27,6 +27,35 @@ export type CardActionResult = {
     requiresTurnEnd?: boolean;
 };
 
+/**
+ * Standard animation completion callback - DRY helper for all animations.
+ *
+ * This handles the common pattern:
+ * 1. If actionRequired already exists (from reactive effects), return state as-is
+ * 2. Otherwise, call endTurnCb to continue turn progression
+ *
+ * CRITICAL: Do NOT manually call processQueuedActions here!
+ * The endTurnCb callback triggers the full turn progression flow:
+ * endTurnCb → processEndOfAction → processQueuedActions
+ * This ensures flip_self and other auto-resolve actions are handled correctly.
+ *
+ * @param s - Current game state after animation completes
+ * @param endTurnCb - Callback to continue turn progression
+ * @returns Updated game state
+ */
+export const standardAnimationCallback = (
+    s: GameState,
+    endTurnCb: (s2: GameState) => GameState
+): GameState => {
+    // Check if there's already an actionRequired (from reactive effects)
+    if (s.actionRequired) {
+        return s;
+    }
+
+    // Continue turn progression - endTurnCb handles queuedActions via processEndOfAction
+    return endTurnCb(s);
+};
+
 // List of action types that trigger Metal-6's self-delete (flip actions only)
 // NOTE: Most legacy card-specific flip types have been removed - now using generic handlers
 const METAL6_FLIP_ACTION_TYPES = [
@@ -65,12 +94,20 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const newPlayerState = { ...state[actor], stats: newStats };
         newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
-        // CRITICAL: Store lane info BEFORE the callback (card will be gone after animation)
+        // CRITICAL: Store lane info BEFORE deletion (card will be gone after)
         const cardOwner = cardInfo.owner;
         const laneIndex = state[cardOwner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
         const lane = state[cardOwner].lanes[laneIndex];
         const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
         const hadCardBelow = lane && lane.length > 1;
+        const cardIndex = lane?.findIndex(c => c.id === targetCardId) ?? 0;
+
+        // CRITICAL: Create snapshot BEFORE deletion for animation
+        const cardSnapshot = { ...cardInfo.card };
+
+        // CRITICAL: "DIE LOGIK HAT IMMER RECHT" - Delete the card IMMEDIATELY in the resolver!
+        // The animation will show the snapshot -> new state transition
+        newState = deleteCardFromBoard(newState, targetCardId);
 
         // CRITICAL: Capture pending effects BEFORE the callback runs
         // The callback receives a fresh state after animation, so we need to preserve _pendingCustomEffects
@@ -181,7 +218,15 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         return {
             nextState: { ...newState, actionRequired: null },
             requiresAnimation: {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardOwner,
+                    // Include snapshot data for animation (card is already deleted from state)
+                    cardSnapshot,
+                    laneIndex,
+                    cardIndex
+                } as AnimationRequest],
                 onCompleteCallback,
             },
             requiresTurnEnd: false,
@@ -247,6 +292,15 @@ export const resolveActionWithCard = (
 
             newState = internalResolveTargetedFlip(prev, targetCardId, null, enqueueAnimation);
 
+            // CRITICAL: Create flip animation request so processAnimationQueue waits for flip to complete
+            // This ensures sequential animations (e.g., Water-0's "flip other" then "flip self")
+            const flipAnimationRequest: AnimationRequest = {
+                type: 'flip',
+                cardId: targetCardId,
+                owner: cardInfoBeforeFlip?.owner,
+                laneIndex: cardInfoBeforeFlip ? prev[cardInfoBeforeFlip.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId)) : undefined
+            };
+
             // CRITICAL: Save this value to restore after handleOnFlipToFaceUp
             const savedTargetCardId = targetCardId;
             newState.lastCustomEffectTargetCardId = savedTargetCardId;
@@ -304,15 +358,19 @@ export const resolveActionWithCard = (
                 if (savedFlipLaneIndex !== undefined) {
                     newState.lastFlipLaneIndex = savedFlipLaneIndex;
                 }
-                if (result.animationRequests) {
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
-                    };
-                }
+                // CRITICAL: Always include flip animation request FIRST, then any follow-up requests
+                const allAnimationRequests = [flipAnimationRequest, ...(result.animationRequests || [])];
+                requiresAnimation = {
+                    animationRequests: allAnimationRequests,
+                    onCompleteCallback: standardAnimationCallback
+                };
+            } else if (cardInfoBeforeFlip) {
+                // Card was face-up and is now face-down (or was already face-down)
+                // Still need to wait for flip animation before processing next queued action
+                requiresAnimation = {
+                    animationRequests: [flipAnimationRequest],
+                    onCompleteCallback: standardAnimationCallback
+                };
             }
 
             // NEW: Handle custom protocol follow-up effects (e.g., "Flip 1 card. Draw cards equal to that card's value")
@@ -1364,10 +1422,7 @@ export const resolveActionWithCard = (
                 if (onFlipResult.animationRequests) {
                     requiresAnimation = {
                         animationRequests: onFlipResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
+                        onCompleteCallback: standardAnimationCallback
                     };
                 }
             } else {

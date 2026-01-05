@@ -18,6 +18,32 @@ Diese Dokumente sind essentiell um zu verstehen:
 
 ---
 
+## Wichtige Regeln für die KI
+
+### Code-Qualität
+- **Clean Code**: Schreibe lesbaren, wartbaren Code mit aussagekräftigen Namen
+- **DRY (Don't Repeat Yourself)**: Keine Code-Duplikation! Wenn derselbe Code an mehreren Stellen steht, extrahiere ihn in eine gemeinsame Funktion
+- **KISS (Keep It Simple)**: Einfache Lösungen bevorzugen, nicht über-engineeren
+
+### Dev Server
+- **NIEMALS den dev server starten** (`npm run dev`) - Der User startet den dev server selbst!
+- Nur `npm run build` zum Testen von Kompilierungsfehlern verwenden
+- Nur `npm test` zum Ausführen von Tests verwenden
+
+### Verstehen vor Ändern
+- Code **LESEN und VERSTEHEN** bevor Änderungen gemacht werden
+- **Nicht raten** - bei Unklarheiten nachfragen oder mehr Code lesen
+- **Ähnliche Implementierungen** als Referenz nutzen (z.B. wie DELETE funktioniert, bevor man FLIP ändert)
+- Bei komplexen Änderungen: **In den Planungsmodus gehen** und erst verstehen, dann implementieren
+
+### Animation System Regeln
+- **ALLE Logik ist SYNCHRON** - niemals async/await in der Spiellogik verwenden
+- **Animationen sind asynchron** aber komplett getrennt von der Logik
+- **Snapshots VOR Änderungen erstellen** - die Animation zeigt den Zustand VOR der Änderung
+- Siehe "Animation System (KRITISCH!)" Sektion weiter unten für Details
+
+---
+
 ## Game Overview
 
 COMPILE is a competitive card game where two players (rogue AIs) compete one-on-one in a race to compile their 3 protocols, rewriting reality in their new image.
@@ -396,6 +422,89 @@ createCompileDeleteAnimations(state, cards, laneIndex)
 2. **enqueueAnimation nutzen**: Nie Animationen direkt abspielen
 3. **Auf Queue-Ende warten**: `getIsAnimatingSync()` prüft ob Queue leer
 4. **Staggering für Multi-Card**: Bei mehreren Karten `startDelay` verwenden
+
+### KRITISCHE REGELN (nicht brechen!)
+
+1. **ALLE Effekte nutzen das Queue-System** - keine Ausnahmen!
+   - Jeder Effekt (flip, delete, return, shift, etc.) MUSS das Animation-Queue-System verwenden
+   - Niemals Animationen außerhalb des Queue-Systems erstellen
+
+2. **Logik ist IMMER synchron** - der State ändert sich SOFORT
+   - `gameState` zeigt immer den aktuellen Zustand
+   - Animationen zeigen den ÜBERGANG vom Snapshot zum neuen State
+   - Niemals `async/await` oder `Promise` in der Spiellogik verwenden
+
+3. **onCompleteCallback ruft IMMER endTurnCb auf**
+   ```typescript
+   // RICHTIG:
+   onCompleteCallback: (s, endTurnCb) => {
+       if (s.actionRequired) return s;  // Interrupt
+       return endTurnCb(s);  // Turn-Progression fortsetzen
+   }
+
+   // FALSCH - NIE processQueuedActions direkt aufrufen:
+   onCompleteCallback: (s, endTurnCb) => {
+       return processQueuedActions(s);  // FALSCH! Überspringt Turn-Flow!
+   }
+   ```
+
+4. **Multi-Card Animationen: Animationen VOR setGameState erstellen**
+   ```typescript
+   // Beispiel: Water-3 "Return all cards with value 2"
+
+   // 1. VOR setGameState: Animationen mit Original-Snapshot erstellen
+   if (gameState.actionRequired?.type === 'select_lane_for_return') {
+       matchingCards.forEach(card => {
+           const animation = createReturnAnimation(gameState, card, ...);
+           animations.push(animation);
+       });
+       enqueueAnimations(animations);  // Queue VOR State-Änderung
+   }
+
+   // 2. setGameState ändert dann den State
+   setGameState(prev => {
+       const { nextState, requiresAnimation } = resolver(prev);
+       // 3. Animationen vom Resolver FILTERN (wurden schon erstellt!)
+       const filteredRequests = requiresAnimation.animationRequests
+           .filter(r => r.type !== 'return');  // Bereits gequeued!
+       return nextState;
+   });
+   ```
+
+5. **Doppelte Animationen vermeiden**
+   - Wenn Animationen VOR setGameState erstellt werden, MÜSSEN sie aus `requiresAnimation.animationRequests` rausgefiltert werden
+   - Siehe `isShiftAction`, `isPlayFromHandAction`, `isReturnAction` Filter in `useGameState.ts`
+
+6. **DIE LOGIK HAT IMMER RECHT**
+   - Der State ändert sich SOFORT im Resolver, BEVOR Animationen erstellt werden
+   - Animationen zeigen nur den visuellen Übergang von Snapshot → neuer State
+   - Animationen dürfen NIEMALS den eigentlichen State beeinflussen
+   - **Beispiel DELETE**: `deleteCardFromBoard()` wird IM Resolver aufgerufen, nicht in processAnimationQueue
+   - **Beispiel RETURN**: `internalReturnCard()` wird IM Resolver aufgerufen, nicht in processAnimationQueue
+   - Die Animation-Queue ist NUR für visuelle Darstellung - die Logik ist schon fertig!
+
+7. **processAnimationQueue: NUR WARTEN, NIE STATE ÄNDERN**
+   - `processAnimationQueue` in `useGameState.ts` darf **NIEMALS** `setGameState` aufrufen um den Spielstate zu ändern
+   - Jeder Handler (flip, delete, return, shift, etc.) sollte NUR:
+     1. Auf Animation-Dauer warten (`setTimeout`)
+     2. Nächste Animation starten (`processNext(rest)`)
+     3. Am Ende: `onComplete()` aufrufen
+   - **Pattern für alle Handler:**
+     ```typescript
+     } else if (nextRequest.type === 'return') {
+         // Animation wurde schon VOR setGameState erstellt
+         // State wurde schon im Resolver geändert
+         // Hier NUR warten:
+         setTimeout(() => {
+             if (rest.length > 0) {
+                 processNext(rest);
+             } else {
+                 onComplete();
+             }
+         }, ANIMATION_DURATIONS.return);
+     }
+     ```
+   - **AUSNAHME**: Animation-Erstellung (mit `enqueueAnimation`) ist erlaubt für spezielle Fälle (deck-to-lane plays), aber **KEINE State-Änderungen** an Lanes/Hand/etc.
 
 ## Effect Action Types Reference
 

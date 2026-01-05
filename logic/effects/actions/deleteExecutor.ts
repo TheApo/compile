@@ -8,10 +8,25 @@
  * Extracted 1:1 from effectInterpreter.ts for modularity.
  */
 
-import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
+import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest, Card } from '../../../types';
 import { log } from '../../utils/log';
 import { findCardOnBoard, handleUncoverEffect, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../../game/helpers/actionUtils';
 import { getLanesWhereOpponentHasHigherValue, getPlayerLaneValue } from '../../game/stateManager';
+
+/**
+ * Helper function to add a card to the discard pile with correct format.
+ * Cards in discard are stored without id and isFaceUp (as Card[], not PlayedCard[]).
+ */
+function addCardToDiscard(state: GameState, owner: Player, card: PlayedCard): GameState {
+    // Extract only the Card properties (without id and isFaceUp)
+    const { id, isFaceUp, ...cardData } = card;
+    const newDiscard = [...state[owner].discard, cardData as Card];
+
+    return {
+        ...state,
+        [owner]: { ...state[owner], discard: newDiscard }
+    };
+}
 
 /**
  * Execute DELETE effect
@@ -85,15 +100,20 @@ export function executeDeleteEffect(
 
             if (cardIndex !== -1) {
                 const wasTopCard = cardIndex === lane.length - 1;
+                const deletedCard = lane[cardIndex];
                 lane.splice(cardIndex, 1);
 
                 const newLanes = [...newState[owner].lanes];
                 newLanes[targetLaneIndex] = lane;
 
+                // Update lanes first
                 newState = {
                     ...newState,
                     [owner]: { ...newState[owner], lanes: newLanes }
                 };
+
+                // Add card to discard using helper function
+                newState = addCardToDiscard(newState, owner, deletedCard);
 
                 const cardName = targetCardInfo.card.isFaceUp
                     ? `${targetCardInfo.card.protocol}-${targetCardInfo.card.value}`
@@ -345,10 +365,14 @@ export function executeDeleteEffect(
             const newLanes = [...newState[owner].lanes];
             newLanes[targetLaneIndex] = laneCopy;
 
+            // Update lanes first
             newState = {
                 ...newState,
                 [owner]: { ...newState[owner], lanes: newLanes },
             };
+
+            // Add card to discard using helper function
+            newState = addCardToDiscard(newState, owner, targetCard);
 
             // Update stats
             const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
@@ -436,10 +460,14 @@ export function executeDeleteEffect(
         const newLanes = [...newState[owner].lanes];
         newLanes[laneIndex] = laneCopy;
 
+        // Update lanes first
         newState = {
             ...newState,
             [owner]: { ...newState[owner], lanes: newLanes },
         };
+
+        // Add card to discard using helper function
+        newState = addCardToDiscard(newState, owner, card);
 
         // Update stats
         const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
