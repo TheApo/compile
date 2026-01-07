@@ -47,6 +47,36 @@ import {
 } from '../logic/utils/logMessages';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
+/**
+ * DRY Helper: Process compile delete animations
+ * Extracts _compileAnimations from state and enqueues delete animations
+ * @returns State with _compileAnimations marker removed
+ */
+function processCompileAnimations(
+    stateAfterCompile: GameState,
+    stateBeforeCompile: GameState,
+    laneIndex: number,
+    enqueueAnimations?: (items: Omit<AnimationQueueItem, 'id'>[]) => void
+): GameState {
+    const compileAnimationData = (stateAfterCompile as any)._compileAnimations as
+        { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] | undefined;
+
+    if (compileAnimationData && compileAnimationData.length > 0 && enqueueAnimations) {
+        const deleteAnims = createCompileDeleteAnimations(stateBeforeCompile, compileAnimationData);
+        if (deleteAnims.length > 0) {
+            const protocolName = stateBeforeCompile.player.protocols[laneIndex];
+            const logMsg = compileProtocolMessage('player', protocolName);
+            deleteAnims[0] = { ...deleteAnims[0], logMessage: { message: logMsg, player: 'player' } };
+        }
+        enqueueAnimations(deleteAnims);
+    }
+
+    // Clean up animation marker
+    const stateWithoutMarker = { ...stateAfterCompile };
+    delete (stateWithoutMarker as any)._compileAnimations;
+    return stateWithoutMarker;
+}
+
 export const useGameState = (
     playerProtocols: string[],
     opponentProtocols: string[],
@@ -576,16 +606,29 @@ export const useGameState = (
     const compileLane = useCallback((laneIndex: number) => {
         setGameState(prev => {
             if (prev.winner || prev.phase !== 'compile') return prev;
-            
+
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+
+            // CRITICAL FIX: Check for Control-Mechanic FIRST (before any animation)
+            // If player has Control, show prompt immediately without animation
+            const hasControl = prev.useControlMechanic && prev.controlCardHolder === prev.turn;
+
+            if (hasControl) {
+                // Call performCompile which will return the control mechanic prompt
+                const stateWithPrompt = resolvers.performCompile(prev, laneIndex, onEndGame);
+                // No animation yet - will be handled after control mechanic is resolved
+                return { ...stateWithPrompt, compilableLanes: [] };
+            }
+
+            // No Control-Mechanic: proceed with animation flow
             const stateBeforeCompile = resolvers.compileLane(prev, laneIndex);
-    
-            const stateWithAnimation = { 
-                ...stateBeforeCompile, 
+
+            const stateWithAnimation = {
+                ...stateBeforeCompile,
                 animationState: { type: 'compile' as const, laneIndex },
                 compilableLanes: []
             };
-    
+
             setTimeout(() => {
                 setGameState(currentState => {
                     const stateAfterCompile = resolvers.performCompile(currentState, laneIndex, onEndGame);
@@ -593,40 +636,14 @@ export const useGameState = (
                         return stateAfterCompile;
                     }
 
-                    // REMOVED: Duplicate Control-Mechanic handling that was overwriting the originalAction from performCompile
-                    // The Control-Mechanic prompt is now fully handled inside performCompile
-                    if (stateAfterCompile.actionRequired?.type === 'prompt_use_control_mechanic') {
-                        return { ...stateAfterCompile, animationState: null };
-                    }
+                    // DRY: Process compile animations (handles _compileAnimations and cleanup)
+                    const stateWithoutMarker = processCompileAnimations(stateAfterCompile, currentState, laneIndex, enqueueAnimations);
 
-                    // NEW: Check for compile delete animations
-                    const compileAnimationData = (stateAfterCompile as any)._compileAnimations as { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] | undefined;
-                    if (compileAnimationData && compileAnimationData.length > 0 && enqueueAnimations) {
-                        // Create delete animations using the state BEFORE compile for correct positions
-                        const deleteAnims = createCompileDeleteAnimations(currentState, compileAnimationData);
-
-                        // Add compile message to the first animation
-                        if (deleteAnims.length > 0) {
-                            const protocolName = currentState.player.protocols[laneIndex];
-                            const logMsg = compileProtocolMessage('player', protocolName);
-                            deleteAnims[0] = { ...deleteAnims[0], logMessage: { message: logMsg, player: 'player' } };
-                        }
-
-                        enqueueAnimations(deleteAnims);
-
-                        // Clean up animation marker from state
-                        const stateWithoutMarker = { ...stateAfterCompile };
-                        delete (stateWithoutMarker as any)._compileAnimations;
-
-                        const finalState = turnProgressionCb(stateWithoutMarker);
-                        return { ...finalState, animationState: null };
-                    }
-
-                    const finalState = turnProgressionCb(stateAfterCompile);
+                    const finalState = turnProgressionCb(stateWithoutMarker);
                     return { ...finalState, animationState: null };
                 });
             }, 1000);
-    
+
             return stateWithAnimation;
         });
     }, [onEndGame, getTurnProgressionCallback]);
@@ -1058,12 +1075,16 @@ export const useGameState = (
                             if (nextState.winner) {
                                 return nextState;
                             }
-                            const turnProgressionCb = getTurnProgressionCallback(nextState.phase);
-                            const finalState = turnProgressionCb(nextState);
+
+                            // DRY: Process compile animations (same helper as compileLane)
+                            const stateWithoutMarker = processCompileAnimations(nextState, currentState, originalAction.laneIndex, enqueueAnimations);
+
+                            const turnProgressionCb = getTurnProgressionCallback(stateWithoutMarker.phase);
+                            const finalState = turnProgressionCb(stateWithoutMarker);
                             return { ...finalState, animationState: null };
                         });
                     }, 1000);
-    
+
                     return stateWithAnimation;
                 } else if (originalAction.type === 'continue_turn') {
                     let stateWithQueuedActions = { ...stateAfterSkip };
@@ -1199,11 +1220,22 @@ export const useGameState = (
                 trackPlayerRearrange(prev.actionRequired.actor);
             }
 
+            // Save originalAction to check if this was a compile action (for animations)
+            const originalAction = (prev.actionRequired as any)?.originalAction;
+
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const nextState = resolvers.resolveRearrangeProtocols(prev, newOrder, onEndGame);
 
             if (nextState.winner) {
                 return nextState;
+            }
+
+            // Handle compile animations if this rearrange was followed by a compile
+            // (originalAction.type === 'compile' means Control-Mechanic before compile)
+            if (originalAction?.type === 'compile' && (nextState as any)._compileAnimations) {
+                const laneIndex = originalAction.laneIndex;
+                const stateWithoutMarker = processCompileAnimations(nextState, prev, laneIndex, enqueueAnimations);
+                return turnProgressionCb(stateWithoutMarker);
             }
 
             return turnProgressionCb(nextState);

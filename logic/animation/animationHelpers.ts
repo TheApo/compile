@@ -563,12 +563,13 @@ export function createCompileDeleteAnimations(
     const hiddenCardIds = new Set<string>();
 
     return deletedCards.map((item, index) => {
-        // CRITICAL FIX: Add this card to hidden set BEFORE creating snapshot
-        // This ensures the card appears ONLY in the flying animation, not on the board
-        hiddenCardIds.add(item.card.id);
-
-        // Create snapshot that excludes this card AND all previously animated cards
+        // Create snapshot that excludes all previously animated cards
+        // NOTE: Current card stays in snapshot for DOM position detection
+        // The card is hidden via CSS (animatingCardIds) during animation playback
         const snapshot = createVisualSnapshot(state, hiddenCardIds);
+
+        // Add this card to hidden set for the NEXT animation's snapshot
+        hiddenCardIds.add(item.card.id);
 
         const fromPosition: CardPosition = {
             type: 'lane',

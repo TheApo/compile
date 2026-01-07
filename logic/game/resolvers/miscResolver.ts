@@ -160,6 +160,12 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         }
     });
 
+    // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+    // This ensures we delete from top (uncovered) to bottom (covered), preventing
+    // index shifting issues during sequential delete animations.
+    // Example: With cards at [0,1,2], deleting index 2 first keeps 0,1 stable.
+    compileAnimationData.sort((a, b) => b.cardIndex - a.cardIndex);
+
     // NOTE: Compile deletes are NOT counted in cardsDeleted stats
     // Only effect-based deletes (delete 1 card, delete all cards with value X, etc.) should be counted
     // Stats remain unchanged for cardsDeleted during compile
@@ -283,7 +289,7 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
             newState._interruptedTurn = compiler;
             newState._interruptedPhase = newState.phase;
             // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
-            newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
+            newState._interruptedCardPlayedFlag = prevState._cardPlayedThisActionPhase;
             newState.turn = firstAction.actor;
         }
     } else {

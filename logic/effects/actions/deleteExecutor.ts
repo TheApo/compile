@@ -132,8 +132,15 @@ export function executeDeleteEffect(
                     newState = uncoverResult.newState;
                 }
 
-                // Animation request
-                const animationRequests = [{ type: 'delete' as const, cardId: targetCardId, owner }];
+                // Animation request with snapshot data (card already deleted from state)
+                const animationRequests = [{
+                    type: 'delete' as const,
+                    cardId: targetCardId,
+                    owner,
+                    cardSnapshot: { ...deletedCard },
+                    laneIndex: targetLaneIndex,
+                    cardIndex
+                }];
                 return { newState, animationRequests };
             }
         }

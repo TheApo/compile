@@ -733,8 +733,19 @@ export const resolveActionWithCard = (
             newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, true);
 
             newState.actionRequired = null;
+
+            // CRITICAL FIX: Include cardSnapshot, laneIndex, cardIndex for animation
+            // These are needed because the card is already deleted from state
+            const cardIndexForAnim = lane ? lane.findIndex(c => c.id === targetCardId) : -1;
             requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardInfo.owner,
+                    cardSnapshot: { ...cardInfo.card },
+                    laneIndex: laneIndex,
+                    cardIndex: cardIndexForAnim,
+                }],
                 onCompleteCallback: (s, endTurnCb) => {
                     const deletingPlayer = prev.actionRequired.actor;
                     const originalAction = prev.actionRequired;
@@ -1157,11 +1168,19 @@ export const resolveActionWithCard = (
             const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+            const cardIndexForAnim = lane ? lane.findIndex(c => c.id === targetCardId) : -1;
 
             newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardInfo.owner,
+                    cardSnapshot: { ...cardInfo.card },
+                    laneIndex: laneIndex,
+                    cardIndex: cardIndexForAnim,
+                }],
                 onCompleteCallback: (s, endTurnCb) => {
                     // Trigger reactive effects after delete (Hate-3 custom protocol)
                     const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
