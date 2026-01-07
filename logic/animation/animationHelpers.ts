@@ -563,11 +563,12 @@ export function createCompileDeleteAnimations(
     const hiddenCardIds = new Set<string>();
 
     return deletedCards.map((item, index) => {
-        // Create snapshot that excludes all previously animated cards
-        const snapshot = createVisualSnapshot(state, hiddenCardIds);
-
-        // Add this card to hidden set for the NEXT animation
+        // CRITICAL FIX: Add this card to hidden set BEFORE creating snapshot
+        // This ensures the card appears ONLY in the flying animation, not on the board
         hiddenCardIds.add(item.card.id);
+
+        // Create snapshot that excludes this card AND all previously animated cards
+        const snapshot = createVisualSnapshot(state, hiddenCardIds);
 
         const fromPosition: CardPosition = {
             type: 'lane',
@@ -1155,4 +1156,185 @@ export function convertAnimationRequestsToQueueItems(
     }
 
     return items;
+}
+
+// =============================================================================
+// SINGLE POINT OF TRUTH: ANIMATION REQUEST PROCESSING
+// =============================================================================
+
+/**
+ * Process animation requests and enqueue them.
+ * This is the SINGLE POINT OF TRUTH for converting AnimationRequests to animations.
+ *
+ * CRITICAL: The state parameter should be the state AFTER the effect (cards already moved).
+ * Use cardSnapshot in the request for deleted/returned cards that no longer exist in state.
+ *
+ * @param state - Current game state (for card positions and log messages)
+ * @param animationRequests - Array of animation requests to process
+ * @param enqueueAnimation - Function to enqueue animations
+ * @param lastProcessedLogIndex - Optional: Index of last processed log entry (for log message association)
+ */
+export function enqueueAnimationsFromRequests(
+    state: GameState,
+    animationRequests: AnimationRequest[],
+    enqueueAnimation: (animation: Omit<AnimationQueueItem, 'id'>) => void,
+    lastProcessedLogIndex?: number
+): void {
+    if (!animationRequests || animationRequests.length === 0) return;
+
+    const animations: Omit<AnimationQueueItem, 'id'>[] = [];
+
+    // Track log index for associating log messages with animations
+    let logIndex = lastProcessedLogIndex ?? (state.log.length - animationRequests.length);
+    if (logIndex < 0) logIndex = 0;
+
+    for (const request of animationRequests) {
+        // Get the corresponding log message for this animation
+        const logEntry = state.log[logIndex];
+        const logMessage = logEntry ? { message: logEntry.message, player: logEntry.player } : undefined;
+        logIndex++;
+
+        if (request.type === 'play' && request.fromDeck && request.toLane !== undefined) {
+            // Play from deck animation
+            const playCard = state[request.owner].lanes[request.toLane]?.find(c => c.id === request.cardId);
+            if (playCard) {
+                const animation = createPlayAnimation(
+                    state,
+                    playCard,
+                    request.owner,
+                    request.toLane,
+                    false,  // fromHand = false (from deck)
+                    undefined,  // no handIndex
+                    request.isFaceUp ?? false,
+                    request.owner === 'opponent'
+                );
+                animations.push({ ...animation, logMessage });
+            }
+        } else if (request.type === 'shift') {
+            const shiftCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
+            const fromCardIndex = state[request.owner].lanes[request.fromLane]?.findIndex(c => c.id === request.cardId) ?? -1;
+            if (shiftCard && fromCardIndex >= 0) {
+                const animation = createShiftAnimation(
+                    state,
+                    shiftCard,
+                    request.owner,
+                    request.fromLane,
+                    fromCardIndex,
+                    request.toLane
+                );
+                animations.push({ ...animation, logMessage });
+            }
+        } else if (request.type === 'delete') {
+            // CRITICAL: Use cardSnapshot if available - the card is already deleted from state!
+            const cardSnapshot = (request as any).cardSnapshot;
+            const laneIndex = (request as any).laneIndex;
+            const cardIndex = (request as any).cardIndex;
+
+            if (cardSnapshot && laneIndex !== undefined && cardIndex !== undefined) {
+                const animation = createDeleteAnimation(
+                    state,
+                    cardSnapshot,
+                    request.owner,
+                    laneIndex,
+                    cardIndex
+                );
+                animations.push({ ...animation, logMessage });
+            } else {
+                // Fallback: Try to find card in current state
+                const deleteCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
+                const cardPosition = findCardInLanes(state, request.cardId, request.owner);
+                if (deleteCard && cardPosition) {
+                    const animation = createDeleteAnimation(
+                        state,
+                        deleteCard,
+                        request.owner,
+                        cardPosition.laneIndex,
+                        cardPosition.cardIndex
+                    );
+                    animations.push({ ...animation, logMessage });
+                }
+            }
+        } else if (request.type === 'draw') {
+            // Draw X cards animation
+            const hand = state[request.player].hand;
+            const newCards = hand.slice(-request.count);
+            const startIndex = hand.length - request.count;
+
+            if (newCards.length > 0) {
+                const drawAnimations = createSequentialDrawAnimations(
+                    state,
+                    newCards,
+                    request.player,
+                    startIndex
+                );
+                if (drawAnimations.length > 0) {
+                    animations.push({ ...drawAnimations[0], logMessage });
+                    animations.push(...drawAnimations.slice(1));
+                }
+            }
+        } else if (request.type === 'return') {
+            // CRITICAL: Use cardSnapshot if available - the card may already be returned to hand!
+            const cardSnapshot = (request as any).cardSnapshot;
+            const laneIndex = (request as any).laneIndex;
+            const cardIndex = (request as any).cardIndex;
+
+            if (cardSnapshot && laneIndex !== undefined && cardIndex !== undefined) {
+                const animation = createReturnAnimation(
+                    state,
+                    cardSnapshot,
+                    request.owner,
+                    laneIndex,
+                    cardIndex,
+                    true  // setFaceDown
+                );
+                animations.push({ ...animation, logMessage });
+            } else {
+                // Fallback: Try to find card in current state
+                const cardPosition = findCardInLanes(state, request.cardId, request.owner);
+                const card = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
+                if (card && cardPosition) {
+                    const animation = createReturnAnimation(
+                        state,
+                        card,
+                        request.owner,
+                        cardPosition.laneIndex,
+                        cardPosition.cardIndex,
+                        true  // setFaceDown
+                    );
+                    animations.push({ ...animation, logMessage });
+                }
+            }
+        } else if (request.type === 'flip') {
+            const owner = request.owner || (state.player.lanes.flat().some(c => c.id === request.cardId) ? 'player' : 'opponent');
+            const position = findCardInLanes(state, request.cardId, owner);
+            if (position) {
+                const card = state[owner].lanes[position.laneIndex][position.cardIndex];
+                if (card) {
+                    // Note: After flip, card.isFaceUp is already the NEW state
+                    // So we animate TO the current state (which is the result of the flip)
+                    const animation = createFlipAnimation(
+                        state,
+                        card,
+                        owner,
+                        position.laneIndex,
+                        position.cardIndex,
+                        card.isFaceUp  // Flip to current state
+                    );
+                    animations.push({ ...animation, logMessage });
+                }
+            }
+        } else if (request.type === 'discard') {
+            const handIndex = findCardInHand(state, request.cardId, request.owner);
+            if (handIndex >= 0) {
+                const card = state[request.owner].hand[handIndex];
+                if (card) {
+                    const animation = createDiscardAnimation(state, card, request.owner, handIndex);
+                    animations.push({ ...animation, logMessage });
+                }
+            }
+        }
+    }
+
+    // Enqueue all animations
+    animations.forEach(anim => enqueueAnimation(anim));
 }

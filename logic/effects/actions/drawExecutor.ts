@@ -229,6 +229,10 @@ export function executeDrawEffect(
                     cardIds: newCards.map(c => c.id)
                 }
             };
+
+            // CRITICAL FIX: Clear _effectSkippedNoTargets AFTER all reactive effects.
+            // Reactive effects might set this marker if they fail, but the DRAW succeeded.
+            delete (newState as any)._effectSkippedNoTargets;
         }
 
         // NOTE: animationRequests removed - they caused double animation when used alongside animationState
@@ -564,15 +568,11 @@ export function executeDrawEffect(
         hand: drawnCards,
     };
 
-    // DEBUG: Check for duplicate card IDs in hand
-    const handIds = drawnCards.map(c => c.id);
-    const uniqueIds = new Set(handIds);
-    if (handIds.length !== uniqueIds.size) {
-        console.error('[DRAW BUG] Duplicate card IDs detected in hand after draw!', {
-            player: drawingPlayer,
-            handIds,
-            duplicates: handIds.filter((id, idx) => handIds.indexOf(id) !== idx)
-        });
+    // CRITICAL FIX: Clear _effectSkippedNoTargets if we successfully drew cards.
+    // This marker might have been set by a previous effect or reactive effect,
+    // and would incorrectly signal that THIS draw was skipped.
+    if (newCards.length > 0) {
+        delete (newState as any)._effectSkippedNoTargets;
     }
 
     // Log reshuffle if it happened
@@ -636,32 +636,10 @@ export function executeDrawEffect(
         const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: newCards.length });
         newState = reactiveResult.newState;
 
-        // DEBUG: Check for duplicate card IDs after reactive effects
-        const afterReactiveIds = newState[drawingPlayer].hand.map((c: any) => c.id);
-        const afterReactiveUnique = new Set(afterReactiveIds);
-        if (afterReactiveIds.length !== afterReactiveUnique.size) {
-            console.error('[DRAW BUG] Duplicate card IDs after after_draw reactive!', {
-                player: drawingPlayer,
-                handIds: afterReactiveIds,
-                duplicates: afterReactiveIds.filter((id: string, idx: number) => afterReactiveIds.indexOf(id) !== idx)
-            });
-        }
-
         // CRITICAL: Trigger after_opponent_draw for opponent's cards (Mirror-4)
         const opponentOfDrawer = drawingPlayer === 'player' ? 'opponent' : 'player';
         const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: newCards.length });
         newState = oppReactiveResult.newState;
-
-        // DEBUG: Check for duplicate card IDs after opponent reactive effects
-        const afterOppReactiveIds = newState[drawingPlayer].hand.map((c: any) => c.id);
-        const afterOppReactiveUnique = new Set(afterOppReactiveIds);
-        if (afterOppReactiveIds.length !== afterOppReactiveUnique.size) {
-            console.error('[DRAW BUG] Duplicate card IDs after after_opponent_draw reactive!', {
-                player: drawingPlayer,
-                handIds: afterOppReactiveIds,
-                duplicates: afterOppReactiveIds.filter((id: string, idx: number) => afterOppReactiveIds.indexOf(id) !== idx)
-            });
-        }
     }
 
     // Reveal from drawn cards - flexible based on parameters
@@ -716,6 +694,11 @@ export function executeDrawEffect(
                 cardIds: newCards.map(c => c.id)
             }
         };
+
+        // CRITICAL FIX: Clear _effectSkippedNoTargets AFTER all reactive effects.
+        // Reactive effects might set this marker if they fail (e.g., Spirit-3's shift has no targets),
+        // but this shouldn't prevent Death-1's conditional from executing since the DRAW succeeded.
+        delete (newState as any)._effectSkippedNoTargets;
     }
 
     // NOTE: animationRequests removed - they caused double animation when used alongside animationState

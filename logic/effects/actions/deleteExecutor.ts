@@ -574,14 +574,6 @@ export function executeDeleteEffect(
             conditionalType: conditional?.type,
         } as any;
 
-        console.log('[DEATH-1 DEBUG 12] Created select_cards_to_delete (each_lane):', {
-            sourceCard: `${card.protocol}-${card.value}`,
-            count,
-            actor,
-            firstLane,
-            remainingLanes
-        });
-
         return { newState };
     }
 
@@ -638,14 +630,6 @@ export function executeDeleteEffect(
         scope: params.scope,                     // Pass scope to resolver/UI
         protocolMatching: params.protocolMatching, // Pass protocol matching rule
     } as any;
-
-    console.log('[DEATH-1 DEBUG 11] Created select_cards_to_delete:', {
-        sourceCard: `${card.protocol}-${card.value}`,
-        count,
-        actor,
-        hasFollowUpEffect: !!conditional?.thenEffect,
-        conditionalType: conditional?.type
-    });
 
     return { newState };
 }

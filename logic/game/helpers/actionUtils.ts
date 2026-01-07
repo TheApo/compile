@@ -14,7 +14,7 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
 import { rememberFlippedCard } from '../../ai/cardMemory';
-import { createFlipAnimation } from '../../animation/animationHelpers';
+import { createFlipAnimation, enqueueAnimationsFromRequests } from '../../animation/animationHelpers';
 import { flipCardMessage } from '../../utils/logMessages';
 
 export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex: number, cardIndex: number } | null {
@@ -369,6 +369,11 @@ export function internalResolveTargetedFlip(
     // NEW: Trigger reactive effects BEFORE flip (Metal-6: "When this card would be flipped")
     const beforeFlipResult = processReactiveEffects(state, 'on_flip', { player: owner, cardId: targetCardId });
     let newState = beforeFlipResult.newState;
+
+    // CRITICAL FIX: Process animation requests from reactive effects (e.g., Hate-0's delete on flip)
+    if (beforeFlipResult.animationRequests && enqueueAnimation) {
+        enqueueAnimationsFromRequests(newState, beforeFlipResult.animationRequests, enqueueAnimation);
+    }
 
     // Check if the card still exists after on_flip effects (Metal-6 might delete itself)
     const cardAfterOnFlip = findCardOnBoard(newState, targetCardId);
