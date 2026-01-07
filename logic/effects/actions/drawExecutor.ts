@@ -219,6 +219,7 @@ export function executeDrawEffect(
 
         // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
         // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
+        // NOTE: We ONLY use animationState, NOT animationRequests, to prevent double animation.
         if (newCards.length > 0) {
             newState = {
                 ...newState,
@@ -230,10 +231,8 @@ export function executeDrawEffect(
             };
         }
 
-        // Also return animationRequests for backwards compatibility
-        const animationRequests = count > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count }] : undefined;
-
-        return { newState, animationRequests };
+        // NOTE: animationRequests removed - they caused double animation when used alongside animationState
+        return { newState };
     }
 
     // NEW: Calculate draw count based on countType
@@ -565,6 +564,17 @@ export function executeDrawEffect(
         hand: drawnCards,
     };
 
+    // DEBUG: Check for duplicate card IDs in hand
+    const handIds = drawnCards.map(c => c.id);
+    const uniqueIds = new Set(handIds);
+    if (handIds.length !== uniqueIds.size) {
+        console.error('[DRAW BUG] Duplicate card IDs detected in hand after draw!', {
+            player: drawingPlayer,
+            handIds,
+            duplicates: handIds.filter((id, idx) => handIds.indexOf(id) !== idx)
+        });
+    }
+
     // Log reshuffle if it happened
     if (reshuffled) {
         const sourcePlayerName = sourcePlayer === 'player' ? 'Player' : 'Opponent';
@@ -621,14 +631,37 @@ export function executeDrawEffect(
     }
 
     // CRITICAL: Trigger reactive effects after draw (Spirit-3)
-    if (drawnCards.length > 0) {
-        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: drawnCards.length });
+    // NOTE: Use newCards.length (newly drawn cards), NOT drawnCards.length (entire hand)!
+    if (newCards.length > 0) {
+        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: newCards.length });
         newState = reactiveResult.newState;
+
+        // DEBUG: Check for duplicate card IDs after reactive effects
+        const afterReactiveIds = newState[drawingPlayer].hand.map((c: any) => c.id);
+        const afterReactiveUnique = new Set(afterReactiveIds);
+        if (afterReactiveIds.length !== afterReactiveUnique.size) {
+            console.error('[DRAW BUG] Duplicate card IDs after after_draw reactive!', {
+                player: drawingPlayer,
+                handIds: afterReactiveIds,
+                duplicates: afterReactiveIds.filter((id: string, idx: number) => afterReactiveIds.indexOf(id) !== idx)
+            });
+        }
 
         // CRITICAL: Trigger after_opponent_draw for opponent's cards (Mirror-4)
         const opponentOfDrawer = drawingPlayer === 'player' ? 'opponent' : 'player';
-        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: drawnCards.length });
+        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: newCards.length });
         newState = oppReactiveResult.newState;
+
+        // DEBUG: Check for duplicate card IDs after opponent reactive effects
+        const afterOppReactiveIds = newState[drawingPlayer].hand.map((c: any) => c.id);
+        const afterOppReactiveUnique = new Set(afterOppReactiveIds);
+        if (afterOppReactiveIds.length !== afterOppReactiveUnique.size) {
+            console.error('[DRAW BUG] Duplicate card IDs after after_opponent_draw reactive!', {
+                player: drawingPlayer,
+                handIds: afterOppReactiveIds,
+                duplicates: afterOppReactiveIds.filter((id: string, idx: number) => afterOppReactiveIds.indexOf(id) !== idx)
+            });
+        }
     }
 
     // Reveal from drawn cards - flexible based on parameters
@@ -673,6 +706,7 @@ export function executeDrawEffect(
 
     // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
     // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
+    // NOTE: We ONLY use animationState, NOT animationRequests, to prevent double animation.
     if (newCards.length > 0) {
         newState = {
             ...newState,
@@ -684,10 +718,6 @@ export function executeDrawEffect(
         };
     }
 
-    // Also return animationRequests for backwards compatibility with other callers
-    const animationRequests = newCards.length > 0
-        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length }]
-        : undefined;
-
-    return { newState, animationRequests };
+    // NOTE: animationRequests removed - they caused double animation when used alongside animationState
+    return { newState };
 }

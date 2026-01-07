@@ -190,7 +190,7 @@ export const AnimationOverlay: React.FC = () => {
             {/* For compile animations with multiple cards */}
             {currentAnimation.animatingCards && currentAnimation.animatingCards.map((item, index) => (
                 <AnimatedCard
-                    key={item.card.id}
+                    key={`compile-${item.card.id}-${index}`}
                     animation={{
                         ...currentAnimation,
                         animatingCard: {

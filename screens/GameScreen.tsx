@@ -1070,52 +1070,66 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                     actionRequiredClass={actionRequiredClass}
                   />
                   <div className={`player-hand-area ${isAnimating ? '' : handBackgroundClass}`}>
-                    {visualGameState.player.hand
-                      .filter((card) => {
-                        // During animation, show all cards from the snapshot
-                        if (isAnimating) return true;
-                        // When there's a selectableCardIds filter (Clarity-2 play effect),
-                        // only show selectable cards - others stay hidden behind the banner
-                        const action = gameState.actionRequired as any;
-                        const hasSelectableFilter = action?.type === 'select_card_from_hand_to_play' && action?.selectableCardIds;
-                        if (hasSelectableFilter) {
-                          return action.selectableCardIds.includes(card.id);
+                    {(() => {
+                      // DEFENSIVE: Deduplicate hand cards to prevent React key errors
+                      // This handles edge cases where snapshot hand might contain duplicate IDs
+                      const seenIds = new Set<string>();
+                      const deduplicatedHand = visualGameState.player.hand.filter(card => {
+                        if (seenIds.has(card.id)) {
+                          console.warn('[GameScreen] Duplicate card ID in hand:', card.id, card.protocol, card.value);
+                          return false;
                         }
-                        return true; // Show all cards normally
-                      })
-                      .map((card) => {
-                      // During animation: hide the animating card via CSS (visibility: hidden)
-                      // We keep it in DOM for position detection, just invisible
-                      const isBeingAnimated = animatingCardIds.has(card.id);
-                      if (isAnimating) {
+                        seenIds.add(card.id);
+                        return true;
+                      });
+
+                      return deduplicatedHand
+                        .filter((card) => {
+                          // During animation, show all cards from the snapshot
+                          if (isAnimating) return true;
+                          // When there's a selectableCardIds filter (Clarity-2 play effect),
+                          // only show selectable cards - others stay hidden behind the banner
+                          const action = gameState.actionRequired as any;
+                          const hasSelectableFilter = action?.type === 'select_card_from_hand_to_play' && action?.selectableCardIds;
+                          if (hasSelectableFilter) {
+                            return action.selectableCardIds.includes(card.id);
+                          }
+                          return true; // Show all cards normally
+                        })
+                        .map((card, index) => {
+                        // During animation: hide the animating card via CSS (visibility: hidden)
+                        // We keep it in DOM for position detection, just invisible
+                        const isBeingAnimated = animatingCardIds.has(card.id);
+                        if (isAnimating) {
+                          return (
+                            <CardComponent
+                              key={`hand-${card.id}-${index}`}
+                              card={card}
+                              isFaceUp={true}
+                              additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                            />
+                          );
+                        }
+                        // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
+                        const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
+                          ? card.id === (gameState.actionRequired as any).cardInHandId
+                          : card.id === selectedCard;
+
                         return (
                           <CardComponent
-                            key={card.id}
+                            key={`hand-${card.id}-${index}`}
                             card={card}
                             isFaceUp={true}
-                            additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                            onPointerDown={() => handleHandCardPointerDown(card)}
+                            onPointerEnter={() => handleHandCardPointerEnter(card)}
+                            isSelected={isSelectedForPlay}
+                            isMultiSelected={multiSelectedCardIds.includes(card.id)}
+                            animationState={gameState.animationState}
+                            additionalClassName="in-hand"
                           />
                         );
-                      }
-                      // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
-                      const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
-                        ? card.id === (gameState.actionRequired as any).cardInHandId
-                        : card.id === selectedCard;
-
-                      return (
-                        <CardComponent
-                          key={card.id}
-                          card={card}
-                          isFaceUp={true}
-                          onPointerDown={() => handleHandCardPointerDown(card)}
-                          onPointerEnter={() => handleHandCardPointerEnter(card)}
-                          isSelected={isSelectedForPlay}
-                          isMultiSelected={multiSelectedCardIds.includes(card.id)}
-                          animationState={gameState.animationState}
-                          additionalClassName="in-hand"
-                        />
-                      );
-                    })}
+                      });
+                    })()}
                   </div>
                 </div>
             </div>

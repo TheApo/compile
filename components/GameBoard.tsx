@@ -439,19 +439,32 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     return (
         <div className="game-board">
             <div className="opponent-hand-area">
-                {opponent.hand.map(card => {
-                    // Hide the card if it's being animated (kept in DOM for position detection)
-                    const isBeingAnimated = animatingCardIds?.has(card.id);
-                    return (
-                        <CardComponent
-                            key={card.id}
-                            card={card}
-                            isFaceUp={card.isRevealed || false}
-                            additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
-                            onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
-                        />
-                    );
-                })}
+                {(() => {
+                    // DEFENSIVE: Deduplicate hand cards to prevent React key errors
+                    const seenIds = new Set<string>();
+                    return opponent.hand
+                        .filter(card => {
+                            if (seenIds.has(card.id)) {
+                                console.warn('[GameBoard] Duplicate card ID in opponent hand:', card.id);
+                                return false;
+                            }
+                            seenIds.add(card.id);
+                            return true;
+                        })
+                        .map((card, index) => {
+                            // Hide the card if it's being animated (kept in DOM for position detection)
+                            const isBeingAnimated = animatingCardIds?.has(card.id);
+                            return (
+                                <CardComponent
+                                    key={`opp-hand-${card.id}-${index}`}
+                                    card={card}
+                                    isFaceUp={card.isRevealed || false}
+                                    additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                                    onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
+                                />
+                            );
+                        });
+                })()}
             </div>
 
             {/* Opponent's Side */}

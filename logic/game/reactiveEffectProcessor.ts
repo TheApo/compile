@@ -298,6 +298,8 @@ export function processReactiveEffects(
                 if (actionActor !== state.turn && !newState._interruptedTurn) {
                     newState._interruptedTurn = state.turn;
                     newState._interruptedPhase = state.phase;
+                    // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+                    newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
                     newState.turn = actionActor;
                 }
 

@@ -282,6 +282,8 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         if (firstAction.actor !== compiler) {
             newState._interruptedTurn = compiler;
             newState._interruptedPhase = newState.phase;
+            // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+            newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
             newState.turn = firstAction.actor;
         }
     } else {

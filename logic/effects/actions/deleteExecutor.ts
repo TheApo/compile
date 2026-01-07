@@ -182,9 +182,6 @@ export function executeDeleteEffect(
     // CRITICAL DEFAULT: If position is not specified, default to 'uncovered'
     const position = targetFilter.position || 'uncovered';
 
-    // DEBUG: Log delete effect parameters for Hate-4 debugging
-    console.log(`[DELETE DEBUG] Card: ${card.protocol}-${card.value}, laneIndex: ${laneIndex}, position: ${position}, scope: ${params.scope?.type}, triggerType: ${context.triggerType}`);
-
     const validTargets: string[] = [];
     for (const player of ['player', 'opponent'] as const) {
         for (let laneIdx = 0; laneIdx < state[player].lanes.length; laneIdx++) {
@@ -248,12 +245,9 @@ export function executeDeleteEffect(
                 }
 
                 validTargets.push(c.id);
-                console.log(`[DELETE DEBUG] Valid target: ${c.protocol}-${c.value} (id: ${c.id.slice(0,8)}), player: ${player}, lane: ${laneIdx}, cardIdx: ${cardIdx}`);
             }
         }
     }
-
-    console.log(`[DELETE DEBUG] Total validTargets: ${validTargets.length}`);
 
     // If no valid targets, skip the effect
     if (validTargets.length === 0) {
@@ -313,21 +307,11 @@ export function executeDeleteEffect(
 
         // Keep only cards with that value
         filteredTargets = validTargets.filter(id => cardValues.get(id) === targetValue);
-
-        console.log(`[DELETE DEBUG] After ${targetFilter.calculation} filter: targetValue=${targetValue}, filteredTargets=${filteredTargets.length}`);
-        for (const id of filteredTargets) {
-            const info = findCardOnBoard(state, id);
-            if (info) console.log(`[DELETE DEBUG]   - ${info.card.protocol}-${info.card.value} (id: ${id.slice(0,8)})`);
-        }
     }
 
-    // NEW: Auto-execute (Hate-4: automatically delete lowest value card without user selection)
+    // Auto-execute (Hate-4: automatically delete lowest value card without user selection)
     if (params.autoExecute) {
-        console.log(`[DELETE DEBUG] autoExecute=true, count=${count}, will delete first ${Math.min(count, filteredTargets.length)} from filteredTargets`);
-
-        // Take first N cards from filteredTargets (or all if count >= length)
         const cardsToDelete = filteredTargets.slice(0, count);
-        console.log(`[DELETE DEBUG] cardsToDelete: ${cardsToDelete.map(id => id.slice(0,8)).join(', ')}`);
 
         let newState = state;
         const animationRequests: any[] = [];
@@ -590,6 +574,14 @@ export function executeDeleteEffect(
             conditionalType: conditional?.type,
         } as any;
 
+        console.log('[DEATH-1 DEBUG 12] Created select_cards_to_delete (each_lane):', {
+            sourceCard: `${card.protocol}-${card.value}`,
+            count,
+            actor,
+            firstLane,
+            remainingLanes
+        });
+
         return { newState };
     }
 
@@ -631,14 +623,6 @@ export function executeDeleteEffect(
         : undefined;
 
     // Set actionRequired for player to select cards
-    // FLEXIBLE: Pass actorChooses so AI can determine who selects targets
-    console.log('[DELETE EXECUTOR] Setting actionRequired:', {
-        actor,
-        sourceCardId: card.id,
-        hasConditional: !!conditional,
-        hasThenEffect: !!conditional?.thenEffect,
-        followUpEffect: conditional?.thenEffect
-    });
     newState.actionRequired = {
         type: 'select_cards_to_delete',  // CRITICAL: Always use generic type, AI reads targetFilter
         count,
@@ -654,6 +638,14 @@ export function executeDeleteEffect(
         scope: params.scope,                     // Pass scope to resolver/UI
         protocolMatching: params.protocolMatching, // Pass protocol matching rule
     } as any;
+
+    console.log('[DEATH-1 DEBUG 11] Created select_cards_to_delete:', {
+        sourceCard: `${card.protocol}-${card.value}`,
+        count,
+        actor,
+        hasFollowUpEffect: !!conditional?.thenEffect,
+        conditionalType: conditional?.type
+    });
 
     return { newState };
 }

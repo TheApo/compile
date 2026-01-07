@@ -178,6 +178,14 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         const hasActionRequired = !!result.newState.actionRequired;
         const hasSkipMarker = !!(result.newState as any)._effectSkippedNoTargets;
 
+        console.log('[DEATH-1 DEBUG 1] After draw execution:', {
+            card: `${sourceCard.protocol}-${sourceCard.value}`,
+            hasActionRequired,
+            hasSkipMarker,
+            hasConditional: !!effectDef.conditional,
+            conditionalType: effectDef.conditional?.type
+        });
+
         // CRITICAL: Check if effect was skipped due to no valid targets
         // BUT: If actionRequired is set, the effect DID find targets and needs user input - don't skip!
         const effectWasSkipped = hasSkipMarker && !hasActionRequired;
@@ -195,6 +203,13 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
         }
 
         // CRITICAL: Handle conditional follow-up effects (if_executed)
+        console.log('[DEATH-1 DEBUG 2] Checking conditional:', {
+            hasConditional: !!effectDef.conditional,
+            conditionalType: effectDef.conditional?.type,
+            hasThenEffect: !!effectDef.conditional?.thenEffect,
+            willEnterConditionalBlock: !!(effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect)
+        });
+
         if (effectDef.conditional && effectDef.conditional.type === 'if_executed' && effectDef.conditional.thenEffect) {
 
             // If the effect created an actionRequired, check if it's from the SAME card
@@ -245,6 +260,12 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             const sourceCardAfter = [...result.newState.player.lanes.flat(), ...result.newState.opponent.lanes.flat()]
                 .find(c => c.id === sourceCardId);
 
+            console.log('[DEATH-1 DEBUG 2.5] Looking for source card after draw:', {
+                sourceCardId,
+                foundCard: !!sourceCardAfter,
+                cardName: sourceCardAfter ? `${sourceCardAfter.protocol}-${sourceCardAfter.value}` : 'NOT FOUND'
+            });
+
             if (!sourceCardAfter) {
                 // Source card was deleted during the effect - skip the followUp and log
                 // CRITICAL: Restore the ORIGINAL log context (Death-1's Start) before logging,
@@ -263,12 +284,25 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             }
 
             const followUpEffect = effectDef.conditional.thenEffect;
+            console.log('[DEATH-1 DEBUG 3] Executing followUpEffect (delete):', {
+                followUpEffectId: followUpEffect.id,
+                followUpAction: followUpEffect.params?.action,
+                hasNestedConditional: !!followUpEffect.conditional,
+                sourceCard: `${sourceCardAfter.protocol}-${sourceCardAfter.value}`
+            });
+
             const followUpResult = executeCustomEffect(sourceCardAfter, laneIndex, result.newState, context, followUpEffect);
 
-            // CRITICAL: If the followUp created an actionRequired AND the followUp has its own conditional,
+            console.log('[DEATH-1 DEBUG 4] After followUpEffect execution:', {
+                hasActionRequired: !!followUpResult.newState.actionRequired,
+                actionRequiredType: followUpResult.newState.actionRequired?.type,
+                hasNestedConditional: !!followUpEffect.conditional?.thenEffect
+            });
+
+            // If the followUp created an actionRequired AND the followUp has its own conditional,
             // attach the nested conditional as a followUpEffect so it executes after the action completes
-            // Example: Death-1's "draw -> if you do, delete other -> then delete self"
             if (followUpResult.newState.actionRequired && followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
+                console.log('[DEATH-1 DEBUG 5] Attaching nested followUp (deleteSelf)');
                 const stateWithNestedFollowUp = {
                     ...followUpResult.newState,
                     actionRequired: {
@@ -280,6 +314,7 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
                 return stateWithNestedFollowUp;
             }
 
+            console.log('[DEATH-1 DEBUG 6] Returning followUpResult.newState directly (no nested conditional or no actionRequired)');
             return followUpResult.newState;
         }
 

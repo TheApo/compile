@@ -133,17 +133,13 @@ export const useGameState = (
         queue: AnimationRequest[],
         onComplete: () => void
     ) => {
-        console.log('[ANIM QUEUE] processAnimationQueue called with queue:', queue.map(r => r.type));
         const processNext = (q: AnimationRequest[]) => {
-            console.log('[ANIM QUEUE] processNext called, queue length:', q.length, 'types:', q.map(r => r.type));
             if (q.length === 0) {
-                console.log('[ANIM QUEUE] Queue empty, calling onComplete');
                 onComplete();
                 return;
             }
 
             const [nextRequest, ...rest] = q;
-            console.log('[ANIM QUEUE] Processing request type:', nextRequest.type, 'enqueueAnimation defined:', !!enqueueAnimation);
 
             // Handle different animation types
             if (nextRequest.type === 'flip') {
@@ -484,12 +480,6 @@ export const useGameState = (
                                     req.owner === 'opponent'  // isOpponentAction
                                 );
                                 enqueueAnimation(animation);
-                                console.log(`[useGameState] Created play-from-deck animation ${animIndex + 1}/${playFromDeckRequests.length}:`, {
-                                    cardId: req.cardId,
-                                    owner: req.owner,
-                                    toLane: req.toLane,
-                                    hiddenCards: cardsToHide.length
-                                });
                             }
                         });
                         // NOTE: 'draw' requests are handled via animationState.type === 'drawCard'
@@ -611,13 +601,9 @@ export const useGameState = (
 
                     // NEW: Check for compile delete animations
                     const compileAnimationData = (stateAfterCompile as any)._compileAnimations as { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] | undefined;
-                    console.log('[COMPILE DEBUG] compileAnimationData:', compileAnimationData);
-                    console.log('[COMPILE DEBUG] enqueueAnimations defined:', !!enqueueAnimations);
                     if (compileAnimationData && compileAnimationData.length > 0 && enqueueAnimations) {
-                        console.log('[COMPILE DEBUG] Creating delete animations for', compileAnimationData.length, 'cards');
                         // Create delete animations using the state BEFORE compile for correct positions
                         const deleteAnims = createCompileDeleteAnimations(currentState, compileAnimationData);
-                        console.log('[COMPILE DEBUG] Created animations:', deleteAnims.length);
 
                         // Add compile message to the first animation
                         if (deleteAnims.length > 0) {
@@ -719,17 +705,9 @@ export const useGameState = (
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId, enqueueAnimation);
 
-            console.log('[DELETE DEBUG 0] requiresAnimation:', !!requiresAnimation, 'animationRequests:', requiresAnimation?.animationRequests);
             if (requiresAnimation) {
-                // FIX: Updated the call to `processAnimationQueue` to pass a callback, which aligns with the refactored, more flexible animation handling pattern. This fixes the original property access error.
-                const cardIdForDebug = targetCardId; // Capture for debug logging
-                console.log('[DELETE DEBUG 0.5] Calling processAnimationQueue with requests:', requiresAnimation.animationRequests);
                 processAnimationQueue(requiresAnimation.animationRequests, () => {
                     setGameState(s => {
-                        console.log('[DELETE DEBUG 4] Card exists in s before callback:',
-                            s.player.lanes.flat().some(c => c.id === cardIdForDebug) ||
-                            s.opponent.lanes.flat().some(c => c.id === cardIdForDebug));
-
                         // FIX: If turn changed during animation (due to interrupt restoration),
                         // turnProgressionCb was already called. Pass a no-op to prevent double progression.
                         const endTurnCb = s.turn !== originalTurn
@@ -737,10 +715,6 @@ export const useGameState = (
                             : turnProgressionCb;
 
                         const result = requiresAnimation.onCompleteCallback(s, endTurnCb);
-
-                        console.log('[DELETE DEBUG 5] Card exists in result after callback:',
-                            result.player.lanes.flat().some(c => c.id === cardIdForDebug) ||
-                            result.opponent.lanes.flat().some(c => c.id === cardIdForDebug));
 
                         return result;
                     });
@@ -761,79 +735,21 @@ export const useGameState = (
     };
     
     const resolveActionWithLane = (targetLaneIndex: number) => {
-        // NEW ANIMATION SYSTEM: Create shift animation BEFORE setGameState (like playSelectedCard)
-        // This ensures the animation is enqueued synchronously before React updates
-        // Handle all shift action types that go through resolveActionWithLane
+        // CRITICAL FIX: Create shift animation BEFORE setGameState using DRY helper
+        // This ensures the animation captures the "from" state correctly
         const actionType = gameState.actionRequired?.type;
-        // Single-card shift actions
-        const isSingleShiftAction = actionType === 'select_lane_for_shift' ||
-                                    actionType === 'shift_flipped_card_optional' ||
-                                    actionType === 'select_lane_to_shift_revealed_board_card_custom' ||
-                                    actionType === 'select_lane_to_shift_revealed_card';
-        // Multi-card shift action
         const isMultiShiftAction = actionType === 'select_lane_for_shift_all';
 
-        if (enqueueAnimation && isSingleShiftAction) {
-            // Get card info based on action type
-            let cardToShiftId: string | undefined;
-            let cardOwner: Player | undefined;
-            let originalLaneIndex: number | undefined;
-
-            const req = gameState.actionRequired as any;
-
-            if (actionType === 'select_lane_for_shift') {
-                cardToShiftId = req.cardToShiftId;
-                cardOwner = req.cardOwner;
-                originalLaneIndex = req.originalLaneIndex;
-            } else if (actionType === 'select_lane_to_shift_revealed_card') {
-                cardToShiftId = req.revealedCardId;
-                // Find which player owns the card
-                for (const player of ['player', 'opponent'] as Player[]) {
-                    const foundInLane = gameState[player].lanes.findIndex(lane =>
-                        lane.some(c => c.id === cardToShiftId)
-                    );
-                    if (foundInLane >= 0) {
-                        cardOwner = player;
-                        originalLaneIndex = foundInLane;
-                        break;
-                    }
-                }
-            } else {
-                // For shift_flipped_card_optional and select_lane_to_shift_revealed_board_card_custom
-                cardToShiftId = req.cardId || req.cardToShiftId;
-                // Find which player owns the card
-                for (const player of ['player', 'opponent'] as Player[]) {
-                    const foundInLane = gameState[player].lanes.findIndex(lane =>
-                        lane.some(c => c.id === cardToShiftId)
-                    );
-                    if (foundInLane >= 0) {
-                        cardOwner = player;
-                        originalLaneIndex = foundInLane;
-                        break;
-                    }
-                }
-            }
-
-            // Only animate if shift is valid (not same lane)
-            if (cardToShiftId && cardOwner && originalLaneIndex !== undefined && originalLaneIndex !== targetLaneIndex) {
-                const cardToShift = gameState[cardOwner].lanes[originalLaneIndex]?.find(c => c.id === cardToShiftId);
-                const cardIndex = gameState[cardOwner].lanes[originalLaneIndex]?.findIndex(c => c.id === cardToShiftId) ?? -1;
-                if (cardToShift && cardIndex >= 0) {
-                    const fromProtocol = gameState[cardOwner].protocols[originalLaneIndex];
-                    const toProtocol = gameState[cardOwner].protocols[targetLaneIndex];
-                    const logMsg = shiftCardMessage(cardOwner, cardToShift, fromProtocol, toProtocol);
-
-                    const animation = createShiftAnimation(
-                        gameState,
-                        cardToShift,
-                        cardOwner,
-                        originalLaneIndex,
-                        cardIndex,
-                        targetLaneIndex
-                    );
-                    enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: cardOwner } });
-                }
-            }
+        // Use the DRY helper for single-card shifts (handles all shift action types)
+        if (enqueueAnimation && gameState.actionRequired) {
+            // isOpponentAction = false because this is player's action in useGameState
+            aiManager.createShiftAnimationBeforeStateChange(
+                gameState,
+                gameState.actionRequired,
+                targetLaneIndex,
+                enqueueAnimation,
+                false // Player action, not opponent
+            );
         }
 
         // Handle multi-card shift (select_lane_for_shift_all)
@@ -885,7 +801,6 @@ export const useGameState = (
             const req = gameState.actionRequired as any;
             const cardInHandId = req.cardInHandId;
             const actor = req.actor || 'player';
-            console.log('[useGameState] Detected play-from-hand action:', { cardInHandId, actor, actionType });
 
             // Find the card in hand and its index
             const handIndex = gameState[actor].hand.findIndex(c => c.id === cardInHandId);
@@ -918,13 +833,6 @@ export const useGameState = (
                     actor === 'opponent'
                 );
                 enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: actor } });
-                console.log('[useGameState] Created play animation BEFORE setGameState:', {
-                    cardId: cardInHandId,
-                    actor,
-                    toLane: targetLaneIndex,
-                    handIndex,
-                    isFaceUp: canPlayFaceUp
-                });
             }
         }
 

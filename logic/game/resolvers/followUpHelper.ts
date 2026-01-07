@@ -46,7 +46,6 @@ export function queueFollowUpEffectSync(
     // if_executed: Only execute if the action was actually performed
     const shouldExecute = conditionalType !== 'if_executed' || wasActionExecuted;
     if (!shouldExecute) {
-        console.log('[followUpHelper] Skipping followUpEffect (action was not executed)');
         return state;
     }
 
@@ -72,11 +71,8 @@ export function queueFollowUpEffectSync(
         (a: any) => a.type === 'execute_follow_up_effect' && a.sourceCardId === sourceCardId
     );
     if (alreadyQueued) {
-        console.log('[followUpHelper] followUpEffect already queued, skipping');
         return state;
     }
-
-    console.log('[followUpHelper] Queuing followUpEffect synchronously for', sourceCardForLog?.card.protocol, sourceCardForLog?.card.value);
 
     return {
         ...state,

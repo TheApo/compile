@@ -707,12 +707,6 @@ export function executeCustomEffect(
     if (effectDef.conditional && effectDef.conditional.thenEffect) {
         const { newState } = result;
 
-        console.log('[EFFECT INTERPRETER DEBUG] ===== CONDITIONAL DETECTED =====');
-        console.log('[EFFECT INTERPRETER DEBUG] conditional.type:', effectDef.conditional.type);
-        console.log('[EFFECT INTERPRETER DEBUG] conditional.thenEffect:', effectDef.conditional.thenEffect);
-        console.log('[EFFECT INTERPRETER DEBUG] newState.actionRequired:', newState.actionRequired?.type);
-        console.log('[EFFECT INTERPRETER DEBUG] card:', `${card.protocol}-${card.value}`);
-
         if (newState.actionRequired) {
             // Store the conditional for later execution (after user completes the action)
 
@@ -729,7 +723,6 @@ export function executeCustomEffect(
                     outerLaneIndex: laneIndex,  // Lane of the outer source card
                 } as any
             };
-            console.log('[EFFECT INTERPRETER DEBUG] followUpEffect ATTACHED to actionRequired');
             result = { newState: stateWithFollowUp };
         } else {
             // Effect completed immediately - check if we should execute conditional now

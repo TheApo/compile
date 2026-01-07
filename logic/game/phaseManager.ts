@@ -873,6 +873,12 @@ export const processEndOfAction = (state: GameState): GameState => {
         delete restoredState._interruptedPhase;
         restoredState.turn = originalTurnPlayer;
         restoredState.phase = originalPhase;
+        // CRITICAL FIX: Restore _cardPlayedThisActionPhase from the saved interrupt state
+        // This prevents the AI from playing twice after an interrupt (e.g., Death-0 + Metal-3)
+        if (state._interruptedCardPlayedFlag !== undefined) {
+            restoredState._cardPlayedThisActionPhase = state._interruptedCardPlayedFlag;
+            delete restoredState._interruptedCardPlayedFlag;
+        }
 
         // CRITICAL FIX: If interrupt happened during start/end phase, process queued actions first,
         // then return to let the normal phase progression continue (via runOpponentTurn).

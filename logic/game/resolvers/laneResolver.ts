@@ -255,16 +255,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             // CRITICAL: Check if the shift created an interrupt (e.g., uncover effect)
             const uncoverCreatedInterrupt = newState.actionRequired !== null;
 
-            // DEBUG: Log shift details
-            console.log('[SHIFT DEBUG] ===== SHIFT COMPLETED =====');
-            console.log('[SHIFT DEBUG] cardToShiftId:', cardToShiftId);
-            console.log('[SHIFT DEBUG] uncoverCreatedInterrupt:', uncoverCreatedInterrupt);
-            console.log('[SHIFT DEBUG] prev.actionRequired:', prev.actionRequired?.type);
-            console.log('[SHIFT DEBUG] prev.actionRequired.followUpEffect:', (prev.actionRequired as any)?.followUpEffect);
-            console.log('[SHIFT DEBUG] prev.actionRequired.sourceCardId:', prev.actionRequired?.sourceCardId);
-            console.log('[SHIFT DEBUG] sourceEffect:', sourceEffect);
-            console.log('[SHIFT DEBUG] shiftResult.animationRequests:', shiftResult.animationRequests);
-
             // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
             // Using central helper to prevent async timing bugs (AI runs sync, never waits for callbacks)
             const wasActionExecuted = !!cardToShiftId;  // Did the shift actually happen?
@@ -396,11 +386,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // NEW: Handle generic followUpEffect for custom protocols ("Shift 1. If you do, draw 2.")
                         const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                         const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                        console.log('[SHIFT CALLBACK DEBUG] ===== IN CALLBACK =====');
-                        console.log('[SHIFT CALLBACK DEBUG] followUpEffect:', followUpEffect);
-                        console.log('[SHIFT CALLBACK DEBUG] conditionalType:', conditionalType);
-                        console.log('[SHIFT CALLBACK DEBUG] sourceCardId:', sourceCardId);
-                        console.log('[SHIFT CALLBACK DEBUG] uncoverCreatedInterrupt:', uncoverCreatedInterrupt);
                         if (followUpEffect && sourceCardId) {
                             // For 'if_executed' conditionals, only execute if the shift actually happened
                             const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId; // shift happened if cardToShiftId exists
@@ -576,10 +561,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // This handles "Shift 1. If you do, flip this card." like Speed-3
                     const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
                     const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                    console.log('[SHIFT NO-ANIM DEBUG] ===== NO ANIMATION PATH =====');
-                    console.log('[SHIFT NO-ANIM DEBUG] followUpEffect:', followUpEffect);
-                    console.log('[SHIFT NO-ANIM DEBUG] conditionalType:', conditionalType);
-                    console.log('[SHIFT NO-ANIM DEBUG] sourceCardId:', sourceCardId);
                     if (followUpEffect && sourceCardId) {
                         // For 'if_executed' conditionals, only execute if the shift actually happened
                         const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;

@@ -652,6 +652,8 @@ export interface GameState {
     skipNextMiddleCommand?: string;
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
+    /** Saved _cardPlayedThisActionPhase during interrupt - restored when interrupt completes */
+    _interruptedCardPlayedFlag?: boolean;
     _logIndentLevel?: number;
     _currentEffectSource?: string;
     _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover' | 'after';

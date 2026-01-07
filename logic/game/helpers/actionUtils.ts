@@ -516,6 +516,8 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             if (newActionActor !== state.turn) {
                 result.newState._interruptedTurn = state.turn;
                 result.newState._interruptedPhase = state.phase;
+                // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+                result.newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
                 result.newState.turn = newActionActor;
 
                 // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),
@@ -922,6 +924,8 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
         if (newActionActor !== state.turn) {
             result.newState._interruptedTurn = state.turn;
             result.newState._interruptedPhase = state.phase;
+            // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+            result.newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
             result.newState.turn = newActionActor;
 
             // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),
