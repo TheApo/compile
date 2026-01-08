@@ -33,7 +33,7 @@ import {
     createPhaseTransitionAnimation,
     enqueueAnimationsFromRequests,
 } from '../logic/animation/animationHelpers';
-import { createAndEnqueueShiftAnimation, processCompileAnimations } from '../logic/animation/aiAnimationCreators';
+import { createAndEnqueueShiftAnimation, createAndEnqueueLaneDeleteAnimations, processCompileAnimations } from '../logic/animation/aiAnimationCreators';
 import { ANIMATION_DURATIONS } from '../constants/animationTiming';
 import {
     playCardMessage,
@@ -887,12 +887,24 @@ export const useGameState = (
             }
         }
 
+        // Create delete animations for select_lane_for_delete (Death-2, etc.)
+        // DRY: Use centralized helper from aiAnimationCreators.ts
+        if (enqueueAnimations && gameState.actionRequired) {
+            createAndEnqueueLaneDeleteAnimations(
+                gameState,
+                gameState.actionRequired,
+                targetLaneIndex,
+                enqueueAnimations,
+                false // isOpponentAction = false (player action)
+            );
+        }
+
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);
 
             if (requiresAnimation) {
-                // FIX: For shift/play/return actions, the animation was already created BEFORE setGameState
+                // FIX: For shift/play/return/delete actions, the animation was already created BEFORE setGameState
                 // Filter out those requests to prevent double animation
                 const actionType = prev.actionRequired?.type || '';
                 // Check if action type contains 'shift' (covers all shift variants)
@@ -900,6 +912,7 @@ export const useGameState = (
                 const isPlayFromHandAction = actionType === 'select_lane_for_play' &&
                                              (prev.actionRequired as any)?.cardInHandId;
                 const isReturnAction = actionType === 'select_lane_for_return';
+                const isDeleteAction = actionType === 'select_lane_for_delete';
 
                 let filteredRequests = requiresAnimation.animationRequests;
                 if (isShiftAction) {
@@ -910,6 +923,9 @@ export const useGameState = (
                 }
                 if (isReturnAction) {
                     filteredRequests = filteredRequests.filter(r => r.type !== 'return');
+                }
+                if (isDeleteAction) {
+                    filteredRequests = filteredRequests.filter(r => r.type !== 'delete');
                 }
 
                 // Only call processAnimationQueue if there are remaining requests

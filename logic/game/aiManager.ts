@@ -29,6 +29,7 @@ import {
     createAndEnqueueDiscardAnimations,
     createAndEnqueueDrawAnimations,
     createAndEnqueueShiftAnimation,
+    createAndEnqueueLaneDeleteAnimations,
     createAndEnqueuePlayAnimation,
     processCompileAnimations,
 } from '../animation/aiAnimationCreators';
@@ -1534,18 +1535,35 @@ const handleRequiredActionSync = (
             : phaseManager.processEndOfAction(newState);
     }
 
-    // --- SELECT LANE (for shift, play from deck, etc.) ---
+    // --- SELECT LANE (for shift, play from deck, delete, etc.) ---
     if (aiDecision.type === 'selectLane') {
-        // CRITICAL FIX: Create shift animation BEFORE state change using DRY helper
-        createAndEnqueueShiftAnimation(state, action, aiDecision.laneIndex, enqueueAnimation, true);
+        // CRITICAL: Create animations BEFORE state change using DRY helpers
+        const shiftAnimationCreated = createAndEnqueueShiftAnimation(state, action, aiDecision.laneIndex, enqueueAnimation, true);
+
+        // DRY: Use centralized helper for lane-based delete animations (Death-2, Metal-3)
+        // Create a batch wrapper for enqueueAnimation
+        const enqueueAnimationsBatch = enqueueAnimation
+            ? (items: Omit<AnimationQueueItem, 'id'>[]) => items.forEach(item => enqueueAnimation!(item))
+            : undefined;
+        const deleteAnimationCreated = enqueueAnimationsBatch
+            ? createAndEnqueueLaneDeleteAnimations(state, action, aiDecision.laneIndex, enqueueAnimationsBatch, true)
+            : false;
 
         // Execute lane selection synchronously
         const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(state, aiDecision.laneIndex);
 
-        // CRITICAL FIX: Process animations for select_lane actions (Death-2 delete, Water-3 return, etc.)
-        // Use enqueueAnimationsFromRequests for DRY - it handles all animation types
+        // Process remaining animations (filter out already created ones)
         if (requiresAnimation && enqueueAnimation) {
-            enqueueAnimationsFromRequests(state, requiresAnimation.animationRequests, enqueueAnimation);
+            let filteredRequests = requiresAnimation.animationRequests;
+            if (shiftAnimationCreated) {
+                filteredRequests = filteredRequests.filter(r => r.type !== 'shift');
+            }
+            if (deleteAnimationCreated) {
+                filteredRequests = filteredRequests.filter(r => r.type !== 'delete');
+            }
+            if (filteredRequests.length > 0) {
+                enqueueAnimationsFromRequests(state, filteredRequests, enqueueAnimation);
+            }
         }
 
         if (nextState.actionRequired && nextState.actionRequired.actor === 'opponent') {

@@ -76,6 +76,30 @@ npm run test:protocols   # Testet Custom Protocols
 
 ## Projektspezifische Regeln
 
+### HAUPTREGEL: Animationen (KRITISCH - NIEMALS IGNORIEREN!)
+
+**Animation-Code gehört IMMER in `logic/animation/aiAnimationCreators.ts`!**
+
+- **NIEMALS** Animation-Logik in `useGameState.ts` oder `aiManager.ts` duplizieren!
+- **IMMER** zentrale Helper in `aiAnimationCreators.ts` nutzen oder dort neue erstellen
+- **EINE Funktion für Spieler UND AI** - Animationen werden an einer Stelle erstellt, nicht separat
+- Bei neuem Animation-Typ: Helper in `aiAnimationCreators.ts` hinzufügen, dann in beiden Stellen nutzen
+
+Verfügbare zentrale Helper:
+- `createAndEnqueueFlipAnimation()` - Flip-Animation (Spieler + AI)
+- `createAndEnqueueDeleteAnimation()` - Einzelne Delete-Animation
+- `createAndEnqueueLaneDeleteAnimations()` - Lane-basierte Deletes (Death-2, etc.)
+- `createAndEnqueueReturnAnimation()` - Return-Animation
+- `createAndEnqueueShiftAnimation()` - Shift-Animation (Spieler + AI)
+- `createAndEnqueuePlayAnimation()` - Play-Animation
+- `createAndEnqueueDiscardAnimations()` - Discard-Animationen
+- `createAndEnqueueDrawAnimations()` - Draw-Animationen
+- `createAnimationForAIDecision()` - Dispatcher für AI-Entscheidungen
+- `filterAlreadyCreatedAnimations()` - Doppelte Animationen vermeiden
+- `processCompileAnimations()` - Compile-Delete-Animationen
+
+**Wenn du Animation-Code schreibst und es nicht in `aiAnimationCreators.ts` ist, STOPP und refaktoriere!**
+
 ### Spiellogik (KRITISCH!)
 - **ALLE Logik ist SYNCHRON** - niemals async/await in der Spiellogik!
 - **State andert sich SOFORT** - Logik lauft durch, dann Animation

@@ -263,6 +263,123 @@ export function createAndEnqueuePlayAnimation(
 // MULTI-CARD ANIMATIONS
 // =============================================================================
 
+// Type for batch enqueue function
+type EnqueueBatchFn = (items: Omit<AnimationQueueItem, 'id'>[]) => void;
+
+/**
+ * Erstellt und enqueued Delete-Animationen für lane-basierte Deletes.
+ * Unterstützt: select_lane_for_delete (Death-2) und select_lane_for_delete_all (Metal-3)
+ * CRITICAL: Muss VOR resolveActionWithLane aufgerufen werden für korrekten Snapshot.
+ * DRY: Eine zentrale Stelle für Player und AI.
+ *
+ * @param state - State VOR der Änderung (für korrekten Snapshot)
+ * @param action - Die ActionRequired mit targetFilter, count, etc.
+ * @param targetLaneIndex - Die ausgewählte Lane
+ * @param enqueueAnimations - Funktion zum Enqueuen der Animationen (batch)
+ * @param isOpponentAction - true wenn AI-Aktion
+ * @returns true wenn Animationen erstellt wurden, false wenn keine passenden Karten oder falsche Action-Type
+ */
+export function createAndEnqueueLaneDeleteAnimations(
+    state: GameState,
+    action: ActionRequired,
+    targetLaneIndex: number,
+    enqueueAnimations: EnqueueBatchFn,
+    isOpponentAction: boolean = false
+): boolean {
+    // Handle both delete action types
+    const isDeleteAction = action.type === 'select_lane_for_delete';
+    const isDeleteAllAction = action.type === 'select_lane_for_delete_all';
+
+    if (!isDeleteAction && !isDeleteAllAction) return false;
+
+    const req = action as any;
+    const actor = req.actor || (isOpponentAction ? 'opponent' : 'player');
+
+    // Collect matching cards from BOTH players' lanes
+    const matchingCards: { card: PlayedCard; owner: Player; cardIndex: number }[] = [];
+
+    if (isDeleteAllAction) {
+        // select_lane_for_delete_all: Delete ALL cards in lane (Metal-3)
+        for (const owner of ['player', 'opponent'] as Player[]) {
+            const lane = state[owner].lanes[targetLaneIndex];
+            for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
+                matchingCards.push({ card: lane[cardIndex], owner, cardIndex });
+            }
+        }
+    } else {
+        // select_lane_for_delete: Use targetFilter (Death-2, Courage-1)
+        const targetFilter = req.targetFilter || {};
+        const deleteAll = req.deleteAll === true;
+        const deleteCount = req.count || 1;
+
+        for (const owner of ['player', 'opponent'] as Player[]) {
+            const lane = state[owner].lanes[targetLaneIndex];
+            // Darkness-2 rule: face-down cards have value 4 if Darkness-2 is in lane
+            const faceDownValueInLane = lane.some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
+
+            for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
+                const card = lane[cardIndex];
+                const isUncovered = cardIndex === lane.length - 1;
+                const value = card.isFaceUp ? card.value : faceDownValueInLane;
+
+                // Apply targetFilter (same logic as laneResolver.ts)
+                if (targetFilter.valueRange) {
+                    const { min, max } = targetFilter.valueRange;
+                    if (value < min || value > max) continue;
+                }
+                if (targetFilter.faceState === 'face_up' && !card.isFaceUp) continue;
+                if (targetFilter.faceState === 'face_down' && card.isFaceUp) continue;
+                if (targetFilter.owner === 'own' && owner !== actor) continue;
+                if (targetFilter.owner === 'opponent' && owner === actor) continue;
+                if (targetFilter.position === 'uncovered' && !isUncovered) continue;
+                if (targetFilter.position === 'covered' && isUncovered) continue;
+
+                matchingCards.push({ card, owner, cardIndex });
+
+                // Respect count limit (unless deleteAll is true)
+                if (!deleteAll && matchingCards.length >= deleteCount) break;
+            }
+            // Break outer loop too if we hit count limit
+            if (!deleteAll && matchingCards.length >= deleteCount) break;
+        }
+    }
+
+    if (matchingCards.length === 0) return false;
+
+    // CRITICAL: Sort by cardIndex DESCENDING (uncovered cards first)
+    matchingCards.sort((a, b) => b.cardIndex - a.cardIndex);
+
+    // Create delete animations
+    const animations: Omit<AnimationQueueItem, 'id'>[] = [];
+    const hiddenCardIds = new Set<string>();
+
+    matchingCards.forEach(({ card, owner, cardIndex }, idx) => {
+        const animation = createDeleteAnimation(
+            state,
+            card,
+            owner,
+            targetLaneIndex,
+            cardIndex,
+            isOpponentAction,
+            hiddenCardIds
+        );
+        hiddenCardIds.add(card.id);
+
+        // Add logMessage to first card only
+        if (idx === 0) {
+            const logMsg = deleteCardMessage(card);
+            animations.push({ ...animation, logMessage: { message: logMsg, player: owner } });
+        } else {
+            animations.push(animation);
+        }
+    });
+
+    if (animations.length > 0) {
+        enqueueAnimations(animations);
+    }
+    return true;
+}
+
 /**
  * Erstellt und enqueued sequentielle Discard-Animationen.
  * @returns true wenn Animationen erstellt wurden, false wenn keine gültigen Karten
@@ -318,9 +435,6 @@ export function createAndEnqueueDrawAnimations(
 // =============================================================================
 // COMPILE ANIMATION HELPER
 // =============================================================================
-
-// Type for batch enqueue function (used by useGameState)
-type EnqueueBatchFn = (items: Omit<AnimationQueueItem, 'id'>[]) => void;
 
 /**
  * Verarbeitet Compile-Delete-Animationen aus dem _compileAnimations Marker.
