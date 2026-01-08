@@ -8,7 +8,7 @@
  * Extracted 1:1 from effectInterpreter.ts for modularity.
  */
 
-import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
+import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
 import { log } from '../../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
@@ -217,26 +217,17 @@ export function executeDrawEffect(
             newState = oppReactiveResult.newState;
         }
 
-        // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
-        // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
-        // NOTE: We ONLY use animationState, NOT animationRequests, to prevent double animation.
+        // CRITICAL FIX: Clear _effectSkippedNoTargets - the DRAW succeeded.
         if (newCards.length > 0) {
-            newState = {
-                ...newState,
-                animationState: {
-                    type: 'drawCard' as const,
-                    owner: drawingPlayer,
-                    cardIds: newCards.map(c => c.id)
-                }
-            };
-
-            // CRITICAL FIX: Clear _effectSkippedNoTargets AFTER all reactive effects.
-            // Reactive effects might set this marker if they fail, but the DRAW succeeded.
             delete (newState as any)._effectSkippedNoTargets;
         }
 
-        // NOTE: animationRequests removed - they caused double animation when used alongside animationState
-        return { newState };
+        // Return animationRequests for draw animation (consistent with all other effects)
+        const animationRequests: AnimationRequest[] = newCards.length > 0
+            ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id) }]
+            : [];
+
+        return { newState, animationRequests };
     }
 
     // NEW: Calculate draw count based on countType
@@ -682,25 +673,15 @@ export function executeDrawEffect(
         return { newState };
     }
 
-    // CRITICAL FIX: Set animationState directly on newState so Start/End phase effects
-    // trigger draw animations. animationRequests were being ignored by processTriggeredEffects.
-    // NOTE: We ONLY use animationState, NOT animationRequests, to prevent double animation.
+    // CRITICAL FIX: Clear _effectSkippedNoTargets - the DRAW succeeded.
     if (newCards.length > 0) {
-        newState = {
-            ...newState,
-            animationState: {
-                type: 'drawCard' as const,
-                owner: drawingPlayer,
-                cardIds: newCards.map(c => c.id)
-            }
-        };
-
-        // CRITICAL FIX: Clear _effectSkippedNoTargets AFTER all reactive effects.
-        // Reactive effects might set this marker if they fail (e.g., Spirit-3's shift has no targets),
-        // but this shouldn't prevent Death-1's conditional from executing since the DRAW succeeded.
         delete (newState as any)._effectSkippedNoTargets;
     }
 
-    // NOTE: animationRequests removed - they caused double animation when used alongside animationState
-    return { newState };
+    // Return animationRequests for draw animation (consistent with all other effects)
+    const animationRequests: AnimationRequest[] = newCards.length > 0
+        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id) }]
+        : [];
+
+    return { newState, animationRequests };
 }

@@ -184,11 +184,24 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
                 const newQueue = [...stateAfterTriggers.queuedActions];
                 const nextAction = newQueue.shift();
+                const actionType = (nextAction as any)?.type;
 
-                // CRITICAL FIX: execute_remaining_custom_effects is an INTERNAL action type
-                // It must be processed by processQueuedActions, NOT set as actionRequired!
-                // Setting it as actionRequired causes a softlock because there's no UI for it.
-                if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                // CRITICAL FIX: Auto-resolve actions must be processed by processQueuedActions!
+                // These action types have no UI and cause softlocks or wrong turn handling if set as actionRequired.
+                // - execute_remaining_custom_effects: Internal effect continuation
+                // - execute_follow_up_effect: Internal "if you do" effect
+                // - flip_self: Self-flip (Metal-0, Water-0, Psychic-4, etc.)
+                // - reveal_opponent_hand: Auto-resolve reveal
+                // - delete_self: Auto-resolve self-delete
+                const isAutoResolveAction = [
+                    'execute_remaining_custom_effects',
+                    'execute_follow_up_effect',
+                    'flip_self',
+                    'reveal_opponent_hand',
+                    'delete_self'
+                ].includes(actionType);
+
+                if (isAutoResolveAction) {
                     // Put the action back in queue and process it properly
                     const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...newQueue] };
                     const processedState = phaseManager.processQueuedActions(stateWithQueue);
@@ -1034,7 +1047,12 @@ export const resolveActionWithCard = (
                         // CRITICAL: Auto-resolve actions should be processed via processQueuedActions
                         // instead of being set as actionRequired (which expects user input)
                         const firstAction = stateAfterTriggers.queuedActions[0];
-                        if (firstAction?.type === 'execute_remaining_custom_effects') {
+
+                        // CRITICAL FIX: execute_follow_up_effect must ALSO be auto-resolved!
+                        // This fixes Death-1's "then delete this card" being shown as actionRequired
+                        // instead of auto-executing. queueFollowUpEffectSync queues these.
+                        if (firstAction?.type === 'execute_remaining_custom_effects' ||
+                            firstAction?.type === 'execute_follow_up_effect') {
                             const stateAfterQueue = phaseManager.processQueuedActions(stateAfterTriggers);
 
                             // If processQueuedActions set an actionRequired, return it
@@ -1090,8 +1108,10 @@ export const resolveActionWithCard = (
                             const queueCopy = [...stateAfterTriggers.queuedActions];
                             const nextAction = queueCopy.shift();
 
-                            // CRITICAL FIX: execute_remaining_custom_effects must be processed by processQueuedActions
-                            if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                            // CRITICAL FIX: Auto-resolve actions must be processed by processQueuedActions
+                            // This includes execute_follow_up_effect (Death-1's "then delete this card")
+                            if ((nextAction as any)?.type === 'execute_remaining_custom_effects' ||
+                                (nextAction as any)?.type === 'execute_follow_up_effect') {
                                 const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...queueCopy] };
                                 const processedState = phaseManager.processQueuedActions(stateWithQueue);
                                 if (processedState.actionRequired) {

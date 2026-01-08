@@ -83,7 +83,16 @@ npm run test:protocols   # Testet Custom Protocols
 - **Animation-Queue** - Animationen werden sequentiell aus Queue abgespielt
 
 ### Animation System
-- Factory-Funktionen in `logic/animation/animationHelpers.ts` verwenden
+- **Prinzip: "Capture → Change → Enqueue"**
+  1. Animation VOR State-Änderung erstellen (Snapshot korrekt)
+  2. Resolver ausführen (State ändert sich)
+  3. Animation(s) enqueuen
+- **AI-Animationen**: Zentrale Helper in `logic/animation/aiAnimationCreators.ts` verwenden:
+  - `createAnimationForAIDecision()` - Dispatcher für flip/delete/return
+  - `createAndEnqueueDiscardAnimations()` - Discard-Animationen
+  - `createAndEnqueueDrawAnimations()` - Draw-Animationen
+  - `filterAlreadyCreatedAnimations()` - Doppelte Animationen vermeiden
+- **Basis-Funktionen**: `logic/animation/animationHelpers.ts` für Low-Level Animation-Erstellung
 - `enqueueAnimation()` fur alle Animationen nutzen
 - Snapshots enthalten Board-Zustand VOR der Anderung
 - `processAnimationQueue` darf NIEMALS `setGameState` aufrufen
@@ -124,9 +133,11 @@ npm run test:protocols   # Testet Custom Protocols
 - NICHT: Animationen ausserhalb des Queue-Systems erstellen
 - NICHT: State in `processAnimationQueue` andern
 - NICHT: async/await in Spiellogik verwenden
+- NICHT: Animation-Code duplizieren - IMMER zentrale Helper in `aiAnimationCreators.ts` nutzen oder erweitern!
 - IMMER: Snapshot VOR der State-Anderung erstellen
 - IMMER: `enqueueAnimation()` fur alle Animationen nutzen
 - IMMER: Multi-Card Animationen VOR `setGameState` erstellen
+- IMMER: Neue Animation-Typen als Helper in `aiAnimationCreators.ts` hinzufügen (DRY, Single Point of Truth)
 
 ### Logik
 - NICHT: `processQueuedActions` direkt im Callback aufrufen (uberspringt Turn-Flow!)
@@ -155,6 +166,7 @@ npm run test:protocols   # Testet Custom Protocols
 | `logic/game/resolvers/cardResolver.ts` | User/AI-Response-Handling |
 | `logic/game/resolvers/miscResolver.ts` | Compile, Control, etc. |
 | `logic/game/reactiveEffectProcessor.ts` | Reaktive Effekte (after_draw, etc.) |
+| `logic/animation/aiAnimationCreators.ts` | Zentrale AI-Animation-Helper (DRY) |
 | `logic/animation/animationHelpers.ts` | Animation-Factory-Funktionen |
 | `contexts/AnimationQueueContext.tsx` | Animation-Queue-Management |
 | `types/index.ts` | Kern-TypeScript-Typen |

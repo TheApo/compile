@@ -29,10 +29,11 @@ import {
     createShiftAnimation,
     createReturnAnimation,
     createRevealAnimation,
-    createCompileDeleteAnimations,
     findCardInLanes,
     createPhaseTransitionAnimation,
+    enqueueAnimationsFromRequests,
 } from '../logic/animation/animationHelpers';
+import { createAndEnqueueShiftAnimation, processCompileAnimations } from '../logic/animation/aiAnimationCreators';
 import { ANIMATION_DURATIONS } from '../constants/animationTiming';
 import {
     playCardMessage,
@@ -43,39 +44,10 @@ import {
     drawCardsMessage,
     discardCardMessage,
     refreshHandMessage,
-    compileProtocolMessage,
 } from '../logic/utils/logMessages';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
-/**
- * DRY Helper: Process compile delete animations
- * Extracts _compileAnimations from state and enqueues delete animations
- * @returns State with _compileAnimations marker removed
- */
-function processCompileAnimations(
-    stateAfterCompile: GameState,
-    stateBeforeCompile: GameState,
-    laneIndex: number,
-    enqueueAnimations?: (items: Omit<AnimationQueueItem, 'id'>[]) => void
-): GameState {
-    const compileAnimationData = (stateAfterCompile as any)._compileAnimations as
-        { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] | undefined;
-
-    if (compileAnimationData && compileAnimationData.length > 0 && enqueueAnimations) {
-        const deleteAnims = createCompileDeleteAnimations(stateBeforeCompile, compileAnimationData);
-        if (deleteAnims.length > 0) {
-            const protocolName = stateBeforeCompile.player.protocols[laneIndex];
-            const logMsg = compileProtocolMessage('player', protocolName);
-            deleteAnims[0] = { ...deleteAnims[0], logMessage: { message: logMsg, player: 'player' } };
-        }
-        enqueueAnimations(deleteAnims);
-    }
-
-    // Clean up animation marker
-    const stateWithoutMarker = { ...stateAfterCompile };
-    delete (stateWithoutMarker as any)._compileAnimations;
-    return stateWithoutMarker;
-}
+// NOTE: processCompileAnimations moved to aiAnimationCreators.ts (DRY - central animation helpers)
 
 export const useGameState = (
     playerProtocols: string[],
@@ -637,7 +609,7 @@ export const useGameState = (
                     }
 
                     // DRY: Process compile animations (handles _compileAnimations and cleanup)
-                    const stateWithoutMarker = processCompileAnimations(stateAfterCompile, currentState, laneIndex, enqueueAnimations);
+                    const stateWithoutMarker = processCompileAnimations(stateAfterCompile, currentState, laneIndex, 'player', enqueueAnimation);
 
                     const finalState = turnProgressionCb(stateWithoutMarker);
                     return { ...finalState, animationState: null };
@@ -757,10 +729,10 @@ export const useGameState = (
         const actionType = gameState.actionRequired?.type;
         const isMultiShiftAction = actionType === 'select_lane_for_shift_all';
 
-        // Use the DRY helper for single-card shifts (handles all shift action types)
+        // DRY: Use centralized helper for single-card shifts (handles all shift action types)
         if (enqueueAnimation && gameState.actionRequired) {
             // isOpponentAction = false because this is player's action in useGameState
-            aiManager.createShiftAnimationBeforeStateChange(
+            createAndEnqueueShiftAnimation(
                 gameState,
                 gameState.actionRequired,
                 targetLaneIndex,
@@ -1077,7 +1049,7 @@ export const useGameState = (
                             }
 
                             // DRY: Process compile animations (same helper as compileLane)
-                            const stateWithoutMarker = processCompileAnimations(nextState, currentState, originalAction.laneIndex, enqueueAnimations);
+                            const stateWithoutMarker = processCompileAnimations(nextState, currentState, originalAction.laneIndex, 'player', enqueueAnimation);
 
                             const turnProgressionCb = getTurnProgressionCallback(stateWithoutMarker.phase);
                             const finalState = turnProgressionCb(stateWithoutMarker);
@@ -1234,7 +1206,7 @@ export const useGameState = (
             // (originalAction.type === 'compile' means Control-Mechanic before compile)
             if (originalAction?.type === 'compile' && (nextState as any)._compileAnimations) {
                 const laneIndex = originalAction.laneIndex;
-                const stateWithoutMarker = processCompileAnimations(nextState, prev, laneIndex, enqueueAnimations);
+                const stateWithoutMarker = processCompileAnimations(nextState, prev, laneIndex, 'player', enqueueAnimation);
                 return turnProgressionCb(stateWithoutMarker);
             }
 
@@ -1797,6 +1769,26 @@ export const useGameState = (
             prevOpponentHandLengthRef.current = gameState.opponent.hand.length;
         }
     }, [gameState.animationState, enqueueAnimations]);
+
+    // NEW: Process _pendingAnimationRequests for player actions
+    // This handles draw animations from optional draws (Death-1), reactive effects, etc.
+    // AI actions process this in aiManager.ts, but player actions need it here
+    useEffect(() => {
+        const pending = (gameState as any)._pendingAnimationRequests as AnimationRequest[] | undefined;
+        if (!pending || pending.length === 0) return;
+        if (!enqueueAnimation) return;
+
+        // Create animations from pending requests using current state
+        enqueueAnimationsFromRequests(gameState, pending, enqueueAnimation);
+
+        // Clear pending from state
+        setGameState(s => {
+            if (!(s as any)._pendingAnimationRequests) return s;
+            const newState = { ...s };
+            delete (newState as any)._pendingAnimationRequests;
+            return newState;
+        });
+    }, [(gameState as any)._pendingAnimationRequests, enqueueAnimation]);
 
     // Phase Transition Animation: Enqueue animation when turn OR phase changes
     // NOTE: This animation is purely visual - the AI waits via !isAnimating check in Hook 1

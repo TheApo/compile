@@ -64,7 +64,9 @@ export function canBenefitFromPlayerRearrange(state: GameState, compilingLaneInd
 
 /**
  * Checks if rearranging AI's (opponent's) own protocols would be beneficial.
- * Returns true if there's a swap that brings uncompiled protocol closer to victory (distance <= 3).
+ * Returns true if:
+ * 1. CRITICAL WIN: AI has 2 compiled, is compiling a 3rd lane with a compiled protocol → swap = WIN!
+ * 2. Standard: A swap brings uncompiled protocol closer to victory (distance <= 3).
  */
 export function canBenefitFromOwnRearrange(state: GameState, compilingLaneIndex: number | null = null): boolean {
     const aiState = state.opponent;
@@ -81,6 +83,18 @@ export function canBenefitFromOwnRearrange(state: GameState, compilingLaneIndex:
 
     if (compiledIndices.length === 0 || uncompiledIndices.length === 0) {
         return false;
+    }
+
+    // =========================================================================
+    // CRITICAL WIN DETECTION: If AI has 2 compiled and is compiling an already-
+    // compiled lane, swapping the uncompiled protocol to that lane = INSTANT WIN!
+    // =========================================================================
+    if (compiledIndices.length === 2 && uncompiledIndices.length === 1 && compilingLaneIndex !== null) {
+        // Check if the lane being compiled currently has a compiled protocol
+        if (aiState.compiled[compilingLaneIndex]) {
+            // YES! Swapping the uncompiled protocol to this lane wins the game!
+            return true;
+        }
     }
 
     // Get effective values (compiling lane = 0)
@@ -350,6 +364,28 @@ export function handleControlRearrange(state: GameState, action: ActionRequired)
             }
             // Current order might be invalid, find a valid fallback
             return findValidFallbackArrangement(aiState.protocols, isValidArrangement);
+        }
+
+        // =========================================================================
+        // CRITICAL WIN DETECTION: If AI has 2 compiled protocols and is compiling
+        // a lane that currently has a COMPILED protocol, swap to put the UNCOMPILED
+        // protocol in that lane! This wins the game (3rd compile)!
+        // =========================================================================
+        if (compiledIndices.length === 2 && uncompiledIndices.length === 1 && compilingLaneIndex !== null) {
+            const uncompiledIdx = uncompiledIndices[0];
+
+            // Check if the compiling lane has a compiled protocol
+            if (aiState.compiled[compilingLaneIndex]) {
+                // The compiling lane has a compiled protocol - swap it with our uncompiled one!
+                // This puts our uncompiled protocol in the high-value lane that's about to compile = WIN
+                const newOrder = [...aiState.protocols];
+                [newOrder[compilingLaneIndex], newOrder[uncompiledIdx]] =
+                    [newOrder[uncompiledIdx], newOrder[compilingLaneIndex]];
+
+                if (isValidArrangement(newOrder)) {
+                    return { type: 'rearrangeProtocols', newOrder };
+                }
+            }
         }
 
         // CRITICAL FIX: Find the best swap by moving uncompiled protocols to HIGH value lanes

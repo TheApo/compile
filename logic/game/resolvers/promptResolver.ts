@@ -32,8 +32,27 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
 
     if (accept) {
         newState = log(newState, actor, `${actorName} chooses to execute the optional draw effect.`);
+
+        // Capture new card IDs BEFORE draw for animation request
+        const handSizeBefore = newState[drawingPlayer || actor].hand.length;
+
         // Execute the draw
         newState = drawForPlayer(newState, drawingPlayer || actor, count);
+
+        // CRITICAL FIX: Create animation request for draw (drawForPlayer sets animationState,
+        // but that can be lost when followUpEffect is executed. Use _pendingAnimationRequests instead)
+        const newCards = newState[drawingPlayer || actor].hand.slice(handSizeBefore);
+        if (newCards.length > 0) {
+            const drawAnimRequest = {
+                type: 'draw' as const,
+                player: drawingPlayer || actor,
+                count: newCards.length,
+                cardIds: newCards.map(c => c.id)
+            };
+            const existing = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existing, drawAnimRequest];
+        }
+
         newState = log(newState, actor, `${actorName} draws ${count} card${count !== 1 ? 's' : ''}.`);
 
         // Check if there's a follow-up effect from conditional chaining (if_executed)

@@ -56,7 +56,17 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const animationRequests: AnimationRequest[] = [];
             const unaffectedCardIds: string[] = [];
 
-            for (const { cardId, owner } of cardsToShift) {
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This prevents index shifts during multi-card operations and ensures correct animation snapshots
+            const sortedCardsToShift = [...cardsToShift].sort((a, b) => {
+                const aLane = prev[a.owner].lanes.find(l => l.some(c => c.id === a.cardId));
+                const bLane = prev[b.owner].lanes.find(l => l.some(c => c.id === b.cardId));
+                const aCardIdx = aLane?.findIndex(c => c.id === a.cardId) ?? -1;
+                const bCardIdx = bLane?.findIndex(c => c.id === b.cardId) ?? -1;
+                return bCardIdx - aCardIdx;
+            });
+
+            for (const { cardId, owner } of sortedCardsToShift) {
                 const cardInfo = findCardOnBoard(currentState, cardId);
                 if (!cardInfo) {
                     // Card no longer exists (was deleted/returned during previous shifts)
@@ -1159,6 +1169,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
             }
 
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we delete from top (uncovered) to bottom (covered), preventing
+            // index shifts during deletion that would cause animation mismatches
+            cardsToDelete.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
+
             // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
             // The animation system will use the cardSnapshot data to show cards flying to trash
             for (const req of cardsToDelete) {
@@ -1317,6 +1332,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 newState = log(newState, actor, `${sourceCardName}: Returning ${returnedCardNames.join(', ')}.`);
             }
 
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we return from top (uncovered) to bottom (covered), preventing
+            // index shifts during removal that would cause animation mismatches
+            cardsToReturn.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
+
             // CRITICAL: Return ALL cards to hand IMMEDIATELY - logic must be independent of animation!
             // The animation system will use the cardSnapshot data to show cards flying to hand
             for (const req of cardsToReturn) {
@@ -1418,6 +1438,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we delete from top (uncovered) to bottom (covered), preventing
+            // index shifts during deletion that would cause animation mismatches
+            cardsToDelete.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
 
             // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
             for (const req of cardsToDelete) {

@@ -25,12 +25,13 @@ import { createVisualSnapshot } from '../../utils/snapshotUtils';
 import {
     ANIMATION_DURATIONS,
     COMPILE_STAGGER_DELAY,
-    COMPILE_DELETE_DURATION,
     getCardStartDelay,
     TOTAL_DRAW_ANIMATION_DURATION,
     calculateDrawDuration,
     calculateDrawStagger,
     PHASE_TRANSITION_DURATION,
+    calculateCompileDeleteDuration,
+    calculateCompileDeleteStagger,
 } from '../../constants/animationTiming';
 
 // =============================================================================
@@ -559,17 +560,46 @@ export function createCompileDeleteAnimations(
     state: GameState,
     deletedCards: { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[]
 ): AnimationQueueItem[] {
-    // Track which cards should be hidden in each subsequent animation
+    // Track which cards should be hidden from lanes in each subsequent animation
     const hiddenCardIds = new Set<string>();
 
+    // Track cards that have been "visually deleted" to trash (for subsequent snapshots)
+    const deletedToTrash: { player: PlayedCard[]; opponent: PlayedCard[] } = {
+        player: [],
+        opponent: []
+    };
+
+    // Calculate duration per card based on total count
+    // More cards = faster per-card animation, but total time stays ~constant
+    const cardCount = deletedCards.length;
+    const perCardDuration = calculateCompileDeleteDuration(cardCount);
+
     return deletedCards.map((item, index) => {
-        // Create snapshot that excludes all previously animated cards
-        // NOTE: Current card stays in snapshot for DOM position detection
-        // The card is hidden via CSS (animatingCardIds) during animation playback
-        const snapshot = createVisualSnapshot(state, hiddenCardIds);
+        // Create a modified state where previously deleted cards are in the trash
+        // This ensures sequential animations show cards accumulating in trash
+        const stateWithTrash: GameState = {
+            ...state,
+            player: {
+                ...state.player,
+                discard: [...state.player.discard, ...deletedToTrash.player]
+            },
+            opponent: {
+                ...state.opponent,
+                discard: [...state.opponent.discard, ...deletedToTrash.opponent]
+            }
+        };
+
+        // Create snapshot that excludes previously animated cards from lanes
+        // but includes them in the trash (via stateWithTrash)
+        const snapshot = createVisualSnapshot(stateWithTrash, hiddenCardIds);
 
         // Add this card to hidden set for the NEXT animation's snapshot
         hiddenCardIds.add(item.card.id);
+
+        // Add this card to the "deleted to trash" list for NEXT animation's snapshot
+        // Strip the id and isFaceUp to match discard format, then add back for visual
+        const { id, isFaceUp, ...cardData } = item.card;
+        deletedToTrash[item.owner].push({ ...cardData, id, isFaceUp: true } as PlayedCard);
 
         const fromPosition: CardPosition = {
             type: 'lane',
@@ -587,13 +617,13 @@ export function createCompileDeleteAnimations(
             id: generateAnimationId('delete'),
             type: 'delete' as AnimationType,
             snapshot,
-            duration: COMPILE_DELETE_DURATION,
+            duration: perCardDuration,
             animatingCard: {
                 card: item.card,
                 fromPosition,
                 toPosition,
                 targetRotation: 90,
-                startDelay: index * COMPILE_DELETE_DURATION,
+                startDelay: calculateCompileDeleteStagger(index, cardCount),
             },
             laneIndex: item.laneIndex,
         };
@@ -766,19 +796,57 @@ export function createRefreshAnimations(
 
 /**
  * Creates animations for multiple deletes (e.g., from a lane clear effect).
+ * Uses trash accumulation pattern: each animation's snapshot shows previously
+ * deleted cards in the trash for visual continuity.
  */
 export function createBatchDeleteAnimations(
     state: GameState,
     cards: Array<{ card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }>
 ): AnimationQueueItem[] {
+    // Track which cards should be hidden from lanes in each subsequent animation
+    const hiddenCardIds = new Set<string>();
+
+    // Track cards that have been "visually deleted" to trash (for subsequent snapshots)
+    const deletedToTrash: { player: PlayedCard[]; opponent: PlayedCard[] } = {
+        player: [],
+        opponent: []
+    };
+
+    // Use same timing pattern as compile deletes for consistency
+    const cardCount = cards.length;
+    const perCardDuration = calculateCompileDeleteDuration(cardCount);
+
     return cards.map((item, index) => {
-        const snapshot = createVisualSnapshot(state);
+        // Create a modified state where previously deleted cards are in the trash
+        // This ensures sequential animations show cards accumulating in trash
+        const stateWithTrash: GameState = {
+            ...state,
+            player: {
+                ...state.player,
+                discard: [...state.player.discard, ...deletedToTrash.player]
+            },
+            opponent: {
+                ...state.opponent,
+                discard: [...state.opponent.discard, ...deletedToTrash.opponent]
+            }
+        };
+
+        // Create snapshot that excludes previously animated cards from lanes
+        // but includes them in the trash (via stateWithTrash)
+        const snapshot = createVisualSnapshot(stateWithTrash, hiddenCardIds);
+
+        // Add this card to hidden set for the NEXT animation's snapshot
+        hiddenCardIds.add(item.card.id);
+
+        // Add this card to the "deleted to trash" list for NEXT animation's snapshot
+        const { id, isFaceUp, ...cardData } = item.card;
+        deletedToTrash[item.owner].push({ ...cardData, id, isFaceUp: true } as PlayedCard);
 
         return {
             id: generateAnimationId('delete'),
             type: 'delete' as AnimationType,
             snapshot,
-            duration: ANIMATION_DURATIONS.delete,
+            duration: perCardDuration,
             animatingCard: {
                 card: item.card,
                 fromPosition: {
@@ -792,6 +860,7 @@ export function createBatchDeleteAnimations(
                     owner: item.owner,
                 },
                 targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
+                startDelay: calculateCompileDeleteStagger(index, cardCount),
             },
             laneIndex: item.laneIndex,
         };
@@ -1094,9 +1163,8 @@ export function convertAnimationRequestToQueueItem(
         }
 
         case 'draw': {
-            // Draw animations require actual card objects, which aren't in the AnimationRequest
-            // These should be handled at the effect level where cards are available
-            console.warn('[convertAnimationRequest] draw: Cannot convert - need actual card objects');
+            // Draw animations are handled directly in enqueueAnimationsFromRequests
+            // because they need special handling (multiple cards, pre-draw state)
             return null;
         }
 
@@ -1189,6 +1257,18 @@ export function enqueueAnimationsFromRequests(
     let logIndex = lastProcessedLogIndex ?? (state.log.length - animationRequests.length);
     if (logIndex < 0) logIndex = 0;
 
+    // Track trash accumulation for sequential delete animations
+    // This ensures cards deleted earlier appear in trash for subsequent animations
+    const deleteHiddenCardIds = new Set<string>();
+    const deletedToTrash: { player: PlayedCard[]; opponent: PlayedCard[] } = {
+        player: [],
+        opponent: []
+    };
+
+    // Count total delete requests for timing calculation
+    const deleteRequestCount = animationRequests.filter(r => r.type === 'delete').length;
+    let deleteIndex = 0;
+
     for (const request of animationRequests) {
         // Get the corresponding log message for this animation
         const logEntry = state.log[logIndex];
@@ -1197,10 +1277,24 @@ export function enqueueAnimationsFromRequests(
 
         if (request.type === 'play' && request.fromDeck && request.toLane !== undefined) {
             // Play from deck animation
+            // CRITICAL: Card is already in the lane in current state - we need a pre-play snapshot
             const playCard = state[request.owner].lanes[request.toLane]?.find(c => c.id === request.cardId);
             if (playCard) {
+                // Create pre-play state that excludes this card from the target lane
+                const prePlayState = {
+                    ...state,
+                    [request.owner]: {
+                        ...state[request.owner],
+                        lanes: state[request.owner].lanes.map((lane, idx) =>
+                            idx === request.toLane
+                                ? lane.filter(c => c.id !== request.cardId)
+                                : lane
+                        )
+                    }
+                };
+
                 const animation = createPlayAnimation(
-                    state,
+                    prePlayState,  // Use pre-play state for correct snapshot
                     playCard,
                     request.owner,
                     request.toLane,
@@ -1227,46 +1321,104 @@ export function enqueueAnimationsFromRequests(
             }
         } else if (request.type === 'delete') {
             // CRITICAL: Use cardSnapshot if available - the card is already deleted from state!
-            const cardSnapshot = (request as any).cardSnapshot;
-            const laneIndex = (request as any).laneIndex;
-            const cardIndex = (request as any).cardIndex;
+            const cardSnapshot = (request as any).cardSnapshot as PlayedCard | undefined;
+            const laneIndex = (request as any).laneIndex as number | undefined;
+            const cardIndex = (request as any).cardIndex as number | undefined;
+
+            let deleteCard: PlayedCard | undefined;
+            let deleteLaneIndex: number | undefined;
+            let deleteCardIndex: number | undefined;
 
             if (cardSnapshot && laneIndex !== undefined && cardIndex !== undefined) {
-                const animation = createDeleteAnimation(
-                    state,
-                    cardSnapshot,
-                    request.owner,
-                    laneIndex,
-                    cardIndex
-                );
-                animations.push({ ...animation, logMessage });
+                deleteCard = cardSnapshot;
+                deleteLaneIndex = laneIndex;
+                deleteCardIndex = cardIndex;
             } else {
                 // Fallback: Try to find card in current state
-                const deleteCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
+                deleteCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
                 const cardPosition = findCardInLanes(state, request.cardId, request.owner);
-                if (deleteCard && cardPosition) {
-                    const animation = createDeleteAnimation(
-                        state,
-                        deleteCard,
-                        request.owner,
-                        cardPosition.laneIndex,
-                        cardPosition.cardIndex
-                    );
-                    animations.push({ ...animation, logMessage });
+                if (cardPosition) {
+                    deleteLaneIndex = cardPosition.laneIndex;
+                    deleteCardIndex = cardPosition.cardIndex;
                 }
             }
-        } else if (request.type === 'draw') {
-            // Draw X cards animation
-            const hand = state[request.player].hand;
-            const newCards = hand.slice(-request.count);
-            const startIndex = hand.length - request.count;
 
-            if (newCards.length > 0) {
+            if (deleteCard && deleteLaneIndex !== undefined && deleteCardIndex !== undefined) {
+                // Create state with previously deleted cards in trash (for sequential animation snapshots)
+                const stateWithTrash: GameState = {
+                    ...state,
+                    player: {
+                        ...state.player,
+                        discard: [...state.player.discard, ...deletedToTrash.player]
+                    },
+                    opponent: {
+                        ...state.opponent,
+                        discard: [...state.opponent.discard, ...deletedToTrash.opponent]
+                    }
+                };
+
+                // Create snapshot that excludes previously animated cards from lanes
+                const snapshot = createVisualSnapshot(stateWithTrash, deleteHiddenCardIds);
+
+                // Calculate timing based on total delete count
+                const perCardDuration = calculateCompileDeleteDuration(deleteRequestCount);
+
+                // Create animation
+                const animation: Omit<AnimationQueueItem, 'id'> = {
+                    id: generateAnimationId('delete'),
+                    type: 'delete' as AnimationType,
+                    snapshot,
+                    duration: perCardDuration,
+                    animatingCard: {
+                        card: deleteCard,
+                        fromPosition: {
+                            type: 'lane',
+                            owner: request.owner,
+                            laneIndex: deleteLaneIndex,
+                            cardIndex: deleteCardIndex,
+                        },
+                        toPosition: {
+                            type: 'trash',
+                            owner: request.owner,
+                        },
+                        targetRotation: 90,
+                        startDelay: calculateCompileDeleteStagger(deleteIndex, deleteRequestCount),
+                    },
+                    laneIndex: deleteLaneIndex,
+                };
+                animations.push({ ...animation, logMessage });
+
+                // Track this card for NEXT delete animation's snapshot
+                deleteHiddenCardIds.add(deleteCard.id);
+                const { id, isFaceUp, ...cardData } = deleteCard;
+                deletedToTrash[request.owner].push({ ...cardData, id, isFaceUp: true } as PlayedCard);
+                deleteIndex++;
+            }
+        } else if (request.type === 'draw') {
+            // Draw animation using explicit cardIds for precision
+            const hand = state[request.player].hand;
+            const cardIdSet = new Set(request.cardIds);
+
+            // Find the drawn cards in hand and preserve their order
+            const drawnCards = hand.filter(c => cardIdSet.has(c.id));
+
+            if (drawnCards.length > 0) {
+                // Calculate starting index (first drawn card's position)
+                const firstDrawnIndex = hand.findIndex(c => cardIdSet.has(c.id));
+                const startIndex = firstDrawnIndex >= 0 ? firstDrawnIndex : hand.length - drawnCards.length;
+
+                // Create pre-draw state for correct animation snapshot
+                const preDrawHand = hand.filter(c => !cardIdSet.has(c.id));
+                const preDrawState = {
+                    ...state,
+                    [request.player]: { ...state[request.player], hand: preDrawHand }
+                };
+
                 const drawAnimations = createSequentialDrawAnimations(
-                    state,
-                    newCards,
+                    preDrawState,
+                    drawnCards,
                     request.player,
-                    startIndex
+                    preDrawHand.length  // Cards start after existing hand
                 );
                 if (drawAnimations.length > 0) {
                     animations.push({ ...drawAnimations[0], logMessage });

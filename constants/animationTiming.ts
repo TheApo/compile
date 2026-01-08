@@ -49,10 +49,53 @@ export const STAGGER_DELAY = 75; // ms between cards
 export const COMPILE_STAGGER_DELAY = 100; // ms between cards
 
 /**
- * Duration per card for compile delete animations.
- * Each card animates for this duration, staggered sequentially.
+ * Total duration for all compile delete animations combined.
+ * All cards should finish deleting within this time regardless of count.
+ * IMPORTANT: This is the TOTAL time, not per-card time.
  */
-export const COMPILE_DELETE_DURATION = 200; // ms per card
+export const TOTAL_COMPILE_DELETE_DURATION = 1200; // ms
+
+/**
+ * Minimum duration per card for compile delete animations.
+ * Even with many cards, each card gets at least this much time.
+ */
+export const MIN_COMPILE_DELETE_DURATION_PER_CARD = 80; // ms
+
+/**
+ * Calculates duration per card for compile delete animation.
+ * Goal: All cards finish deleting in TOTAL_COMPILE_DELETE_DURATION ms.
+ * More cards = faster per-card animation.
+ *
+ * @param cardCount - Number of cards being deleted
+ * @returns Duration per card in milliseconds
+ */
+export function calculateCompileDeleteDuration(cardCount: number): number {
+    if (cardCount <= 0) return 0;
+    if (cardCount === 1) return TOTAL_COMPILE_DELETE_DURATION;
+
+    // Calculate duration per card, with minimum bound
+    const perCardDuration = Math.floor(TOTAL_COMPILE_DELETE_DURATION / cardCount);
+    return Math.max(perCardDuration, MIN_COMPILE_DELETE_DURATION_PER_CARD);
+}
+
+/**
+ * Calculates stagger delay for a specific card in compile delete animation.
+ * Each card starts at a different time to create cascade effect.
+ *
+ * @param cardIndex - Index of the card (0-based)
+ * @param cardCount - Total number of cards being deleted
+ * @returns Start delay in milliseconds
+ */
+export function calculateCompileDeleteStagger(cardIndex: number, cardCount: number): number {
+    if (cardCount <= 1) return 0;
+    const perCardDuration = calculateCompileDeleteDuration(cardCount);
+    return cardIndex * perCardDuration;
+}
+
+/**
+ * @deprecated Use TOTAL_COMPILE_DELETE_DURATION and calculateCompileDeleteDuration instead
+ */
+export const COMPILE_DELETE_DURATION = 200; // Legacy - kept for backward compatibility
 
 /**
  * Total duration for all draw animations combined.

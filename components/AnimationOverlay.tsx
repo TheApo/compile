@@ -88,8 +88,12 @@ export const AnimationOverlay: React.FC = () => {
             || ANIMATION_DURATIONS[currentAnimation.type]
             || 400;
 
-        // Emergency timeout = 2x normal duration (generous safety margin)
-        const emergencyTimeout = flyDuration * 2 + 500;
+        // CRITICAL: Account for startDelay in the emergency timeout
+        // Some animations (like compile delete) have staggered start delays
+        const startDelay = currentAnimation.animatingCard?.startDelay || 0;
+
+        // Emergency timeout = (startDelay + duration) * 2 + buffer
+        const emergencyTimeout = (startDelay + flyDuration) * 2 + 500;
 
         const timer = setTimeout(() => {
             if (!animationCompleteRef.current) {

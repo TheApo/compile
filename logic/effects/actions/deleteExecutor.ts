@@ -318,7 +318,23 @@ export function executeDeleteEffect(
 
     // Auto-execute (Hate-4: automatically delete lowest value card without user selection)
     if (params.autoExecute) {
-        const cardsToDelete = filteredTargets.slice(0, count);
+        // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+        // This ensures we delete from top (uncovered) to bottom (covered), preventing
+        // index shifts during deletion that would cause animation mismatches
+        const sortedTargets = [...filteredTargets].sort((a, b) => {
+            const aInfo = findCardOnBoard(state, a);
+            const bInfo = findCardOnBoard(state, b);
+            if (!aInfo || !bInfo) return 0;
+            const aIdx = state[aInfo.owner].lanes.flat().findIndex(c => c.id === a);
+            const bIdx = state[bInfo.owner].lanes.flat().findIndex(c => c.id === b);
+            // For same lane, higher cardIndex first (uncovered before covered)
+            const aLaneIdx = state[aInfo.owner].lanes.findIndex(l => l.some(c => c.id === a));
+            const bLaneIdx = state[bInfo.owner].lanes.findIndex(l => l.some(c => c.id === b));
+            const aCardIdx = state[aInfo.owner].lanes[aLaneIdx]?.findIndex(c => c.id === a) ?? 0;
+            const bCardIdx = state[bInfo.owner].lanes[bLaneIdx]?.findIndex(c => c.id === b) ?? 0;
+            return bCardIdx - aCardIdx;
+        });
+        const cardsToDelete = sortedTargets.slice(0, count);
 
         let newState = state;
         const animationRequests: any[] = [];

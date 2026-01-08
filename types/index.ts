@@ -742,7 +742,7 @@ export type AnimationRequest =
     | { type: 'return'; cardId: string; owner: Player }
     | { type: 'discard'; cardId: string; owner: Player }
     | { type: 'play'; cardId: string; owner: Player; toLane?: number; fromDeck?: boolean; isFaceUp?: boolean }
-    | { type: 'draw'; player: Player; count: number }
+    | { type: 'draw'; player: Player; count: number; cardIds: string[] }
     | {
         type: 'compile_delete';
         laneIndex: number;
