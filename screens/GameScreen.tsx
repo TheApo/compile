@@ -217,12 +217,12 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     const syncAnimation = getAnimationSync();
     const isSyncAnimating = getIsAnimatingSync();
 
-    // SPECIAL CASE: Player flip animations use the REAL gameState (not snapshot)
+    // SPECIAL CASE: ALL flip animations use the REAL gameState (not snapshot)
     // because the card stays in place and we want the board's CSS transition to animate it.
-    // Opponent flips (isOpponentAction) use snapshot + AnimatedCard for highlight phase.
+    // This provides a cleaner in-place 3D flip animation (the "old" style that looks better).
     const activeAnim = syncAnimation || currentAnimation;
-    const isPlayerFlip = activeAnim?.type === 'flip' && !activeAnim.animatingCard?.isOpponentAction;
-    if (isPlayerFlip) {
+    const isFlipAnimation = activeAnim?.type === 'flip';
+    if (isFlipAnimation) {
       lastValidAnimationRef.current = null;
       return gameState;
     }
@@ -267,12 +267,12 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
     const isSyncAnimating = getIsAnimatingSync();
     const syncAnimation = getAnimationSync();
 
-    // SPECIAL CASE: Player flip animations do NOT hide the card
+    // SPECIAL CASE: ALL flip animations do NOT hide the card
     // The card stays in place and flips via its own CSS transition.
-    // Opponent flips (isOpponentAction) DO hide the card (AnimatedCard shows it).
+    // AnimatedCard is not used for flip animations - the board's CSS handles the flip.
     const activeAnimForIds = syncAnimation || currentAnimation;
-    const isPlayerFlipForIds = activeAnimForIds?.type === 'flip' && !activeAnimForIds.animatingCard?.isOpponentAction;
-    if (isPlayerFlipForIds) {
+    const isFlipAnimationForIds = activeAnimForIds?.type === 'flip';
+    if (isFlipAnimationForIds) {
       return ids; // Return empty set - don't hide any cards
     }
 
@@ -1003,7 +1003,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 <h2 onClick={handleMainframeClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Click 5 times to toggle debug mode">Mainframe</h2>
                 <GameInfoPanel
                     gameState={visualGameState}
-                    turn={gameState.actionRequired?.actor || visualGameState.turn}
+                    turn={isAnimating ? visualGameState.turn : (gameState.actionRequired?.actor || visualGameState.turn)}
                     animationState={gameState.animationState}
                     difficulty={difficulty}
                     phaseTransitionAnimation={phaseTransitionAnimation}
@@ -1068,6 +1068,9 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                     selectedCardId={selectedCard}
                     multiSelectedCardIds={multiSelectedCardIds}
                     actionRequiredClass={actionRequiredClass}
+                    isAnimating={isAnimating}
+                    snapshotTurn={visualGameState.turn}
+                    snapshotPhase={visualGameState.phase}
                   />
                   <div className={`player-hand-area ${isAnimating ? '' : handBackgroundClass}`}>
                     {(() => {

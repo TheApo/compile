@@ -62,6 +62,13 @@ export const TOTAL_COMPILE_DELETE_DURATION = 1200; // ms
 export const MIN_COMPILE_DELETE_DURATION_PER_CARD = 80; // ms
 
 /**
+ * Initial delay before the first animation in a batch starts.
+ * Prevents animations from "slamming" directly after a previous effect.
+ * Only the first animation in a sequence gets this delay.
+ */
+export const BATCH_ANIMATION_INITIAL_DELAY = 100; // ms
+
+/**
  * Calculates duration per card for compile delete animation.
  * Goal: All cards finish deleting in TOTAL_COMPILE_DELETE_DURATION ms.
  * More cards = faster per-card animation.

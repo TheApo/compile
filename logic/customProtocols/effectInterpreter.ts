@@ -446,17 +446,25 @@ export function executeCustomEffect(
                 // CRITICAL: Generate new unique IDs for drawn cards (same as drawForPlayer)
                 const newHandCards = drawnCards.map(c => ({ ...c, id: uuidv4() }));
 
-                let newState = {
+                let newState: GameState = {
                     ...state,
                     [actor]: {
                         ...state[actor],
                         hand: [...state[actor].hand, ...newHandCards],
                         deck: remainingDeck,
                         discard: newDiscard
-                    },
-                    // Set animationState for draw animation
-                    animationState: { type: 'drawCard' as const, owner: actor, cardIds: newHandCards.map(c => c.id) }
+                    }
                 };
+
+                // Store draw animation request (new queue system)
+                const drawRequest: AnimationRequest = {
+                    type: 'draw',
+                    player: actor,
+                    count: drawnCards.length,
+                    cardIds: newHandCards.map(c => c.id)
+                };
+                const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
 
                 // Only show card names to the player who drew them
                 const cardNamesRefresh = actor === 'player'
@@ -521,10 +529,18 @@ export function executeCustomEffect(
                         [actor]: {
                             ...newState[actor],
                             hand: [...newState[actor].hand, ...newHandCards]
-                        },
-                        // Set animationState for draw animation (actor draws from opponent's deck)
-                        animationState: { type: 'drawCard' as const, owner: actor, cardIds: newHandCards.map(c => c.id) }
+                        }
                     };
+
+                    // Store draw animation request (new queue system)
+                    const drawRequestActor: AnimationRequest = {
+                        type: 'draw',
+                        player: actor,
+                        count: drawnCards.length,
+                        cardIds: newHandCards.map(c => c.id)
+                    };
+                    const existingRequestsActor = (newState as any)._pendingAnimationRequests || [];
+                    (newState as any)._pendingAnimationRequests = [...existingRequestsActor, drawRequestActor];
 
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
@@ -561,10 +577,18 @@ export function executeCustomEffect(
                         [opponent]: {
                             ...newState[opponent],
                             hand: [...newState[opponent].hand, ...newHandCards]
-                        },
-                        // Set animationState for draw animation (opponent draws from actor's deck)
-                        animationState: { type: 'drawCard' as const, owner: opponent, cardIds: newHandCards.map(c => c.id) }
+                        }
                     };
+
+                    // Store draw animation request (new queue system)
+                    const drawRequestOpponent: AnimationRequest = {
+                        type: 'draw',
+                        player: opponent,
+                        count: drawnCards.length,
+                        cardIds: newHandCards.map(c => c.id)
+                    };
+                    const existingRequestsOpponent = (newState as any)._pendingAnimationRequests || [];
+                    (newState as any)._pendingAnimationRequests = [...existingRequestsOpponent, drawRequestOpponent];
 
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
@@ -796,6 +820,20 @@ export function executeCustomEffect(
 
             result = executeCustomEffect(card, laneIndex, newState, enrichedContext, effectDef.conditional.thenEffect);
         }
+    }
+
+    // CRITICAL: Propagate animationRequests to _pendingAnimationRequests on state
+    // This ensures flip/delete/etc animations from executors are not lost
+    // IMPORTANT: Clear animationRequests from result to prevent double-adding by effectExecutor
+    if (result.animationRequests && result.animationRequests.length > 0) {
+        const existingRequests = (result.newState as any)._pendingAnimationRequests || [];
+        result = {
+            newState: {
+                ...result.newState,
+                _pendingAnimationRequests: [...existingRequests, ...result.animationRequests]
+            }
+            // NOTE: animationRequests intentionally NOT included - already in _pendingAnimationRequests
+        };
     }
 
     return result;

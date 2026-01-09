@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, EffectContext } from '../../../types';
+import { GameState, Player, EffectContext, AnimationRequest } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets, findCardOnBoard } from '../helpers/actionUtils';
@@ -107,21 +107,12 @@ const executeFollowUpAfterDiscard = (
     const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
 
     // CRITICAL FIX: If draw animationRequests are present, set animationState so the
-    // useEffect hook in useGameState triggers the draw animation.
-    // Without this, animationRequests from followUpEffects (like Fire-4's "then draw") are lost!
+    // Store animation requests in _pendingAnimationRequests for the new queue system
+    // This handles followUpEffects like Fire-4's "then draw"
     let finalState = result.newState;
     if (result.animationRequests && result.animationRequests.length > 0) {
-        const drawRequest = result.animationRequests.find(r => r.type === 'draw');
-        if (drawRequest) {
-            finalState = {
-                ...finalState,
-                animationState: {
-                    type: 'drawCard',
-                    owner: drawRequest.player,
-                    cardIds: [] // IDs are determined by useEffect from prevHand vs currentHand
-                }
-            };
-        }
+        const existingRequests = (finalState as any)._pendingAnimationRequests || [];
+        (finalState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
     }
     return finalState;
 };
@@ -251,6 +242,23 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const discardedCards = playerState.hand.filter(c => cardsToDiscardSet.has(c.id));
     if (discardedCards.length === 0) return prevState;
 
+    // Create discard animation requests BEFORE state change (DRY - single place for discard animations)
+    // Store handIndex, cardSnapshot, AND preDiscardHand so animation can create sequential snapshots
+    const preDiscardHand = [...playerState.hand]; // Snapshot of hand BEFORE any discards
+    const discardRequests = discardedCards.map((card, index) => {
+        const handIndex = playerState.hand.findIndex(c => c.id === card.id);
+        return {
+            type: 'discard' as const,
+            cardId: card.id,
+            owner: player,
+            handIndex,            // Position in hand BEFORE discard
+            cardSnapshot: card,   // Card object as snapshot
+            preDiscardHand,       // Full hand BEFORE discard (for sequential snapshots)
+            discardIndex: index   // Order in this batch (for filtering previous discards)
+        };
+    });
+    const existingRequests = (prevState as any)._pendingAnimationRequests || [];
+
     const newHand = playerState.hand.filter(c => !cardsToDiscardSet.has(c.id));
 
     const originalAction = (prevState.animationState?.type === 'discardCard' && prevState.animationState.originalAction?.type === 'discard')
@@ -313,6 +321,9 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
             actionRequired: null
         };
     }
+
+    // Store animation requests for discard animations (processed by useGameState useEffect)
+    (newState as any)._pendingAnimationRequests = [...existingRequests, ...discardRequests];
 
     // IMPORTANT: Set context from source card if this discard was caused by an effect
     // Otherwise clear the context AND reset indent level

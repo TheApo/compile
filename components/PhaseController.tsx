@@ -21,6 +21,10 @@ interface PhaseControllerProps {
     selectedCardId: string | null;
     multiSelectedCardIds: string[];
     actionRequiredClass: string;
+    // Während Animationen: zeige nur Snapshot-Turn/Phase, keine interaktiven Elemente
+    isAnimating?: boolean;
+    snapshotTurn?: Player;
+    snapshotPhase?: string;
 }
 
 export const PhaseController: React.FC<PhaseControllerProps> = ({
@@ -28,9 +32,35 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
     onResolveOptionalDiscardCustomPrompt, onResolveOptionalEffectPrompt,
     onResolveVariableDiscard, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt,
     onResolveControlMechanicPrompt, onResolveCustomChoice,
-    selectedCardId, multiSelectedCardIds, actionRequiredClass
+    selectedCardId, multiSelectedCardIds, actionRequiredClass,
+    isAnimating, snapshotTurn, snapshotPhase
 }) => {
     const { phase, turn, actionRequired, player, compilableLanes } = gameState;
+
+    // Während Animationen: zeige nur Snapshot-Turn/Phase, keine interaktiven Elemente
+    if (isAnimating) {
+        const displayTurn = snapshotTurn || turn;
+        const displayPhase = snapshotPhase || phase;
+        const turnText = displayTurn.charAt(0).toUpperCase() + displayTurn.slice(1);
+        const phaseText = displayPhase.replace('_', ' ');
+        phaseText.charAt(0).toUpperCase() + phaseText.slice(1);
+
+        return (
+            <div className="phase-controller">
+                <div className="effect-source-info">
+                    <span>{turnText}'s Turn</span>
+                </div>
+                <div className="phase-controller-main">
+                    <div className="phase-info">
+                        Phase: {phaseText}
+                    </div>
+                    <div className="phase-actions">
+                        <button className="btn" disabled>Processing...</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const findCardById = (id: string): PlayedCard | null => {
         for (const p of ['player', 'opponent'] as const) {

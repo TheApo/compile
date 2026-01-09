@@ -228,18 +228,27 @@ export function executePlayEffect(
         const newPlayerLanes = [...stateAfterOnCover[actor].lanes];
         const playAnimations: AnimationRequest[] = [];
 
+        // CRITICAL: Snapshot lanes BEFORE playing cards (DRY - like preDiscardHand, preShiftLanes)
+        const prePlayLanes = {
+            player: stateAfterOnCover.player.lanes.map(lane => lane.map(card => ({ ...card }))),
+            opponent: stateAfterOnCover.opponent.lanes.map(lane => lane.map(card => ({ ...card })))
+        };
+
         for (let i = 0; i < newCardsToPlay.length; i++) {
             const targetLaneIndex = lanesWithCards[i];
             newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
 
             // Add play animation for each card (from deck)
+            // Include prePlayLanes and playIndex for sequential snapshot (like preDiscardHand)
             playAnimations.push({
                 type: 'play',
                 cardId: newCardsToPlay[i].id,
                 owner: actor,
                 toLane: targetLaneIndex,
                 fromDeck: true,
-                isFaceUp: !faceDown
+                isFaceUp: !faceDown,
+                prePlayLanes,    // Lanes BEFORE any plays in this batch
+                playIndex: i     // Index in this batch (for sequential snapshots)
             });
         }
 
@@ -498,6 +507,39 @@ export function executePlayEffect(
             deck: remainingDeck,
             discard: newDiscard
         };
+
+        // CRITICAL FIX: Handle on_cover effects BEFORE adding the new card (same as laneResolver.ts)
+        // This fixes Hate-4's "When this card would be covered" not triggering
+        const targetLane = newState[targetPlayer].lanes[resolvedLaneIndex];
+        if (targetLane.length > 0) {
+            const topCard = targetLane[targetLane.length - 1];
+
+            // Only trigger on_cover if the top card is face-up (face-down cards don't have active effects)
+            if (topCard.isFaceUp) {
+                const coverContext: EffectContext = {
+                    cardOwner: targetPlayer,
+                    actor: targetPlayer,
+                    currentTurn: newState.turn,
+                    opponent: (targetPlayer === 'player' ? 'opponent' : 'player') as Player,
+                    triggerType: 'cover'
+                };
+                // Store covering card's protocol for on_cover restrictions (Unity-0)
+                const stateWithCoveringProtocol = {
+                    ...newState,
+                    _coveringCardProtocol: newCardsToPlay[0]?.protocol
+                } as GameState;
+                const onCoverResult = executeOnCoverEffect(
+                    topCard, resolvedLaneIndex, stateWithCoveringProtocol, coverContext
+                );
+                newState = onCoverResult.newState;
+
+                // If on_cover created an actionRequired, we need to handle it
+                if (newState.actionRequired) {
+                    // Store the pending play so it can continue after on_cover resolves
+                    // For now, just add the cards and return - the actionRequired will be processed
+                }
+            }
+        }
 
         // Add cards to the target player's specific lane
         const targetPlayerLanes = [...newState[targetPlayer].lanes];

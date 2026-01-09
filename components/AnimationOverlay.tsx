@@ -147,23 +147,18 @@ export const AnimationOverlay: React.FC = () => {
         );
     }
 
-    // Special handling for flip animations:
-    // - Player flips: card stays in place, board's CSS transition animates it
-    // - Opponent flips (isOpponentAction): use AnimatedCard for highlight phase
+    // Special handling for ALL flip animations:
+    // Cards stay in place and the board's CSS transition animates the flip.
+    // This provides the cleaner in-place 3D flip animation (the "old" style).
+    // No AnimatedCard overlay is used - we just run a timer for the duration.
     if (currentAnimation.type === 'flip') {
-        const isOpponentFlip = currentAnimation.animatingCard?.isOpponentAction;
-
-        if (!isOpponentFlip) {
-            // Player flip: just timer, board CSS handles animation
-            return (
-                <PhaseTransitionTimer
-                    duration={currentAnimation.duration}
-                    onComplete={handleAnimationComplete}
-                    animationId={currentAnimation.id}
-                />
-            );
-        }
-        // Opponent flip: fall through to render AnimatedCard with highlight
+        return (
+            <PhaseTransitionTimer
+                duration={currentAnimation.duration}
+                onComplete={handleAnimationComplete}
+                animationId={currentAnimation.id}
+            />
+        );
     }
 
     return (

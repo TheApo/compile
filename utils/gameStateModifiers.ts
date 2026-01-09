@@ -5,7 +5,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Card } from "../data/cards";
-import { GameState, PlayedCard, Player, PlayerState, ActionRequired } from "../types";
+import { GameState, PlayedCard, Player, PlayerState, ActionRequired, AnimationRequest } from "../types";
 import { shuffleDeck } from './gameLogic';
 import { log } from '../logic/utils/log';
 import { recalculateAllLaneValues } from '../logic/game/stateManager';
@@ -104,8 +104,16 @@ export function drawForPlayer(
         };
     }
 
+    // Store draw animation request (new queue system)
     if (drawnCardIds.length > 0) {
-        newState.animationState = { type: 'drawCard', owner: player, cardIds: drawnCardIds };
+        const drawRequest: AnimationRequest = {
+            type: 'draw',
+            player: player,
+            count: drawnCards.length,
+            cardIds: drawnCardIds
+        };
+        const existingRequests = (newState as any)._pendingAnimationRequests || [];
+        (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
     }
 
     if (reshuffled) {
@@ -170,8 +178,16 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
             },
         };
 
+        // Store draw animation request (new queue system)
         if (drawnCardIds.length > 0) {
-            newState.animationState = { type: 'drawCard', owner: drawingPlayer, cardIds: drawnCardIds };
+            const drawRequest: AnimationRequest = {
+                type: 'draw',
+                player: drawingPlayer,
+                count: drawnCards.length,
+                cardIds: drawnCardIds
+            };
+            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
         }
 
         if (reshuffled) {

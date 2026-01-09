@@ -583,6 +583,7 @@ export type AnimationState =
     | { type: 'compile', laneIndex: number }
     | { type: 'flipCard', cardId: string }
     | { type: 'deleteCard', cardId: string, owner: Player }
+    | { type: 'shiftCard', cardId: string, owner: Player, fromLane: number, toLane: number }
     | { type: 'drawCard', owner: Player, cardIds: string[] }
     | { type: 'discardCard', owner: Player, cardIds: string[], originalAction?: ActionRequired }
     | null;
@@ -737,12 +738,12 @@ export type AIAction =
 
 export type AnimationRequest =
     | { type: 'delete'; cardId: string; owner: Player }
-    | { type: 'flip'; cardId: string; owner?: Player; laneIndex?: number }
+    | { type: 'flip'; cardId: string; owner?: Player; laneIndex?: number; cardIndex?: number; toFaceUp?: boolean }
     | { type: 'shift'; cardId: string; fromLane: number; toLane: number; owner: Player }
     | { type: 'return'; cardId: string; owner: Player }
     | { type: 'discard'; cardId: string; owner: Player }
     | { type: 'play'; cardId: string; owner: Player; toLane?: number; fromDeck?: boolean; isFaceUp?: boolean }
-    | { type: 'draw'; player: Player; count: number; cardIds: string[] }
+    | { type: 'draw'; player: Player; count: number; cardIds: string[]; fromOpponentDeck?: boolean }
     | {
         type: 'compile_delete';
         laneIndex: number;

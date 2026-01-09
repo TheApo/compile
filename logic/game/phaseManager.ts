@@ -422,8 +422,17 @@ export const processQueuedActions = (state: GameState): GameState => {
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                // Store flip animation request BEFORE state change (new queue system)
+                const flipRequest: AnimationRequest = {
+                    type: 'flip',
+                    cardId: sourceCardId,
+                    owner: sourceCardInfo.owner,
+                    laneIndex: sourceCardInfo.laneIndex,
+                    cardIndex: sourceCardInfo.cardIndex
+                };
+                const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                (mutableState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                 const reason = !sourceCardInfo ? 'deleted' :
@@ -644,28 +653,10 @@ export const processQueuedActions = (state: GameState): GameState => {
                         mutableState.queuedActions = queuedActions;
                     }
 
-                    // Set animation state so it displays
-                    // Take the FIRST animation request (show one at a time)
-                    const firstAnimation = result.animationRequests[0];
-                    if (firstAnimation.type === 'draw') {
-                        mutableState.animationState = {
-                            type: 'drawCard',
-                            owner: firstAnimation.player as Player,
-                            cardIds: [] // Draw animations are handled separately
-                        };
-                    } else if (firstAnimation.type === 'play') {
-                        mutableState.animationState = {
-                            type: 'playCard',
-                            cardId: firstAnimation.cardId,
-                            owner: firstAnimation.owner
-                        };
-                    } else if (firstAnimation.type === 'delete') {
-                        mutableState.animationState = {
-                            type: 'deleteCard',
-                            cardId: firstAnimation.cardId,
-                            owner: firstAnimation.owner
-                        };
-                    }
+                    // Store ALL animation requests in _pendingAnimationRequests for the new queue system
+                    // The new system handles all animations via AnimationQueue - no old animationState needed
+                    const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                    (mutableState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
 
                     // Return to trigger animation display - queue will continue after animation
                     return mutableState;
@@ -995,38 +986,11 @@ export const processEndOfAction = (state: GameState): GameState => {
             const queuedEffectResult = executeOnPlayEffect(cardOnBoard, laneIndex, stateForQueuedEffect, queuedEffectContext);
             let newState = queuedEffectResult.newState;
 
-            // CRITICAL FIX: Handle animationRequests from queued effects (like Spirit-1's "Draw 2 cards")
-            // Without this, animations from on_play effects are lost!
+            // Store animation requests from queued effects (like Spirit-1's "Draw 2 cards")
+            // The new queue system handles all animations via _pendingAnimationRequests
             if (queuedEffectResult.animationRequests && queuedEffectResult.animationRequests.length > 0) {
-                const firstRequest = queuedEffectResult.animationRequests[0];
-                if (firstRequest.type === 'draw') {
-                    newState = {
-                        ...newState,
-                        animationState: {
-                            type: 'drawCard',
-                            owner: firstRequest.player,
-                            cardIds: []
-                        }
-                    };
-                } else if (firstRequest.type === 'play') {
-                    newState = {
-                        ...newState,
-                        animationState: {
-                            type: 'playCard',
-                            cardId: firstRequest.cardId,
-                            owner: firstRequest.owner
-                        }
-                    };
-                } else if (firstRequest.type === 'delete') {
-                    newState = {
-                        ...newState,
-                        animationState: {
-                            type: 'deleteCard',
-                            cardId: firstRequest.cardId,
-                            owner: firstRequest.owner
-                        }
-                    };
-                }
+                const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                (newState as any)._pendingAnimationRequests = [...existingRequests, ...queuedEffectResult.animationRequests];
             }
 
             if (newState.actionRequired) {
@@ -1083,8 +1047,17 @@ export const processEndOfAction = (state: GameState): GameState => {
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                    // Store flip animation request BEFORE state change (new queue system)
+                    const flipRequest: AnimationRequest = {
+                        type: 'flip',
+                        cardId: sourceCardId,
+                        owner: sourceCardInfo.owner,
+                        laneIndex: sourceCardInfo.laneIndex,
+                        cardIndex: sourceCardInfo.cardIndex
+                    };
+                    const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                    (mutableState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     const reason = !sourceCardInfo ? 'deleted' :

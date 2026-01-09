@@ -569,6 +569,11 @@ export const resolveActionWithCard = (
                         const actor = prev.actionRequired.actor;
                         const shiftResult = internalShiftCard(prev, targetCardId, cardOwner, fixedTargetLane, actor);
                         newState = shiftResult.newState;
+                        // CRITICAL: Store animation requests in _pendingAnimationRequests
+                        if (shiftResult.animationRequests && shiftResult.animationRequests.length > 0) {
+                            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                            (newState as any)._pendingAnimationRequests = [...existingRequests, ...shiftResult.animationRequests];
+                        }
                         requiresTurnEnd = !newState.actionRequired;
                         break;
                     }
@@ -1374,8 +1379,17 @@ export const resolveActionWithCard = (
                 if (sourceCardInfo) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     stateAfterReturn = log(stateAfterReturn, actor, `${cardName}: Flips itself.`);
+                    // Store flip animation request BEFORE state change (new queue system)
+                    const flipRequest: AnimationRequest = {
+                        type: 'flip',
+                        cardId: sourceCardId,
+                        owner: sourceCardInfo.owner,
+                        laneIndex: sourceCardInfo.laneIndex,
+                        cardIndex: sourceCardInfo.cardIndex
+                    };
+                    const existingRequests = (stateAfterReturn as any)._pendingAnimationRequests || [];
+                    (stateAfterReturn as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                     stateAfterReturn = findAndFlipCards(new Set([sourceCardId]), stateAfterReturn);
-                    stateAfterReturn.animationState = { type: 'flipCard', cardId: sourceCardId };
                 }
                 newState = stateAfterReturn;
                 requiresTurnEnd = true;

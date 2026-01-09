@@ -19,7 +19,6 @@ import { log } from '../utils/log';
 import { executeCustomEffect } from '../customProtocols/effectInterpreter';
 import { AnimationQueueItem } from '../../types/animation';
 import {
-    createSequentialDrawAnimations,
     createDelayAnimation,
     enqueueAnimationsFromRequests,
 } from '../animation/animationHelpers';
@@ -32,10 +31,8 @@ import {
     createAndEnqueueLaneDeleteAnimations,
     createAndEnqueuePlayAnimation,
     processCompileAnimations,
+    processRearrangeWithCompile,
 } from '../animation/aiAnimationCreators';
-import {
-    refreshHandMessage,
-} from '../utils/logMessages';
 
 // NOTE: createAndEnqueueShiftAnimation moved to aiAnimationCreators.ts (DRY)
 // NOTE: enqueueAnimationsFromRequests moved to animationHelpers.ts (DRY - Single Point of Truth)
@@ -270,11 +267,7 @@ export const resolveRequiredOpponentAction = (
             const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
             const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
 
-            // DRY: Create discard animations using centralized helper
-            if (enqueueAnimation) {
-                createAndEnqueueDiscardAnimations(state, cardIdsToDiscard, 'opponent', enqueueAnimation);
-            }
-
+            // NOTE: discardCards() now sets _pendingAnimationRequests (DRY - single place for discard animations)
             const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
             if (newState.actionRequired) {
                 return newState;
@@ -290,9 +283,12 @@ export const resolveRequiredOpponentAction = (
                 trackPlayerRearrange(action.actor);
             }
 
-            const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-            const finalState = endActionForPhase(newState, phaseManager);
-            return finalState;
+            // DRY: Use centralized helper for rearrange → compile animation handling
+            const stateBeforeRearrange = state;
+            let newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
+            newState = processRearrangeWithCompile(newState, stateBeforeRearrange, action.originalAction, enqueueAnimation);
+
+            return endActionForPhase(newState, phaseManager);
         }
 
         if (action.type === 'reveal_opponent_hand') {
@@ -668,9 +664,12 @@ const handleRequiredAction = (
             trackPlayerRearrange(action.actor);
         }
 
-        const nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
-        const finalState = endActionForPhase(nextState, phaseManager);
-        return finalState;
+        // DRY: Use centralized helper for rearrange → compile animation handling
+        const stateBeforeRearrange = state;
+        let nextState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
+        nextState = processRearrangeWithCompile(nextState, stateBeforeRearrange, action.originalAction, enqueueAnimation);
+
+        return endActionForPhase(nextState, phaseManager);
     }
 
     // GENERIC: Handle ALL selectLane decisions - no whitelist needed
@@ -858,11 +857,7 @@ const handleRequiredAction = (
         const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
         const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
 
-        // DRY: Create discard animations using centralized helper
-        if (enqueueAnimation) {
-            createAndEnqueueDiscardAnimations(state, cardIdsToDiscard, 'opponent', enqueueAnimation);
-        }
-
+        // NOTE: discardCards() now sets _pendingAnimationRequests (DRY - single place for discard animations)
         const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
         if (newState.actionRequired) return newState; // Handle chained effects
         return endActionForPhase(newState, phaseManager);
@@ -1189,41 +1184,8 @@ export const runOpponentTurn = (
             const mainAction = getAIAction(state, null, difficulty);
 
             if (mainAction.type === 'fillHand') {
-                // NEW ANIMATION SYSTEM: Create SEQUENTIAL draw animations for opponent
-                // Each card gets its own animation with proper snapshot showing cards that already landed
-                if (enqueueAnimation) {
-                    const prevHandIds = new Set(state.opponent.hand.map(c => c.id));
-                    let stateAfterAction = resolvers.fillHand(state, 'opponent');
-
-                    // Find newly drawn cards and create sequential animations
-                    const newCards = stateAfterAction.opponent.hand.filter(c => !prevHandIds.has(c.id));
-                    if (newCards.length > 0) {
-                        const animations = createSequentialDrawAnimations(
-                            state,  // Use pre-draw state for initial snapshot
-                            newCards,
-                            'opponent',
-                            state.opponent.hand.length  // Starting index in hand
-                        );
-                        // Add logMessage to first animation (refresh hand)
-                        if (animations.length > 0) {
-                            const logMsg = refreshHandMessage('opponent', newCards.length);
-                            animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
-                        }
-                        // FIXED: Enqueue synchronously instead of via queueMicrotask
-                        animations.forEach(anim => enqueueAnimation(anim));
-
-                        // CRITICAL: Clear animationState to prevent double-animation from useEffect
-                        // (drawForPlayer sets animationState, but we already created the animation here)
-                        stateAfterAction = { ...stateAfterAction, animationState: null };
-                    }
-
-                    if (stateAfterAction.actionRequired) {
-                        return stateAfterAction;
-                    }
-                    return phaseManager.processEndOfAction(stateAfterAction);
-                }
-
-                // FALLBACK: Old system without animation
+                // NOTE: drawForPlayer sets _pendingAnimationRequests (DRY - single place for draw animations)
+                // Animations are processed via useEffect for _pendingAnimationRequests
                 const stateAfterAction = resolvers.fillHand(state, 'opponent');
                 if (stateAfterAction.actionRequired) {
                     return stateAfterAction;
@@ -1335,113 +1297,7 @@ export const runOpponentTurn = (
                     return phaseManager.processEndOfAction(stateAfterOnPlayLogic);
                 }
 
-                // FALLBACK: Old animation system
-                const { newState: stateAfterPlayLogic, animationRequests: onCoverAnims } = actions.playCard(state, mainAction.cardId, mainAction.laneIndex, mainAction.isFaceUp, 'opponent');
-                // CRITICAL: Set flag to prevent double-play when effects trigger runOpponentTurn
-                const stateWithPlayAnimation = { ...stateAfterPlayLogic, animationState: { type: 'playCard' as const, cardId: mainAction.cardId, owner: 'opponent' as Player }, _cardPlayedThisActionPhase: true };
-
-                setTimeout(() => { // Play card animation delay
-                    const onAnimsComplete = () => {
-                        setGameState(s_after_cover_anims => { // Renamed for clarity
-                            // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
-                            // React batching may have lost this flag
-                            let stateForOnPlay = { ...s_after_cover_anims, _cardPlayedThisActionPhase: true };
-                            let onPlayResult: EffectResult = { newState: stateForOnPlay };
-
-                            if (stateForOnPlay.actionRequired) {
-                                // An on-cover effect created an action. Do not process the on-play effect.
-                            } else if (stateForOnPlay.queuedEffect) {
-                                const { card, laneIndex } = stateForOnPlay.queuedEffect;
-                                const onPlayContext: EffectContext = {
-                                    cardOwner: 'opponent',
-                                    actor: 'opponent',
-                                    currentTurn: stateForOnPlay.turn,
-                                    opponent: 'player',
-                                    triggerType: 'play'
-                                };
-                                onPlayResult = executeOnPlayEffect(card, laneIndex, stateForOnPlay, onPlayContext);
-                                onPlayResult.newState.queuedEffect = undefined;
-                            }
-
-                            const onPlayAnims = onPlayResult.animationRequests;
-                            const stateAfterOnPlayLogic = onPlayResult.newState;
-
-                            const onAllAnimsComplete = () => {
-                                setGameState(s_after_all_anims => {
-                                    // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
-                                    const stateWithFlag = { ...s_after_all_anims, _cardPlayedThisActionPhase: true };
-                                    // CRITICAL FIX: Check if turn already switched to player
-                                    if (stateWithFlag.turn !== 'opponent') {
-                                        return stateWithFlag;
-                                    }
-                                    // CRITICAL FIX: Process queuedActions before checking actionRequired
-                                    // This ensures multi-effect cards (like Gravity-2) complete all effects
-                                    if (stateWithFlag.queuedActions && stateWithFlag.queuedActions.length > 0) {
-                                        const stateAfterQueue = phaseManager.processEndOfAction(stateWithFlag);
-                                        // BUG FIX: Only continue opponent turn if it's still opponent's turn
-                                        if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                            runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
-                                        }
-                                        return stateAfterQueue;
-                                    }
-                                    // BUG FIX: Only continue opponent turn if it's still opponent's turn
-                                    if (stateWithFlag.actionRequired && stateWithFlag.turn === 'opponent') {
-                                        runOpponentTurn(stateWithFlag, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
-                                        return stateWithFlag;
-                                    } else {
-                                        // CRITICAL FIX: Return the phase-advanced state directly instead of
-                                        // calling nested setGameState. This prevents race conditions where
-                                        // the old state (still in 'action' phase) triggers another AI turn.
-                                        return phaseManager.processEndOfAction(stateWithFlag);
-                                    }
-                                });
-                            };
-
-                            if (onPlayAnims && onPlayAnims.length > 0) {
-                                processAnimationQueue(onPlayAnims, onAllAnimsComplete);
-                                return stateAfterOnPlayLogic;
-                            } else {
-                                // CRITICAL FIX: Check if turn already switched to player
-                                if (stateAfterOnPlayLogic.turn !== 'opponent') {
-                                    return stateAfterOnPlayLogic;
-                                }
-                                // CRITICAL FIX: Process queuedActions before checking actionRequired
-                                if (stateAfterOnPlayLogic.queuedActions && stateAfterOnPlayLogic.queuedActions.length > 0) {
-                                    const stateAfterQueue = phaseManager.processEndOfAction(stateAfterOnPlayLogic);
-                                    // BUG FIX: Only continue opponent turn if it's still opponent's turn
-                                    if (stateAfterQueue.actionRequired && stateAfterQueue.turn === 'opponent') {
-                                        runOpponentTurn(stateAfterQueue, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
-                                    }
-                                    return stateAfterQueue;
-                                }
-                                // BUG FIX: Only continue opponent turn if it's still opponent's turn
-                                if (stateAfterOnPlayLogic.actionRequired && stateAfterOnPlayLogic.turn === 'opponent') {
-                                    runOpponentTurn(stateAfterOnPlayLogic, setGameState, difficulty, actions, processAnimationQueue, phaseManager, trackPlayerRearrange, enqueueAnimation);
-                                    return stateAfterOnPlayLogic;
-                                } else {
-                                    // CRITICAL FIX: Return the phase-advanced state directly instead of
-                                    // calling nested setGameState. This prevents race conditions where
-                                    // the old state (still in 'action' phase) triggers another AI turn.
-                                    return phaseManager.processEndOfAction(stateAfterOnPlayLogic);
-                                }
-                            }
-                        });
-                    };
-
-                    setGameState(s => {
-                        // CRITICAL FIX: Restore flag - AI just played a card, so flag must be true
-                        const stateAfterPlayAnim = { ...s, animationState: null, _cardPlayedThisActionPhase: true };
-                        if (onCoverAnims && onCoverAnims.length > 0) {
-                            processAnimationQueue(onCoverAnims, onAnimsComplete);
-                        } else {
-                            onAnimsComplete();
-                        }
-                        return stateAfterPlayAnim;
-                    });
-
-                }, 500);
-
-                return stateWithPlayAnimation;
+                // NOTE: Old fallback removed - enqueueAnimation is always available
             }
         }
 
@@ -1616,9 +1472,7 @@ const handleRequiredActionSync = (
         const maxCards = isVariableCount ? aiDecision.cardIds.length : action.count;
         const cardIdsToDiscard = aiDecision.cardIds.slice(0, maxCards);
 
-        // DRY: Create discard animations using centralized helper
-        createAndEnqueueDiscardAnimations(state, cardIdsToDiscard, 'opponent', enqueueAnimation);
-
+        // NOTE: discardCards() now sets _pendingAnimationRequests (DRY - single place for discard animations)
         const newState = actions.discardCards(state, cardIdsToDiscard, 'opponent');
         if (newState.actionRequired) return newState;
         return endActionForPhase(newState, phaseManager);
@@ -1626,7 +1480,11 @@ const handleRequiredActionSync = (
 
     // --- REARRANGE PROTOCOLS ---
     if (aiDecision.type === 'rearrangeProtocols' && action.type === 'prompt_rearrange_protocols') {
-        const newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
+        // DRY: Use centralized helper for rearrange → compile animation handling
+        const stateBeforeRearrange = state;
+        let newState = actions.resolveRearrangeProtocols(state, aiDecision.newOrder);
+        newState = processRearrangeWithCompile(newState, stateBeforeRearrange, action.originalAction, enqueueAnimation);
+
         return endActionForPhase(newState, phaseManager);
     }
 
@@ -1934,30 +1792,10 @@ export const runOpponentTurnSync = (
             const decision = getAIAction(state, null, difficulty);
 
             // Fill hand
+            // NOTE: drawForPlayer sets _pendingAnimationRequests (DRY - single place for draw animations)
+            // Animations are processed via useEffect for _pendingAnimationRequests
             if (decision.type === 'fillHand') {
-                const prevHandIds = new Set(state.opponent.hand.map(c => c.id));
                 state = resolvers.fillHand(state, 'opponent');
-
-                // Create draw animations
-                const newCards = state.opponent.hand.filter(c => !prevHandIds.has(c.id));
-                if (newCards.length > 0) {
-                    const animations = createSequentialDrawAnimations(
-                        initialState, // Use pre-draw state for snapshot
-                        newCards,
-                        'opponent',
-                        initialState.opponent.hand.length
-                    );
-                    // Add logMessage to first animation (refresh hand)
-                    if (animations.length > 0) {
-                        const logMsg = refreshHandMessage('opponent', newCards.length);
-                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'opponent' } };
-                    }
-                    animations.forEach(anim => enqueueAnimation(anim));
-                }
-
-                // Clear animationState since we handle animations directly
-                state = { ...state, animationState: null };
-
                 if (state.actionRequired) continue;
                 state = phaseManager.processEndOfAction(state);
                 continue;

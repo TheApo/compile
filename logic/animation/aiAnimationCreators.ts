@@ -479,6 +479,40 @@ export function processCompileAnimations(
     return stateWithoutMarker;
 }
 
+/**
+ * Verarbeitet State nach Rearrange und prüft ob Compile-Animationen erstellt werden müssen.
+ * DRY: EINZIGE Stelle für "Rearrange → Compile" Animation-Handling.
+ *
+ * @param stateAfterRearrange - State NACH dem Rearrange (enthält ggf. _compileAnimations)
+ * @param stateBeforeRearrange - State VOR dem Rearrange (für Snapshot)
+ * @param originalAction - Die ursprüngliche Action (enthält laneIndex bei compile)
+ * @param enqueueAnimation - Funktion zum Enqueuen
+ * @returns State mit verarbeiteten Compile-Animationen (falls vorhanden)
+ */
+export function processRearrangeWithCompile(
+    stateAfterRearrange: GameState,
+    stateBeforeRearrange: GameState,
+    originalAction: { type: string; laneIndex?: number } | undefined,
+    enqueueAnimation?: EnqueueFn
+): GameState {
+    // Prüfe ob Rearrange einen Compile getriggert hat (Control Mechanic Flow)
+    if (!(stateAfterRearrange as any)._compileAnimations || !enqueueAnimation) {
+        return stateAfterRearrange;
+    }
+
+    if (originalAction?.type !== 'compile' || originalAction.laneIndex === undefined) {
+        return stateAfterRearrange;
+    }
+
+    return processCompileAnimations(
+        stateAfterRearrange,
+        stateBeforeRearrange,
+        originalAction.laneIndex,
+        'opponent',
+        enqueueAnimation
+    );
+}
+
 // =============================================================================
 // DISPATCHER FÜR AI-ENTSCHEIDUNGEN
 // =============================================================================

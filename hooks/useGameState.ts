@@ -523,37 +523,10 @@ export const useGameState = (
         if (gameState.turn !== 'player' || gameState.phase !== 'action' || gameState.actionRequired) return;
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const prevHandIds = new Set(prev.player.hand.map(c => c.id));
             let newState = resolvers.fillHand(prev, 'player');
 
-            // Create SEQUENTIAL draw animations
-            // Each card gets its own animation with proper snapshot showing cards that already landed
-            if (enqueueAnimations) {
-                const newCards = newState.player.hand.filter(c => !prevHandIds.has(c.id));
-                if (newCards.length > 0) {
-                    // Create sequential animations - each shows previously landed cards
-                    const animations = createSequentialDrawAnimations(
-                        prev,  // Use prev state for initial snapshot (before cards were added)
-                        newCards,
-                        'player',
-                        prev.player.hand.length  // Starting index in hand
-                    );
-                    // Add logMessage to first animation (refresh hand)
-                    if (animations.length > 0) {
-                        const logMsg = refreshHandMessage('player', newCards.length);
-                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'player' } };
-                    }
-                    enqueueAnimations(animations);
-
-                    // CRITICAL: Clear animationState to prevent double-animation from useEffect
-                    // (drawForPlayer sets animationState, but we already created the animation here)
-                    newState = { ...newState, animationState: null };
-
-                    // Update refs so the useEffect doesn't try to create animation
-                    prevPlayerHandRef.current = new Set(newState.player.hand.map(c => c.id));
-                    prevPlayerHandLengthRef.current = newState.player.hand.length;
-                }
-            }
+            // NOTE: drawForPlayer sets _pendingAnimationRequests (DRY - single place for draw animations)
+            // Animations are processed via useEffect for _pendingAnimationRequests
 
             if (newState.actionRequired) {
                 return newState;
@@ -566,14 +539,27 @@ export const useGameState = (
         setGameState(prev => {
             if (prev.actionRequired?.type !== 'discard' || prev.actionRequired.actor !== 'player') return prev;
 
-            // Set animationState - the useEffect will handle creating the animation
-            // (Works for both new and old animation systems)
-            return {
-                ...prev,
-                animationState: { type: 'discardCard', owner: 'player', cardIds: [cardId], originalAction: prev.actionRequired }
-            };
+            const originalAction = prev.actionRequired;
+            const cardToDiscard = prev.player.hand.find(c => c.id === cardId);
+            if (!cardToDiscard) return prev;
+
+            // Apply the discard (discardCards creates animation requests in _pendingAnimationRequests)
+            let stateAfterDiscard;
+            if (originalAction.count > 1 || (originalAction as any).variableCount) {
+                stateAfterDiscard = resolvers.resolveVariableDiscard(prev, [cardId]);
+            } else {
+                stateAfterDiscard = resolvers.discardCards(prev, [cardId], 'player');
+            }
+
+            // Handle turn progression if no more actions required
+            if (!stateAfterDiscard.actionRequired) {
+                const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+                return turnProgressionCb(stateAfterDiscard);
+            }
+
+            return stateAfterDiscard;
         });
-    }, []);
+    }, [getTurnProgressionCallback]);
 
     const compileLane = useCallback((laneIndex: number) => {
         setGameState(prev => {
@@ -695,7 +681,7 @@ export const useGameState = (
             const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId, enqueueAnimation);
 
             if (requiresAnimation) {
-                processAnimationQueue(requiresAnimation.animationRequests, () => {
+                processAnimationQueue(requiresAnimation.animationRequests || [], () => {
                     setGameState(s => {
                         // FIX: If turn changed during animation (due to interrupt restoration),
                         // turnProgressionCb was already called. Pass a no-op to prevent double progression.
@@ -966,7 +952,7 @@ export const useGameState = (
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(stateWithFaceDown, targetLaneIndex);
 
             if (requiresAnimation) {
-                processAnimationQueue(requiresAnimation.animationRequests, () => {
+                processAnimationQueue(requiresAnimation.animationRequests || [], () => {
                     setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
                 });
                 return nextState;
@@ -1173,6 +1159,7 @@ export const useGameState = (
     /**
      * Resolve variable count or batch discard (used by custom protocols)
      * Handles discards where count > 1 or variableCount is true
+     * Animation requests are created in discardCards (DRY - single place for discard animations)
      */
     const resolveVariableDiscard = useCallback((cardIds: string[]) => {
         setGameState(prev => {
@@ -1181,12 +1168,18 @@ export const useGameState = (
 
             if (!isVariableCount && !isBatchDiscard) return prev;
 
-             return {
-                ...prev,
-                animationState: { type: 'discardCard', owner: 'player', cardIds: cardIds, originalAction: prev.actionRequired }
-            };
+            // Apply the discard (discardCards creates animation requests in _pendingAnimationRequests)
+            const stateAfterDiscard = resolvers.resolveVariableDiscard(prev, cardIds);
+
+            // Handle turn progression if no more actions required
+            if (!stateAfterDiscard.actionRequired) {
+                const turnProgressionCb = getTurnProgressionCallback(prev.phase);
+                return turnProgressionCb(stateAfterDiscard);
+            }
+
+            return stateAfterDiscard;
         });
-    }, []);
+    }, [getTurnProgressionCallback]);
 
     // REMOVED: resolveLight2Prompt - Light-2 now uses resolveRevealBoardCardPrompt
 
@@ -1589,202 +1582,15 @@ export const useGameState = (
         });
     }, [useControlMechanic]);
 
-    useEffect(() => {
-        const animState = gameState.animationState;
-        if (!animState) return;
-
-        let duration = 0;
-        let shouldClear = false;
-
-        if (animState.type === 'flipCard') {
-            duration = 600;
-            shouldClear = true;
-        } else if (animState.type === 'drawCard') {
-            duration = 1000;
-            shouldClear = true;
-        } else if (animState.type === 'discardCard') {
-            duration = 800;
-            shouldClear = true;
-        }
-
-        if (shouldClear) {
-            const timer = setTimeout(() => {
-                setGameState(s => ({ ...s, animationState: null }));
-            }, duration);
-            return () => clearTimeout(timer);
-        }
-    }, [gameState.animationState]);
-
     // Update previous hand refs when hand changes
-    // CRITICAL: Don't update refs when animationState.type === 'drawCard' because
-    // the draw animation effect needs the OLD refs to determine which cards are new.
-    // The draw animation effect will update refs after creating animations.
     useEffect(() => {
-        if (gameState.animationState?.type === 'drawCard') {
-            return; // Skip ref update - draw animation effect will handle it
-        }
         prevPlayerHandRef.current = new Set(gameState.player.hand.map(c => c.id));
         prevOpponentHandRef.current = new Set(gameState.opponent.hand.map(c => c.id));
         prevPlayerHandLengthRef.current = gameState.player.hand.length;
         prevOpponentHandLengthRef.current = gameState.opponent.hand.length;
-    }, [gameState.player.hand, gameState.opponent.hand, gameState.animationState]);
+    }, [gameState.player.hand, gameState.opponent.hand]);
 
-    useEffect(() => {
-        const animState = gameState.animationState;
-        if (animState?.type === 'discardCard' && animState.owner === 'player') {
-            // Create sequential discard animations
-            if (enqueueAnimations) {
-                const { cardIds, originalAction } = animState;
-                if (!originalAction) return;
-
-                // Get actual card objects from hand
-                const cardsToDiscard = cardIds
-                    .map(id => gameState.player.hand.find(c => c.id === id))
-                    .filter((c): c is PlayedCard => c !== undefined);
-
-                if (cardsToDiscard.length > 0) {
-                    // Create sequential animations using current state (before discard)
-                    const animations = createSequentialDiscardAnimations(
-                        gameState,
-                        cardsToDiscard,
-                        'player'
-                    );
-                    // Add logMessage to first animation
-                    if (animations.length > 0 && cardsToDiscard[0]) {
-                        const logMsg = discardCardMessage('player', cardsToDiscard[0]);
-                        animations[0] = { ...animations[0], logMessage: { message: logMsg, player: 'player' } };
-                    }
-
-                    // Apply the discard immediately
-                    setGameState(s => {
-                        const currentAnim = s.animationState;
-                        if (currentAnim?.type !== 'discardCard' || !currentAnim.originalAction) return s;
-
-                        const turnProgressionCb = getTurnProgressionCallback(s.phase);
-
-                        let stateAfterDiscard;
-                        if (originalAction.type === 'discard' && (originalAction.count > 1 || (originalAction as any).variableCount)) {
-                            // Variable count or batch discard - use resolveVariableDiscard for proper followUpEffect handling
-                            stateAfterDiscard = resolvers.resolveVariableDiscard(s, cardIds);
-                        } else {
-                            stateAfterDiscard = resolvers.discardCards(s, cardIds, 'player');
-                        }
-
-                        // CRITICAL FIX: Only clear discard animation, preserve draw animation from followUpEffect!
-                        // If animationState is 'drawCard' (from "then draw" effect), keep it so the draw animation plays.
-                        if (stateAfterDiscard.animationState?.type === 'discardCard') {
-                            stateAfterDiscard.animationState = null;
-                        }
-
-                        if (stateAfterDiscard.actionRequired) {
-                            return stateAfterDiscard;
-                        }
-
-                        return turnProgressionCb(stateAfterDiscard);
-                    });
-
-                    // Enqueue animations after state update
-                    enqueueAnimations(animations);
-                }
-                return;
-            }
-
-        }
-    }, [gameState.animationState, getTurnProgressionCallback, enqueueAnimations, gameState]);
-
-    // NOTE: discard_completed is now handled directly in discardResolver - no hook needed here
-
-    // NEW: useEffect to convert animationState.type === 'drawCard' to queue animations
-    // This handles draws from: Control mechanic (fill_hand after skip/rearrange), effect draws, etc.
-    useEffect(() => {
-        const animState = gameState.animationState;
-        if (animState?.type !== 'drawCard') return;
-        if (!enqueueAnimations) return;
-
-        const { owner } = animState;
-        let { cardIds } = animState;
-
-        // CRITICAL FIX: If cardIds is empty, calculate from hand comparison
-        // This handles cases like "Discard 1+, then draw 1 more" where discardResolver
-        // sets cardIds: [] and expects us to determine new cards from prevHand vs currentHand
-        const prevHandIds = owner === 'player' ? prevPlayerHandRef.current : prevOpponentHandRef.current;
-        if (!cardIds || cardIds.length === 0) {
-            // Find new cards in hand that weren't there before
-            const newCardIds = gameState[owner].hand
-                .filter(c => !prevHandIds.has(c.id))
-                .map(c => c.id);
-            if (newCardIds.length === 0) {
-                // No new cards - just clear animationState
-                setGameState(s => {
-                    if (s.animationState?.type !== 'drawCard') return s;
-                    return { ...s, animationState: null };
-                });
-                return;
-            }
-            cardIds = newCardIds;
-        }
-
-        // CRITICAL: Check if animations were already created for these cards.
-        // Other code paths (like fillHand at line 711) may have already created animations
-        // and updated the refs. If all cardIds are already in the refs, skip animation creation.
-        const allCardsAlreadyTracked = cardIds.every(id => prevHandIds.has(id));
-        if (allCardsAlreadyTracked) {
-            // Animations already created elsewhere - just clear animationState
-            setGameState(s => {
-                if (s.animationState?.type !== 'drawCard') return s;
-                return { ...s, animationState: null };
-            });
-            return;
-        }
-
-        // Get the drawn cards from hand
-        const drawnCards = gameState[owner].hand.filter(c => cardIds.includes(c.id));
-        if (drawnCards.length === 0) return;
-
-        // Create pre-draw state for snapshot
-        const drawnIdSet = new Set(cardIds);
-        const preDrawHand = gameState[owner].hand.filter(c => !drawnIdSet.has(c.id));
-        const stateBeforeDraw = {
-            ...gameState,
-            [owner]: {
-                ...gameState[owner],
-                hand: preDrawHand,
-            }
-        };
-
-        // Find starting index
-        const firstDrawnIndex = gameState[owner].hand.findIndex(c => cardIds.includes(c.id));
-        const startIndex = firstDrawnIndex >= 0 ? firstDrawnIndex : preDrawHand.length;
-
-        // Create and enqueue animations
-        const animations = createSequentialDrawAnimations(
-            stateBeforeDraw,
-            drawnCards,
-            owner,
-            startIndex
-        );
-        // Add logMessage to first animation
-        if (animations.length > 0) {
-            const logMsg = drawCardsMessage(owner, drawnCards.length);
-            animations[0] = { ...animations[0], logMessage: { message: logMsg, player: owner } };
-        }
-        enqueueAnimations(animations);
-
-        // Clear animationState to prevent double-animation
-        setGameState(s => {
-            if (s.animationState?.type !== 'drawCard') return s;
-            return { ...s, animationState: null };
-        });
-
-        // Update refs to prevent old useEffect interference
-        if (owner === 'player') {
-            prevPlayerHandRef.current = new Set(gameState.player.hand.map(c => c.id));
-            prevPlayerHandLengthRef.current = gameState.player.hand.length;
-        } else {
-            prevOpponentHandRef.current = new Set(gameState.opponent.hand.map(c => c.id));
-            prevOpponentHandLengthRef.current = gameState.opponent.hand.length;
-        }
-    }, [gameState.animationState, enqueueAnimations]);
+    // NOTE: drawCard and discardCard now use _pendingAnimationRequests (new queue system)
 
     // NEW: Process _pendingAnimationRequests for player actions
     // This handles draw animations from optional draws (Death-1), reactive effects, etc.

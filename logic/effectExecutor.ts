@@ -666,6 +666,13 @@ function processTriggeredEffects(
                 const result = executeCustomEffect(card, cardLaneIndex, newState, context, effectDef);
                 newState = recalculateAllLaneValues(result.newState);
 
+                // CRITICAL: Store animation requests in _pendingAnimationRequests (DRY pattern)
+                // This ensures End-phase draw animations etc. are captured
+                if (result.animationRequests && result.animationRequests.length > 0) {
+                    const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                    (newState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
+                }
+
                 if (newState.actionRequired) {
                     // Store remaining effects to execute after this action resolves
                     const remainingEffects = matchingEffects.slice(effectIdx + 1);
@@ -734,6 +741,12 @@ function processTriggeredEffects(
         // FIXED: Now calls execute with proper signature (card, state, context)
         const result = execute(card, newState, context);
         newState = recalculateAllLaneValues(result.newState);
+
+        // CRITICAL: Store animation requests in _pendingAnimationRequests (DRY pattern)
+        if (result.animationRequests && result.animationRequests.length > 0) {
+            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
+        }
 
         if (isStartPhase) {
             newState.processedStartEffectIds = [...(newState.processedStartEffectIds || []), card.id];

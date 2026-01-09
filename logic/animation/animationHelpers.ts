@@ -31,7 +31,7 @@ import {
     calculateDrawStagger,
     PHASE_TRANSITION_DURATION,
     calculateCompileDeleteDuration,
-    calculateCompileDeleteStagger,
+    BATCH_ANIMATION_INITIAL_DELAY,
 } from '../../constants/animationTiming';
 
 // =============================================================================
@@ -482,12 +482,16 @@ export function createSequentialDrawAnimations(
     state: GameState,
     cards: PlayedCard[],
     owner: Player,
-    startingHandIndex: number
+    startingHandIndex: number,
+    sourceOwner?: Player  // Optional: owner of source deck (for drawing from opponent's deck)
 ): AnimationQueueItem[] {
     // Calculate per-card duration from total draw time
     // 5 cards = 1200ms total = 240ms per card
     const cardCount = cards.length;
     const SINGLE_CARD_DURATION = Math.max(100, Math.floor(TOTAL_DRAW_ANIMATION_DURATION / cardCount));
+
+    // Default: draw from own deck. If sourceOwner is provided, draw from that player's deck
+    const deckOwner = sourceOwner ?? owner;
 
     return cards.map((card, index) => {
         // Create a snapshot that includes cards that have already "landed"
@@ -511,7 +515,7 @@ export function createSequentialDrawAnimations(
             duration: SINGLE_CARD_DURATION,
             animatingCard: {
                 card,
-                fromPosition: { type: 'deck' as const, owner },
+                fromPosition: { type: 'deck' as const, owner: deckOwner },  // Use deckOwner for source
                 toPosition: { type: 'hand' as const, owner, handIndex: startingHandIndex + index },
             },
         };
@@ -623,7 +627,9 @@ export function createCompileDeleteAnimations(
                 fromPosition,
                 toPosition,
                 targetRotation: 90,
-                startDelay: calculateCompileDeleteStagger(index, cardCount),
+                // Erste Animation: kurze Pause, damit nicht direkt nach vorherigem Effekt
+                // Ab zweiter Animation: kein startDelay (Queue ist sequentiell)
+                startDelay: index === 0 ? BATCH_ANIMATION_INITIAL_DELAY : 0,
             },
             laneIndex: item.laneIndex,
         };
@@ -860,7 +866,8 @@ export function createBatchDeleteAnimations(
                     owner: item.owner,
                 },
                 targetRotation: 90,  // Both: player ends at 90°, opponent ends at 270° (=-90°) because baseRotation=180
-                startDelay: calculateCompileDeleteStagger(index, cardCount),
+                // Erste Animation: kurze Pause, ab zweiter: kein startDelay (Queue ist sequentiell)
+                startDelay: index === 0 ? BATCH_ANIMATION_INITIAL_DELAY : 0,
             },
             laneIndex: item.laneIndex,
         };
@@ -1081,8 +1088,8 @@ export function convertAnimationRequestToQueueItem(
                 console.warn('[convertAnimationRequest] flip: Card object not found:', request.cardId);
                 return null;
             }
-            // Flip animation: card is currently faceUp, so flip to faceDown, and vice versa
-            const toFaceUp = !card.isFaceUp;
+            // Use toFaceUp from request if provided (for post-flip state), otherwise calculate from current state
+            const toFaceUp = request.toFaceUp !== undefined ? request.toFaceUp : !card.isFaceUp;
             return createFlipAnimation(state, card, owner, position.laneIndex, position.cardIndex, toFaceUp);
         }
 
@@ -1142,7 +1149,17 @@ export function convertAnimationRequestToQueueItem(
                     console.warn('[convertAnimationRequest] play (from deck): Card object not found:', request.cardId);
                     return null;
                 }
-                return createPlayAnimation(state, card, request.owner, request.toLane, false, undefined, request.isFaceUp ?? false, isOpponentAction);
+                // CRITICAL: Use prePlayLanes for correct snapshot (card shouldn't appear in lane yet)
+                const prePlayLanes = (request as any).prePlayLanes;
+                let stateForAnimation = state;
+                if (prePlayLanes) {
+                    stateForAnimation = {
+                        ...state,
+                        player: { ...state.player, lanes: prePlayLanes.player },
+                        opponent: { ...state.opponent, lanes: prePlayLanes.opponent }
+                    };
+                }
+                return createPlayAnimation(stateForAnimation, card, request.owner, request.toLane, false, undefined, request.isFaceUp ?? false, isOpponentAction);
             } else {
                 // From hand
                 const handIndex = findCardInHand(state, request.cardId, request.owner);
@@ -1279,19 +1296,61 @@ export function enqueueAnimationsFromRequests(
             // Play from deck animation
             // CRITICAL: Card is already in the lane in current state - we need a pre-play snapshot
             const playCard = state[request.owner].lanes[request.toLane]?.find(c => c.id === request.cardId);
+            const prePlayLanes = (request as any).prePlayLanes as { player: PlayedCard[][]; opponent: PlayedCard[][] } | undefined;
+            const playIndex = (request as any).playIndex as number | undefined;
+
             if (playCard) {
-                // Create pre-play state that excludes this card from the target lane
-                const prePlayState = {
-                    ...state,
-                    [request.owner]: {
-                        ...state[request.owner],
-                        lanes: state[request.owner].lanes.map((lane, idx) =>
-                            idx === request.toLane
-                                ? lane.filter(c => c.id !== request.cardId)
-                                : lane
-                        )
-                    }
-                };
+                let prePlayState: GameState;
+
+                // CRITICAL: Use prePlayLanes for correct sequential snapshot (DRY - like preDiscardHand)
+                // For animation N, show lanes with cards from plays 0..N-1, but NOT the current card
+                if (prePlayLanes && playIndex !== undefined) {
+                    // Start from prePlayLanes, then add cards played before this one in this batch
+                    const snapshotPlayerLanes = prePlayLanes.player.map((lane, laneIdx) => {
+                        const previousCardsInThisLane = animationRequests
+                            .filter(r => r.type === 'play' &&
+                                        r.owner === 'player' &&
+                                        r.toLane === laneIdx &&
+                                        (r as any).playIndex !== undefined &&
+                                        (r as any).playIndex < playIndex &&
+                                        (r as any).prePlayLanes === prePlayLanes)
+                            .map(r => state.player.lanes[laneIdx]?.find(c => c.id === r.cardId))
+                            .filter(Boolean) as PlayedCard[];
+                        return [...lane, ...previousCardsInThisLane];
+                    });
+
+                    const snapshotOpponentLanes = prePlayLanes.opponent.map((lane, laneIdx) => {
+                        const previousCardsInThisLane = animationRequests
+                            .filter(r => r.type === 'play' &&
+                                        r.owner === 'opponent' &&
+                                        r.toLane === laneIdx &&
+                                        (r as any).playIndex !== undefined &&
+                                        (r as any).playIndex < playIndex &&
+                                        (r as any).prePlayLanes === prePlayLanes)
+                            .map(r => state.opponent.lanes[laneIdx]?.find(c => c.id === r.cardId))
+                            .filter(Boolean) as PlayedCard[];
+                        return [...lane, ...previousCardsInThisLane];
+                    });
+
+                    prePlayState = {
+                        ...state,
+                        player: { ...state.player, lanes: snapshotPlayerLanes },
+                        opponent: { ...state.opponent, lanes: snapshotOpponentLanes }
+                    };
+                } else {
+                    // Fallback: Create pre-play state that excludes only this card from the target lane
+                    prePlayState = {
+                        ...state,
+                        [request.owner]: {
+                            ...state[request.owner],
+                            lanes: state[request.owner].lanes.map((lane, idx) =>
+                                idx === request.toLane
+                                    ? lane.filter(c => c.id !== request.cardId)
+                                    : lane
+                            )
+                        }
+                    };
+                }
 
                 const animation = createPlayAnimation(
                     prePlayState,  // Use pre-play state for correct snapshot
@@ -1306,15 +1365,41 @@ export function enqueueAnimationsFromRequests(
                 animations.push({ ...animation, logMessage });
             }
         } else if (request.type === 'shift') {
-            const shiftCard = state[request.owner].lanes.flat().find(c => c.id === request.cardId);
-            const fromCardIndex = state[request.owner].lanes[request.fromLane]?.findIndex(c => c.id === request.cardId) ?? -1;
-            if (shiftCard && fromCardIndex >= 0) {
+            // CRITICAL: Use cardSnapshot and preShiftLanes if available - the card may already be shifted in state!
+            const cardSnapshot = (request as any).cardSnapshot as PlayedCard | undefined;
+            const fromCardIndex = (request as any).cardIndex as number | undefined;
+            const preShiftLanes = (request as any).preShiftLanes as { player: PlayedCard[][]; opponent: PlayedCard[][] } | undefined;
+
+            // Try to find the card in state, fallback to snapshot
+            let shiftCard = state[request.owner].lanes[request.fromLane]?.find(c => c.id === request.cardId);
+            let actualFromIndex = shiftCard
+                ? state[request.owner].lanes[request.fromLane]?.findIndex(c => c.id === request.cardId)
+                : fromCardIndex;
+
+            // If card not found at fromLane (already shifted), use snapshot
+            if (!shiftCard && cardSnapshot) {
+                shiftCard = cardSnapshot;
+                actualFromIndex = fromCardIndex ?? 0;
+            }
+
+            if (shiftCard && actualFromIndex !== undefined && actualFromIndex >= 0) {
+                // CRITICAL: Use preShiftLanes for correct animation snapshot (DRY - like preDiscardHand)
+                // This ensures the animation shows the card at its original position, not the target
+                let stateForAnimation = state;
+                if (preShiftLanes) {
+                    stateForAnimation = {
+                        ...state,
+                        player: { ...state.player, lanes: preShiftLanes.player },
+                        opponent: { ...state.opponent, lanes: preShiftLanes.opponent }
+                    };
+                }
+
                 const animation = createShiftAnimation(
-                    state,
+                    stateForAnimation,
                     shiftCard,
                     request.owner,
                     request.fromLane,
-                    fromCardIndex,
+                    actualFromIndex,
                     request.toLane
                 );
                 animations.push({ ...animation, logMessage });
@@ -1382,7 +1467,8 @@ export function enqueueAnimationsFromRequests(
                             owner: request.owner,
                         },
                         targetRotation: 90,
-                        startDelay: calculateCompileDeleteStagger(deleteIndex, deleteRequestCount),
+                        // Erste Animation: kurze Pause, ab zweiter: kein startDelay (Queue ist sequentiell)
+                        startDelay: deleteIndex === 0 ? BATCH_ANIMATION_INITIAL_DELAY : 0,
                     },
                     laneIndex: deleteLaneIndex,
                 };
@@ -1414,11 +1500,17 @@ export function enqueueAnimationsFromRequests(
                     [request.player]: { ...state[request.player], hand: preDrawHand }
                 };
 
+                // Determine source deck owner (own deck or opponent's deck for re-compile reward)
+                const sourceOwner = request.fromOpponentDeck
+                    ? (request.player === 'player' ? 'opponent' : 'player')
+                    : undefined;
+
                 const drawAnimations = createSequentialDrawAnimations(
                     preDrawState,
                     drawnCards,
                     request.player,
-                    preDrawHand.length  // Cards start after existing hand
+                    preDrawHand.length,  // Cards start after existing hand
+                    sourceOwner          // Pass source deck owner for animation
                 );
                 if (drawAnimations.length > 0) {
                     animations.push({ ...drawAnimations[0], logMessage });
@@ -1458,33 +1550,64 @@ export function enqueueAnimationsFromRequests(
                 }
             }
         } else if (request.type === 'flip') {
-            const owner = request.owner || (state.player.lanes.flat().some(c => c.id === request.cardId) ? 'player' : 'opponent');
-            const position = findCardInLanes(state, request.cardId, owner);
-            if (position) {
-                const card = state[owner].lanes[position.laneIndex][position.cardIndex];
-                if (card) {
-                    // Note: After flip, card.isFaceUp is already the NEW state
-                    // So we animate TO the current state (which is the result of the flip)
-                    const animation = createFlipAnimation(
-                        state,
-                        card,
-                        owner,
-                        position.laneIndex,
-                        position.cardIndex,
-                        card.isFaceUp  // Flip to current state
-                    );
-                    animations.push({ ...animation, logMessage });
-                }
-            }
+            // NOTE: Flip animation is handled by CSS (rotateY transition on isFaceUp change)
+            // We create a DELAY animation to give CSS time to run the flip transition.
+            // The state already has the new isFaceUp value - React will render it,
+            // and the CSS transition will animate the flip.
+            const delayAnimation: Omit<AnimationQueueItem, 'id'> = {
+                type: 'delay',
+                snapshot: createVisualSnapshot(state),
+                duration: ANIMATION_DURATIONS.flip,
+                logMessage,
+            };
+            animations.push(delayAnimation);
         } else if (request.type === 'discard') {
-            const handIndex = findCardInHand(state, request.cardId, request.owner);
-            if (handIndex >= 0) {
-                const card = state[request.owner].hand[handIndex];
-                if (card) {
-                    const animation = createDiscardAnimation(state, card, request.owner, handIndex);
-                    animations.push({ ...animation, logMessage });
-                }
+            // Use stored data for sequential snapshots (card may already be discarded)
+            const storedCard = (request as any).cardSnapshot as PlayedCard | undefined;
+            const preDiscardHand = (request as any).preDiscardHand as PlayedCard[] | undefined;
+            const discardIndex = (request as any).discardIndex as number | undefined;
+
+            const card = storedCard ?? state[request.owner].hand.find(c => c.id === request.cardId);
+            if (!card) continue;
+
+            // Create sequential snapshot: show hand as it was BEFORE this discard
+            // For animation N, exclude cards 0..N-1 from preDiscardHand
+            let snapshotHand: PlayedCard[];
+            if (preDiscardHand && discardIndex !== undefined && discardIndex > 0) {
+                // Get IDs of cards discarded before this one (discardIndex 0..N-1)
+                const previouslyDiscardedIds = new Set(
+                    animationRequests
+                        .filter(r => r.type === 'discard' &&
+                                    (r as any).discardIndex !== undefined &&
+                                    (r as any).discardIndex < discardIndex &&
+                                    (r as any).preDiscardHand === preDiscardHand) // Same batch
+                        .map(r => (r as any).cardSnapshot?.id)
+                        .filter(Boolean)
+                );
+                snapshotHand = preDiscardHand.filter(c => !previouslyDiscardedIds.has(c.id));
+            } else if (preDiscardHand) {
+                // First discard in batch - show full hand
+                snapshotHand = preDiscardHand;
+            } else {
+                // Fallback to current state
+                snapshotHand = state[request.owner].hand;
             }
+
+            // Find handIndex in the snapshot hand
+            const handIndex = snapshotHand.findIndex(c => c.id === card.id);
+            if (handIndex < 0) continue;
+
+            // Create snapshot state with the sequential hand
+            const snapshotState = {
+                ...state,
+                [request.owner]: {
+                    ...state[request.owner],
+                    hand: snapshotHand
+                }
+            };
+
+            const animation = createDiscardAnimation(snapshotState, card, request.owner, handIndex);
+            animations.push({ ...animation, logMessage });
         }
     }
 

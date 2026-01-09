@@ -403,20 +403,29 @@ export function internalResolveTargetedFlip(
         newState = rememberFlippedCard(newState, card);
     }
 
-    // NEW ANIMATION SYSTEM: Create flip animation before state change
-    if (enqueueAnimation && laneIndex !== -1 && cardIndex !== -1) {
+    // Create flip animation request BEFORE state change
+    if (laneIndex !== -1 && cardIndex !== -1) {
         const toFaceUp = !card.isFaceUp;
-        const flipAnim = createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp);
-        const logMsg = flipCardMessage(card, toFaceUp);
-        enqueueAnimation({ ...flipAnim, logMessage: { message: logMsg, player: actor } });
+        if (enqueueAnimation) {
+            // Direct enqueue if available
+            const flipAnim = createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp);
+            const logMsg = flipCardMessage(card, toFaceUp);
+            enqueueAnimation({ ...flipAnim, logMessage: { message: logMsg, player: actor } });
+        } else {
+            // Store in _pendingAnimationRequests for later processing
+            const flipRequest: AnimationRequest = {
+                type: 'flip',
+                cardId: targetCardId,
+                owner: owner,
+                laneIndex: laneIndex,
+                cardIndex: cardIndex
+            };
+            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+        }
     }
 
     newState = findAndFlipCards(new Set([targetCardId]), newState);
-
-    // Only set old animationState as fallback when new system not used
-    if (!enqueueAnimation) {
-        newState.animationState = { type: 'flipCard', cardId: targetCardId };
-    }
 
     newState.actionRequired = nextAction;
     return newState;
@@ -716,6 +725,14 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     // Snapshot before removal from original lane
     const laneBeforeRemoval = state[cardOwner].lanes[originalLaneIndex];
     const isRemovingTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === cardToShiftId;
+    // CRITICAL: Capture card index BEFORE removal for animation snapshot
+    const fromCardIndex = laneBeforeRemoval.findIndex(c => c.id === cardToShiftId);
+
+    // CRITICAL: Snapshot lanes BEFORE shift for correct animation (DRY - like preDiscardHand for discard)
+    const preShiftLanes = {
+        player: state.player.lanes.map(lane => lane.map(card => ({ ...card }))),
+        opponent: state.opponent.lanes.map(lane => lane.map(card => ({ ...card })))
+    };
 
     // Create a new lanes array with the card removed from the original lane.
     const lanesAfterRemoval = ownerState.lanes.map((lane, index) => {
@@ -787,12 +804,16 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;
 
     // Create the shift animation request FIRST (before cover/uncover animations)
+    // CRITICAL: Include cardSnapshot AND preShiftLanes for correct animation snapshot (DRY - like preDiscardHand)
     const shiftAnimRequest: AnimationRequest = {
         type: 'shift',
         cardId: cardToShiftId,
         owner: cardOwner,
         fromLane: originalLaneIndex,
         toLane: targetLaneIndex,
+        cardSnapshot: { ...cardToShift },
+        cardIndex: fromCardIndex,
+        preShiftLanes,  // Lanes BEFORE shift - for correct animation snapshot
     };
     let allAnimations: AnimationRequest[] = [shiftAnimRequest, ...(resultAfterOnCover.animationRequests || [])];
 

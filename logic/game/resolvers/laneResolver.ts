@@ -346,9 +346,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // No interrupt - execute follow-up effects immediately
                         if (sourceEffect === 'speed_3_end') {
                             const speed3CardId = prev.actionRequired.sourceCardId;
+                            const speed3CardInfo = findCardOnBoard(finalState, speed3CardId);
                             finalState = log(finalState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                            // Store flip animation request BEFORE state change (new queue system)
+                            if (speed3CardInfo) {
+                                const flipRequest: AnimationRequest = {
+                                    type: 'flip',
+                                    cardId: speed3CardId,
+                                    owner: speed3CardInfo.owner,
+                                    laneIndex: speed3CardInfo.laneIndex,
+                                    cardIndex: speed3CardInfo.cardIndex
+                                };
+                                const existingRequests = (finalState as any)._pendingAnimationRequests || [];
+                                (finalState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+                            }
                             finalState = findAndFlipCards(new Set([speed3CardId]), finalState);
-                            finalState.animationState = { type: 'flipCard', cardId: speed3CardId };
                         }
                         // NOTE: Anarchy-0 conditional draw is now handled via custom protocol pending effects
 
@@ -519,9 +531,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // No interrupt - execute immediately
                     if (sourceEffect === 'speed_3_end') {
                         const speed3CardId = prev.actionRequired.sourceCardId;
+                        const speed3CardInfo = findCardOnBoard(newState, speed3CardId);
                         newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                        // Store flip animation request BEFORE state change (new queue system)
+                        if (speed3CardInfo) {
+                            const flipRequest: AnimationRequest = {
+                                type: 'flip',
+                                cardId: speed3CardId,
+                                owner: speed3CardInfo.owner,
+                                laneIndex: speed3CardInfo.laneIndex,
+                                cardIndex: speed3CardInfo.cardIndex
+                            };
+                            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                            (newState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+                        }
                         newState = findAndFlipCards(new Set([speed3CardId]), newState);
-                        newState.animationState = { type: 'flipCard', cardId: speed3CardId };
                     }
 
                     // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0) - NO ANIMATION case

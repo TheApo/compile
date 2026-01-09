@@ -111,13 +111,23 @@ Verfügbare zentrale Helper:
   1. Animation VOR State-Änderung erstellen (Snapshot korrekt)
   2. Resolver ausführen (State ändert sich)
   3. Animation(s) enqueuen
-- **AI-Animationen**: Zentrale Helper in `logic/animation/aiAnimationCreators.ts` verwenden:
-  - `createAnimationForAIDecision()` - Dispatcher für flip/delete/return
-  - `createAndEnqueueDiscardAnimations()` - Discard-Animationen
-  - `createAndEnqueueDrawAnimations()` - Draw-Animationen
-  - `filterAlreadyCreatedAnimations()` - Doppelte Animationen vermeiden
+- **AI-Animationen**: Zentrale Helper in `logic/animation/aiAnimationCreators.ts` verwenden
+- **Automatische Effekte** (via `processQueuedActions`):
+  - Animation Requests werden in `_pendingAnimationRequests` gespeichert
+  - `useGameState.ts` und `aiManager.ts` verarbeiten diese automatisch
+  - IMMER `cardSnapshot` und Position-Info in Requests einschließen!
+- **Animation Requests mit Snapshots** (KRITISCH für automatische Effekte):
+  ```typescript
+  // Shift Request mit Snapshot
+  { type: 'shift', cardId, owner, fromLane, toLane, cardSnapshot: {...card}, cardIndex }
+  // Delete Request mit Snapshot
+  { type: 'delete', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
+  // Return Request mit Snapshot
+  { type: 'return', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
+  ```
 - **Basis-Funktionen**: `logic/animation/animationHelpers.ts` für Low-Level Animation-Erstellung
 - `enqueueAnimation()` fur alle Animationen nutzen
+- `enqueueAnimationsFromRequests()` - DRY Funktion zum Verarbeiten von Animation Requests
 - Snapshots enthalten Board-Zustand VOR der Anderung
 - `processAnimationQueue` darf NIEMALS `setGameState` aufrufen
 
