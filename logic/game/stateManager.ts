@@ -53,7 +53,6 @@ export const createInitialState = (playerProtocols: string[], opponentProtocols:
         log: [],
         actionRequired: null,
         queuedActions: [],
-        animationState: null,
         compilableLanes: [],
         processedStartEffectIds: [],
         processedEndEffectIds: [],

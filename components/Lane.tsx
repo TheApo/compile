@@ -21,7 +21,6 @@ interface LaneProps {
     onCardPointerEnter: (card: PlayedCard) => void;
     onCardPointerLeave: (card: PlayedCard) => void;
     owner: 'player' | 'opponent';
-    animationState: GameState['animationState'];
     isCardTargetable: (card: PlayedCard) => boolean;
     laneIndex: number;
     sourceCardId: string | null;
@@ -30,7 +29,7 @@ interface LaneProps {
     animatingCardInfo?: { cardId: string; fromPosition: CardPosition } | null;  // Extended info for shift animation hiding
 }
 
-export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, animationState, isCardTargetable, laneIndex, sourceCardId, gameState, animatingCardIds, animatingCardInfo }) => {
+export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isShiftTarget, isEffectTarget, isMatching, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, owner, isCardTargetable, laneIndex, sourceCardId, gameState, animatingCardIds, animatingCardInfo }) => {
 
     const laneClasses = ['lane'];
     if (isPlayable) laneClasses.push('playable');
@@ -98,7 +97,6 @@ export const Lane: React.FC<LaneProps> = ({ cards, isPlayable, isCompilable, isS
                                         onCardPointerDown(card);
                                     }}
                                     onPointerEnter={() => onCardPointerEnter(card)}
-                                    animationState={animationState}
                                     isTargetable={isCardTargetable(card)}
                                     isSourceOfEffect={card.id === sourceCardId}
                                     faceDownValue={faceDownValue}

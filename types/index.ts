@@ -574,20 +574,6 @@ export type ActionRequired =
 // -----------------------------------------------------------------------------
 | null;
 
-// =============================================================================
-// ANIMATION TYPES
-// =============================================================================
-
-export type AnimationState =
-    | { type: 'playCard', cardId: string; owner: Player }
-    | { type: 'compile', laneIndex: number }
-    | { type: 'flipCard', cardId: string }
-    | { type: 'deleteCard', cardId: string, owner: Player }
-    | { type: 'shiftCard', cardId: string, owner: Player, fromLane: number, toLane: number }
-    | { type: 'drawCard', owner: Player, cardIds: string[] }
-    | { type: 'discardCard', owner: Player, cardIds: string[], originalAction?: ActionRequired }
-    | null;
-
 // Card reference for log preview
 export interface LogCardRef {
     protocol: string;
@@ -618,7 +604,6 @@ export interface GameState {
     actionRequired: ActionRequired;
     queuedActions: ActionRequired[];
     queuedEffect?: { card: PlayedCard; laneIndex: number };
-    animationState: AnimationState;
     compilableLanes: number[];
     processedStartEffectIds?: string[];
     processedEndEffectIds?: string[];

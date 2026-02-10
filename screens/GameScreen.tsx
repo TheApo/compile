@@ -276,13 +276,6 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
       return ids; // Return empty set - don't hide any cards
     }
 
-    // CRITICAL: Also hide cards from animationState.cardIds (drawCard)
-    // This handles the race condition BEFORE the queue animation starts
-    const animState = gameState.animationState as any;
-    if (animState?.type === 'drawCard' && animState.cardIds) {
-      animState.cardIds.forEach((id: string) => ids.add(id));
-    }
-
     if (isSyncAnimating && syncAnimation) {
       if (syncAnimation.animatingCard) {
         ids.add(syncAnimation.animatingCard.card.id);
@@ -310,9 +303,8 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
       return lastValidAnimationRef.current.cardIds;
     }
 
-    // Return whatever we have (could be just animationState cardIds or empty)
     return ids;
-  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync, gameState.animationState]);
+  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync]);
 
   // Extended animation info for correct hiding during shift animations
   const animatingCardInfo = useMemo(() => {
@@ -551,7 +543,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const handleLanePointerDown = (laneIndex: number, owner: Player) => {
     const currentState = gameStateRef.current;
     // Block input during animations (old system OR new queue system)
-    if (currentState.animationState || isAnimating) return;
+    if (isAnimating) return;
 
     const { actionRequired, turn, phase, compilableLanes, player, opponent } = currentState;
 
@@ -676,7 +668,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const handlePlayFaceDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
     // Block input during animations (old system OR new queue system)
-    if (currentState.animationState || isAnimating) return;
+    if (isAnimating) return;
 
     const { phase, actionRequired, player } = currentState;
 
@@ -702,7 +694,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const handleHandCardPointerDown = (card: PlayedCard) => {
     const currentState = gameStateRef.current;
     // Block input during animations (old system OR new queue system)
-    if (currentState.animationState || isAnimating) return;
+    if (isAnimating) return;
 
     if (currentState.actionRequired) {
       // Check for discard action
@@ -761,7 +753,7 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
   const handleBoardCardPointerDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
       const currentState = gameStateRef.current;
       // Block input during animations (old system OR new queue system)
-      if (currentState.animationState || isAnimating) return;
+      if (isAnimating) return;
 
       const { actionRequired, turn, phase, compilableLanes } = currentState;
 
@@ -1004,7 +996,6 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                 <GameInfoPanel
                     gameState={visualGameState}
                     turn={isAnimating ? visualGameState.turn : (gameState.actionRequired?.actor || visualGameState.turn)}
-                    animationState={gameState.animationState}
                     difficulty={difficulty}
                     phaseTransitionAnimation={phaseTransitionAnimation}
                     overridePhase={overridePhase}
@@ -1127,7 +1118,6 @@ function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtoco
                             onPointerEnter={() => handleHandCardPointerEnter(card)}
                             isSelected={isSelectedForPlay}
                             isMultiSelected={multiSelectedCardIds.includes(card.id)}
-                            animationState={gameState.animationState}
                             additionalClassName="in-hand"
                           />
                         );

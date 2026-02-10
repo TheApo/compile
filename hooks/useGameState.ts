@@ -22,10 +22,6 @@ import { AnimationQueueItem } from '../types/animation';
 import {
     createPlayAnimation,
     createDeleteAnimation,
-    createDiscardAnimation,
-    createDrawAnimation,
-    createSequentialDrawAnimations,
-    createSequentialDiscardAnimations,
     createShiftAnimation,
     createReturnAnimation,
     createRevealAnimation,
@@ -34,16 +30,11 @@ import {
     enqueueAnimationsFromRequests,
 } from '../logic/animation/animationHelpers';
 import { createAndEnqueueShiftAnimation, createAndEnqueueLaneDeleteAnimations, processCompileAnimations } from '../logic/animation/aiAnimationCreators';
-import { ANIMATION_DURATIONS } from '../constants/animationTiming';
 import {
     playCardMessage,
-    shiftCardMessage,
     shiftAllCardsMessage,
     deleteCardMessage,
     returnAllCardsMessage,
-    drawCardsMessage,
-    discardCardMessage,
-    refreshHandMessage,
 } from '../logic/utils/logMessages';
 // NOTE: Hate-3 trigger is now handled via custom protocol reactive effects
 
@@ -131,227 +122,6 @@ export const useGameState = (
         }
     }, []);
 
-    const processAnimationQueue = useCallback((
-        queue: AnimationRequest[],
-        onComplete: () => void
-    ) => {
-        const processNext = (q: AnimationRequest[]) => {
-            if (q.length === 0) {
-                onComplete();
-                return;
-            }
-
-            const [nextRequest, ...rest] = q;
-
-            // Handle different animation types
-            if (nextRequest.type === 'flip') {
-                // Flip animation was already created in handleFlipCard via enqueueAnimation
-                // Just wait for the animation to complete, then process next/callback
-                setTimeout(() => {
-                    if (rest.length > 0) {
-                        processNext(rest);
-                    } else {
-                        onComplete();
-                    }
-                }, ANIMATION_DURATIONS.flip);
-            } else if (nextRequest.type === 'delete') {
-                // Delete animation was already created BEFORE setGameState in resolveActionWithCard
-                // Just wait for the animation to complete, then process next/callback
-                setTimeout(() => {
-                    if (rest.length > 0) {
-                        processNext(rest);
-                    } else {
-                        onComplete();
-                    }
-                }, ANIMATION_DURATIONS.delete);
-            } else if (nextRequest.type === 'return') {
-                // Return animation was already created BEFORE setGameState in resolveActionWithLane
-                // State was already changed in the resolver via internalReturnCard
-                // Just wait for the animation to complete, then process next/callback
-                setTimeout(() => {
-                    if (rest.length > 0) {
-                        processNext(rest);
-                    } else {
-                        onComplete();
-                    }
-                }, ANIMATION_DURATIONS.return);
-            } else if (nextRequest.type === 'play') {
-                // Create play animation for deck-to-lane plays
-                if (enqueueAnimation && nextRequest.fromDeck && nextRequest.toLane !== undefined) {
-                    setGameState(currentState => {
-                        const owner = nextRequest.owner;
-                        const toLane = nextRequest.toLane!;
-                        const playedCard = currentState[owner].lanes[toLane]?.find(c => c.id === nextRequest.cardId);
-
-                        if (playedCard) {
-                            // CRITICAL FIX: For sequential play animations (like Life-0),
-                            // we need to hide ALL cards that haven't been animated yet, not just this one.
-                            // Find all play requests that are still pending (this + rest)
-                            const allPendingPlayRequests = [nextRequest, ...rest.filter(r => r.type === 'play' && r.fromDeck)];
-                            const pendingCardIds = new Set(allPendingPlayRequests.map(r => r.cardId));
-
-                            // Create a snapshot without ALL pending cards
-                            let snapshotState = currentState;
-                            for (const player of ['player', 'opponent'] as const) {
-                                snapshotState = {
-                                    ...snapshotState,
-                                    [player]: {
-                                        ...snapshotState[player],
-                                        lanes: snapshotState[player].lanes.map(lane =>
-                                            lane.filter(c => !pendingCardIds.has(c.id))
-                                        )
-                                    }
-                                };
-                            }
-
-                            const animation = createPlayAnimation(
-                                snapshotState,  // Use state WITHOUT pending cards
-                                playedCard,
-                                owner,
-                                toLane,
-                                false,  // fromHand = false (from deck)
-                                undefined,  // no handIndex
-                                nextRequest.isFaceUp ?? false,
-                                owner === 'opponent'  // isOpponentAction
-                            );
-                            enqueueAnimation(animation);
-                        }
-
-                        return { ...currentState, animationState: null };
-                    });
-
-                    // Wait for animation to complete
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, ANIMATION_DURATIONS.play);
-                    return; // Exit early - new system handled everything
-                }
-
-            } else if (nextRequest.type === 'draw') {
-                // Create sequential draw animations
-                if (enqueueAnimations) {
-                    // Use drawnCardIds if provided (preferred - avoids state timing issues)
-                    // Otherwise fall back to finding cards by count in current state
-                    const drawnCardIds = (nextRequest as any).drawnCardIds as string[] | undefined;
-
-                    setGameState(currentState => {
-                        const player = nextRequest.player;
-                        const count = nextRequest.count;
-                        const hand = currentState[player].hand;
-
-                        // Find the drawn cards either by ID or by position
-                        let newCards: PlayedCard[];
-                        let startIndex: number;
-
-                        if (drawnCardIds && drawnCardIds.length > 0) {
-                            // Use provided card IDs - more reliable
-                            newCards = hand.filter(c => drawnCardIds.includes(c.id));
-                            // Find the first drawn card's index as startIndex
-                            const firstDrawnIndex = hand.findIndex(c => drawnCardIds.includes(c.id));
-                            startIndex = firstDrawnIndex >= 0 ? firstDrawnIndex : hand.length - count;
-                        } else {
-                            // Fallback: assume last 'count' cards are newly drawn
-                            newCards = hand.slice(-count);
-                            startIndex = Math.max(0, hand.length - count);
-                        }
-
-                        if (newCards.length > 0) {
-                            // Create snapshot BEFORE the draw for animation
-                            // Remove the drawn cards from hand to reconstruct pre-draw state
-                            const drawnIds = new Set(newCards.map(c => c.id));
-                            const preDrawHand = hand.filter(c => !drawnIds.has(c.id));
-                            const stateBeforeDraw = {
-                                ...currentState,
-                                [player]: {
-                                    ...currentState[player],
-                                    hand: preDrawHand,
-                                },
-                            };
-
-                            const animations = createSequentialDrawAnimations(
-                                stateBeforeDraw,
-                                newCards,
-                                player,
-                                startIndex
-                            );
-                            // Add logMessage to first animation
-                            if (animations.length > 0) {
-                                const logMsg = drawCardsMessage(player, newCards.length);
-                                animations[0] = { ...animations[0], logMessage: { message: logMsg, player } };
-                            }
-                            enqueueAnimations(animations);
-                        }
-
-                        // Clear animationState to prevent double-animation
-                        return { ...currentState, animationState: null };
-                    });
-
-                    // Wait for animations to complete before processing next
-                    const totalDuration = ANIMATION_DURATIONS.draw;
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, totalDuration);
-                    return; // Exit early - new system handled everything
-                }
-
-            } else if (nextRequest.type === 'shift') {
-                // Handle shift animation for reactive effects that DON'T go through resolveActionWithLane
-                // NOTE: For select_lane_for_shift, shift_flipped_card_optional, and playSelectedCard,
-                // animations are created BEFORE setGameState. This handler is for other cases.
-                if (enqueueAnimation && !(nextRequest as any)._animationAlreadyCreated) {
-                    setGameState(currentState => {
-                        // Card has already been shifted, so it's now in toLane
-                        const card = currentState[nextRequest.owner].lanes[nextRequest.toLane]?.find(c => c.id === nextRequest.cardId);
-
-                        if (card) {
-                            const animation = createShiftAnimation(
-                                currentState,
-                                card,
-                                nextRequest.owner,
-                                nextRequest.fromLane,
-                                0,  // Original index unknown, use 0
-                                nextRequest.toLane
-                            );
-                            enqueueAnimation(animation);
-                        }
-                        return currentState;
-                    });
-                }
-
-                // Shift animations wait for animation to complete, then continue
-                setTimeout(() => {
-                    setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext(rest);
-                        } else {
-                            onComplete();
-                        }
-                    }, 10);
-                }, 1000); // 1s for animation
-            } else {
-                // Skip unknown animation types
-                setTimeout(() => {
-                    if (rest.length > 0) {
-                        processNext(rest);
-                    } else {
-                        onComplete();
-                    }
-                }, 10);
-            }
-        };
-
-        processNext(queue);
-    }, []);
-
-
     const playSelectedCard = (laneIndex: number, isFaceUp: boolean, targetOwner: Player = 'player') => {
         if (!selectedCard || gameState.turn !== 'player' || gameState.phase !== 'action') return;
         const cardId = selectedCard;
@@ -381,7 +151,7 @@ export const useGameState = (
                 enqueueAnimation({ ...animation, logMessage: { message: logMsg, player: 'player' } });
             }
 
-            // Update state immediately to final state (no setTimeout, no animationState)
+            // Update state immediately to final state (synchronous)
             setGameState(prev => {
                 const turnProgressionCb = getTurnProgressionCallback(prev.phase);
                 const { newState, animationRequests } = resolvers.playCard(prev, cardId, laneIndex, isFaceUp, 'player', targetOwner);
@@ -405,7 +175,7 @@ export const useGameState = (
                                     request.toLane
                                 );
                                 enqueueAnimation(animation);
-                                // Mark as already created so processAnimationQueue doesn't create duplicate
+                                // Mark as already created to prevent duplicate animation
                                 (request as any)._animationAlreadyCreated = true;
                             }
                         } else if (request.type === 'flip') {
@@ -484,30 +254,25 @@ export const useGameState = (
                                 enqueueAnimation(animation);
                             }
                         });
-                        // NOTE: 'draw' requests are handled via animationState.type === 'drawCard'
-                        // in the useEffect hook. Don't create duplicate animations here.
+                        // NOTE: 'draw' requests are handled via enqueueAnimationsFromRequests.
+                        // Don't create duplicate animations here.
                     }
 
-                    // CRITICAL: Must use processAnimationQueue for proper game state timing!
-                    // The callback ensures turnProgressionCb is called AFTER animations complete
-                    const stateToProcess = { ...newState, animationState: null };
+                    // Enqueue remaining animation requests not already handled above
+                    // (play-from-deck handled above, shift with _animationAlreadyCreated handled above, delete handled above)
+                    const remainingRequests = animationRequests.filter(r => {
+                        if (r.type === 'play' && (r as any).fromDeck) return false;
+                        if (r.type === 'shift' && (r as any)._animationAlreadyCreated) return false;
+                        if (r.type === 'delete') return false;
+                        return true;
+                    });
 
-                    // Filter out play-from-deck requests since we already created animations for them above
-                    const filteredForQueue = animationRequests.filter(r =>
-                        !(r.type === 'play' && (r as any).fromDeck)
-                    );
-
-                    if (filteredForQueue.length > 0) {
-                        processAnimationQueue(filteredForQueue, () => {
-                            setGameState(s_after_anim => turnProgressionCb(s_after_anim));
-                        });
-                    } else {
-                        // All animations were handled, just wait for them to complete
-                        setTimeout(() => {
-                            setGameState(s_after_anim => turnProgressionCb(s_after_anim));
-                        }, 1000);
+                    if (enqueueAnimation && remainingRequests.length > 0) {
+                        enqueueAnimationsFromRequests(newState, remainingRequests, enqueueAnimation);
                     }
-                    return stateToProcess;
+
+                    if (newState.actionRequired) return newState;
+                    return turnProgressionCb(newState);
                 }
 
                 if (newState.actionRequired) {
@@ -567,44 +332,27 @@ export const useGameState = (
 
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
 
-            // CRITICAL FIX: Check for Control-Mechanic FIRST (before any animation)
+            // Check for Control-Mechanic FIRST (before any compile)
             // If player has Control, show prompt immediately without animation
             const hasControl = prev.useControlMechanic && prev.controlCardHolder === prev.turn;
 
             if (hasControl) {
-                // Call performCompile which will return the control mechanic prompt
                 const stateWithPrompt = resolvers.performCompile(prev, laneIndex, onEndGame);
-                // No animation yet - will be handled after control mechanic is resolved
                 return { ...stateWithPrompt, compilableLanes: [] };
             }
 
-            // No Control-Mechanic: proceed with animation flow
-            const stateBeforeCompile = resolvers.compileLane(prev, laneIndex);
+            // Execute compile SYNCHRONOUSLY
+            const stateAfterCompile = resolvers.performCompile(prev, laneIndex, onEndGame);
+            if (stateAfterCompile.winner) {
+                return stateAfterCompile;
+            }
 
-            const stateWithAnimation = {
-                ...stateBeforeCompile,
-                animationState: { type: 'compile' as const, laneIndex },
-                compilableLanes: []
-            };
+            // Enqueue compile delete animations
+            const stateWithoutMarker = processCompileAnimations(stateAfterCompile, prev, laneIndex, 'player', enqueueAnimation);
 
-            setTimeout(() => {
-                setGameState(currentState => {
-                    const stateAfterCompile = resolvers.performCompile(currentState, laneIndex, onEndGame);
-                    if (stateAfterCompile.winner) {
-                        return stateAfterCompile;
-                    }
-
-                    // DRY: Process compile animations (handles _compileAnimations and cleanup)
-                    const stateWithoutMarker = processCompileAnimations(stateAfterCompile, currentState, laneIndex, 'player', enqueueAnimation);
-
-                    const finalState = turnProgressionCb(stateWithoutMarker);
-                    return { ...finalState, animationState: null };
-                });
-            }, 1000);
-
-            return stateWithAnimation;
+            return turnProgressionCb({ ...stateWithoutMarker, compilableLanes: [] });
         });
-    }, [onEndGame, getTurnProgressionCallback]);
+    }, [onEndGame, getTurnProgressionCallback, enqueueAnimation]);
 
     const resolveActionWithCard = (targetCardId: string) => {
         // Create return animation BEFORE setGameState
@@ -678,33 +426,25 @@ export const useGameState = (
         setGameState(prev => {
             const originalTurn = prev.turn;
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            const { nextState, requiresAnimation, requiresTurnEnd } = resolvers.resolveActionWithCard(prev, targetCardId, enqueueAnimation);
+            const { nextState, requiresAnimation } = resolvers.resolveActionWithCard(prev, targetCardId, enqueueAnimation);
 
             if (requiresAnimation) {
-                processAnimationQueue(requiresAnimation.animationRequests || [], () => {
-                    setGameState(s => {
-                        // FIX: If turn changed during animation (due to interrupt restoration),
-                        // turnProgressionCb was already called. Pass a no-op to prevent double progression.
-                        const endTurnCb = s.turn !== originalTurn
-                            ? (state: GameState) => state
-                            : turnProgressionCb;
-
-                        const result = requiresAnimation.onCompleteCallback(s, endTurnCb);
-
-                        return result;
-                    });
-                });
-                return nextState;
+                // Enqueue remaining animation requests (some were already created before setGameState)
+                if (enqueueAnimation && requiresAnimation.animationRequests && requiresAnimation.animationRequests.length > 0) {
+                    enqueueAnimationsFromRequests(nextState, requiresAnimation.animationRequests, enqueueAnimation);
+                }
+                // Execute callback SYNCHRONOUSLY — state changes immediately, animations are visual
+                // If turn changed (due to interrupt restoration), pass no-op to prevent double progression
+                const endTurnCb = nextState.turn !== originalTurn
+                    ? (state: GameState) => state
+                    : turnProgressionCb;
+                return requiresAnimation.onCompleteCallback(nextState, endTurnCb);
             }
 
             if (nextState.actionRequired) {
                 return nextState;
             }
 
-            // If the current action was resolved (actionRequired is null),
-            // we must always call the turn progression callback. It will handle
-            // processing any queued actions (like Water-0's self-flip) or
-            // advancing the game phase.
             return turnProgressionCb(nextState);
         });
     };
@@ -890,10 +630,8 @@ export const useGameState = (
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(prev, targetLaneIndex);
 
             if (requiresAnimation) {
-                // FIX: For shift/play/return/delete actions, the animation was already created BEFORE setGameState
-                // Filter out those requests to prevent double animation
+                // Filter out already-created animations (shift, play, return, delete created before setGameState)
                 const actionType = prev.actionRequired?.type || '';
-                // Check if action type contains 'shift' (covers all shift variants)
                 const isShiftAction = actionType.toLowerCase().includes('shift');
                 const isPlayFromHandAction = actionType === 'select_lane_for_play' &&
                                              (prev.actionRequired as any)?.cardInHandId;
@@ -901,31 +639,17 @@ export const useGameState = (
                 const isDeleteAction = actionType === 'select_lane_for_delete';
 
                 let filteredRequests = requiresAnimation.animationRequests;
-                if (isShiftAction) {
-                    filteredRequests = filteredRequests.filter(r => r.type !== 'shift');
-                }
-                if (isPlayFromHandAction) {
-                    filteredRequests = filteredRequests.filter(r => r.type !== 'play');
-                }
-                if (isReturnAction) {
-                    filteredRequests = filteredRequests.filter(r => r.type !== 'return');
-                }
-                if (isDeleteAction) {
-                    filteredRequests = filteredRequests.filter(r => r.type !== 'delete');
-                }
+                if (isShiftAction) filteredRequests = filteredRequests.filter(r => r.type !== 'shift');
+                if (isPlayFromHandAction) filteredRequests = filteredRequests.filter(r => r.type !== 'play');
+                if (isReturnAction) filteredRequests = filteredRequests.filter(r => r.type !== 'return');
+                if (isDeleteAction) filteredRequests = filteredRequests.filter(r => r.type !== 'delete');
 
-                // Only call processAnimationQueue if there are remaining requests
-                if (filteredRequests.length > 0) {
-                    processAnimationQueue(filteredRequests, () => {
-                        setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
-                    });
-                } else {
-                    // No animation requests left, just call the callback
-                    setTimeout(() => {
-                        setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
-                    }, 1000);
+                // Enqueue remaining animation requests
+                if (enqueueAnimation && filteredRequests.length > 0) {
+                    enqueueAnimationsFromRequests(nextState, filteredRequests, enqueueAnimation);
                 }
-                return nextState;
+                // Execute callback SYNCHRONOUSLY
+                return requiresAnimation.onCompleteCallback(nextState, turnProgressionCb);
             }
 
             if (nextState.actionRequired) {
@@ -952,10 +676,12 @@ export const useGameState = (
             const { nextState, requiresAnimation } = resolvers.resolveActionWithLane(stateWithFaceDown, targetLaneIndex);
 
             if (requiresAnimation) {
-                processAnimationQueue(requiresAnimation.animationRequests || [], () => {
-                    setGameState(s => requiresAnimation.onCompleteCallback(s, turnProgressionCb));
-                });
-                return nextState;
+                // Enqueue animation requests
+                if (enqueueAnimation && requiresAnimation.animationRequests && requiresAnimation.animationRequests.length > 0) {
+                    enqueueAnimationsFromRequests(nextState, requiresAnimation.animationRequests, enqueueAnimation);
+                }
+                // Execute callback SYNCHRONOUSLY
+                return requiresAnimation.onCompleteCallback(nextState, turnProgressionCb);
             }
 
             if (nextState.actionRequired) {
@@ -1005,7 +731,7 @@ export const useGameState = (
     const skipAction = () => {
         setGameState(prev => {
             const turnProgressionCb = getTurnProgressionCallback(prev.phase);
-            let stateWithoutAnimation = { ...prev, animationState: null };
+            let stateWithoutAnimation = { ...prev };
 
             // Handle skip for reveal-board-card prompts (Light-2 and custom protocols)
             if (stateWithoutAnimation.actionRequired?.type === 'prompt_shift_or_flip_board_card_custom') {
@@ -1035,31 +761,17 @@ export const useGameState = (
                 stateAfterSkip = { ...stateAfterSkip, _logIndentLevel: 0 };
 
                 if (originalAction.type === 'compile') {
-                    const stateBeforeCompile = stateAfterSkip;
-                    
-                    const stateWithAnimation = { 
-                        ...stateBeforeCompile, 
-                        animationState: { type: 'compile' as const, laneIndex: originalAction.laneIndex },
-                        compilableLanes: []
-                    };
-    
-                    setTimeout(() => {
-                        setGameState(currentState => {
-                            const nextState = resolvers.performCompile(currentState, originalAction.laneIndex, onEndGame);
-                            if (nextState.winner) {
-                                return nextState;
-                            }
+                    // Execute compile SYNCHRONOUSLY
+                    const stateAfterCompile = resolvers.performCompile(stateAfterSkip, originalAction.laneIndex, onEndGame);
+                    if (stateAfterCompile.winner) {
+                        return stateAfterCompile;
+                    }
 
-                            // DRY: Process compile animations (same helper as compileLane)
-                            const stateWithoutMarker = processCompileAnimations(nextState, currentState, originalAction.laneIndex, 'player', enqueueAnimation);
+                    // Enqueue compile delete animations
+                    const stateWithoutMarker = processCompileAnimations(stateAfterCompile, stateAfterSkip, originalAction.laneIndex, 'player', enqueueAnimation);
 
-                            const turnProgressionCb = getTurnProgressionCallback(stateWithoutMarker.phase);
-                            const finalState = turnProgressionCb(stateWithoutMarker);
-                            return { ...finalState, animationState: null };
-                        });
-                    }, 1000);
-
-                    return stateWithAnimation;
+                    const turnProgressionCb = getTurnProgressionCallback(stateWithoutMarker.phase);
+                    return turnProgressionCb({ ...stateWithoutMarker, compilableLanes: [] });
                 } else if (originalAction.type === 'continue_turn') {
                     let stateWithQueuedActions = { ...stateAfterSkip };
                     if (originalAction.queuedSpeed2Actions && originalAction.queuedSpeed2Actions.length > 0) {
@@ -1683,7 +1395,6 @@ export const useGameState = (
 
         if (gameState.turn === 'opponent' &&
             !gameState.winner &&
-            !gameState.animationState &&
             !isAnimating &&  // Wait for all animations (incl. phase transition) to complete
             !isAnimationPendingRef.current &&  // Synchronous check - blocks until phase animation is enqueued
             !gameState._interruptedTurn &&  // Don't trigger during interrupts
@@ -1741,58 +1452,59 @@ export const useGameState = (
                 isProcessingAIRef.current = false;
             });
         }
-    }, [gameState.turn, gameState.phase, gameState.winner, gameState.animationState, isAnimating, gameState._interruptedTurn, difficulty, onEndGame, enqueueAnimation, gameState.actionRequired]);
+    }, [gameState.turn, gameState.phase, gameState.winner, isAnimating, gameState._interruptedTurn, difficulty, onEndGame, enqueueAnimation, gameState.actionRequired]);
 
-    // Hook 2: Opponent Action During Player Turn (Higher priority - shorter timeout)
+    // Hook 2: Opponent Action During Player Turn (Interrupts)
+    // Uses synchronous system - processes ONE action per render, re-fires when actionRequired changes
     useEffect(() => {
         const action = gameState.actionRequired;
-        // CRITICAL FIX: Check for opponent actions during player's turn, INCLUDING during interrupts.
+        // Check for opponent actions during player's turn, INCLUDING during interrupts.
         // If an interrupt is active (_interruptedTurn === 'player'), the opponent can have actions even though turn === 'opponent'.
         const isPlayerTurnOrInterrupt = gameState.turn === 'player' || gameState._interruptedTurn === 'player';
         const hasOpponentAction = action && 'actor' in action && action.actor === 'opponent';
         const isOpponentActionDuringPlayerTurn =
             isPlayerTurnOrInterrupt &&
-            !gameState.animationState &&
+            !isAnimating &&          // Wait for animation to finish before processing next action
             hasOpponentAction;
 
-        // CRITICAL: Check the lock AND set it in a way that prevents race conditions
-        // We check !isProcessingAIRef.current AFTER all other conditions, and set it immediately
-        if (isOpponentActionDuringPlayerTurn && !isProcessingAIRef.current) {
+        if (isOpponentActionDuringPlayerTurn && !isProcessingAIRef.current && enqueueAnimation) {
             isProcessingAIRef.current = true;
 
-            // CRITICAL: Execute IMMEDIATELY without setTimeout to avoid React Hook race conditions
-            // The closure and cleanup functions were causing the wrong state to be used
-            aiManager.resolveRequiredOpponentAction(
-                gameState,
-                setGameState,
-                difficulty,
-                {
-                    playCard: resolvers.playCard,
-                    discardCards: resolvers.discardCards,
-                    flipCard: resolvers.flipCard,
-                    returnCard: resolvers.returnCard,
-                    deleteCard: (s, c) => ({
-                        newState: s,
-                        animationRequests: [{ type: 'delete', cardId: c, owner: 'opponent' as Player }]
-                    }),
-                    resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
-                    revealOpponentHand: resolvers.revealOpponentHand,
-                    resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
-                },
-                phaseManager,
-                processAnimationQueue,
-                resolvers.resolveActionWithCard,
-                resolvers.resolveActionWithLane,
-                trackPlayerRearrange,
-                enqueueAnimation
-            );
+            setGameState(prevState => {
+                // handleRequiredActionSync processes ONE action and returns new state
+                return aiManager.handleRequiredActionSync(
+                    prevState,
+                    difficulty,
+                    {
+                        compileLane: (s, l) => resolvers.performCompile(s, l, onEndGame),
+                        playCard: resolvers.playCard,
+                        fillHand: resolvers.performFillHand,
+                        discardCards: resolvers.discardCards,
+                        flipCard: resolvers.flipCard,
+                        deleteCard: (s, c) => ({
+                            newState: s,
+                            animationRequests: [{ type: 'delete', cardId: c, owner: 'opponent' as Player }]
+                        }),
+                        returnCard: resolvers.returnCard,
+                        skipAction: resolvers.skipAction,
+                        resolveOptionalDrawPrompt: resolvers.resolveOptionalDrawPrompt,
+                        resolveOptionalDiscardCustomPrompt: resolvers.resolveOptionalDiscardCustomPrompt,
+                        resolveOptionalEffectPrompt: resolvers.resolveOptionalEffectPrompt,
+                        resolveVariableDiscard: resolvers.resolveVariableDiscard,
+                        resolveRearrangeProtocols: (s, o) => resolvers.resolveRearrangeProtocols(s, o, onEndGame),
+                        resolveActionWithHandCard: resolvers.resolveActionWithHandCard,
+                        resolveSwapProtocols: (s, o) => resolvers.resolveSwapProtocols(s, o, onEndGame),
+                        revealOpponentHand: resolvers.revealOpponentHand,
+                        resolveCustomChoice: resolvers.resolveCustomChoice,
+                    },
+                    phaseManager,
+                    enqueueAnimation
+                );
+            });
 
-            // CRITICAL FIX: Clear lock immediately instead of after 1 second
-            // The 1-second delay was causing softlocks when the interrupt resolved and switched turns,
-            // because useEffect #1 (opponent turn) would trigger but find the lock still set
             isProcessingAIRef.current = false;
         }
-    }, [gameState.actionRequired, gameState.turn, gameState.animationState, difficulty, processAnimationQueue, onEndGame]);
+    }, [gameState.actionRequired, gameState.turn, gameState._interruptedTurn, isAnimating, difficulty, onEndGame, enqueueAnimation]);
 
     useEffect(() => {
         setGameState(currentState => {

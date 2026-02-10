@@ -307,7 +307,6 @@ export function snapshotToGameState(
         log: [],
         actionRequired: null,
         queuedActions: [],
-        animationState: null,
         compilableLanes: [],
     };
 }

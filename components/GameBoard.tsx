@@ -12,6 +12,7 @@ import { DeckTrashArea } from './DeckTrashArea';
 import { isCardTargetable } from '../utils/targeting';
 import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
+import { useAnimationQueue } from '../contexts/AnimationQueueContext';
 
 interface GameBoardProps {
     gameState: GameState;
@@ -34,7 +35,8 @@ interface GameBoardProps {
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardIds, animatingCardInfo, onDeckClick, onTrashClick, onTrashCardHover, onTrashCardLeave }) => {
-    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
+    const { player, opponent, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
+    const { currentAnimation } = useAnimationQueue();
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
         const isCompilable = phase === 'compile' && turn === 'player' && !actionRequired && compilableLanes.includes(laneIndex);
@@ -411,7 +413,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const getProtocolClass = (baseClass: string, isCompiled: boolean, laneIndex: number) => {
         let classes = [baseClass];
         if (isCompiled) classes.push('compiled');
-        if (animationState?.type === 'compile' && animationState.laneIndex === laneIndex) {
+        if (currentAnimation?.type === 'delete' && currentAnimation.laneIndex === laneIndex) {
             classes.push('is-compiling');
         }
         return classes.join(' ');
@@ -496,7 +498,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')}
                             onCardPointerLeave={() => onCardPointerLeave()}
                             owner="opponent"
-                            animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             laneIndex={i}
                             sourceCardId={sourceCardId}
@@ -571,7 +572,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')}
                             onCardPointerLeave={() => onCardPointerLeave()}
                             owner="player"
-                            animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             laneIndex={i}
                             sourceCardId={sourceCardId}

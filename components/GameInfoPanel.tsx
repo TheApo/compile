@@ -4,13 +4,12 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, Player, AnimationState, Difficulty, GamePhase } from '../types';
+import { GameState, Player, Difficulty, GamePhase } from '../types';
 import { PHASE_TRANSITION_DURATION } from '../constants/animationTiming';
 
 interface GameInfoPanelProps {
   gameState: GameState;
   turn: Player;
-  animationState: AnimationState;
   difficulty?: Difficulty;
   // Phase transition animation data from the animation queue
   phaseTransitionAnimation?: {
@@ -36,7 +35,7 @@ const PHASE_LABELS: Record<string, string> = {
 // All phases in order for the TurnPhaseIndicator
 const ALL_PHASES: GamePhase[] = ['start', 'control', 'compile', 'action', 'hand_limit', 'end'];
 
-export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, animationState, difficulty, phaseTransitionAnimation, overridePhase, overrideTurn, onPlayerClick, onOpponentClick }) => {
+export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, difficulty, phaseTransitionAnimation, overridePhase, overrideTurn, onPlayerClick, onOpponentClick }) => {
   const { player, opponent } = gameState;
 
   // State for animated phase display
@@ -116,13 +115,6 @@ export const GameInfoPanel: React.FC<GameInfoPanelProps> = ({ gameState, turn, a
 
     if (turn === forPlayer) {
       classes.push('active-turn');
-    }
-
-    if (animationState?.type === 'drawCard' && animationState.owner === forPlayer) {
-      classes.push('is-drawing');
-    }
-    if (animationState?.type === 'discardCard' && animationState.owner === forPlayer) {
-      classes.push('is-discarding');
     }
 
     return classes.join(' ');

@@ -149,19 +149,18 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (action && 'count' in action && action.count > 1) {
                 const remainingCount = action.count - 1;
                 stateAfterTriggers.actionRequired = { ...action, count: remainingCount };
-                return { ...stateAfterTriggers, animationState: null };
+                return { ...stateAfterTriggers };
             }
             // CRITICAL: If the input state already has actionRequired or queuedActions,
             // it means processQueuedActions already ran and set up the next action.
             // We should NOT override it by calling queuePendingCustomEffects again.
             if (workingState.actionRequired || (workingState.queuedActions && workingState.queuedActions.length > 0)) {
                 // Preserve actionRequired/queuedActions from working state
-                // CRITICAL: Must clear animationState since endTurnCb won't be called
+                // endTurnCb won't be called - preserve actionRequired/queuedActions
                 return {
                     ...stateAfterTriggers,
                     actionRequired: workingState.actionRequired,
                     queuedActions: workingState.queuedActions,
-                    animationState: null
                 };
             }
 
@@ -208,14 +207,14 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
 
                     // If processing created an actionRequired (like a shift prompt), return it
                     if (processedState.actionRequired) {
-                        return { ...processedState, animationState: null };
+                        return { ...processedState };
                     }
 
                     // If no actionRequired, check for more queued actions
                     if (processedState.queuedActions && processedState.queuedActions.length > 0) {
                         const nextQueue = [...processedState.queuedActions];
                         const nextNextAction = nextQueue.shift();
-                        return { ...processedState, actionRequired: nextNextAction, queuedActions: nextQueue, animationState: null };
+                        return { ...processedState, actionRequired: nextNextAction, queuedActions: nextQueue };
                     }
 
                     // Nothing left to do - end turn
@@ -223,7 +222,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
                 }
 
                 // For other action types, set as actionRequired normally
-                return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue, animationState: null };
+                return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue };
             }
             return endTurnCb(stateAfterTriggers);
         };

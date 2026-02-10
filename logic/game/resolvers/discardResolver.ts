@@ -106,7 +106,6 @@ const executeFollowUpAfterDiscard = (
 
     const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
 
-    // CRITICAL FIX: If draw animationRequests are present, set animationState so the
     // Store animation requests in _pendingAnimationRequests for the new queue system
     // This handles followUpEffects like Fire-4's "then draw"
     let finalState = result.newState;
@@ -261,9 +260,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
 
     const newHand = playerState.hand.filter(c => !cardsToDiscardSet.has(c.id));
 
-    const originalAction = (prevState.animationState?.type === 'discardCard' && prevState.animationState.originalAction?.type === 'discard')
-        ? prevState.animationState.originalAction
-        : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
+    const originalAction = prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null;
 
     // NEW: Check discardTo parameter - determines which trash pile receives the cards
     const discardTo = (originalAction as any)?.discardTo || 'own_trash';
