@@ -733,7 +733,9 @@ export type AnimationRequest =
         type: 'compile_delete';
         laneIndex: number;
         deletedCards: Array<{cardId: string; owner: Player}>
-    };
+    }
+    | { type: 'take'; cardId: string; owner: Player; cardSnapshot: PlayedCard; fromHandIndex: number }
+    | { type: 'give'; cardId: string; owner: Player; cardSnapshot: PlayedCard; handIndex: number };
 
 export type EffectResult = {
     newState: GameState;

@@ -674,6 +674,43 @@ export function createGiveAnimation(
 }
 
 /**
+ * Creates a TAKE animation - card moves from opponent's hand to own hand.
+ */
+export function createTakeAnimation(
+    state: GameState,
+    card: PlayedCard,
+    toOwner: Player,
+    fromHandIndex: number
+): AnimationQueueItem {
+    const snapshot = createVisualSnapshot(state);
+    const fromOwner: Player = toOwner === 'player' ? 'opponent' : 'player';
+
+    const fromPosition: CardPosition = {
+        type: 'hand',
+        owner: fromOwner,
+        handIndex: fromHandIndex,
+    };
+
+    const toPosition: CardPosition = {
+        type: 'hand',
+        owner: toOwner,
+        handIndex: state[toOwner].hand.length,
+    };
+
+    return {
+        id: generateAnimationId('take'),
+        type: 'take',
+        snapshot,
+        duration: ANIMATION_DURATIONS.take,
+        animatingCard: {
+            card,
+            fromPosition,
+            toPosition,
+        },
+    };
+}
+
+/**
  * Creates a REVEAL animation - card is briefly shown (e.g., from hand).
  */
 export function createRevealAnimation(
@@ -1282,6 +1319,31 @@ export function enqueueAnimationsFromRequests(
         opponent: []
     };
 
+    // Track trash accumulation for sequential discard animations
+    const discardedToTrash: { player: PlayedCard[]; opponent: PlayedCard[] } = {
+        player: [],
+        opponent: []
+    };
+
+    // CRITICAL: Compute base trash WITHOUT cards that will be animated as delete/discard.
+    // The state parameter is POST-EFFECT (cards already in trash), but animations should
+    // show cards flying TO trash - not already there. Each animation progressively adds
+    // previously animated cards back via deletedToTrash/discardedToTrash.
+    // NOTE: Cards in trash DON'T have IDs (stripped by deleteCard/discardCards), so we use
+    // count-based slicing: new cards are always appended at the END of the discard pile.
+    const pendingTrashCount = { player: 0, opponent: 0 };
+    for (const req of animationRequests) {
+        if (req.type === 'delete') {
+            pendingTrashCount[req.owner]++;
+        } else if (req.type === 'discard') {
+            pendingTrashCount[req.owner]++;
+        }
+    }
+    const baseTrash = {
+        player: state.player.discard.slice(0, Math.max(0, state.player.discard.length - pendingTrashCount.player)),
+        opponent: state.opponent.discard.slice(0, Math.max(0, state.opponent.discard.length - pendingTrashCount.opponent))
+    };
+
     // Count total delete requests for timing calculation
     const deleteRequestCount = animationRequests.filter(r => r.type === 'delete').length;
     let deleteIndex = 0;
@@ -1429,16 +1491,17 @@ export function enqueueAnimationsFromRequests(
             }
 
             if (deleteCard && deleteLaneIndex !== undefined && deleteCardIndex !== undefined) {
-                // Create state with previously deleted cards in trash (for sequential animation snapshots)
+                // Create state with clean trash: base trash (without pending animation cards)
+                // + previously animated delete/discard cards (already "landed" in trash)
                 const stateWithTrash: GameState = {
                     ...state,
                     player: {
                         ...state.player,
-                        discard: [...state.player.discard, ...deletedToTrash.player]
+                        discard: [...baseTrash.player, ...deletedToTrash.player, ...discardedToTrash.player]
                     },
                     opponent: {
                         ...state.opponent,
-                        discard: [...state.opponent.discard, ...deletedToTrash.opponent]
+                        discard: [...baseTrash.opponent, ...deletedToTrash.opponent, ...discardedToTrash.opponent]
                     }
                 };
 
@@ -1597,16 +1660,77 @@ export function enqueueAnimationsFromRequests(
             const handIndex = snapshotHand.findIndex(c => c.id === card.id);
             if (handIndex < 0) continue;
 
-            // Create snapshot state with the sequential hand
-            const snapshotState = {
+            // Create snapshot state with sequential hand AND clean trash
+            // Trash uses base (without pending cards) + previously animated cards
+            const cleanTrashState = {
                 ...state,
+                player: {
+                    ...state.player,
+                    discard: [...baseTrash.player, ...deletedToTrash.player, ...discardedToTrash.player]
+                },
+                opponent: {
+                    ...state.opponent,
+                    discard: [...baseTrash.opponent, ...deletedToTrash.opponent, ...discardedToTrash.opponent]
+                }
+            };
+            const snapshotState = {
+                ...cleanTrashState,
                 [request.owner]: {
-                    ...state[request.owner],
+                    ...cleanTrashState[request.owner],
                     hand: snapshotHand
                 }
             };
 
             const animation = createDiscardAnimation(snapshotState, card, request.owner, handIndex);
+            animations.push({ ...animation, logMessage });
+
+            // Track this card for NEXT discard animation's trash snapshot
+            discardedToTrash[request.owner].push(card);
+        } else if (request.type === 'take') {
+            // Take animation: card moves from opponent's hand to own hand
+            // State is POST-EFFECT: card is already in owner's hand
+            // We need a pre-take snapshot where the card is still in opponent's hand
+            const cardSnapshot = (request as any).cardSnapshot as PlayedCard | undefined;
+            const fromHandIndex = (request as any).fromHandIndex as number | undefined;
+            if (!cardSnapshot || fromHandIndex === undefined) continue;
+
+            const opponent: Player = request.owner === 'player' ? 'opponent' : 'player';
+
+            // Build pre-take state: remove card from owner's hand, add back to opponent's hand
+            const preTakeOwnerHand = state[request.owner].hand.filter(c => c.id !== cardSnapshot.id);
+            const preTakeOpponentHand = [...state[opponent].hand];
+            preTakeOpponentHand.splice(fromHandIndex, 0, cardSnapshot);
+
+            const preTakeState = {
+                ...state,
+                [request.owner]: { ...state[request.owner], hand: preTakeOwnerHand },
+                [opponent]: { ...state[opponent], hand: preTakeOpponentHand }
+            };
+
+            const animation = createTakeAnimation(preTakeState, cardSnapshot, request.owner, fromHandIndex);
+            animations.push({ ...animation, logMessage });
+        } else if (request.type === 'give') {
+            // Give animation: card moves from owner's hand to opponent's hand
+            // State is POST-EFFECT: card is already in opponent's hand
+            // We need a pre-give snapshot where the card is still in owner's hand
+            const cardSnapshot = (request as any).cardSnapshot as PlayedCard | undefined;
+            const handIndex = (request as any).handIndex as number | undefined;
+            if (!cardSnapshot || handIndex === undefined) continue;
+
+            const opponent: Player = request.owner === 'player' ? 'opponent' : 'player';
+
+            // Build pre-give state: add card back to owner's hand, remove from opponent's hand
+            const preGiveOwnerHand = [...state[request.owner].hand];
+            preGiveOwnerHand.splice(handIndex, 0, cardSnapshot);
+            const preGiveOpponentHand = state[opponent].hand.filter(c => c.id !== cardSnapshot.id);
+
+            const preGiveState = {
+                ...state,
+                [request.owner]: { ...state[request.owner], hand: preGiveOwnerHand },
+                [opponent]: { ...state[opponent], hand: preGiveOpponentHand }
+            };
+
+            const animation = createGiveAnimation(preGiveState, cardSnapshot, request.owner, handIndex);
             animations.push({ ...animation, logMessage });
         }
     }

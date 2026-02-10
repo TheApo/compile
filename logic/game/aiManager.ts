@@ -28,6 +28,7 @@ import {
     createAndEnqueueShiftAnimation,
     createAndEnqueueLaneDeleteAnimations,
     createAndEnqueuePlayAnimation,
+    createAndEnqueueGiveAnimation,
     processCompileAnimations,
     processRearrangeWithCompile,
 } from '../animation/aiAnimationCreators';
@@ -380,6 +381,10 @@ export const handleRequiredActionSync = (
 
     // --- GIVE CARD ---
     if (aiDecision.type === 'giveCard' && action.type === 'select_card_from_hand_to_give') {
+        // Create give animation BEFORE state change (Capture → Change → Enqueue)
+        if (enqueueAnimation) {
+            createAndEnqueueGiveAnimation(state, aiDecision.cardId, 'opponent', enqueueAnimation);
+        }
         const newState = actions.resolveActionWithHandCard(state, aiDecision.cardId);
         if (newState.actionRequired) return newState;
         return endActionForPhase(newState, phaseManager);

@@ -945,12 +945,22 @@ function executeTakeEffect(
         // Random take - execute immediately (like original Love-3)
         const actualCount = Math.min(count, opponentState.hand.length);
         const takenCards: any[] = [];
+        const animationRequests: any[] = [];
 
         for (let i = 0; i < actualCount; i++) {
             const randomIndex = Math.floor(Math.random() * opponentState.hand.length);
             const takenCard = opponentState.hand.splice(randomIndex, 1)[0];
             cardOwnerState.hand.push(takenCard);
             takenCards.push(takenCard);
+
+            // Animation request: card flies from opponent's hand to own hand
+            animationRequests.push({
+                type: 'take',
+                cardId: takenCard.id,
+                owner: cardOwner,
+                cardSnapshot: { ...takenCard },
+                fromHandIndex: randomIndex,
+            });
         }
 
         newState = {
@@ -969,7 +979,7 @@ function executeTakeEffect(
 
         newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardNames} from the opponent's hand.`);
 
-        return { newState };
+        return { newState, animationRequests };
     } else {
         // Non-random take - requires user selection (future feature)
         // For now, fall back to random behavior
@@ -991,7 +1001,16 @@ function executeTakeEffect(
 
         newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardName} from the opponent's hand.`);
 
-        return { newState };
+        // Animation request for non-random take fallback
+        const animationRequests = [{
+            type: 'take' as const,
+            cardId: takenCard.id,
+            owner: cardOwner,
+            cardSnapshot: { ...takenCard },
+            fromHandIndex: randomIndex,
+        }];
+
+        return { newState, animationRequests };
     }
 }
 

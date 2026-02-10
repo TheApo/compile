@@ -24,6 +24,7 @@ import {
     createShiftAnimation,
     createPlayAnimation,
     createCompileDeleteAnimations,
+    createGiveAnimation,
 } from './animationHelpers';
 import {
     flipCardMessage,
@@ -514,6 +515,29 @@ export function processRearrangeWithCompile(
 }
 
 // =============================================================================
+// GIVE ANIMATION
+// =============================================================================
+
+/**
+ * Erstellt und enqueued eine Give-Animation.
+ * Karte fliegt von actor's Hand zu opponent's Hand.
+ */
+export function createAndEnqueueGiveAnimation(
+    state: GameState,
+    cardId: string,
+    actor: Player,
+    enqueueAnimation: EnqueueFn
+): boolean {
+    const handIndex = state[actor].hand.findIndex(c => c.id === cardId);
+    const card = state[actor].hand[handIndex];
+    if (!card || handIndex < 0) return false;
+
+    const animation = createGiveAnimation(state, card, actor, handIndex);
+    enqueueAnimation(animation);
+    return true;
+}
+
+// =============================================================================
 // DISPATCHER FÜR AI-ENTSCHEIDUNGEN
 // =============================================================================
 
@@ -544,6 +568,11 @@ export function createAnimationForAIDecision(
         case 'returnCard':
             if (createAndEnqueueReturnAnimation(state, aiDecision.cardId, enqueueAnimation)) {
                 createdTypes.add('return');
+            }
+            break;
+        case 'giveCard':
+            if (createAndEnqueueGiveAnimation(state, aiDecision.cardId, state.turn, enqueueAnimation)) {
+                createdTypes.add('give');
             }
             break;
     }

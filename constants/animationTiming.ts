@@ -25,6 +25,7 @@ export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
     draw: 1200,     // Single card draw (or total for multi-card)
     compile: 1200,  // Protocol glow + multiple card deletions
     give: 800,      // Card moves to opponent's hand
+    take: 800,      // Card moves from opponent's hand to own hand
     reveal: 800,    // Card flips up briefly, then back
     swap: 600,      // Protocol bars swap positions
     refresh: 1200,  // Hand refill (multiple draws)
@@ -217,6 +218,7 @@ export const ANIMATION_EASINGS = {
     draw: 'ease-out',
     compile: 'ease-in-out',
     give: 'ease-in-out',
+    take: 'ease-in-out',
     reveal: 'ease-in-out',
     swap: 'ease-in-out',
     refresh: 'ease-out',

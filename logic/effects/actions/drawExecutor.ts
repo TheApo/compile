@@ -679,8 +679,9 @@ export function executeDrawEffect(
     }
 
     // Return animationRequests for draw animation (consistent with all other effects)
+    const fromOpponentDeck = sourcePlayer !== drawingPlayer;
     const animationRequests: AnimationRequest[] = newCards.length > 0
-        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id) }]
+        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id), ...(fromOpponentDeck ? { fromOpponentDeck: true } : {}) }]
         : [];
 
     return { newState, animationRequests };

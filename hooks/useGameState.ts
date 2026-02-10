@@ -25,6 +25,7 @@ import {
     createShiftAnimation,
     createReturnAnimation,
     createRevealAnimation,
+    createGiveAnimation,
     findCardInLanes,
     createPhaseTransitionAnimation,
     enqueueAnimationsFromRequests,
@@ -703,8 +704,24 @@ export const useGameState = (
     };
 
     const resolveActionWithHandCard = (cardId: string) => {
-        // Create reveal animation BEFORE setGameState
+        // Create give/reveal animation BEFORE setGameState
         const actionType = gameState.actionRequired?.type;
+        if (enqueueAnimation &&
+            actionType === 'select_card_from_hand_to_give') {
+            const card = gameState.player.hand.find(c => c.id === cardId);
+            const handIndex = gameState.player.hand.findIndex(c => c.id === cardId);
+
+            if (card && handIndex >= 0) {
+                const animation = createGiveAnimation(
+                    gameState,
+                    card,
+                    'player',
+                    handIndex
+                );
+                enqueueAnimation(animation);
+            }
+        }
+
         if (enqueueAnimation &&
             actionType === 'select_card_from_hand_to_reveal') {
             const card = gameState.player.hand.find(c => c.id === cardId);

@@ -23,6 +23,7 @@ export type AnimationType =
     | 'draw'            // Card(s) move from deck to hand
     | 'compile'         // Lane compiles (multiple cards to trash + protocol glow)
     | 'give'            // Card moves from one player's hand to opponent's hand
+    | 'take'            // Card moves from opponent's hand to own hand
     | 'reveal'          // Card is briefly shown (then flipped back or kept)
     | 'swap'            // Protocols swap positions
     | 'refresh'         // Hand is refilled (multiple draws)
@@ -209,6 +210,7 @@ export const DEFAULT_ANIMATION_DURATIONS: Record<AnimationType, number> = {
     draw: 300,
     compile: 800,
     give: 500,
+    take: 500,
     reveal: 600,
     swap: 400,
     refresh: 500,
