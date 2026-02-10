@@ -81,6 +81,7 @@ export const useGameState = (
     // Prevents race condition between Phase-Animation Effect and Hook 1
     // Set BEFORE async enqueue, checked by Hook 1, reset when isAnimating becomes false
     const isAnimationPendingRef = useRef<boolean>(false);
+    const wasInInterruptRef = useRef<boolean>(false);
 
 
 
@@ -430,8 +431,12 @@ export const useGameState = (
 
             if (requiresAnimation) {
                 // Enqueue remaining animation requests (some were already created before setGameState)
+                // Filter out delete requests - they were already created before setGameState (lines 400-424)
                 if (enqueueAnimation && requiresAnimation.animationRequests && requiresAnimation.animationRequests.length > 0) {
-                    enqueueAnimationsFromRequests(nextState, requiresAnimation.animationRequests, enqueueAnimation);
+                    const remainingRequests = requiresAnimation.animationRequests.filter(r => r.type !== 'delete');
+                    if (remainingRequests.length > 0) {
+                        enqueueAnimationsFromRequests(nextState, remainingRequests, enqueueAnimation);
+                    }
                 }
                 // Execute callback SYNCHRONOUSLY — state changes immediately, animations are visual
                 // If turn changed (due to interrupt restoration), pass no-op to prevent double progression
@@ -1331,9 +1336,19 @@ export const useGameState = (
         const currentPhase = gameState.phase as GamePhase;
         const turnChanged = prevTurnRef.current !== gameState.turn;
 
-        // Only animate on TURN changes (not every phase change)
-        // Phase changes during opponent turn are handled internally - no separate animation needed
-        if (turnChanged && enqueueAnimation && !gameState.winner) {
+        // Skip phase animation during interrupts (effect queue party switches):
+        // 1. Entering interrupt: _interruptedTurn is set (temporary turn switch to opponent)
+        // 2. Leaving interrupt: wasInInterruptRef was set (turn restoring to original player)
+        const isEnteringInterrupt = !!gameState._interruptedTurn;
+        const isLeavingInterrupt = wasInInterruptRef.current && turnChanged;
+
+        if (isEnteringInterrupt) {
+            wasInInterruptRef.current = true;
+        }
+
+        // Only animate on REAL turn changes (not interrupt party switches)
+        if (turnChanged && enqueueAnimation && !gameState.winner
+            && !isEnteringInterrupt && !isLeavingInterrupt) {
             // SYNCHRONOUSLY set ref BEFORE async enqueue - this blocks Hook 1 immediately
             isAnimationPendingRef.current = true;
 
@@ -1363,6 +1378,11 @@ export const useGameState = (
                 isAnimationPendingRef.current = false;
             }
         }
+
+        if (isLeavingInterrupt) {
+            wasInInterruptRef.current = false;
+        }
+
         // Update refs for next change detection
         prevTurnRef.current = gameState.turn;
         prevPhaseRef.current = currentPhase;

@@ -348,13 +348,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     const intoTheirTrash = discardPileOwner !== player ? ' into their trash' : '';
     let logMessage: string;
-    if (player === 'player' || discardedCards.every(c => c.isRevealed)) {
-        const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-        logMessage = `${playerName} discards ${cardNames}${intoTheirTrash}.`;
-    } else {
-        const cardText = discardedCards.length === 1 ? 'card' : 'cards';
-        logMessage = `${playerName} discards ${discardedCards.length} ${cardText}${intoTheirTrash}.`;
-    }
+    const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+    logMessage = `${playerName} discards ${cardNames}${intoTheirTrash}.`;
     newState = log(newState, player, logMessage);
 
     // NOTE: We do NOT change indent here - it's inherited from the effect context
