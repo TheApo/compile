@@ -1,229 +1,323 @@
 # COMPILE Card Game
 
-Ein kompetitives Kartenspiel, bei dem zwei KI-Spieler um die Wette ihre 3 Protokolle kompilieren, um die Realitat neu zu schreiben.
+Kompetitives Kartenspiel: Zwei Spieler (Mensch vs KI) kompilieren um die Wette ihre 3 Protokolle. Datengetriebenes System mit 32+ Protokollen als JSON-Definitionen.
 
 ## Tech Stack
 - **Framework**: React 19 + Vite 6
 - **Sprache**: TypeScript 5.8 (strict mode)
-- **Datenbank**: Keine (Client-only, localStorage fur Statistiken)
 - **Styling**: Vanilla CSS mit CSS-Variablen (Cyberpunk-Theme)
 - **Testing**: Vitest (Unit), Playwright (E2E)
-- **Besonderheit**: Datengetriebenes Custom Protocol System (JSON-definierte Karteneffekte)
+- **Datenbank**: Keine (Client-only, localStorage fuer Statistiken)
 
 ## Projektstruktur
 ```
 compile/
-├── components/           # React UI-Komponenten (Card, Lane, GameBoard, Modals)
+├── components/           # React UI-Komponenten (Card, Lane, GameBoard, Modals, AnimationOverlay)
 ├── screens/              # Hauptbildschirme (GameScreen, MainMenu, ProtocolSelection)
 │   └── CustomProtocolCreator/  # Protocol-Editor mit Effect-Editoren
 ├── hooks/                # React Hooks (useGameState, useStatistics)
 ├── contexts/             # React Contexts (AnimationQueueContext)
 ├── logic/                # Gesamte Spiellogik (KEINE async Operationen!)
 │   ├── ai/               # KI-Systeme (easy, normal, hardImproved)
-│   ├── animation/        # Animation-Factory-Funktionen
-│   ├── customProtocols/  # Protocol-Loader, Effect-Interpreter
-│   ├── effects/          # Effect-Executoren (delete, flip, shift, etc.)
-│   ├── game/             # Kern-Spiellogik (phaseManager, resolvers, aiManager)
-│   ├── keywords/         # Keyword-Handler (draw, delete, flip, etc.)
-│   └── utils/            # Hilfsfunktionen (log, boardModifiers)
-├── custom_protocols/     # JSON-Definitionen fur alle Protokolle (32+)
-├── types/                # TypeScript Typdefinitionen
-├── styles/               # CSS-Dateien (base, components, layouts)
-├── utils/                # Utility-Funktionen (snapshotUtils, targeting)
-├── constants/            # Konstanten (animationTiming)
+│   ├── animation/        # animationHelpers.ts (Factories) + aiAnimationCreators.ts (DRY Helper)
+│   ├── customProtocols/  # effectInterpreter.ts (Haupt-Entry), Protocol-Loader
+│   ├── effects/actions/  # Modulare Executoren (drawExecutor, flipExecutor, deleteExecutor, etc.)
+│   ├── game/             # phaseManager, aiManager, reactiveEffectProcessor, stateManager
+│   │   ├── resolvers/    # cardResolver, playResolver, discardResolver, handCardResolver, etc.
+│   │   └── helpers/      # actionUtils (findCardOnBoard, isCardUncovered, etc.)
+│   ├── keywords/         # Keyword-Handler
+│   └── utils/            # log, boardModifiers, logMessages
+├── custom_protocols/     # JSON-Definitionen fuer alle Protokolle (32+)
+├── types/                # index.ts (GameState, PlayedCard, etc.) + animation.ts (AnimationQueueItem, etc.)
+├── utils/                # snapshotUtils, targeting
+├── constants/            # animationTiming (Durations, Stagger, Easings)
+├── styles/               # CSS-Dateien
 ├── tests/                # Vitest Unit-Tests
 └── e2e/                  # Playwright E2E-Tests
 ```
 
 ## Entwicklung
 ```bash
-npm install              # Dependencies installieren
-npm run dev              # Entwicklungsserver (NUR DER USER STARTET DIES!)
-npm run build            # Production Build
-npm test                 # Unit-Tests ausfuhren (Vitest)
+npm run dev              # Entwicklungsserver (NUR DER USER STARTET DIES! NIEMALS CLAUDE!)
+npm run build            # Production Build (zum Pruefen von Kompilierungsfehlern)
+npm test                 # Unit-Tests (Vitest)
 npm run test:watch       # Tests im Watch-Modus
 npm run test:e2e         # Playwright E2E-Tests (startet dev server automatisch)
-npm run test:e2e:ui      # Playwright mit UI
-npm run test:e2e:debug   # Playwright mit Debugging
-npm run check:effects    # Pruft pending Effects
+npm run check:effects    # Prueft pending Effects
 npm run test:protocols   # Testet Custom Protocols
 ```
 
-## Testing
+## Spielregeln (Kurzfassung)
 
-### Unit Tests (Vitest)
-- Liegen in `tests/` Ordner
-- Testen Effect-Chains, Trigger, AI-Handler
-- `npm test` zum Ausfuhren
+### Gewinnbedingung
+Alle 3 eigenen Protokolle kompilieren.
 
-### E2E Tests (Playwright)
-- Liegen in `e2e/` Ordner
-- Testen komplette Spielablaufe im Browser
-- Startet automatisch dev server auf Port 3000
-- Hilfsfunktionen verfugbar:
-  - `startGame(page, options)` - Spiel mit Einstellungen starten
-  - `waitForTurn(page, 'player'|'opponent')` - Auf Zug warten
-  - `waitForPhase(page, phase)` - Auf Phase warten
-  - `playCard(page, cardIndex, laneIndex, faceUp)` - Karte spielen
-  - `setupConsoleErrorCapture(page)` - Browser-Fehler erfassen
+### Turn-Flow (6 Phasen)
+```
+1. Start Phase    -> "start:" Effekte auf face-up Karten mit sichtbarem Effekt ausfuehren
+2. Control Phase  -> Fuehrt in 2+ Lanes? -> Erhaelt Control Component
+3. Compile Phase  -> Lane >= 10 UND > Gegner -> MUSS kompilieren
+4. Action Phase   -> PLAY (Karte spielen) ODER REFRESH (Hand auf 5 auffuellen)
+5. Hand Limit     -> Auf 5 Karten abwerfen wenn noetig
+6. End Phase      -> "end:" Effekte auf face-up Karten mit sichtbarem Effekt ausfuehren
+```
+**Sichtbarkeit**: Top-Effekte sind sichtbar wenn face-up (auch covered). Bottom-Effekte nur wenn face-up UND uncovered.
 
-## Code-Standards
-- TypeScript strict mode - keine `any` Types ohne guten Grund
-- Clean Code - aussagekraftige Namen, kleine Funktionen, maximal 800 Zeilen pro Datei, ansonsten refactorn
-- DRY - Code-Duplikation vermeiden, gemeinsame Helper extrahieren
-- KISS - einfache Losungen bevorzugen, nicht uber-engineeren
-- Single Point of Truth - eine Stelle fur jede Logik
+### Kompilierung
+- **Bedingungen**: Lane-Wert >= 10 UND hoeher als Gegner in gleicher Lane
+- **Ablauf**: Alle Karten beider Seiten in Lane geloescht -> Protokoll wird "Compiled"
+- **Recompile**: Bereits kompiliert? -> Karten geloescht, STATT Umdrehen: Ziehe 1 vom Gegnerdeck (ownership change!)
+- **Control Component**: Wer in 2+ Lanes fuehrt, erhaelt Control. Bei Compile/Refresh mit Control: Darf Protokolle rearrange (Positions/Status tauschen)
 
-## Projektspezifische Regeln
+### Karten-Werte
+- **Face-up**: Angezeigter Wert (0-6+)
+- **Face-down**: Immer Wert 2
+- **Face-up spielen**: NUR in matching Protocol Lane, Middle Command triggert
+- **Face-down spielen**: In jede Lane, kein Effekt-Trigger
 
-### HAUPTREGEL: Animationen (KRITISCH - NIEMALS IGNORIEREN!)
+### Targeting-Regeln (KRITISCH)
+- **Default**: NUR uncovered (oberste Karte im Stack = `lane[lane.length - 1]`)
+- **Covered**: Alle Karten darunter - NICHT waehlbar, es sei denn explizit ("flip 1 covered card")
+- **Scope**: "1 card" = eigene ODER gegner | "your card" = nur eigene | "opponent card" = nur gegner
 
-**Animation-Code gehört IMMER in `logic/animation/aiAnimationCreators.ts`!**
+### Karten-Text-Types
+1. **Top Command** (Persistent): Aktiv solange face-up (auch wenn covered - Text ist oben immer sichtbar)
+2. **Middle Command** (Immediate): Triggert bei Play face-up / Flip face-up / Uncover
+3. **Bottom Command** (Auxiliary): Triggered effects, nur wenn face-up UND uncovered
 
-- **NIEMALS** Animation-Logik in `useGameState.ts` oder `aiManager.ts` duplizieren!
-- **IMMER** zentrale Helper in `aiAnimationCreators.ts` nutzen oder dort neue erstellen
-- **EINE Funktion für Spieler UND AI** - Animationen werden an einer Stelle erstellt, nicht separat
-- Bei neuem Animation-Typ: Helper in `aiAnimationCreators.ts` hinzufügen, dann in beiden Stellen nutzen
+### Interrupt-System
+"Last in, first out" - Neueste Effekte werden zuerst abgehandelt. Wenn ein Effekt einen weiteren triggert, wird der neue Effekt zuerst komplett resolved, dann der urspruengliche fortgesetzt.
 
-Verfügbare zentrale Helper:
-- `createAndEnqueueFlipAnimation()` - Flip-Animation (Spieler + AI)
+## Architektur-Ueberblick
+
+### Datenfluss
+```
+User/AI Aktion -> Resolver (synchron) -> neuer GameState
+                                      -> AnimationRequests
+                                      -> actionRequired (wartet auf Input)
+
+AnimationRequests -> _pendingAnimationRequests (auf State)
+                  -> useEffect erkennt -> enqueueAnimationsFromRequests()
+                  -> AnimationQueue -> AnimationOverlay rendert
+                  -> onAnimationComplete() -> naechste Animation
+```
+
+### Grundprinzip: ALLES ist SYNCHRON
+- **State aendert sich SOFORT** - Logik laeuft komplett durch, dann Animation
+- **Animationen sind rein visuell** - Queue zeigt Uebergaenge, aendert NIEMALS State
+- **Snapshots VOR Aenderungen** - Animation zeigt von altem zu neuem State
+
+---
+
+## Animation System (KRITISCH!)
+
+### Prinzip: "Capture -> Change -> Enqueue"
+1. **Capture**: Snapshot BEVOR State sich aendert (fuer korrekte Animation)
+2. **Change**: Resolver/Effekt ausfuehren (State aendert sich sofort)
+3. **Enqueue**: Animation mit altem Snapshot in Queue einreihen
+
+### Alle 15 AnimationTypes (`types/animation.ts`)
+```
+play, delete, flip, shift, return, discard, draw, compile,
+give, take, reveal, swap, refresh, phaseTransition, delay
+```
+
+### Alle 10 AnimationRequest-Typen (`types/index.ts`)
+```typescript
+| { type: 'delete'; cardId; owner }
+| { type: 'flip'; cardId; owner?; laneIndex?; cardIndex?; toFaceUp? }
+| { type: 'shift'; cardId; fromLane; toLane; owner }
+| { type: 'return'; cardId; owner }
+| { type: 'discard'; cardId; owner }
+| { type: 'play'; cardId; owner; toLane?; fromDeck?; isFaceUp? }
+| { type: 'draw'; player; count; cardIds; fromOpponentDeck? }
+| { type: 'compile_delete'; laneIndex; deletedCards[] }
+| { type: 'take'; cardId; owner; cardSnapshot; fromHandIndex }
+| { type: 'give'; cardId; owner; cardSnapshot; handIndex }
+```
+
+### HAUPTREGEL: Animation-Code DRY halten
+
+**Zentrale Helper in `logic/animation/aiAnimationCreators.ts`:**
+- `createAndEnqueueFlipAnimation()` - Flip-Animation
 - `createAndEnqueueDeleteAnimation()` - Einzelne Delete-Animation
-- `createAndEnqueueLaneDeleteAnimations()` - Lane-basierte Deletes (Death-2, etc.)
+- `createAndEnqueueLaneDeleteAnimations()` - Lane-basierte Deletes
 - `createAndEnqueueReturnAnimation()` - Return-Animation
-- `createAndEnqueueShiftAnimation()` - Shift-Animation (Spieler + AI)
+- `createAndEnqueueShiftAnimation()` - Shift-Animation
 - `createAndEnqueuePlayAnimation()` - Play-Animation
 - `createAndEnqueueDiscardAnimations()` - Discard-Animationen
 - `createAndEnqueueDrawAnimations()` - Draw-Animationen
-- `createAnimationForAIDecision()` - Dispatcher für AI-Entscheidungen
+- `createAndEnqueueGiveAnimation()` - Give-Animation
+- `createAnimationForAIDecision()` - Dispatcher fuer AI-Entscheidungen (flip, delete, return, give)
 - `filterAlreadyCreatedAnimations()` - Doppelte Animationen vermeiden
 - `processCompileAnimations()` - Compile-Delete-Animationen
+- `processRearrangeWithCompile()` - Rearrange mit Compile
 
-**Wenn du Animation-Code schreibst und es nicht in `aiAnimationCreators.ts` ist, STOPP und refaktoriere!**
+**Low-Level Factories in `logic/animation/animationHelpers.ts`:**
+- `createPlayAnimation()`, `createDeleteAnimation()`, `createFlipAnimation()`
+- `createShiftAnimation()`, `createReturnAnimation()`, `createDiscardAnimation()`
+- `createDrawAnimation()`, `createGiveAnimation()`, `createTakeAnimation()`
+- `createRevealAnimation()`, `createSwapAnimation()`, `createDelayAnimation()`
+- `createSequentialDrawAnimations()`, `createSequentialDiscardAnimations()`
+- `createCompileDeleteAnimations()`, `createBatchDeleteAnimations()`
+- `enqueueAnimationsFromRequests()` - Konvertiert AnimationRequests -> AnimationQueueItems
 
-### Spiellogik (KRITISCH!)
-- **ALLE Logik ist SYNCHRON** - niemals async/await in der Spiellogik!
-- **State andert sich SOFORT** - Logik lauft durch, dann Animation
-- **Snapshots VOR Anderungen** - Animation zeigt Ubergang vom alten zum neuen State
-- **Animation-Queue** - Animationen werden sequentiell aus Queue abgespielt
+**Regel: Neuer Animation-Typ? -> Helper in aiAnimationCreators.ts hinzufuegen!**
 
-### Animation System
-- **Prinzip: "Capture → Change → Enqueue"**
-  1. Animation VOR State-Änderung erstellen (Snapshot korrekt)
-  2. Resolver ausführen (State ändert sich)
-  3. Animation(s) enqueuen
-- **AI-Animationen**: Zentrale Helper in `logic/animation/aiAnimationCreators.ts` verwenden
-- **Automatische Effekte** (via `processQueuedActions`):
-  - Animation Requests werden in `_pendingAnimationRequests` gespeichert
-  - `useGameState.ts` und `aiManager.ts` verarbeiten diese automatisch
-  - IMMER `cardSnapshot` und Position-Info in Requests einschließen!
-- **Animation Requests mit Snapshots** (KRITISCH für automatische Effekte):
-  ```typescript
-  // Shift Request mit Snapshot
-  { type: 'shift', cardId, owner, fromLane, toLane, cardSnapshot: {...card}, cardIndex }
-  // Delete Request mit Snapshot
-  { type: 'delete', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
-  // Return Request mit Snapshot
-  { type: 'return', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
-  ```
-- **Basis-Funktionen**: `logic/animation/animationHelpers.ts` für Low-Level Animation-Erstellung
-- `enqueueAnimation()` fur alle Animationen nutzen
-- `enqueueAnimationsFromRequests()` - DRY Funktion zum Verarbeiten von Animation Requests
-- Snapshots enthalten Board-Zustand VOR der Anderung
-- `processAnimationQueue` darf NIEMALS `setGameState` aufrufen
+### _pendingAnimationRequests Flow
+```
+1. Executor (z.B. drawExecutor) gibt { newState, animationRequests } zurueck
+2. effectInterpreter.ts (Zeile ~825): Verschiebt animationRequests -> newState._pendingAnimationRequests
+   WICHTIG: Loescht animationRequests aus dem Return-Value!
+3. setGameState() wird mit newState aufgerufen
+4. useEffect in useGameState.ts (Zeile ~1320): Erkennt _pendingAnimationRequests
+5. Ruft enqueueAnimationsFromRequests(state, pending, enqueueAnimation) auf
+6. Loescht _pendingAnimationRequests vom State
+```
 
-### Custom Protocol System
-- Alle Karteneffekte sind in JSON definiert (`custom_protocols/*.json`)
-- `effectInterpreter.ts` - Haupt-Entry-Point fur Effekt-Ausfuhrung
-- `cardResolver.ts` - verarbeitet User/AI-Antworten auf `actionRequired`
+### Snapshot-Rekonstruktion in enqueueAnimationsFromRequests
+Die Funktion empfaengt POST-EFFECT State (Karten bereits verschoben). Sie rekonstruiert PRE-EFFECT Snapshots:
+
+- **Trash**: Count-based slicing. Karten im Trash haben KEINE IDs (stripped durch deleteCard/discardCards). Daher: `baseTrash = state.discard.slice(0, length - pendingCount)`. Jede Animation fuegt progressiv zurueck via `deletedToTrash`/`discardedToTrash`.
+- **prePlayLanes**: Lanes VOR Play-from-Deck. Fuer sequentielle Plays (Water-1: "play in each other line") - jede Animation zeigt Board mit vorherigen Plays aber OHNE aktuelle.
+- **preShiftLanes**: Lanes VOR Shift. Falls Karte schon verschoben, nutze `cardSnapshot` + `preShiftLanes`.
+- **preDiscardHand**: Hand VOR Discard. Fuer sequentielle Discards - jede Animation zeigt Hand ohne vorher abgeworfene Karten.
+- **Take/Give**: Karten sind schon in neuer Hand. Pre-State wird rekonstruiert: Karte zurueck in alte Hand verschieben.
+- **fromOpponentDeck**: Bei Draw-Requests mit `fromOpponentDeck: true` zeigt Animation Ziehen vom Gegnerdeck statt eigenem.
+
+### Player vs AI Animation-Pattern
+
+**Player-Aktionen (useGameState.ts):**
+```typescript
+// Give/Reveal: Animation VOR setGameState erstellen
+if (actionType === 'select_card_from_hand_to_give') {
+    const animation = createGiveAnimation(gameState, card, 'player', handIndex);
+    enqueueAnimation(animation);  // Snapshot von AKTUELLEM State (pre-change)
+}
+setGameState(prev => { /* resolver aendert state */ });
+// -> _pendingAnimationRequests werden per useEffect verarbeitet
+```
+
+**AI-Aktionen (aiManager.ts):**
+```typescript
+// Give: Animation VOR State-Change erstellen
+createAndEnqueueGiveAnimation(state, cardId, 'opponent', enqueueAnimation);
+const newState = resolveActionWithHandCard(state, cardId);
+// -> _pendingAnimationRequests werden per useEffect verarbeitet
+```
+
+### Animation Requests mit Snapshots (KRITISCH)
+Requests MUESSEN `cardSnapshot` und Position-Info enthalten, weil die Karte im POST-EFFECT State bereits verschoben/geloescht ist:
+```typescript
+{ type: 'shift', cardId, owner, fromLane, toLane, cardSnapshot: {...card}, cardIndex, preShiftLanes }
+{ type: 'delete', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
+{ type: 'return', cardId, owner, cardSnapshot: {...card}, laneIndex, cardIndex }
+{ type: 'take', cardId, owner, cardSnapshot: {...card}, fromHandIndex }
+{ type: 'give', cardId, owner, cardSnapshot: {...card}, handIndex }
+{ type: 'play', cardId, owner, toLane, fromDeck, isFaceUp, prePlayLanes, playIndex }
+{ type: 'discard', cardId, owner, cardSnapshot, preDiscardHand, discardIndex }
+{ type: 'draw', player, count, cardIds, fromOpponentDeck }
+```
+
+---
+
+## Custom Protocol System
+- Alle Karteneffekte in JSON definiert (`custom_protocols/*.json`)
+- `effectInterpreter.ts` - Haupt-Entry-Point, ruft modulare Executoren auf
+- Modulare Executoren in `logic/effects/actions/`:
+  - `drawExecutor.ts`, `flipExecutor.ts`, `deleteExecutor.ts`
+  - `discardExecutor.ts`, `shiftExecutor.ts`, `returnExecutor.ts`
+  - `playExecutor.ts`, `revealGiveExecutor.ts`, `shuffleExecutor.ts`
+  - `copyEffectExecutor.ts`, `swapStacksExecutor.ts`
+- Executoren geben `{ newState, animationRequests? }` zurueck
+- effectInterpreter propagiert animationRequests -> `_pendingAnimationRequests`
 - Generische Handler bevorzugen (`select_card_to_flip`, `select_cards_to_delete`)
 
-### Resolver-Pattern
-- Resolver geben `{ newState, animationRequests?, onCompleteCallback? }` zuruck
-- `onCompleteCallback` MUSS `endTurnCb` aufrufen fur Turn-Progression
-- Bei `actionRequired` - State zuruckgeben und auf User/AI-Input warten
+## Resolver-Pattern
+```typescript
+// Resolver Return-Typ:
+{ newState: GameState, animationRequests?: AnimationRequest[], onCompleteCallback? }
+```
+- `onCompleteCallback` MUSS `endTurnCb` aufrufen fuer Turn-Progression
+- Bei `actionRequired` - State zurueckgeben und auf User/AI-Input warten
+- **Alle Resolver in `logic/game/resolvers/`:**
 
-## Wichtige Hinweise
+| Resolver | Zweck |
+|----------|-------|
+| `cardResolver.ts` | Karten-Selektion (flip, delete, return, shift targets) |
+| `playResolver.ts` | Karte aus Hand spielen |
+| `discardResolver.ts` | Karten abwerfen |
+| `handCardResolver.ts` | Hand-Karten-Aktionen (give, reveal) |
+| `laneResolver.ts` | Lane-basierte Aktionen |
+| `choiceResolver.ts` | Choice/Prompt-Antworten |
+| `miscResolver.ts` | Compile, Control, Rearrange, Fill Hand |
+| `promptResolver.ts` | Prompt-basierte Aktionen |
+| `followUpHelper.ts` | Follow-up Effekt-Verkettung |
 
-### Dev Server
-- **NIEMALS `npm run dev` starten** - Der User startet den dev server selbst!
-- Nur `npm run build` zum Testen von Kompilierungsfehlern
-- Nur `npm test` zum Ausfuhren von Tests
-
-### Verstehen vor Andern
-- Code LESEN und VERSTEHEN bevor Anderungen gemacht werden
-- Nicht raten - bei Unklarheiten mehr Code lesen oder nachfragen
-- Ahnliche Implementierungen als Referenz nutzen
-- Bei komplexen Anderungen: In den **Planungsmodus** gehen
-
-### Dokumentation
-- `AI_ONBOARDING.md` - Detaillierte Onboarding-Dokumentation
-- `beschreibung.txt` - Anleitung zum Verständnis der Spielregeln und Karteneffektspezifika
-- `COMP-MN01_Rulesheet_Updated.pdf` - Regeln für das Spiel
-- `game_rules.md` - Detaillierte Spielregeln
-
-## Haufige Fehler vermeiden
-
-### Animation
-- NICHT: Animationen ausserhalb des Queue-Systems erstellen
-- NICHT: State in `processAnimationQueue` andern
-- NICHT: async/await in Spiellogik verwenden
-- NICHT: Animation-Code duplizieren - IMMER zentrale Helper in `aiAnimationCreators.ts` nutzen oder erweitern!
-- IMMER: Snapshot VOR der State-Anderung erstellen
-- IMMER: `enqueueAnimation()` fur alle Animationen nutzen
-- IMMER: Multi-Card Animationen VOR `setGameState` erstellen
-- IMMER: Neue Animation-Typen als Helper in `aiAnimationCreators.ts` hinzufügen (DRY, Single Point of Truth)
-
-### Logik
-- NICHT: `processQueuedActions` direkt im Callback aufrufen (uberspringt Turn-Flow!)
-- NICHT: `any` Types ohne guten Grund verwenden
-- NICHT: Code duplizieren - Helper-Funktionen extrahieren
-- IMMER: `onCompleteCallback` mit `endTurnCb` fur Turn-Progression
-- IMMER: `prevState` statt `state` in Funktionen mit `prevState` Parameter
-- IMMER: Karten von oben (uncovered) nach unten (covered) loschen bei Compile
-
-### Allgemein
-- NICHT: Den dev server starten (`npm run dev`)
-- NICHT: Raten bei Unklarheiten - Code lesen oder fragen
-- NICHT: Uber-engineeren - KISS Prinzip befolgen
-- IMMER: Tests fur neue Features schreiben
-- IMMER: Build prufen nach Anderungen (`npm run build`)
-- IMMER: Bestehende Patterns als Referenz nutzen
+## Interrupt-System (reactiveEffectProcessor.ts)
+- Wenn ein Effekt die agierende Partei wechselt (z.B. Spieler flippt -> Hate-0 triggert -> Gegner muss deleten)
+- `_interruptedTurn` wird gesetzt, `turn` wechselt temporaer
+- Phase-Transition-Animation wird unterdrueckt (via `wasInInterruptRef` in useGameState.ts)
+- Nach Interrupt: `turn` wird zurueckgesetzt, `_interruptedTurn` geloescht
 
 ## Kern-Dateien Referenz
 
 | Datei | Zweck |
 |-------|-------|
-| `hooks/useGameState.ts` | Zentraler Game-State-Manager |
-| `logic/game/aiManager.ts` | AI-Turn-Management und Callbacks |
-| `logic/game/phaseManager.ts` | Phase-Transitions und Turn-Flow |
-| `logic/customProtocols/effectInterpreter.ts` | Effekt-Ausfuhrung |
-| `logic/game/resolvers/cardResolver.ts` | User/AI-Response-Handling |
-| `logic/game/resolvers/miscResolver.ts` | Compile, Control, etc. |
-| `logic/game/reactiveEffectProcessor.ts` | Reaktive Effekte (after_draw, etc.) |
-| `logic/animation/aiAnimationCreators.ts` | Zentrale AI-Animation-Helper (DRY) |
-| `logic/animation/animationHelpers.ts` | Animation-Factory-Funktionen |
-| `contexts/AnimationQueueContext.tsx` | Animation-Queue-Management |
-| `types/index.ts` | Kern-TypeScript-Typen |
-| `types/animation.ts` | Animation-Typen |
+| `hooks/useGameState.ts` | Zentraler Game-State-Manager, Animation-Koordination, Player-Actions |
+| `logic/game/aiManager.ts` | AI-Turn-Management, AI-Decision -> State -> Animation |
+| `logic/game/phaseManager.ts` | Phase-Transitions (Start->Control->Compile->Action->Hand->End) |
+| `logic/game/reactiveEffectProcessor.ts` | Reaktive Effekte (after_draw, after_flip, on_cover, etc.) |
+| `logic/game/stateManager.ts` | createInitialState(), recalculateAllLaneValues() |
+| `logic/customProtocols/effectInterpreter.ts` | Haupt-Entry-Point fuer Effekt-Ausfuehrung |
+| `logic/animation/aiAnimationCreators.ts` | Zentrale DRY Animation-Helper |
+| `logic/animation/animationHelpers.ts` | Low-Level Animation-Factories + enqueueAnimationsFromRequests |
+| `contexts/AnimationQueueContext.tsx` | Animation-Queue: enqueueAnimation(), isAnimating, processQueue |
+| `types/index.ts` | GameState, PlayedCard, Player, AnimationRequest, EffectResult, etc. |
+| `types/animation.ts` | AnimationType, AnimationQueueItem, VisualSnapshot, CardPosition |
+| `constants/animationTiming.ts` | ANIMATION_DURATIONS, ANIMATION_EASINGS, Stagger/Timing-Helpers |
+| `utils/snapshotUtils.ts` | createVisualSnapshot(), snapshotToGameState() |
+| `logic/game/helpers/actionUtils.ts` | findCardOnBoard(), isCardUncovered(), handleUncoverEffect() |
+| `logic/utils/boardModifiers.ts` | deleteCard(), internalShiftCard() |
 
-## Turn-Flow Ubersicht
+## Haeufige Fehler vermeiden
 
-```
-1. Start Phase    -> Trigger "start" effects auf uncovered face-up cards
-2. Control Phase  -> Control-Mechanic (Protokolle umordnen)
-3. Compile Phase  -> Wenn Lane >= 10 UND > Gegner: MUSS kompilieren
-4. Action Phase   -> PLAY card ODER REFRESH (auf 5 Karten auffüllen)
-5. Hand Limit     -> Auf 5 Karten abwerfen wenn notig
-6. End Phase      -> Trigger "end" effects auf uncovered face-up cards
-```
+### Animation
+- NICHT: Animation-Code duplizieren - IMMER zentrale Helper in `aiAnimationCreators.ts` nutzen!
+- NICHT: Animationen ausserhalb des Queue-Systems erstellen
+- NICHT: State in `processAnimationQueue` aendern
+- NICHT: Snapshot NACH State-Aenderung erstellen (muss VORHER sein!)
+- IMMER: `enqueueAnimation()` fuer alle Animationen nutzen
+- IMMER: `cardSnapshot` + Position-Info in AnimationRequests einschliessen
+- IMMER: Multi-Card Animationen VOR `setGameState` erstellen
+- IMMER: Trash-Karten haben KEINE IDs -> count-based slicing nutzen, nicht ID-Filter
 
-## Animation-Flow
+### Logik
+- NICHT: async/await in Spiellogik verwenden (ALLES synchron!)
+- NICHT: `processQueuedActions` direkt im Callback aufrufen (ueberspringt Turn-Flow!)
+- NICHT: `any` Types ohne guten Grund verwenden
+- IMMER: `prevState` statt `state` in Funktionen mit `prevState` Parameter
+- IMMER: `onCompleteCallback` mit `endTurnCb` fuer Turn-Progression
+- IMMER: Karten von oben (uncovered) nach unten (covered) loeschen bei Compile
 
-```
-1. Effekt ausfuhren (synchron)     -> State andert sich SOFORT
-2. AnimationRequest erstellen       -> { type, cardId, owner, ... }
-3. processAnimationQueue aufrufen   -> Erstellt AnimationQueueItems
-4. enqueueAnimation()               -> In Queue einreihen
-5. AnimationOverlay zeigt Animation -> Karte fliegt von A nach B
-6. onAnimationComplete()            -> Nachste Animation in Queue
-```
+### Allgemein
+- NICHT: Den dev server starten (`npm run dev`) - User startet selbst!
+- NICHT: Raten bei Unklarheiten - Code lesen oder fragen
+- NICHT: Ueber-engineeren - KISS Prinzip
+- IMMER: Build pruefen nach Aenderungen (`npm run build`)
+- IMMER: Tests ausfuehren (`npm test`)
+- IMMER: Bestehende Patterns als Referenz nutzen
+- IMMER: Bei komplexen Aenderungen in den **Planungsmodus** gehen
+
+## Code-Standards
+- TypeScript strict mode - keine `any` Types ohne guten Grund
+- Clean Code - aussagekraeftige Namen, kleine Funktionen, max 800 Zeilen pro Datei
+- DRY - Code-Duplikation vermeiden, gemeinsame Helper extrahieren
+- KISS - einfache Loesungen bevorzugen
+- Single Point of Truth - eine Stelle fuer jede Logik
+
+## Weitere Dokumentation
+- `game_rules.md` - Detaillierte Spielregeln mit Targeting, Interrupt-System, AI-Strategie
+- `CARD_TARGETING_RULES.md` - Karten-Targeting Details
+- `beschreibung.txt` - Spielregeln und Karteneffektspezifika
+- `COMP-MN01_Rulesheet_Updated.pdf` - Original-Regeln
