@@ -434,6 +434,11 @@ export const useGameState = (
                 // Filter out delete requests - they were already created before setGameState (lines 400-424)
                 if (enqueueAnimation && requiresAnimation.animationRequests && requiresAnimation.animationRequests.length > 0) {
                     const remainingRequests = requiresAnimation.animationRequests.filter(r => r.type !== 'delete');
+                    // If there's a flip animation, defer flip_self in processQueuedActions
+                    // so the self-flip happens in a separate render (sequential CSS transitions)
+                    if (remainingRequests.some(r => r.type === 'flip')) {
+                        (nextState as any)._deferFlipSelf = true;
+                    }
                     if (remainingRequests.length > 0) {
                         enqueueAnimationsFromRequests(nextState, remainingRequests, enqueueAnimation);
                     }
@@ -1328,6 +1333,20 @@ export const useGameState = (
             return newState;
         });
     }, [(gameState as any)._pendingAnimationRequests, enqueueAnimation]);
+
+    // Deferred flip_self: Process after the preceding flip animation completes.
+    // When a flip effect is followed by "flip this card" (e.g., Water-0), the self-flip
+    // is deferred to a separate render so CSS transitions play sequentially, not simultaneously.
+    useEffect(() => {
+        if ((gameState as any)._hasDeferredFlipSelf && !isAnimating) {
+            setGameState(prev => {
+                if (!(prev as any)._hasDeferredFlipSelf) return prev;
+                const newState = { ...prev };
+                delete (newState as any)._hasDeferredFlipSelf;
+                return phaseManager.processEndOfAction(newState);
+            });
+        }
+    }, [(gameState as any)._hasDeferredFlipSelf, isAnimating]);
 
     // Phase Transition Animation: Enqueue animation when turn OR phase changes
     // NOTE: This animation is purely visual - the AI waits via !isAnimating check in Hook 1

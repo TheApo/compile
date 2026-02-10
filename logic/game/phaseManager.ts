@@ -413,6 +413,15 @@ export const processQueuedActions = (state: GameState): GameState => {
 
         // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, custom protocols)
         if (nextAction.type === 'flip_self') {
+            // DEFER: If a flip animation is pending (_deferFlipSelf), defer the self-flip
+            // to a separate render cycle so CSS transitions play sequentially
+            if ((mutableState as any)._deferFlipSelf) {
+                delete (mutableState as any)._deferFlipSelf;
+                (mutableState as any)._hasDeferredFlipSelf = true;
+                mutableState.queuedActions = [nextAction, ...queuedActions];
+                break;
+            }
+
             const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
@@ -624,6 +633,36 @@ export const processQueuedActions = (state: GameState): GameState => {
             // Execute remaining effects sequentially
             for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
                 const effectDef = effects[effectIndex];
+
+                // DEFER flipSelf effects when _deferFlipSelf is set (sequential CSS animation).
+                // Convert to a flip_self queued action so the existing deferral handler can defer it.
+                if (effectDef.params?.flipSelf && (mutableState as any)._deferFlipSelf) {
+                    delete (mutableState as any)._deferFlipSelf;
+                    const flipSelfAction: any = {
+                        type: 'flip_self',
+                        sourceCardId,
+                        actor: context.cardOwner,
+                    };
+                    const remainingEffectsAfterFlip = effects.slice(effectIndex + 1);
+                    const actionsToAdd: any[] = [flipSelfAction];
+                    if (remainingEffectsAfterFlip.length > 0) {
+                        actionsToAdd.push({
+                            type: 'execute_remaining_custom_effects',
+                            sourceCardId,
+                            laneIndex,
+                            effects: remainingEffectsAfterFlip,
+                            context,
+                            actor: context.cardOwner,
+                            logSource: mutableState._currentEffectSource,
+                            logPhase: mutableState._currentPhaseContext,
+                            logIndentLevel: mutableState._logIndentLevel || 0
+                        });
+                    }
+                    mutableState.queuedActions = [...actionsToAdd, ...queuedActions];
+                    (mutableState as any)._hasDeferredFlipSelf = true;
+                    return mutableState;
+                }
+
                 const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
                 mutableState = result.newState;
 
@@ -851,6 +890,11 @@ export const processEndOfAction = (state: GameState): GameState => {
         if (stateAfterQueue.actionRequired) {
             return stateAfterQueue;
         }
+        // If flip_self was deferred, return immediately — don't advance phases.
+        // The useEffect in useGameState will process it after animations complete.
+        if ((stateAfterQueue as any)._hasDeferredFlipSelf) {
+            return stateAfterQueue;
+        }
         // Continue with the processed state
         state = stateAfterQueue;
     }
@@ -1038,6 +1082,15 @@ export const processEndOfAction = (state: GameState): GameState => {
             // --- Auto-resolving actions ---
             // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, Speed-3, custom protocols)
             if (isFlipSelfAction) {
+                // DEFER: If a flip animation is pending (_deferFlipSelf), defer the self-flip
+                // to a separate render cycle so CSS transitions play sequentially
+                if ((mutableState as any)._deferFlipSelf) {
+                    delete (mutableState as any)._deferFlipSelf;
+                    (mutableState as any)._hasDeferredFlipSelf = true;
+                    mutableState.queuedActions = [nextAction, ...queuedActions];
+                    break;
+                }
+
                 const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
                 const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
