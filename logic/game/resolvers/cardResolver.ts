@@ -4,7 +4,10 @@
  */
 
 import { GameState, PlayedCard, Player, ActionRequired, AnimationRequest, EffectResult, EffectContext } from '../../../types';
+import { AnimationQueueItem } from '../../../types/animation';
 import { drawForPlayer, findAndFlipCards } from '../../../utils/gameStateModifiers';
+import { createDeleteAnimation, convertAnimationRequestsToQueueItems } from '../../animation/animationHelpers';
+import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent, setLogSource, setLogPhase } from '../../utils/log';
 import { findCardOnBoard, isCardUncovered, internalResolveTargetedFlip, internalReturnCard, internalShiftCard, handleUncoverEffect, countValidDeleteTargets, handleOnFlipToFaceUp, findAllHighestUncoveredCards, handleChainedEffectsOnFlip } from '../helpers/actionUtils';
 // NOTE: checkForHate3Trigger removed - Hate-3 is now custom protocol, triggers via processReactiveEffects
@@ -13,6 +16,7 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { canFlipSpecificCard } from '../passiveRuleChecker';
 import { getMiddleEffects } from '../../effects/actions/copyEffectExecutor';
+import { queueFollowUpEffectSync, isFollowUpAlreadyQueued } from './followUpHelper';
 
 export type CardActionResult = {
     nextState: GameState;
@@ -21,6 +25,35 @@ export type CardActionResult = {
         onCompleteCallback: (s: GameState, endTurnCb: (s2: GameState) => GameState) => GameState;
     } | null;
     requiresTurnEnd?: boolean;
+};
+
+/**
+ * Standard animation completion callback - DRY helper for all animations.
+ *
+ * This handles the common pattern:
+ * 1. If actionRequired already exists (from reactive effects), return state as-is
+ * 2. Otherwise, call endTurnCb to continue turn progression
+ *
+ * CRITICAL: Do NOT manually call processQueuedActions here!
+ * The endTurnCb callback triggers the full turn progression flow:
+ * endTurnCb → processEndOfAction → processQueuedActions
+ * This ensures flip_self and other auto-resolve actions are handled correctly.
+ *
+ * @param s - Current game state after animation completes
+ * @param endTurnCb - Callback to continue turn progression
+ * @returns Updated game state
+ */
+export const standardAnimationCallback = (
+    s: GameState,
+    endTurnCb: (s2: GameState) => GameState
+): GameState => {
+    // Check if there's already an actionRequired (from reactive effects)
+    if (s.actionRequired) {
+        return s;
+    }
+
+    // Continue turn progression - endTurnCb handles queuedActions via processEndOfAction
+    return endTurnCb(s);
 };
 
 // List of action types that trigger Metal-6's self-delete (flip actions only)
@@ -61,12 +94,20 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         const newPlayerState = { ...state[actor], stats: newStats };
         newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
 
-        // CRITICAL: Store lane info BEFORE the callback (card will be gone after animation)
+        // CRITICAL: Store lane info BEFORE deletion (card will be gone after)
         const cardOwner = cardInfo.owner;
         const laneIndex = state[cardOwner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
         const lane = state[cardOwner].lanes[laneIndex];
         const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
         const hadCardBelow = lane && lane.length > 1;
+        const cardIndex = lane?.findIndex(c => c.id === targetCardId) ?? 0;
+
+        // CRITICAL: Create snapshot BEFORE deletion for animation
+        const cardSnapshot = { ...cardInfo.card };
+
+        // CRITICAL: "DIE LOGIK HAT IMMER RECHT" - Delete the card IMMEDIATELY in the resolver!
+        // The animation will show the snapshot -> new state transition
+        newState = deleteCardFromBoard(newState, targetCardId);
 
         // CRITICAL: Capture pending effects BEFORE the callback runs
         // The callback receives a fresh state after animation, so we need to preserve _pendingCustomEffects
@@ -108,19 +149,18 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (action && 'count' in action && action.count > 1) {
                 const remainingCount = action.count - 1;
                 stateAfterTriggers.actionRequired = { ...action, count: remainingCount };
-                return { ...stateAfterTriggers, animationState: null };
+                return { ...stateAfterTriggers };
             }
             // CRITICAL: If the input state already has actionRequired or queuedActions,
             // it means processQueuedActions already ran and set up the next action.
             // We should NOT override it by calling queuePendingCustomEffects again.
             if (workingState.actionRequired || (workingState.queuedActions && workingState.queuedActions.length > 0)) {
                 // Preserve actionRequired/queuedActions from working state
-                // CRITICAL: Must clear animationState since endTurnCb won't be called
+                // endTurnCb won't be called - preserve actionRequired/queuedActions
                 return {
                     ...stateAfterTriggers,
                     actionRequired: workingState.actionRequired,
                     queuedActions: workingState.queuedActions,
-                    animationState: null
                 };
             }
 
@@ -143,25 +183,38 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
                 const newQueue = [...stateAfterTriggers.queuedActions];
                 const nextAction = newQueue.shift();
+                const actionType = (nextAction as any)?.type;
 
-                // CRITICAL FIX: execute_remaining_custom_effects is an INTERNAL action type
-                // It must be processed by processQueuedActions, NOT set as actionRequired!
-                // Setting it as actionRequired causes a softlock because there's no UI for it.
-                if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                // CRITICAL FIX: Auto-resolve actions must be processed by processQueuedActions!
+                // These action types have no UI and cause softlocks or wrong turn handling if set as actionRequired.
+                // - execute_remaining_custom_effects: Internal effect continuation
+                // - execute_follow_up_effect: Internal "if you do" effect
+                // - flip_self: Self-flip (Metal-0, Water-0, Psychic-4, etc.)
+                // - reveal_opponent_hand: Auto-resolve reveal
+                // - delete_self: Auto-resolve self-delete
+                const isAutoResolveAction = [
+                    'execute_remaining_custom_effects',
+                    'execute_follow_up_effect',
+                    'flip_self',
+                    'reveal_opponent_hand',
+                    'delete_self'
+                ].includes(actionType);
+
+                if (isAutoResolveAction) {
                     // Put the action back in queue and process it properly
                     const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...newQueue] };
                     const processedState = phaseManager.processQueuedActions(stateWithQueue);
 
                     // If processing created an actionRequired (like a shift prompt), return it
                     if (processedState.actionRequired) {
-                        return { ...processedState, animationState: null };
+                        return { ...processedState };
                     }
 
                     // If no actionRequired, check for more queued actions
                     if (processedState.queuedActions && processedState.queuedActions.length > 0) {
                         const nextQueue = [...processedState.queuedActions];
                         const nextNextAction = nextQueue.shift();
-                        return { ...processedState, actionRequired: nextNextAction, queuedActions: nextQueue, animationState: null };
+                        return { ...processedState, actionRequired: nextNextAction, queuedActions: nextQueue };
                     }
 
                     // Nothing left to do - end turn
@@ -169,7 +222,7 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
                 }
 
                 // For other action types, set as actionRequired normally
-                return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue, animationState: null };
+                return { ...stateAfterTriggers, actionRequired: nextAction, queuedActions: newQueue };
             }
             return endTurnCb(stateAfterTriggers);
         };
@@ -177,7 +230,15 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
         return {
             nextState: { ...newState, actionRequired: null },
             requiresAnimation: {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardOwner,
+                    // Include snapshot data for animation (card is already deleted from state)
+                    cardSnapshot,
+                    laneIndex,
+                    cardIndex
+                } as AnimationRequest],
                 onCompleteCallback,
             },
             requiresTurnEnd: false,
@@ -186,7 +247,27 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
     return null;
 }
 
-export const resolveActionWithCard = (prev: GameState, targetCardId: string): CardActionResult => {
+/**
+ * Helper function that applies the CardActionResult's callback synchronously.
+ * This ensures the LOGIC always runs, regardless of animation.
+ * Use this for any code path that doesn't need animation (AI sync, tests, etc.)
+ */
+export const applyCardActionResult = (
+    result: CardActionResult,
+    endTurnCb: (s: GameState) => GameState = (s) => s
+): GameState => {
+    if (result.requiresAnimation && result.requiresAnimation.onCompleteCallback) {
+        // Apply the callback synchronously - this is where followUpEffects etc. are processed
+        return result.requiresAnimation.onCompleteCallback(result.nextState, endTurnCb);
+    }
+    return result.nextState;
+};
+
+export const resolveActionWithCard = (
+    prev: GameState,
+    targetCardId: string,
+    enqueueAnimation?: (item: AnimationQueueItem) => void
+): CardActionResult => {
     if (!prev.actionRequired) return { nextState: prev };
 
     let newState: GameState = { ...prev };
@@ -221,7 +302,16 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const cardInfoBeforeFlip = findCardOnBoard(prev, targetCardId);
             const draws = 'draws' in prev.actionRequired ? prev.actionRequired.draws : 0;
 
-            newState = internalResolveTargetedFlip(prev, targetCardId);
+            newState = internalResolveTargetedFlip(prev, targetCardId, null, enqueueAnimation);
+
+            // CRITICAL: Create flip animation request so processAnimationQueue waits for flip to complete
+            // This ensures sequential animations (e.g., Water-0's "flip other" then "flip self")
+            const flipAnimationRequest: AnimationRequest = {
+                type: 'flip',
+                cardId: targetCardId,
+                owner: cardInfoBeforeFlip?.owner,
+                laneIndex: cardInfoBeforeFlip ? prev[cardInfoBeforeFlip.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId)) : undefined
+            };
 
             // CRITICAL: Save this value to restore after handleOnFlipToFaceUp
             const savedTargetCardId = targetCardId;
@@ -280,15 +370,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 if (savedFlipLaneIndex !== undefined) {
                     newState.lastFlipLaneIndex = savedFlipLaneIndex;
                 }
-                if (result.animationRequests) {
-                    requiresAnimation = {
-                        animationRequests: result.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
-                    };
-                }
+                // CRITICAL: Always include flip animation request FIRST, then any follow-up requests
+                const allAnimationRequests = [flipAnimationRequest, ...(result.animationRequests || [])];
+                requiresAnimation = {
+                    animationRequests: allAnimationRequests,
+                    onCompleteCallback: standardAnimationCallback
+                };
+            } else if (cardInfoBeforeFlip) {
+                // Card was face-up and is now face-down (or was already face-down)
+                // Still need to wait for flip animation before processing next queued action
+                requiresAnimation = {
+                    animationRequests: [flipAnimationRequest],
+                    onCompleteCallback: standardAnimationCallback
+                };
             }
 
             // NEW: Handle custom protocol follow-up effects (e.g., "Flip 1 card. Draw cards equal to that card's value")
@@ -474,6 +568,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         const actor = prev.actionRequired.actor;
                         const shiftResult = internalShiftCard(prev, targetCardId, cardOwner, fixedTargetLane, actor);
                         newState = shiftResult.newState;
+                        // CRITICAL: Store animation requests in _pendingAnimationRequests
+                        if (shiftResult.animationRequests && shiftResult.animationRequests.length > 0) {
+                            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                            (newState as any)._pendingAnimationRequests = [...existingRequests, ...shiftResult.animationRequests];
+                        }
                         requiresTurnEnd = !newState.actionRequired;
                         break;
                     }
@@ -526,22 +625,13 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             newState = log(newState, actor, `Deleting ${cardName}.`);
 
             const { owner, laneIndex } = cardInfo;
-            const wasTopCard = prev[owner].lanes[laneIndex][prev[owner].lanes[laneIndex].length - 1].id === cardToDeleteId;
+            const lane = prev[owner].lanes[laneIndex];
+            const wasTopCard = lane[lane.length - 1].id === cardToDeleteId;
 
-            // Delete the card
-            const lane = [...prev[owner].lanes[laneIndex]];
-            const cardIndex = lane.findIndex(c => c.id === cardToDeleteId);
-            lane.splice(cardIndex, 1);
+            // Delete the card (removes from board, adds to trash)
+            newState = deleteCardFromBoard(prev, cardToDeleteId);
 
-            const newLanes = [...prev[owner].lanes];
-            newLanes[laneIndex] = lane;
-
-            let stateAfterDelete = {
-                ...prev,
-                [owner]: { ...prev[owner], lanes: newLanes },
-            };
-
-            newState = phaseManager.queuePendingCustomEffects(stateAfterDelete);
+            newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + 1 };
@@ -649,14 +739,33 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
 
+            // CRITICAL: Actually delete the card from board and add to trash
+            newState = deleteCardFromBoard(newState, targetCardId);
+
             newState = phaseManager.queuePendingCustomEffects(newState);
+
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // This fixes "Delete 1. If you do, flip this card" not working for AI
+            // because AI runs synchronously and never waits for async callbacks.
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, true);
+
             newState.actionRequired = null;
+
+            // CRITICAL FIX: Include cardSnapshot, laneIndex, cardIndex for animation
+            // These are needed because the card is already deleted from state
+            const cardIndexForAnim = lane ? lane.findIndex(c => c.id === targetCardId) : -1;
             requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardInfo.owner,
+                    cardSnapshot: { ...cardInfo.card },
+                    laneIndex: laneIndex,
+                    cardIndex: cardIndexForAnim,
+                }],
                 onCompleteCallback: (s, endTurnCb) => {
                     const deletingPlayer = prev.actionRequired.actor;
                     const originalAction = prev.actionRequired;
-
 
                     // Trigger reactive effects after delete (Hate-3 custom protocol)
                     const reactiveResult = processReactiveEffects(s, 'after_delete', { player: deletingPlayer });
@@ -724,7 +833,11 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                     sourceCardId: originalAction.sourceCardId,
                                     disallowedLaneIndex: originalAction.disallowedLaneIndex,
                                     lanesSelected: allSelectedLanes,
-                                    actor: originalAction.actor
+                                    actor: originalAction.actor,
+                                    // CRITICAL FIX: Preserve log context for proper formatting
+                                    logSource: originalAction.logSource,
+                                    logPhase: originalAction.logPhase,
+                                    logIndentLevel: originalAction.logIndentLevel
                                 };
                             } else {
                                 // No cards left in remaining lanes - skip the rest
@@ -785,8 +898,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
                     // CRITICAL: Handle followUpEffect (Death-1: "then delete this card") when delete is complete
                     // This only applies when we DON'T have a nextStepOfDeleteAction (i.e., this was the last/only delete)
-                    if (followUpEffect && !nextStepOfDeleteAction) {
-
+                    // NOTE: followUpEffect may have been queued synchronously already (by queueFollowUpEffectSync)
+                    // to fix the async bug where AI runs sync and never waits for callbacks.
+                    const followUpAlreadyQueued = isFollowUpAlreadyQueued(stateAfterTriggers, originalAction.sourceCardId);
+                    if (followUpEffect && !nextStepOfDeleteAction && !followUpAlreadyQueued) {
                         // If there's already an actionRequired (from uncover effect), queue the followUp for later
                         if (stateAfterTriggers.actionRequired) {
 
@@ -855,6 +970,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                 stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
                                 stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
+                                // CRITICAL: Capture state BEFORE effect for proper animation snapshots
+                                const stateBeforeFollowUp = stateAfterTriggers;
+
                                 const followUpResult = executeCustomEffect(
                                     sourceCardForFollowUp.card,
                                     followUpLaneIndex,
@@ -863,6 +981,22 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                     followUpEffect
                                 );
                                 stateAfterTriggers = followUpResult.newState;
+
+                                // CRITICAL: Convert AnimationRequests to AnimationQueueItems using PRE-effect state
+                                // This ensures snapshots capture cards in their original positions
+                                if (followUpResult.animationRequests && followUpResult.animationRequests.length > 0) {
+                                    const queueItems = convertAnimationRequestsToQueueItems(
+                                        stateBeforeFollowUp,  // Use state BEFORE effect!
+                                        followUpResult.animationRequests,
+                                        true  // isOpponentAction
+                                    );
+                                    if (queueItems.length > 0) {
+                                        stateAfterTriggers._pendingAnimations = [
+                                            ...(stateAfterTriggers._pendingAnimations || []),
+                                            ...queueItems
+                                        ];
+                                    }
+                                }
 
                                 // Queue any pending effects from the follow-up
                                 stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
@@ -876,10 +1010,29 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                                     stateAfterTriggers = setLogPhase(stateAfterTriggers, (originalAction as any).logPhase || 'start');
                                     stateAfterTriggers._logIndentLevel = (originalAction as any).logIndentLevel ?? 1;
 
-                                    // Execute delete_self directly
-                                    const deleteResult = internalDeleteCard(stateAfterTriggers, originalAction.sourceCardId);
-                                    stateAfterTriggers = deleteResult.newState;
-                                    stateAfterTriggers = log(stateAfterTriggers, originalAction.actor, `Deletes itself.`);
+                                    // CRITICAL: Find card info BEFORE deleting for animation
+                                    const cardToDelete = findCardOnBoard(stateAfterTriggers, (originalAction as any).sourceCardId);
+                                    if (cardToDelete) {
+                                        const { card, owner, laneIndex, cardIndex } = cardToDelete;
+                                        // CRITICAL: Create COMPLETE AnimationQueueItem BEFORE delete
+                                        // The snapshot captures the state WITH the card still present
+                                        const deleteAnimation = createDeleteAnimation(
+                                            stateAfterTriggers,  // State WITH card - snapshot will include it
+                                            card,
+                                            owner,
+                                            laneIndex,
+                                            cardIndex,
+                                            true  // isOpponentAction - AI is always opponent
+                                        );
+                                        stateAfterTriggers._pendingAnimations = [
+                                            ...(stateAfterTriggers._pendingAnimations || []),
+                                            deleteAnimation
+                                        ];
+                                    }
+
+                                    // Execute delete_self directly using deleteCardFromBoard
+                                    stateAfterTriggers = deleteCardFromBoard(stateAfterTriggers, (originalAction as any).sourceCardId);
+                                    stateAfterTriggers = log(stateAfterTriggers, (originalAction as any).actor, `Deletes itself.`);
                                 }
                             }
                         }
@@ -898,7 +1051,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         // CRITICAL: Auto-resolve actions should be processed via processQueuedActions
                         // instead of being set as actionRequired (which expects user input)
                         const firstAction = stateAfterTriggers.queuedActions[0];
-                        if (firstAction?.type === 'execute_remaining_custom_effects') {
+
+                        // CRITICAL FIX: execute_follow_up_effect must ALSO be auto-resolved!
+                        // This fixes Death-1's "then delete this card" being shown as actionRequired
+                        // instead of auto-executing. queueFollowUpEffectSync queues these.
+                        if (firstAction?.type === 'execute_remaining_custom_effects' ||
+                            firstAction?.type === 'execute_follow_up_effect') {
                             const stateAfterQueue = phaseManager.processQueuedActions(stateAfterTriggers);
 
                             // If processQueuedActions set an actionRequired, return it
@@ -954,8 +1112,10 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                             const queueCopy = [...stateAfterTriggers.queuedActions];
                             const nextAction = queueCopy.shift();
 
-                            // CRITICAL FIX: execute_remaining_custom_effects must be processed by processQueuedActions
-                            if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+                            // CRITICAL FIX: Auto-resolve actions must be processed by processQueuedActions
+                            // This includes execute_follow_up_effect (Death-1's "then delete this card")
+                            if ((nextAction as any)?.type === 'execute_remaining_custom_effects' ||
+                                (nextAction as any)?.type === 'execute_follow_up_effect') {
                                 const stateWithQueue = { ...stateAfterTriggers, queuedActions: [nextAction, ...queueCopy] };
                                 const processedState = phaseManager.processQueuedActions(stateWithQueue);
                                 if (processedState.actionRequired) {
@@ -1032,11 +1192,19 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const laneIndex = prev[cardInfo.owner].lanes.findIndex(l => l.some(c => c.id === targetCardId));
             const lane = prev[cardInfo.owner].lanes[laneIndex];
             const wasTopCard = lane && lane.length > 0 && lane[lane.length - 1].id === targetCardId;
+            const cardIndexForAnim = lane ? lane.findIndex(c => c.id === targetCardId) : -1;
 
             newState = phaseManager.queuePendingCustomEffects(newState);
             newState.actionRequired = null;
             requiresAnimation = {
-                animationRequests: [{ type: 'delete', cardId: targetCardId, owner: cardInfo.owner }],
+                animationRequests: [{
+                    type: 'delete',
+                    cardId: targetCardId,
+                    owner: cardInfo.owner,
+                    cardSnapshot: { ...cardInfo.card },
+                    laneIndex: laneIndex,
+                    cardIndex: cardIndexForAnim,
+                }],
                 onCompleteCallback: (s, endTurnCb) => {
                     // Trigger reactive effects after delete (Hate-3 custom protocol)
                     const reactiveResult = processReactiveEffects(s, 'after_delete', { player: actor });
@@ -1093,13 +1261,15 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
             const destination = (prev.actionRequired as any)?.destination as 'owner_hand' | 'actor_hand' | undefined;
 
             // CRITICAL: Validate that target card is uncovered (unless targetFilter explicitly allows covered)
+            // Use isCardUncovered which correctly handles committed cards:
+            // If a card above the target is "committed" (shifting/playing but not landed yet),
+            // the card below it counts as uncovered for targeting purposes.
             const targetCardInfo = findCardOnBoard(prev, targetCardId);
             if (targetCardInfo) {
-                const lane = prev[targetCardInfo.owner].lanes[targetCardInfo.laneIndex];
-                const isUncovered = lane[lane.length - 1]?.id === targetCardId;
+                const uncovered = isCardUncovered(prev, targetCardId);
                 const allowsCovered = targetFilter?.position === 'covered' || targetFilter?.position === 'any';
 
-                if (!isUncovered && !allowsCovered) {
+                if (!uncovered && !allowsCovered) {
                     console.error(`[cardResolver] Invalid return target: ${targetCardInfo.card.protocol}-${targetCardInfo.card.value} is covered`);
                     return { nextState: prev, requiresTurnEnd: false };
                 }
@@ -1107,6 +1277,12 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
 
             const result = internalReturnCard(prev, targetCardId, destination);
             newState = result.newState;
+
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // This fixes "Return 1. If you do, flip this card" not working for AI
+            // because AI runs synchronously and never waits for async callbacks.
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, true);
+
             if (result.animationRequests) {
                  requiresAnimation = {
                     animationRequests: result.animationRequests,
@@ -1116,7 +1292,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                         let finalState = s;
 
                         // NEW: Handle generic followUpEffect for custom protocols ("Return 1. If you do, flip 1.")
-                        if (followUpEffect && sourceCardId) {
+                        // NOTE: Check if already queued synchronously (async bug fix)
+                        const followUpAlreadyQueued = isFollowUpAlreadyQueued(finalState, sourceCardId);
+                        if (followUpEffect && sourceCardId && !followUpAlreadyQueued) {
                             const shouldExecute = conditionalType !== 'if_executed' || targetCardId;
 
                             if (shouldExecute) {
@@ -1145,7 +1323,9 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 };
             } else {
                 // No animation - execute followUp immediately if present
-                if (followUpEffect && sourceCardId) {
+                // NOTE: Check if already queued synchronously (async bug fix)
+                const followUpAlreadyQueuedNoAnim = isFollowUpAlreadyQueued(newState, sourceCardId);
+                if (followUpEffect && sourceCardId && !followUpAlreadyQueuedNoAnim) {
                     const shouldExecute = conditionalType !== 'if_executed' || targetCardId;
 
                     if (shouldExecute) {
@@ -1198,8 +1378,17 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 if (sourceCardInfo) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     stateAfterReturn = log(stateAfterReturn, actor, `${cardName}: Flips itself.`);
+                    // Store flip animation request BEFORE state change (new queue system)
+                    const flipRequest: AnimationRequest = {
+                        type: 'flip',
+                        cardId: sourceCardId,
+                        owner: sourceCardInfo.owner,
+                        laneIndex: sourceCardInfo.laneIndex,
+                        cardIndex: sourceCardInfo.cardIndex
+                    };
+                    const existingRequests = (stateAfterReturn as any)._pendingAnimationRequests || [];
+                    (stateAfterReturn as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                     stateAfterReturn = findAndFlipCards(new Set([sourceCardId]), stateAfterReturn);
-                    stateAfterReturn.animationState = { type: 'flipCard', cardId: sourceCardId };
                 }
                 newState = stateAfterReturn;
                 requiresTurnEnd = true;
@@ -1247,7 +1436,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 };
             }
 
-            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, nextActionInChain);
+            let stateAfterFlip = internalResolveTargetedFlip(prev, targetCardId, nextActionInChain, enqueueAnimation);
 
             if (cardInfoBeforeFlip && !cardInfoBeforeFlip.card.isFaceUp) {
                 const onFlipResult = handleOnFlipToFaceUp(stateAfterFlip, targetCardId);
@@ -1266,10 +1455,7 @@ export const resolveActionWithCard = (prev: GameState, targetCardId: string): Ca
                 if (onFlipResult.animationRequests) {
                     requiresAnimation = {
                         animationRequests: onFlipResult.animationRequests,
-                        onCompleteCallback: (s, endTurnCb) => {
-                            if (s.actionRequired || (s.queuedActions && s.queuedActions.length > 0)) return s;
-                            return endTurnCb(s);
-                        }
+                        onCompleteCallback: standardAnimationCallback
                     };
                 }
             } else {

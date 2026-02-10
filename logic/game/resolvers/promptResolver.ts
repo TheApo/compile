@@ -32,8 +32,11 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
 
     if (accept) {
         newState = log(newState, actor, `${actorName} chooses to execute the optional draw effect.`);
+
         // Execute the draw
+        // NOTE: drawForPlayer already sets _pendingAnimationRequests for draw animation (DRY)
         newState = drawForPlayer(newState, drawingPlayer || actor, count);
+
         newState = log(newState, actor, `${actorName} draws ${count} card${count !== 1 ? 's' : ''}.`);
 
         // Check if there's a follow-up effect from conditional chaining (if_executed)
@@ -92,35 +95,7 @@ export const resolveOptionalDrawPrompt = (prevState: GameState, accept: boolean)
 
 // REMOVED: resolveDeath1Prompt - Death-1 now uses custom protocol with prompt_optional_draw + conditional
 // REMOVED: resolveLove1Prompt - Love-1 now uses custom protocol with prompt_optional_effect
-
-export const resolvePlague4Flip = (prevState: GameState, accept: boolean, player: Player): GameState => {
-    if (prevState.actionRequired?.type !== 'plague_4_player_flip_optional') return prevState;
-
-    let newState = { ...prevState, actionRequired: null };
-
-    // Set context for Plague-4 (indent is already set by the End effect)
-    newState = setLogSource(newState, 'Plague-4');
-    newState = setLogPhase(newState, 'end');
-
-    if (accept) {
-        const { sourceCardId } = prevState.actionRequired;
-        const actorName = player === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, player, `${actorName} chooses to flip the card.`);
-        newState = findAndFlipCards(new Set([sourceCardId]), newState);
-        newState.animationState = { type: 'flipCard', cardId: sourceCardId };
-    } else {
-        const actorName = player === 'player' ? 'Player' : 'Opponent';
-        newState = log(newState, player, `${actorName} skips flipping the card.`);
-    }
-
-    // Clear context and decrease indent (closing the End effect)
-    newState = setLogSource(newState, undefined);
-    newState = setLogPhase(newState, undefined);
-    newState = decreaseLogIndent(newState);
-
-    return newState;
-};
-
+// REMOVED: resolvePlague4Flip - Plague-4 now uses custom protocol with flip + flipSelf + optional
 // REMOVED: resolveFire3Prompt - Fire-3 now uses custom protocol with prompt_optional_discard_custom
 
 export const resolveOptionalDiscardCustomPrompt = (prevState: GameState, accept: boolean): GameState => {
@@ -293,9 +268,8 @@ export const resolveOptionalEffectPrompt = (prevState: GameState, accept: boolea
             const followUpEffect = effectDef.conditional.thenEffect;
             const followUpResult = executeCustomEffect(sourceCardAfter, laneIndex, result.newState, context, followUpEffect);
 
-            // CRITICAL: If the followUp created an actionRequired AND the followUp has its own conditional,
+            // If the followUp created an actionRequired AND the followUp has its own conditional,
             // attach the nested conditional as a followUpEffect so it executes after the action completes
-            // Example: Death-1's "draw -> if you do, delete other -> then delete self"
             if (followUpResult.newState.actionRequired && followUpEffect.conditional && followUpEffect.conditional.thenEffect) {
                 const stateWithNestedFollowUp = {
                     ...followUpResult.newState,

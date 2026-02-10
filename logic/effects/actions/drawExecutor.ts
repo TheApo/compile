@@ -8,7 +8,7 @@
  * Extracted 1:1 from effectInterpreter.ts for modularity.
  */
 
-import { GameState, Player, PlayedCard, EffectResult, EffectContext } from '../../../types';
+import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
 import { log } from '../../utils/log';
 import { v4 as uuidv4 } from 'uuid';
 import { processReactiveEffects } from '../../game/reactiveEffectProcessor';
@@ -217,8 +217,15 @@ export function executeDrawEffect(
             newState = oppReactiveResult.newState;
         }
 
-        // Add draw animation request
-        const animationRequests = count > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count }] : undefined;
+        // CRITICAL FIX: Clear _effectSkippedNoTargets - the DRAW succeeded.
+        if (newCards.length > 0) {
+            delete (newState as any)._effectSkippedNoTargets;
+        }
+
+        // Return animationRequests for draw animation (consistent with all other effects)
+        const animationRequests: AnimationRequest[] = newCards.length > 0
+            ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id) }]
+            : [];
 
         return { newState, animationRequests };
     }
@@ -552,6 +559,13 @@ export function executeDrawEffect(
         hand: drawnCards,
     };
 
+    // CRITICAL FIX: Clear _effectSkippedNoTargets if we successfully drew cards.
+    // This marker might have been set by a previous effect or reactive effect,
+    // and would incorrectly signal that THIS draw was skipped.
+    if (newCards.length > 0) {
+        delete (newState as any)._effectSkippedNoTargets;
+    }
+
     // Log reshuffle if it happened
     if (reshuffled) {
         const sourcePlayerName = sourcePlayer === 'player' ? 'Player' : 'Opponent';
@@ -608,13 +622,14 @@ export function executeDrawEffect(
     }
 
     // CRITICAL: Trigger reactive effects after draw (Spirit-3)
-    if (drawnCards.length > 0) {
-        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: drawnCards.length });
+    // NOTE: Use newCards.length (newly drawn cards), NOT drawnCards.length (entire hand)!
+    if (newCards.length > 0) {
+        const reactiveResult = processReactiveEffects(newState, 'after_draw', { player: drawingPlayer, count: newCards.length });
         newState = reactiveResult.newState;
 
         // CRITICAL: Trigger after_opponent_draw for opponent's cards (Mirror-4)
         const opponentOfDrawer = drawingPlayer === 'player' ? 'opponent' : 'player';
-        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: drawnCards.length });
+        const oppReactiveResult = processReactiveEffects(newState, 'after_opponent_draw', { player: opponentOfDrawer, count: newCards.length });
         newState = oppReactiveResult.newState;
     }
 
@@ -658,10 +673,16 @@ export function executeDrawEffect(
         return { newState };
     }
 
-    // TEMPORARY FIX: Don't return animation for custom protocol draws to avoid blocking hand interactions
-    // The animation causes a race condition where Check Cache runs while animation is still playing
-    // TODO: Fix the async timing properly
-    // const animationRequests = drawnCards.length > 0 ? [{ type: 'draw' as const, player: drawingPlayer, count: drawnCards.length }] : undefined;
+    // CRITICAL FIX: Clear _effectSkippedNoTargets - the DRAW succeeded.
+    if (newCards.length > 0) {
+        delete (newState as any)._effectSkippedNoTargets;
+    }
 
-    return { newState };
+    // Return animationRequests for draw animation (consistent with all other effects)
+    const fromOpponentDeck = sourcePlayer !== drawingPlayer;
+    const animationRequests: AnimationRequest[] = newCards.length > 0
+        ? [{ type: 'draw' as const, player: drawingPlayer, count: newCards.length, cardIds: newCards.map(c => c.id), ...(fromOpponentDeck ? { fromOpponentDeck: true } : {}) }]
+        : [];
+
+    return { newState, animationRequests };
 }

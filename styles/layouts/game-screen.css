@@ -93,6 +93,7 @@
     flex-direction: column;
     min-height: 0;
     position: relative;
+    /* NO padding-left here - only lanes should be offset, not hand/phase areas */
 }
 
 .compile-prompt-container {
@@ -120,9 +121,14 @@
 
 .player-side {
     height: 42%;
+    display: flex;
+    flex-direction: row;
 }
+
+/* Opponent is rotated 180°, so use row-reverse to keep DeckTrashArea on LEFT after rotation */
 .opponent-side {
     transform: rotate(180deg);
+    flex-direction: row-reverse;
 }
 
 .player-side.active-turn .lanes {
@@ -145,6 +151,7 @@
     padding: 1rem 0;
     border-radius: 10px;
     transition: background-color 0.4s ease-in-out;
+    flex: 1; /* Take remaining space after DeckTrashArea */
 }
 
 .lane {
@@ -215,11 +222,17 @@
 }
 
 
+/* Card size for lane-stack AND pile-card-wrapper (same card, just rotated in pile) */
+.lane-stack .card-component,
+.pile-card-wrapper .card-component {
+    width: 100px;
+    height: 140px;
+}
+
+/* Lane-specific positioning */
 .lane-stack .card-component {
     position: absolute;
     top: calc(var(--i) * 64px);
-    width: 100px;
-    height: 140px;
     transition: all 0.2s ease-in-out;
     cursor: pointer;
 }
@@ -296,7 +309,8 @@
 
 
 /* --- Central Protocol Bars Redesign --- */
-.protocol-bars-container {
+/* IMPORTANT: Use .game-board prefix to avoid affecting ResultsScreen */
+.game-board .protocol-bars-container {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -309,6 +323,10 @@
     margin: 0.5rem 0;
     height: auto;
     position: relative; /* For centering the coin */
+    /* Center only over the lanes (not over DeckTrashArea) */
+    width: calc(100% - 170px);  /* 170px = DeckTrashArea width */
+    margin-left: auto;
+    margin-right: 0;
 }
 .protocol-bar {
     display: flex;
@@ -541,6 +559,166 @@
 .opponent-hand-area .card-component.in-hand:hover .card-front {
   border-color: var(--primary-color);
   box-shadow: 0 0 10px var(--primary-color);
+}
+
+/* --- Deck & Trash Areas --- */
+/* Positioned as flex item alongside lanes */
+.deck-trash-area {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px;
+    width: 170px;
+    flex-shrink: 0;
+    background: transparent;
+    border-radius: 10px;
+}
+
+/* Opponent side is rotated 180°, so counter-rotate the DeckTrashArea content */
+.deck-trash-area.opponent {
+    transform: rotate(180deg);
+}
+
+.deck-pile, .trash-pile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    /* Subtle background - part of the game board */
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--surface-hover);
+    transition: all 0.2s ease;
+    width: 150px;
+    /* Re-enable clicks on the actual pile elements */
+    pointer-events: auto;
+}
+
+.deck-pile:hover, .trash-pile:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
+.pile-label {
+    font-size: 0.7rem;
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+/* Card wrapper - just rotates the normal card 90° */
+.pile-card-wrapper {
+    transform: rotate(90deg);
+    transform-origin: center center;
+    width: 140px;  /* Card height becomes width after rotation */
+    height: 100px; /* Card width becomes height after rotation */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.deck-trash-area.opponent .pile-card-wrapper {
+    transform: rotate(-90deg);
+}
+
+
+.empty-pile {
+    width: 100px;
+    height: 140px;
+    border: 2px dashed var(--surface-hover);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.pile-count {
+    font-size: 0.8rem;
+    font-family: 'Orbitron', sans-serif;
+    color: var(--text-color);
+    margin-top: 4px;
+}
+
+/* =============================================================================
+   RESPONSIVE DESIGN FOR DECK/TRASH AREAS
+   ============================================================================= */
+
+/* Medium screens: Smaller DeckTrashArea */
+@media (max-width: 1200px) {
+    .deck-trash-area {
+        width: 120px;
+    }
+
+    .deck-pile, .trash-pile {
+        width: 105px;
+        padding: 3px;
+    }
+
+    .pile-card-wrapper {
+        width: 98px;
+        height: 70px;
+    }
+
+    .empty-pile {
+        width: 70px;
+        height: 98px;
+    }
+
+    .game-board .protocol-bars-container {
+        width: calc(100% - 120px);
+    }
+}
+
+/* Small screens: Even smaller DeckTrashArea */
+@media (max-width: 1000px) {
+    .deck-trash-area {
+        width: 90px;
+    }
+
+    .deck-pile, .trash-pile {
+        width: 80px;
+        padding: 2px;
+    }
+
+    .pile-label {
+        font-size: 0.5rem;
+    }
+
+    .pile-card-wrapper {
+        width: 70px;
+        height: 50px;
+    }
+
+    .empty-pile {
+        width: 50px;
+        height: 70px;
+        font-size: 0.5rem;
+    }
+
+    .pile-count {
+        font-size: 0.6rem;
+    }
+
+    .game-board .protocol-bars-container {
+        width: calc(100% - 90px);
+    }
+}
+
+/* Very small screens: Hide DeckTrashArea completely */
+@media (max-width: 850px) {
+    .deck-trash-area {
+        display: none;
+    }
+
+    .game-board .protocol-bars-container {
+        width: 100%;  /* DeckTrashArea is hidden, use full width */
+    }
 }
 
 /* --- Card Component --- FUTURISTIC REDESIGN --- */

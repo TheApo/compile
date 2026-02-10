@@ -10,7 +10,7 @@ import { CardComponent } from '../components/Card';
 import { useGameState } from '../hooks/useGameState';
 import { GameBoard } from '../components/GameBoard';
 import { PhaseController } from '../components/PhaseController';
-import { GameState, Player, PlayedCard, Difficulty, ActionRequired } from '../types';
+import { GameState, Player, PlayedCard, Difficulty, ActionRequired, GamePhase } from '../types';
 import { GameInfoPanel } from '../components/GameInfoPanel';
 import { LogModal } from '../components/LogModal';
 import { isCardTargetable } from '../utils/targeting';
@@ -30,6 +30,9 @@ import { CoinFlipModal } from '../components/CoinFlipModal';
 import { useStatistics } from '../hooks/useStatistics';
 import { DebugPanel } from '../components/DebugPanel';
 import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
+import { AnimationQueueProvider, useAnimationQueue } from '../contexts/AnimationQueueContext';
+import { AnimationOverlay } from '../components/AnimationOverlay';
+import { snapshotToGameState } from '../utils/snapshotUtils';
 
 
 interface GameScreenProps {
@@ -72,7 +75,23 @@ const ACTIONS_REQUIRING_HAND_INTERACTION = new Set<ActionRequired['type']>([
 ]);
 
 
-export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
+/**
+ * GameScreen - Wrapper that provides AnimationQueueContext
+ */
+export function GameScreen(props: GameScreenProps) {
+  return (
+    <AnimationQueueProvider>
+      <GameScreenContent {...props} />
+    </AnimationQueueProvider>
+  );
+}
+
+/**
+ * GameScreenContent - Main game screen content
+ */
+function GameScreenContent({ onBack, onEndGame, playerProtocols, opponentProtocols, difficulty, useControlMechanic, startingPlayer = 'player', initialScenarioSetup }: GameScreenProps) {
+  // Animation queue context for the new animation system
+  const { isAnimating, currentAnimation, enqueueAnimation, enqueueAnimations, getIsAnimatingSync, getAnimationSync } = useAnimationQueue();
   // Determine starting player via coin flip on first mount
   const [actualStartingPlayer, setActualStartingPlayer] = useState<Player | null>(null);
   const [showCoinFlip, setShowCoinFlip] = useState(true);
@@ -148,23 +167,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     resolveActionWithHandCard,
     skipAction,
     resolveOptionalDrawPrompt,
-    resolveDeath1Prompt,
-    resolveLove1Prompt,
-    resolvePlague2Discard,
-    resolvePlague4Flip,
-    resolveFire3Prompt,
     resolveOptionalDiscardCustomPrompt,
     resolveOptionalEffectPrompt,
-    resolveFire4Discard,
-    resolveHate1Discard,
-    resolveLight2Prompt,
+    resolveVariableDiscard,
     resolveRevealBoardCardPrompt,
     resolveRearrangeProtocols,
-    resolveSpirit1Prompt,
-    resolveSpirit3Prompt,
     resolveSwapProtocols,
-    resolveSpeed3Prompt,
-    resolvePsychic4Prompt,
     resolveControlMechanicPrompt,
     resolveCustomChoice,
     resolveSelectRevealedDeckCard,
@@ -184,8 +192,160 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
     difficulty,
     useControlMechanic,
     actualStartingPlayer ?? 'player',
-    trackPlayerRearrange
+    trackPlayerRearrange,
+    // NEW: Pass animation queue functions for the new animation system
+    enqueueAnimation,
+    enqueueAnimations,
+    // NEW: Pass animation state so AI waits for phase transitions
+    isAnimating
   );
+
+  // CRITICAL: Track the last valid animation state to prevent flashing gameState during transitions
+  // When animation A completes and animation B starts, there's a brief gap where refs are stale
+  // This ref persists through that gap to prevent showing the real gameState
+  const lastValidAnimationRef = useRef<{
+    snapshot: ReturnType<typeof getAnimationSync> extends { snapshot: infer S } ? S : never;
+    cardIds: Set<string>;
+  } | null>(null);
+
+  // Compute the visual game state - uses snapshot data during animation
+  // This allows the SAME GameBoard to render both real state and animation snapshots
+  // CRITICAL: Check synchronous refs FIRST to handle race conditions
+  // When animation is enqueued, refs are set immediately but React state lags behind
+  const visualGameState = useMemo(() => {
+    // FIRST: Check synchronous animation state (handles race conditions)
+    const syncAnimation = getAnimationSync();
+    const isSyncAnimating = getIsAnimatingSync();
+
+    // SPECIAL CASE: ALL flip animations use the REAL gameState (not snapshot)
+    // because the card stays in place and we want the board's CSS transition to animate it.
+    // This provides a cleaner in-place 3D flip animation (the "old" style that looks better).
+    const activeAnim = syncAnimation || currentAnimation;
+    const isFlipAnimation = activeAnim?.type === 'flip';
+    if (isFlipAnimation) {
+      lastValidAnimationRef.current = null;
+      return gameState;
+    }
+
+    if (isSyncAnimating && syncAnimation?.snapshot) {
+      // Update last valid state
+      const cardIds = new Set<string>();
+      if (syncAnimation.animatingCard) cardIds.add(syncAnimation.animatingCard.card.id);
+      if (syncAnimation.animatingCards) syncAnimation.animatingCards.forEach(item => cardIds.add(item.card.id));
+      lastValidAnimationRef.current = { snapshot: syncAnimation.snapshot, cardIds };
+      return snapshotToGameState(syncAnimation.snapshot, useControlMechanic);
+    }
+
+    // Check React state
+    if (isAnimating && currentAnimation?.snapshot) {
+      // Update last valid state
+      const cardIds = new Set<string>();
+      if (currentAnimation.animatingCard) cardIds.add(currentAnimation.animatingCard.card.id);
+      if (currentAnimation.animatingCards) currentAnimation.animatingCards.forEach(item => cardIds.add(item.card.id));
+      lastValidAnimationRef.current = { snapshot: currentAnimation.snapshot, cardIds };
+      return snapshotToGameState(currentAnimation.snapshot, useControlMechanic);
+    }
+
+    // CRITICAL FALLBACK: If we think we're animating but don't have a current snapshot,
+    // use the last valid snapshot to prevent flashing the real gameState during transitions
+    if ((isSyncAnimating || isAnimating) && lastValidAnimationRef.current?.snapshot) {
+      return snapshotToGameState(lastValidAnimationRef.current.snapshot, useControlMechanic);
+    }
+
+    // Truly not animating - clear the last valid state and show real gameState
+    lastValidAnimationRef.current = null;
+    return gameState;
+  }, [isAnimating, currentAnimation, gameState, useControlMechanic, getAnimationSync, getIsAnimatingSync]);
+
+  // Track which cards are currently being animated - used to hide them via CSS
+  // This handles both single-card animations (animatingCard) and multi-card animations (animatingCards)
+  // CRITICAL: Check sync refs FIRST to handle race condition where React state hasn't updated yet
+  const animatingCardIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    // FIRST: Check synchronous animation state (handles race conditions)
+    const isSyncAnimating = getIsAnimatingSync();
+    const syncAnimation = getAnimationSync();
+
+    // SPECIAL CASE: ALL flip animations do NOT hide the card
+    // The card stays in place and flips via its own CSS transition.
+    // AnimatedCard is not used for flip animations - the board's CSS handles the flip.
+    const activeAnimForIds = syncAnimation || currentAnimation;
+    const isFlipAnimationForIds = activeAnimForIds?.type === 'flip';
+    if (isFlipAnimationForIds) {
+      return ids; // Return empty set - don't hide any cards
+    }
+
+    if (isSyncAnimating && syncAnimation) {
+      if (syncAnimation.animatingCard) {
+        ids.add(syncAnimation.animatingCard.card.id);
+      }
+      if (syncAnimation.animatingCards) {
+        syncAnimation.animatingCards.forEach(item => ids.add(item.card.id));
+      }
+      if (ids.size > 0) return ids;
+    }
+
+    // Check React state
+    if (isAnimating && currentAnimation) {
+      if (currentAnimation.animatingCard) {
+        ids.add(currentAnimation.animatingCard.card.id);
+      }
+      if (currentAnimation.animatingCards) {
+        currentAnimation.animatingCards.forEach(item => ids.add(item.card.id));
+      }
+      if (ids.size > 0) return ids;
+    }
+
+    // CRITICAL FALLBACK: Use last valid card IDs during animation transitions
+    // This prevents cards from briefly appearing when transitioning between animations
+    if ((isSyncAnimating || isAnimating) && lastValidAnimationRef.current?.cardIds) {
+      return lastValidAnimationRef.current.cardIds;
+    }
+
+    return ids;
+  }, [isAnimating, currentAnimation, getIsAnimatingSync, getAnimationSync]);
+
+  // Extended animation info for correct hiding during shift animations
+  const animatingCardInfo = useMemo(() => {
+    if (isAnimating && currentAnimation?.animatingCard) {
+      const { card, fromPosition } = currentAnimation.animatingCard;
+      return { cardId: card.id, fromPosition };
+    }
+    return null;
+  }, [isAnimating, currentAnimation]);
+
+  // Extract phase transition animation data for GameInfoPanel
+  const phaseTransitionAnimation = useMemo(() => {
+    if (currentAnimation?.type === 'phaseTransition' && currentAnimation.phaseTransitionData) {
+      return {
+        phaseSequence: currentAnimation.phaseTransitionData.phaseSequence,
+        duration: currentAnimation.duration,
+      };
+    }
+    return null;
+  }, [currentAnimation]);
+
+  // Extract override phase/turn for non-phaseTransition animations
+  // During ANY animation (except phaseTransition), use snapshot's phase/turn
+  // This prevents the phase display from jumping to the final state during animations
+  const { overridePhase, overrideTurn } = useMemo(() => {
+    // During phaseTransition: let the animated sequence handle it (don't override)
+    if (currentAnimation?.type === 'phaseTransition') {
+      return { overridePhase: undefined, overrideTurn: undefined };
+    }
+
+    // During ANY other animation: use snapshot phase (static display)
+    if (currentAnimation?.snapshot) {
+      return {
+        overridePhase: currentAnimation.snapshot.phase as GamePhase,
+        overrideTurn: currentAnimation.snapshot.turn as Player,
+      };
+    }
+
+    // No animation: don't override (use gameState defaults)
+    return { overridePhase: undefined, overrideTurn: undefined };
+  }, [currentAnimation]);
 
   const [hoveredCard, setHoveredCard] = useState<PreviewState>(null);
   const [multiSelectedCardIds, setMultiSelectedCardIds] = useState<string[]>([]);
@@ -289,22 +449,43 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
   // Priority: 1) User hover, 2) Effect source card, 3) Last played card
   const previewState = hoveredCard || sourceCardInfo || lastPlayedCardInfo;
 
+  // NEW TOAST SYSTEM: Synchronized with animations
+  // Effect 1: Show toast when animation with logMessage starts
+  useEffect(() => {
+    if (currentAnimation?.logMessage) {
+        const { message, player } = currentAnimation.logMessage;
+        const newToast = { message, player, id: uuidv4() };
+        setToasts(currentToasts => [...currentToasts, newToast]);
+
+        // Remove after 5 seconds
+        setTimeout(() => {
+            setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
+        }, 5000);
+    }
+  }, [currentAnimation?.id]); // Trigger when animation changes
+
+  // Effect 2: For log entries WITHOUT animation - show immediately when NOT animating
   useEffect(() => {
     if (gameState.log.length > lastLogLengthRef.current) {
         const newLogs = gameState.log.slice(lastLogLengthRef.current);
-        newLogs.forEach(logEntry => {
-            if (logEntry.message !== 'Game Started.') {
-                const newToast = { message: logEntry.message, player: logEntry.player, id: uuidv4() };
-                setToasts(currentToasts => [...currentToasts, newToast]);
 
-                setTimeout(() => {
-                    setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
-                }, 5000);
-            }
-        });
+        // Only show immediately if NOT animating
+        // If animating, log messages should be attached to animations via logMessage property
+        if (!getIsAnimatingSync()) {
+            newLogs.forEach(logEntry => {
+                if (logEntry.message !== 'Game Started.') {
+                    const newToast = { message: logEntry.message, player: logEntry.player, id: uuidv4() };
+                    setToasts(currentToasts => [...currentToasts, newToast]);
+
+                    setTimeout(() => {
+                        setToasts(currentToasts => currentToasts.filter(t => t.id !== newToast.id));
+                    }, 5000);
+                }
+            });
+        }
     }
     lastLogLengthRef.current = gameState.log.length;
-  }, [gameState.log]);
+  }, [gameState.log, getIsAnimatingSync]);
 
   useEffect(() => {
     const isVariableDiscard = gameState.actionRequired?.type === 'discard' && gameState.actionRequired?.variableCount;
@@ -361,7 +542,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleLanePointerDown = (laneIndex: number, owner: Player) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (isAnimating) return;
 
     const { actionRequired, turn, phase, compilableLanes, player, opponent } = currentState;
 
@@ -485,7 +667,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handlePlayFaceDown = (laneIndex: number) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (isAnimating) return;
 
     const { phase, actionRequired, player } = currentState;
 
@@ -510,7 +693,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleHandCardPointerDown = (card: PlayedCard) => {
     const currentState = gameStateRef.current;
-    if (currentState.animationState) return;
+    // Block input during animations (old system OR new queue system)
+    if (isAnimating) return;
 
     if (currentState.actionRequired) {
       // Check for discard action
@@ -568,7 +752,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
 
   const handleBoardCardPointerDown = (card: PlayedCard, owner: Player, laneIndex: number) => {
       const currentState = gameStateRef.current;
-      if (currentState.animationState) return;
+      // Block input during animations (old system OR new queue system)
+      if (isAnimating) return;
 
       const { actionRequired, turn, phase, compilableLanes } = currentState;
 
@@ -696,7 +881,8 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 difficulty={difficulty}
             />
         )}
-        {showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (
+        {/* Hide modals during animation */}
+        {!isAnimating && showRearrangeModal && gameState.actionRequired?.type === 'prompt_rearrange_protocols' && (
             <RearrangeProtocolsModal
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
@@ -710,7 +896,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {showSwapModal && gameState.actionRequired?.type === 'prompt_swap_protocols' && (
+        {!isAnimating && showSwapModal && gameState.actionRequired?.type === 'prompt_swap_protocols' && (
             <SwapProtocolsModal
                 gameState={gameState}
                 targetPlayer={gameState.actionRequired.target}
@@ -720,7 +906,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {(gameState.actionRequired?.type === 'select_card_from_revealed_deck' || gameState.actionRequired?.type === 'reveal_deck_draw_protocol') && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && (gameState.actionRequired?.type === 'select_card_from_revealed_deck' || gameState.actionRequired?.type === 'reveal_deck_draw_protocol') && gameState.actionRequired.actor === 'player' && (
             <RevealedDeckModal
                 gameState={gameState}
                 onSelectCard={(cardId) => {
@@ -732,7 +918,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             />
         )}
         {/* Time Protocol: Trash selection modals */}
-        {gameState.actionRequired?.type === 'select_card_from_trash_to_play' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_card_from_trash_to_play' && gameState.actionRequired.actor === 'player' && (
             <TrashSelectionModal
                 gameState={gameState}
                 onSelectCard={(cardIndex) => {
@@ -740,7 +926,7 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'select_card_from_trash_to_reveal' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_card_from_trash_to_reveal' && gameState.actionRequired.actor === 'player' && (
             <TrashSelectionModal
                 gameState={gameState}
                 onSelectCard={(cardIndex) => {
@@ -748,27 +934,27 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'prompt_optional_effect' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'prompt_optional_effect' && gameState.actionRequired.actor === 'player' && (
             <RevealedDeckTopModal
                 gameState={gameState}
                 onAccept={() => resolveOptionalEffectPrompt(true)}
                 onDecline={() => resolveOptionalEffectPrompt(false)}
             />
         )}
-        {gameState.actionRequired?.type === 'state_number' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'state_number' && gameState.actionRequired.actor === 'player' && (
             <StateNumberModal
                 gameState={gameState}
                 onConfirm={(number) => resolveStateNumber(number)}
             />
         )}
-        {gameState.actionRequired?.type === 'state_protocol' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'state_protocol' && gameState.actionRequired.actor === 'player' && (
             <StateProtocolModal
                 gameState={gameState}
                 availableProtocols={(gameState.actionRequired as any).availableProtocols || []}
                 onConfirm={(protocol) => resolveStateProtocol(protocol)}
             />
         )}
-        {gameState.actionRequired?.type === 'select_from_drawn_to_reveal' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'select_from_drawn_to_reveal' && gameState.actionRequired.actor === 'player' && (
             <SelectFromDrawnModal
                 gameState={gameState}
                 allDrawnCardIds={(gameState.actionRequired as any).allDrawnCardIds || []}
@@ -782,20 +968,21 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                 }}
             />
         )}
-        {gameState.actionRequired?.type === 'confirm_deck_discard' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'confirm_deck_discard' && gameState.actionRequired.actor === 'player' && (
             <DeckDiscardModal
                 discardedCard={(gameState.actionRequired as any).discardedCard}
                 deckOwner={(gameState.actionRequired as any).deckOwner}
                 onConfirm={() => resolveConfirmDeckDiscard()}
             />
         )}
-        {gameState.actionRequired?.type === 'confirm_deck_play_preview' && gameState.actionRequired.actor === 'player' && (
+        {!isAnimating && gameState.actionRequired?.type === 'confirm_deck_play_preview' && gameState.actionRequired.actor === 'player' && (
             <DeckPlayPreviewModal
                 card={(gameState.actionRequired as any).drawnCard}
                 isFaceDown={(gameState.actionRequired as any).isFaceDown}
                 onConfirm={() => resolveConfirmDeckPlayPreview()}
             />
         )}
+        {/* Toasts are now synchronized with animations - always show */}
         <div className="toaster-container">
             {toasts.map((toast) => (
                 <Toaster key={toast.id} message={toast.message} player={toast.player} />
@@ -807,10 +994,12 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
             <div className="game-preview-container">
                 <h2 onClick={handleMainframeClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Click 5 times to toggle debug mode">Mainframe</h2>
                 <GameInfoPanel
-                    gameState={gameState}
-                    turn={gameState.actionRequired?.actor || gameState.turn}
-                    animationState={gameState.animationState}
+                    gameState={visualGameState}
+                    turn={isAnimating ? visualGameState.turn : (gameState.actionRequired?.actor || visualGameState.turn)}
                     difficulty={difficulty}
+                    phaseTransitionAnimation={phaseTransitionAnimation}
+                    overridePhase={overridePhase}
+                    overrideTurn={overrideTurn}
                     onPlayerClick={() => setDebugModalPlayer('player')}
                     onOpponentClick={() => setDebugModalPlayer('opponent')}
                 />
@@ -828,17 +1017,31 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     <h3>Select a Protocol to Compile</h3>
                   </div>
                 )}
-                <GameBoard 
-                  gameState={gameState}
+                <GameBoard
+                  gameState={visualGameState}
                   onLanePointerDown={handleLanePointerDown}
                   onPlayFaceDown={handlePlayFaceDown}
-                  selectedCardId={selectedCard}
+                  selectedCardId={isAnimating ? null : selectedCard}
                   onCardPointerDown={handleBoardCardPointerDown}
                   onCardPointerEnter={handleBoardCardPointerEnter}
                   onCardPointerLeave={handleBoardCardPointerLeave}
                   onOpponentHandCardPointerEnter={handleOpponentHandCardPointerEnter}
                   onOpponentHandCardPointerLeave={handleBoardCardPointerLeave}
-                  sourceCardId={sourceCardId}
+                  sourceCardId={isAnimating ? null : sourceCardId}
+                  animatingCardIds={animatingCardIds}
+                  animatingCardInfo={animatingCardInfo}
+                  onDeckClick={(owner) => setDebugModalPlayer(owner)}
+                  onTrashClick={(owner) => setDebugModalPlayer(owner)}
+                  onTrashCardHover={(card, owner) => {
+                    if (!selectedCard) {
+                      setHoveredCard({ card, showContents: true });
+                    }
+                  }}
+                  onTrashCardLeave={() => {
+                    if (!selectedCard) {
+                      setHoveredCard(null);
+                    }
+                  }}
                 />
                 
                 <div className="player-action-area">
@@ -847,65 +1050,88 @@ export function GameScreen({ onBack, onEndGame, playerProtocols, opponentProtoco
                     onFillHand={fillHand}
                     onSkipAction={skipAction}
                     onResolveOptionalDrawPrompt={resolveOptionalDrawPrompt}
-                    onResolveDeath1Prompt={resolveDeath1Prompt}
-                    onResolveLove1Prompt={resolveLove1Prompt}
-                    onResolvePlague2Discard={resolvePlague2Discard}
-                    onResolvePlague4Flip={resolvePlague4Flip}
-                    onResolveFire3Prompt={resolveFire3Prompt}
                     onResolveOptionalDiscardCustomPrompt={resolveOptionalDiscardCustomPrompt}
                     onResolveOptionalEffectPrompt={resolveOptionalEffectPrompt}
-                    onResolveSpeed3Prompt={resolveSpeed3Prompt}
-                    onResolveFire4Discard={resolveFire4Discard}
-                    onResolveHate1Discard={resolveHate1Discard}
-                    onResolveLight2Prompt={resolveLight2Prompt}
+                    onResolveVariableDiscard={resolveVariableDiscard}
                     onResolveRevealBoardCardPrompt={resolveRevealBoardCardPrompt}
-                    onResolvePsychic4Prompt={resolvePsychic4Prompt}
-                    onResolveSpirit1Prompt={resolveSpirit1Prompt}
-                    onResolveSpirit3Prompt={resolveSpirit3Prompt}
                     onResolveControlMechanicPrompt={resolveControlMechanicPrompt}
                     onResolveCustomChoice={resolveCustomChoice}
                     selectedCardId={selectedCard}
                     multiSelectedCardIds={multiSelectedCardIds}
                     actionRequiredClass={actionRequiredClass}
+                    isAnimating={isAnimating}
+                    snapshotTurn={visualGameState.turn}
+                    snapshotPhase={visualGameState.phase}
                   />
-                  <div className={`player-hand-area ${handBackgroundClass}`}>
-                    {gameState.player.hand
-                      .filter((card) => {
-                        // When there's a selectableCardIds filter (Clarity-2 play effect),
-                        // only show selectable cards - others stay hidden behind the banner
-                        const action = gameState.actionRequired as any;
-                        const hasSelectableFilter = action?.type === 'select_card_from_hand_to_play' && action?.selectableCardIds;
-                        if (hasSelectableFilter) {
-                          return action.selectableCardIds.includes(card.id);
+                  <div className={`player-hand-area ${isAnimating ? '' : handBackgroundClass}`}>
+                    {(() => {
+                      // DEFENSIVE: Deduplicate hand cards to prevent React key errors
+                      // This handles edge cases where snapshot hand might contain duplicate IDs
+                      const seenIds = new Set<string>();
+                      const deduplicatedHand = visualGameState.player.hand.filter(card => {
+                        if (seenIds.has(card.id)) {
+                          console.warn('[GameScreen] Duplicate card ID in hand:', card.id, card.protocol, card.value);
+                          return false;
                         }
-                        return true; // Show all cards normally
-                      })
-                      .map((card) => {
-                      // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
-                      const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
-                        ? card.id === (gameState.actionRequired as any).cardInHandId
-                        : card.id === selectedCard;
+                        seenIds.add(card.id);
+                        return true;
+                      });
 
-                      return (
-                        <CardComponent
-                          key={card.id}
-                          card={card}
-                          isFaceUp={true}
-                          onPointerDown={() => handleHandCardPointerDown(card)}
-                          onPointerEnter={() => handleHandCardPointerEnter(card)}
-                          isSelected={isSelectedForPlay}
-                          isMultiSelected={multiSelectedCardIds.includes(card.id)}
-                          animationState={gameState.animationState}
-                          additionalClassName="in-hand"
-                        />
-                      );
-                    })}
+                      return deduplicatedHand
+                        .filter((card) => {
+                          // During animation, show all cards from the snapshot
+                          if (isAnimating) return true;
+                          // When there's a selectableCardIds filter (Clarity-2 play effect),
+                          // only show selectable cards - others stay hidden behind the banner
+                          const action = gameState.actionRequired as any;
+                          const hasSelectableFilter = action?.type === 'select_card_from_hand_to_play' && action?.selectableCardIds;
+                          if (hasSelectableFilter) {
+                            return action.selectableCardIds.includes(card.id);
+                          }
+                          return true; // Show all cards normally
+                        })
+                        .map((card, index) => {
+                        // During animation: hide the animating card via CSS (visibility: hidden)
+                        // We keep it in DOM for position detection, just invisible
+                        const isBeingAnimated = animatingCardIds.has(card.id);
+                        if (isAnimating) {
+                          return (
+                            <CardComponent
+                              key={`hand-${card.id}-${index}`}
+                              card={card}
+                              isFaceUp={true}
+                              additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                            />
+                          );
+                        }
+                        // CRITICAL: When select_lane_for_play is active, only the cardInHandId should be selected
+                        const isSelectedForPlay = gameState.actionRequired?.type === 'select_lane_for_play'
+                          ? card.id === (gameState.actionRequired as any).cardInHandId
+                          : card.id === selectedCard;
+
+                        return (
+                          <CardComponent
+                            key={`hand-${card.id}-${index}`}
+                            card={card}
+                            isFaceUp={true}
+                            onPointerDown={() => handleHandCardPointerDown(card)}
+                            onPointerEnter={() => handleHandCardPointerEnter(card)}
+                            isSelected={isSelectedForPlay}
+                            isMultiSelected={multiSelectedCardIds.includes(card.id)}
+                            additionalClassName="in-hand"
+                          />
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
             </div>
         </div>
         {showCoinFlip && <CoinFlipModal onComplete={handleCoinFlipComplete} />}
         {showDebugButton && <DebugPanel onLoadScenario={setupTestScenario} onSkipCoinFlip={handleSkipCoinFlip} onForceWin={handleForceWin} onForceLose={handleForceLose} />}
+
+        {/* Animation Overlay - renders above game during animation queue playback */}
+        <AnimationOverlay />
     </div>
   );
 }

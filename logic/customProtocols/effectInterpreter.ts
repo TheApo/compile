@@ -446,7 +446,7 @@ export function executeCustomEffect(
                 // CRITICAL: Generate new unique IDs for drawn cards (same as drawForPlayer)
                 const newHandCards = drawnCards.map(c => ({ ...c, id: uuidv4() }));
 
-                let newState = {
+                let newState: GameState = {
                     ...state,
                     [actor]: {
                         ...state[actor],
@@ -455,6 +455,16 @@ export function executeCustomEffect(
                         discard: newDiscard
                     }
                 };
+
+                // Store draw animation request (new queue system)
+                const drawRequest: AnimationRequest = {
+                    type: 'draw',
+                    player: actor,
+                    count: drawnCards.length,
+                    cardIds: newHandCards.map(c => c.id)
+                };
+                const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
 
                 // Only show card names to the player who drew them
                 const cardNamesRefresh = actor === 'player'
@@ -522,6 +532,16 @@ export function executeCustomEffect(
                         }
                     };
 
+                    // Store draw animation request (new queue system)
+                    const drawRequestActor: AnimationRequest = {
+                        type: 'draw',
+                        player: actor,
+                        count: drawnCards.length,
+                        cardIds: newHandCards.map(c => c.id)
+                    };
+                    const existingRequestsActor = (newState as any)._pendingAnimationRequests || [];
+                    (newState as any)._pendingAnimationRequests = [...existingRequestsActor, drawRequestActor];
+
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
                     // Only show card names to the player who drew them
@@ -560,6 +580,16 @@ export function executeCustomEffect(
                         }
                     };
 
+                    // Store draw animation request (new queue system)
+                    const drawRequestOpponent: AnimationRequest = {
+                        type: 'draw',
+                        player: opponent,
+                        count: drawnCards.length,
+                        cardIds: newHandCards.map(c => c.id)
+                    };
+                    const existingRequestsOpponent = (newState as any)._pendingAnimationRequests || [];
+                    (newState as any)._pendingAnimationRequests = [...existingRequestsOpponent, drawRequestOpponent];
+
                     const opponentName = opponent === 'player' ? 'Player' : 'Opponent';
                     const actorName = actor === 'player' ? 'Player' : 'Opponent';
                     // Only show card names to the player who drew them
@@ -589,7 +619,11 @@ export function executeCustomEffect(
             break;
 
         case 'delete':
-            result = executeDeleteEffect(card, laneIndex, state, context, params);
+            // CRITICAL: Pass _conditional for follow-up effects (Death-1: "delete other, then delete self")
+            result = executeDeleteEffect(card, laneIndex, state, context, {
+                ...params,
+                _conditional: effectDef.conditional
+            });
             break;
 
         case 'discard':
@@ -788,6 +822,20 @@ export function executeCustomEffect(
         }
     }
 
+    // CRITICAL: Propagate animationRequests to _pendingAnimationRequests on state
+    // This ensures flip/delete/etc animations from executors are not lost
+    // IMPORTANT: Clear animationRequests from result to prevent double-adding by effectExecutor
+    if (result.animationRequests && result.animationRequests.length > 0) {
+        const existingRequests = (result.newState as any)._pendingAnimationRequests || [];
+        result = {
+            newState: {
+                ...result.newState,
+                _pendingAnimationRequests: [...existingRequests, ...result.animationRequests]
+            }
+            // NOTE: animationRequests intentionally NOT included - already in _pendingAnimationRequests
+        };
+    }
+
     return result;
 }
 
@@ -897,12 +945,22 @@ function executeTakeEffect(
         // Random take - execute immediately (like original Love-3)
         const actualCount = Math.min(count, opponentState.hand.length);
         const takenCards: any[] = [];
+        const animationRequests: any[] = [];
 
         for (let i = 0; i < actualCount; i++) {
             const randomIndex = Math.floor(Math.random() * opponentState.hand.length);
             const takenCard = opponentState.hand.splice(randomIndex, 1)[0];
             cardOwnerState.hand.push(takenCard);
             takenCards.push(takenCard);
+
+            // Animation request: card flies from opponent's hand to own hand
+            animationRequests.push({
+                type: 'take',
+                cardId: takenCard.id,
+                owner: cardOwner,
+                cardSnapshot: { ...takenCard },
+                fromHandIndex: randomIndex,
+            });
         }
 
         newState = {
@@ -921,7 +979,7 @@ function executeTakeEffect(
 
         newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardNames} from the opponent's hand.`);
 
-        return { newState };
+        return { newState, animationRequests };
     } else {
         // Non-random take - requires user selection (future feature)
         // For now, fall back to random behavior
@@ -943,7 +1001,16 @@ function executeTakeEffect(
 
         newState = log(newState, cardOwner, `${cardName}: ${actorName} takes ${takenCardName} from the opponent's hand.`);
 
-        return { newState };
+        // Animation request for non-random take fallback
+        const animationRequests = [{
+            type: 'take' as const,
+            cardId: takenCard.id,
+            owner: cardOwner,
+            cardSnapshot: { ...takenCard },
+            fromHandIndex: randomIndex,
+        }];
+
+        return { newState, animationRequests };
     }
 }
 

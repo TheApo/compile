@@ -8,10 +8,25 @@
  * Extracted 1:1 from effectInterpreter.ts for modularity.
  */
 
-import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest } from '../../../types';
+import { GameState, Player, PlayedCard, EffectResult, EffectContext, AnimationRequest, Card } from '../../../types';
 import { log } from '../../utils/log';
 import { findCardOnBoard, handleUncoverEffect, isCardCommitted, isCardAtIndexUncovered, countUniqueProtocolsOnField } from '../../game/helpers/actionUtils';
 import { getLanesWhereOpponentHasHigherValue, getPlayerLaneValue } from '../../game/stateManager';
+
+/**
+ * Helper function to add a card to the discard pile with correct format.
+ * Cards in discard are stored without id and isFaceUp (as Card[], not PlayedCard[]).
+ */
+function addCardToDiscard(state: GameState, owner: Player, card: PlayedCard): GameState {
+    // Extract only the Card properties (without id and isFaceUp)
+    const { id, isFaceUp, ...cardData } = card;
+    const newDiscard = [...state[owner].discard, cardData as Card];
+
+    return {
+        ...state,
+        [owner]: { ...state[owner], discard: newDiscard }
+    };
+}
 
 /**
  * Execute DELETE effect
@@ -85,15 +100,20 @@ export function executeDeleteEffect(
 
             if (cardIndex !== -1) {
                 const wasTopCard = cardIndex === lane.length - 1;
+                const deletedCard = lane[cardIndex];
                 lane.splice(cardIndex, 1);
 
                 const newLanes = [...newState[owner].lanes];
                 newLanes[targetLaneIndex] = lane;
 
+                // Update lanes first
                 newState = {
                     ...newState,
                     [owner]: { ...newState[owner], lanes: newLanes }
                 };
+
+                // Add card to discard using helper function
+                newState = addCardToDiscard(newState, owner, deletedCard);
 
                 const cardName = targetCardInfo.card.isFaceUp
                     ? `${targetCardInfo.card.protocol}-${targetCardInfo.card.value}`
@@ -112,8 +132,15 @@ export function executeDeleteEffect(
                     newState = uncoverResult.newState;
                 }
 
-                // Animation request
-                const animationRequests = [{ type: 'delete' as const, cardId: targetCardId, owner }];
+                // Animation request with snapshot data (card already deleted from state)
+                const animationRequests = [{
+                    type: 'delete' as const,
+                    cardId: targetCardId,
+                    owner,
+                    cardSnapshot: { ...deletedCard },
+                    laneIndex: targetLaneIndex,
+                    cardIndex
+                }];
                 return { newState, animationRequests };
             }
         }
@@ -287,14 +314,27 @@ export function executeDeleteEffect(
 
         // Keep only cards with that value
         filteredTargets = validTargets.filter(id => cardValues.get(id) === targetValue);
-
     }
 
-    // NEW: Auto-execute (Hate-4: automatically delete lowest value card without user selection)
+    // Auto-execute (Hate-4: automatically delete lowest value card without user selection)
     if (params.autoExecute) {
-
-        // Take first N cards from filteredTargets (or all if count >= length)
-        const cardsToDelete = filteredTargets.slice(0, count);
+        // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+        // This ensures we delete from top (uncovered) to bottom (covered), preventing
+        // index shifts during deletion that would cause animation mismatches
+        const sortedTargets = [...filteredTargets].sort((a, b) => {
+            const aInfo = findCardOnBoard(state, a);
+            const bInfo = findCardOnBoard(state, b);
+            if (!aInfo || !bInfo) return 0;
+            const aIdx = state[aInfo.owner].lanes.flat().findIndex(c => c.id === a);
+            const bIdx = state[bInfo.owner].lanes.flat().findIndex(c => c.id === b);
+            // For same lane, higher cardIndex first (uncovered before covered)
+            const aLaneIdx = state[aInfo.owner].lanes.findIndex(l => l.some(c => c.id === a));
+            const bLaneIdx = state[bInfo.owner].lanes.findIndex(l => l.some(c => c.id === b));
+            const aCardIdx = state[aInfo.owner].lanes[aLaneIdx]?.findIndex(c => c.id === a) ?? 0;
+            const bCardIdx = state[bInfo.owner].lanes[bLaneIdx]?.findIndex(c => c.id === b) ?? 0;
+            return bCardIdx - aCardIdx;
+        });
+        const cardsToDelete = sortedTargets.slice(0, count);
 
         let newState = state;
         const animationRequests: any[] = [];
@@ -332,17 +372,28 @@ export function executeDeleteEffect(
             const newLanes = [...newState[owner].lanes];
             newLanes[targetLaneIndex] = laneCopy;
 
+            // Update lanes first
             newState = {
                 ...newState,
                 [owner]: { ...newState[owner], lanes: newLanes },
             };
 
+            // Add card to discard using helper function
+            newState = addCardToDiscard(newState, owner, targetCard);
+
             // Update stats
             const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
             newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
-            // Add animation request
-            animationRequests.push({ type: 'delete', cardId, owner });
+            // Add animation request with snapshot data (card already deleted from state)
+            animationRequests.push({
+                type: 'delete',
+                cardId,
+                owner,
+                cardSnapshot: { ...targetCard },
+                laneIndex: targetLaneIndex,
+                cardIndex
+            });
 
             // Handle uncover if was top card AND not an on_cover delete
             // (new card will be placed immediately after an on_cover delete)
@@ -416,17 +467,29 @@ export function executeDeleteEffect(
         const newLanes = [...newState[owner].lanes];
         newLanes[laneIndex] = laneCopy;
 
+        // Update lanes first
         newState = {
             ...newState,
             [owner]: { ...newState[owner], lanes: newLanes },
         };
+
+        // Add card to discard using helper function
+        newState = addCardToDiscard(newState, owner, card);
 
         // Update stats
         const newStats = { ...newState.stats[cardOwner], cardsDeleted: newState.stats[cardOwner].cardsDeleted + 1 };
         newState = { ...newState, stats: { ...newState.stats, [cardOwner]: newStats } };
 
         // CRITICAL: Create animation request for delete animation (Death-1)
-        const animationRequests: AnimationRequest[] = [{ type: 'delete', cardId: card.id, owner }];
+        // Include snapshot data since card is already deleted from state
+        const animationRequests: AnimationRequest[] = [{
+            type: 'delete',
+            cardId: card.id,
+            owner,
+            cardSnapshot: { ...card },
+            laneIndex,
+            cardIndex: currentCardIndex
+        } as AnimationRequest];
 
         // Handle uncover ONLY if:
         // 1. Card was the top card
@@ -575,7 +638,6 @@ export function executeDeleteEffect(
         : undefined;
 
     // Set actionRequired for player to select cards
-    // FLEXIBLE: Pass actorChooses so AI can determine who selects targets
     newState.actionRequired = {
         type: 'select_cards_to_delete',  // CRITICAL: Always use generic type, AI reads targetFilter
         count,

@@ -24,6 +24,8 @@ export function processReactiveEffects(
     }
 ): EffectResult {
     let newState = { ...state };
+    // CRITICAL FIX: Collect ALL animation requests from reactive effects
+    const allAnimationRequests: EffectResult['animationRequests'] = [];
 
     // IMPORTANT: Prevent recursive reactive effect triggering
     // If we're already processing reactive effects, don't trigger new ones
@@ -290,6 +292,18 @@ export function processReactiveEffects(
             const result = executeCustomEffect(card, laneIndex, newState, effectContext, effectDef);
             newState = recalculateAllLaneValues(result.newState);
 
+            // CRITICAL FIX: Collect animation requests from this effect
+            if (result.animationRequests) {
+                allAnimationRequests.push(...result.animationRequests);
+            }
+
+            // CRITICAL: Also accumulate animation requests on the state for nested effects
+            // This allows the UI layer to pick them up after callbacks complete
+            if (result.animationRequests && result.animationRequests.length > 0) {
+                const existing = (newState as any)._pendingAnimationRequests || [];
+                (newState as any)._pendingAnimationRequests = [...existing, ...result.animationRequests];
+            }
+
             // If an action is required, stop and return
             if (newState.actionRequired) {
                 // CRITICAL FIX: If the reactive effect created an action for a different player than the current turn,
@@ -298,6 +312,8 @@ export function processReactiveEffects(
                 if (actionActor !== state.turn && !newState._interruptedTurn) {
                     newState._interruptedTurn = state.turn;
                     newState._interruptedPhase = state.phase;
+                    // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+                    newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
                     newState.turn = actionActor;
                 }
 
@@ -322,7 +338,8 @@ export function processReactiveEffects(
 
                 // Clear recursion flag before returning
                 delete (newState as any)._processingReactiveEffects;
-                return { newState };
+                // Return with collected animation requests
+                return { newState, animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined };
             }
         }
 
@@ -334,5 +351,6 @@ export function processReactiveEffects(
 
     // Clear recursion flag before returning
     delete (newState as any)._processingReactiveEffects;
-    return { newState };
+    // Return with all collected animation requests
+    return { newState, animationRequests: allAnimationRequests.length > 0 ? allAnimationRequests : undefined };
 }

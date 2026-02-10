@@ -67,7 +67,6 @@ function createTestState(): GameState {
             opponent: { cardsPlayed: 0, cardsDeleted: 0, compiledLanes: [] },
         },
         log: [],
-        animationState: null,
         logIndent: 0,
         logSource: null,
         logPhase: null,

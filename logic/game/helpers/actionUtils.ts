@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext } from "../../../types";
+import { GameState, PlayedCard, Player, ActionRequired, EffectResult, EffectContext, AnimationRequest } from "../../../types";
+import { AnimationQueueItem } from "../../../types/animation";
 import { findAndFlipCards } from "../../../utils/gameStateModifiers";
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent, completeEffectAction } from "../../utils/log";
 import { recalculateAllLaneValues, getEffectiveCardValue } from "../stateManager";
@@ -13,14 +14,19 @@ import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { queuePendingCustomEffects } from '../phaseManager';
 import { rememberFlippedCard } from '../../ai/cardMemory';
+import { createFlipAnimation, enqueueAnimationsFromRequests } from '../../animation/animationHelpers';
+import { flipCardMessage } from '../../utils/logMessages';
 
-export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex?: number } | null {
+export function findCardOnBoard(state: GameState, cardId: string | undefined): { card: PlayedCard, owner: Player, laneIndex: number, cardIndex: number } | null {
     if (!cardId) return null;
-    for (const p of ['player', 'opponent'] as Player[]) {
-        for (let i = 0; i < state[p].lanes.length; i++) {
-            const lane = state[p].lanes[i];
-            const card = lane.find(c => c.id === cardId);
-            if (card) return { card, owner: p, laneIndex: i };
+    for (const owner of ['player', 'opponent'] as Player[]) {
+        for (let laneIndex = 0; laneIndex < state[owner].lanes.length; laneIndex++) {
+            const lane = state[owner].lanes[laneIndex];
+            for (let cardIndex = 0; cardIndex < lane.length; cardIndex++) {
+                if (lane[cardIndex].id === cardId) {
+                    return { card: lane[cardIndex], owner, laneIndex, cardIndex };
+                }
+            }
         }
     }
     return null;
@@ -327,22 +333,31 @@ export function handleChainedEffectsOnDiscard(state: GameState, player: Player, 
     return newState;
 }
 
-export function internalResolveTargetedFlip(state: GameState, targetCardId: string, nextAction: ActionRequired = null): GameState {
+export function internalResolveTargetedFlip(
+    state: GameState,
+    targetCardId: string,
+    nextAction: ActionRequired = null,
+    enqueueAnimation?: (item: AnimationQueueItem) => void
+): GameState {
     const cardInfo = findCardOnBoard(state, targetCardId);
     if (!cardInfo) return state;
 
     const { card, owner } = cardInfo;
 
+    // Find which lane and card index the card is in (needed for animation)
+    let laneIndex = -1;
+    let cardIndex = -1;
+    for (let i = 0; i < state[owner].lanes.length; i++) {
+        const idx = state[owner].lanes[i].findIndex(c => c.id === targetCardId);
+        if (idx !== -1) {
+            laneIndex = i;
+            cardIndex = idx;
+            break;
+        }
+    }
+
     // NEW: Check passive rules for flip restrictions (Frost-1, custom cards with block_flips rule)
     if (!card.isFaceUp) {
-        // Find which lane the card is in
-        let laneIndex = -1;
-        for (let i = 0; i < state[owner].lanes.length; i++) {
-            if (state[owner].lanes[i].some(c => c.id === targetCardId)) {
-                laneIndex = i;
-                break;
-            }
-        }
         if (laneIndex !== -1) {
             const flipCheck = canFlipCard(state, laneIndex);
             if (!flipCheck.allowed) {
@@ -354,6 +369,11 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
     // NEW: Trigger reactive effects BEFORE flip (Metal-6: "When this card would be flipped")
     const beforeFlipResult = processReactiveEffects(state, 'on_flip', { player: owner, cardId: targetCardId });
     let newState = beforeFlipResult.newState;
+
+    // CRITICAL FIX: Process animation requests from reactive effects (e.g., Hate-0's delete on flip)
+    if (beforeFlipResult.animationRequests && enqueueAnimation) {
+        enqueueAnimationsFromRequests(newState, beforeFlipResult.animationRequests, enqueueAnimation);
+    }
 
     // Check if the card still exists after on_flip effects (Metal-6 might delete itself)
     const cardAfterOnFlip = findCardOnBoard(newState, targetCardId);
@@ -383,8 +403,30 @@ export function internalResolveTargetedFlip(state: GameState, targetCardId: stri
         newState = rememberFlippedCard(newState, card);
     }
 
+    // Create flip animation request BEFORE state change
+    if (laneIndex !== -1 && cardIndex !== -1) {
+        const toFaceUp = !card.isFaceUp;
+        if (enqueueAnimation) {
+            // Direct enqueue if available
+            const flipAnim = createFlipAnimation(state, card, owner, laneIndex, cardIndex, toFaceUp);
+            const logMsg = flipCardMessage(card, toFaceUp);
+            enqueueAnimation({ ...flipAnim, logMessage: { message: logMsg, player: actor } });
+        } else {
+            // Store in _pendingAnimationRequests for later processing
+            const flipRequest: AnimationRequest = {
+                type: 'flip',
+                cardId: targetCardId,
+                owner: owner,
+                laneIndex: laneIndex,
+                cardIndex: cardIndex
+            };
+            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+        }
+    }
+
     newState = findAndFlipCards(new Set([targetCardId]), newState);
-    newState.animationState = { type: 'flipCard', cardId: targetCardId };
+
     newState.actionRequired = nextAction;
     return newState;
 }
@@ -488,6 +530,8 @@ export function handleUncoverEffect(state: GameState, owner: Player, laneIndex: 
             if (newActionActor !== state.turn) {
                 result.newState._interruptedTurn = state.turn;
                 result.newState._interruptedPhase = state.phase;
+                // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+                result.newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
                 result.newState.turn = newActionActor;
 
                 // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),
@@ -681,6 +725,14 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     // Snapshot before removal from original lane
     const laneBeforeRemoval = state[cardOwner].lanes[originalLaneIndex];
     const isRemovingTopCard = laneBeforeRemoval.length > 0 && laneBeforeRemoval[laneBeforeRemoval.length - 1].id === cardToShiftId;
+    // CRITICAL: Capture card index BEFORE removal for animation snapshot
+    const fromCardIndex = laneBeforeRemoval.findIndex(c => c.id === cardToShiftId);
+
+    // CRITICAL: Snapshot lanes BEFORE shift for correct animation (DRY - like preDiscardHand for discard)
+    const preShiftLanes = {
+        player: state.player.lanes.map(lane => lane.map(card => ({ ...card }))),
+        opponent: state.opponent.lanes.map(lane => lane.map(card => ({ ...card })))
+    };
 
     // Create a new lanes array with the card removed from the original lane.
     const lanesAfterRemoval = ownerState.lanes.map((lane, index) => {
@@ -750,7 +802,20 @@ export function internalShiftCard(state: GameState, cardToShiftId: string, cardO
     }
 
     let stateAfterOriginalLaneUncover = resultAfterOnCover.newState;
-    let allAnimations = [...(resultAfterOnCover.animationRequests || [])];
+
+    // Create the shift animation request FIRST (before cover/uncover animations)
+    // CRITICAL: Include cardSnapshot AND preShiftLanes for correct animation snapshot (DRY - like preDiscardHand)
+    const shiftAnimRequest: AnimationRequest = {
+        type: 'shift',
+        cardId: cardToShiftId,
+        owner: cardOwner,
+        fromLane: originalLaneIndex,
+        toLane: targetLaneIndex,
+        cardSnapshot: { ...cardToShift },
+        cardIndex: fromCardIndex,
+        preShiftLanes,  // Lanes BEFORE shift - for correct animation snapshot
+    };
+    let allAnimations: AnimationRequest[] = [shiftAnimRequest, ...(resultAfterOnCover.animationRequests || [])];
 
     // If we removed the top card from the original lane, trigger uncover effect there
     if (isRemovingTopCard) {
@@ -885,6 +950,8 @@ export const handleOnFlipToFaceUp = (state: GameState, cardId: string): EffectRe
         if (newActionActor !== state.turn) {
             result.newState._interruptedTurn = state.turn;
             result.newState._interruptedPhase = state.phase;
+            // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+            result.newState._interruptedCardPlayedFlag = state._cardPlayedThisActionPhase;
             result.newState.turn = newActionActor;
 
             // CRITICAL: If the action requires continuation (like prompt_rearrange_protocols),

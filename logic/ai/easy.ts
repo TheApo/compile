@@ -1106,14 +1106,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: scored[0].cardId };
         }
 
-        case 'plague_2_opponent_discard': {
-            // Discard weakest card
-            if (state.opponent.hand.length === 0) return { type: 'skip' };
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            return { type: 'discardCards', cardIds: [sortedHand[0].id] };
-        }
-
-        // REMOVED: Legacy handlers 'select_cards_from_hand_to_discard_for_fire_4' and
+        // REMOVED: Legacy handlers 'plague_2_opponent_discard', 'select_cards_from_hand_to_discard_for_fire_4',
         // 'select_cards_from_hand_to_discard_for_hate_1' - now using generic 'discard' with variableCount
 
         case 'select_card_from_hand_to_play': {
@@ -2121,15 +2114,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        // REMOVED: Legacy protocol-specific handlers - now using generic handlers:
-        // - select_own_card_to_return_for_water_4 -> select_card_to_return
-        // - select_card_to_shift_for_anarchy_0 -> select_card_to_shift
-        // - select_card_to_shift_for_anarchy_1 -> select_card_to_shift
-        // - select_card_to_shift_for_gravity_1 -> select_card_to_shift
-        // - select_card_to_flip_and_shift_for_gravity_2 -> select_card_to_flip
-        // - select_face_down_card_to_shift_for_gravity_4 -> select_card_to_shift
-        // - select_face_down_card_to_shift_for_darkness_4 -> select_card_to_shift
-
         case 'shift_flipped_card_optional': {
             // Darkness-1, Spirit-3: Shift the flipped card to another lane
             const cardId = (action as any).cardId;
@@ -2473,32 +2457,34 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
         case 'select_card_to_shift': {
             // Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
-            // CRITICAL: Only restrict lane if scope is explicitly 'this_lane'
             const scope = (action as any).scope;
+            const destinationRestriction = (action as any).destinationRestriction;
+            const targetLaneIndex = (action as any).targetLaneIndex; // Fixed destination (Gravity-4, etc.)
             const restrictedLaneIndex = scope === 'this_lane'
                 ? ((action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex)
                 : undefined;
-            const cardOwner = action.actor; // Who owns the source card (whose "opponent" we target)
+            const cardOwner = action.actor;
             const sourceCardId = action.sourceCardId;
             const validTargets: PlayedCard[] = [];
 
             for (const playerKey of ['player', 'opponent'] as const) {
-                // CRITICAL: owner filter is relative to cardOwner, NOT hardcoded to 'opponent'
-                // 'own' = cards belonging to cardOwner
-                // 'opponent' = cards belonging to the opponent OF cardOwner
                 if (targetFilter.owner === 'own' && playerKey !== cardOwner) continue;
                 if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
 
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
-                    // CRITICAL: If lane is restricted (this_lane scope), only check that lane!
+                    // Scope restriction (Fear-3: only this lane)
                     if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+
+                    // CRITICAL: For 'to_this_lane' (Gravity-4), card must be FROM ANOTHER lane
+                    if (destinationRestriction?.type === 'to_this_lane' && targetLaneIndex !== undefined) {
+                        if (laneIdx === targetLaneIndex) continue; // Skip cards in destination lane
+                    }
 
                     const lane = state[playerKey].lanes[laneIdx];
                     for (let i = 0; i < lane.length; i++) {
                         const card = lane[i];
                         const isTopCard = i === lane.length - 1;
 
-                        // Use centralized filter matching (includes valueRange, valueEquals, etc.)
                         if (!matchesTargetFilter(card, isTopCard, targetFilter, sourceCardId)) continue;
 
                         validTargets.push(card);
@@ -2602,31 +2588,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
 
         // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
 
-        case 'plague_4_opponent_delete': {
-            // Plague-4: Opponent (AI) must delete their OWN uncovered face-down card
-            // IMPORTANT: Only UNCOVERED (top) cards can be deleted, not covered ones!
-            const ownFaceDownUncovered: PlayedCard[] = [];
-            state.opponent.lanes.forEach((lane) => {
-                if (lane.length > 0) {
-                    const topCard = lane[lane.length - 1]; // UNCOVERED card
-                    if (!topCard.isFaceUp) {
-                        ownFaceDownUncovered.push(topCard);
-                    }
-                }
-            });
-
-            if (ownFaceDownUncovered.length > 0) {
-                // Delete lowest value face-down UNCOVERED card (minimize loss)
-                ownFaceDownUncovered.sort((a, b) => a.value - b.value);
-                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
-            }
-            return { type: 'skip' };
-        }
-
+        // REMOVED: plague_4_opponent_delete - Plague-4 now uses generic select_cards_to_delete with actorChooses: card_owner
         // flip_self_for_water_0 is handled by the generic flip_self case above
 
         case 'reveal_opponent_hand':
-        case 'plague_2_player_discard':
         case 'delete_self': {
             // These actions don't require AI decisions - handled automatically
             return { type: 'skip' };

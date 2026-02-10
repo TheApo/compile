@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { Card } from "../data/cards";
+import type { AnimationQueueItem } from "./animation";
 // FIX: Export the Card type so it can be imported by other modules.
 export type { Card };
 
@@ -467,16 +468,12 @@ export type ActionRequired =
           'select_opponent_face_down_card_to_shift' | 'select_own_card_to_shift_for_speed_3' |
           'gravity_2_shift_after_flip' | 'speed_3_self_flip_after_shift' |
           'anarchy_0_conditional_draw' | 'execute_remaining_custom_effects' |
-          'prompt_death_1_effect' | 'prompt_give_card_for_love_1' | 'prompt_fire_3_discard' |
-          'prompt_shift_for_speed_3' | 'prompt_return_for_psychic_4' | 'prompt_spirit_1_start' |
-          'prompt_shift_for_spirit_3' | 'plague_2_opponent_discard' | 'plague_4_player_flip_optional' |
-          'select_cards_from_hand_to_discard_for_fire_4' | 'select_cards_from_hand_to_discard_for_hate_1' |
           'prompt_shift_or_flip_board_card_custom' | 'discard_completed' |
           'delete_self' | 'select_face_down_card_to_delete' | 'select_low_value_card_to_delete' |
-          'select_card_from_other_lanes_to_delete' | 'plague_4_opponent_delete' |
+          'select_card_from_other_lanes_to_delete' |
           'select_opponent_card_to_return' | 'select_any_card_to_flip' |
-          'prompt_shift_or_flip_for_light_2' | 'select_board_card_to_reveal_custom' |
-          'plague_2_player_discard' | 'select_lane_to_shift_revealed_board_card_custom' |
+          'select_board_card_to_reveal_custom' |
+          'select_lane_to_shift_revealed_board_card_custom' |
           'select_lane_for_water_3' | 'prompt_optional_draw';
     actor: Player;
     sourceCardId?: string;
@@ -577,19 +574,6 @@ export type ActionRequired =
 // -----------------------------------------------------------------------------
 | null;
 
-// =============================================================================
-// ANIMATION TYPES
-// =============================================================================
-
-export type AnimationState =
-    | { type: 'playCard', cardId: string; owner: Player }
-    | { type: 'compile', laneIndex: number }
-    | { type: 'flipCard', cardId: string }
-    | { type: 'deleteCard', cardId: string, owner: Player }
-    | { type: 'drawCard', owner: Player, cardIds: string[] }
-    | { type: 'discardCard', owner: Player, cardIds: string[], originalAction?: ActionRequired }
-    | null;
-
 // Card reference for log preview
 export interface LogCardRef {
     protocol: string;
@@ -620,7 +604,6 @@ export interface GameState {
     actionRequired: ActionRequired;
     queuedActions: ActionRequired[];
     queuedEffect?: { card: PlayedCard; laneIndex: number };
-    animationState: AnimationState;
     compilableLanes: number[];
     processedStartEffectIds?: string[];
     processedEndEffectIds?: string[];
@@ -655,6 +638,8 @@ export interface GameState {
     skipNextMiddleCommand?: string;
     _interruptedTurn?: Player;
     _interruptedPhase?: GamePhase;
+    /** Saved _cardPlayedThisActionPhase during interrupt - restored when interrupt completes */
+    _interruptedCardPlayedFlag?: boolean;
     _logIndentLevel?: number;
     _currentEffectSource?: string;
     _currentPhaseContext?: 'start' | 'middle' | 'end' | 'uncover' | 'compile' | 'oncover' | 'after';
@@ -668,6 +653,8 @@ export interface GameState {
     detailedGameStats?: DetailedGameStats;
     /** Card that is currently committed (being played, not yet landed) - for rules compliance */
     _committedCardId?: string;
+    /** AI Double-Play Prevention - set when AI plays a card, cleared when phase changes */
+    _cardPlayedThisActionPhase?: boolean;
     /** Deferred parent effects stack - stores parent effects when child effects are executing
      *  This ensures correct effect chain order: Child completes ALL effects → Parent resumes
      *  Example: Smoke-1 (flip + shift) flips Test-1 (delete + delete + flip)
@@ -677,6 +664,8 @@ export interface GameState {
     _pendingCustomEffects?: any[];
     /** Suspended queued actions during effect execution */
     _suspendedQueuedActions?: ActionRequired[];
+    /** Pending animations from SYNC effects - complete AnimationQueueItems for direct enqueue */
+    _pendingAnimations?: AnimationQueueItem[];
     /**
      * AI Card Memory - Tracks known values of face-down cards
      * Key: cardId, Value: known card value (0-6)
@@ -734,17 +723,19 @@ export type AIAction =
 
 export type AnimationRequest =
     | { type: 'delete'; cardId: string; owner: Player }
-    | { type: 'flip'; cardId: string }
+    | { type: 'flip'; cardId: string; owner?: Player; laneIndex?: number; cardIndex?: number; toFaceUp?: boolean }
     | { type: 'shift'; cardId: string; fromLane: number; toLane: number; owner: Player }
     | { type: 'return'; cardId: string; owner: Player }
     | { type: 'discard'; cardId: string; owner: Player }
-    | { type: 'play'; cardId: string; owner: Player }
-    | { type: 'draw'; player: Player; count: number }
+    | { type: 'play'; cardId: string; owner: Player; toLane?: number; fromDeck?: boolean; isFaceUp?: boolean }
+    | { type: 'draw'; player: Player; count: number; cardIds: string[]; fromOpponentDeck?: boolean }
     | {
         type: 'compile_delete';
         laneIndex: number;
         deletedCards: Array<{cardId: string; owner: Player}>
-    };
+    }
+    | { type: 'take'; cardId: string; owner: Player; cardSnapshot: PlayedCard; fromHandIndex: number }
+    | { type: 'give'; cardId: string; owner: Player; cardSnapshot: PlayedCard; handIndex: number };
 
 export type EffectResult = {
     newState: GameState;

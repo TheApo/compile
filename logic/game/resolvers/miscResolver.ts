@@ -138,6 +138,34 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         return true;
     });
 
+    // Collect animation data BEFORE modifying state
+    // We need the original positions of deleted cards for animations
+    const compileAnimationData: { card: PlayedCard; owner: Player; laneIndex: number; cardIndex: number }[] = [];
+
+    // Get original indices from the lane before filtering
+    const originalCompilerLane = compilerState.lanes[laneIndex];
+    const originalNonCompilerLane = nonCompilerState.lanes[laneIndex];
+
+    compilerDeletedCards.forEach(card => {
+        const cardIndex = originalCompilerLane.findIndex(c => c.id === card.id);
+        if (cardIndex !== -1) {
+            compileAnimationData.push({ card, owner: compiler, laneIndex, cardIndex });
+        }
+    });
+
+    nonCompilerDeletedCards.forEach(card => {
+        const cardIndex = originalNonCompilerLane.findIndex(c => c.id === card.id);
+        if (cardIndex !== -1) {
+            compileAnimationData.push({ card, owner: nonCompiler, laneIndex, cardIndex });
+        }
+    });
+
+    // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+    // This ensures we delete from top (uncovered) to bottom (covered), preventing
+    // index shifting issues during sequential delete animations.
+    // Example: With cards at [0,1,2], deleting index 2 first keeps 0,1 stable.
+    compileAnimationData.sort((a, b) => b.cardIndex - a.cardIndex);
+
     // NOTE: Compile deletes are NOT counted in cardsDeleted stats
     // Only effect-based deletes (delete 1 card, delete all cards with value X, etc.) should be counted
     // Stats remain unchanged for cardsDeleted during compile
@@ -201,6 +229,16 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
     
     newState = recalculateAllLaneValues(newState);
 
+    // CRITICAL: Set cannotCompile to prevent another compile this turn (1 compile per turn rule)
+    // This is needed for Speed-2 and similar cards that shift to another lane during compile
+    newState = {
+        ...newState,
+        [compiler]: {
+            ...newState[compiler],
+            cannotCompile: true
+        }
+    };
+
     const win = compilerState.compiled.every(c => c === true);
     if (win) {
         newState.winner = compiler;
@@ -250,11 +288,19 @@ export const performCompile = (prevState: GameState, laneIndex: number, onEndGam
         if (firstAction.actor !== compiler) {
             newState._interruptedTurn = compiler;
             newState._interruptedPhase = newState.phase;
+            // CRITICAL FIX: Save _cardPlayedThisActionPhase so it can be restored after interrupt
+            newState._interruptedCardPlayedFlag = prevState._cardPlayedThisActionPhase;
             newState.turn = firstAction.actor;
         }
     } else {
         newState.actionRequired = null;
         newState.queuedActions = [];
+    }
+
+    // Attach animation data for compile delete animations
+    // This will be consumed by useGameState to create visual delete animations
+    if (compileAnimationData.length > 0) {
+        (newState as any)._compileAnimations = compileAnimationData;
     }
 
     return newState;

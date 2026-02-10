@@ -722,12 +722,26 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
     switch (action.type) {
         case 'prompt_use_control_mechanic': {
             const playerCompiledCount = state.player.compiled.filter(c => c).length;
+            const aiCompiledCount = state.opponent.compiled.filter(c => c).length;
 
             // Get the compiling lane index if this is during a compile
             const compilingLaneIndex = state.compilableLanes.length > 0 ? state.compilableLanes[0] : null;
 
             // =========================================================================
-            // CRITICAL STRATEGY: Use control to prevent player from winning!
+            // PRIORITY 0 (HIGHEST): CAN WE WIN BY REARRANGING OUR OWN PROTOCOLS?
+            // If AI has 2 compiled protocols and is compiling an already-compiled lane,
+            // swapping the uncompiled protocol to that lane = INSTANT WIN!
+            // =========================================================================
+            if (aiCompiledCount === 2 && compilingLaneIndex !== null) {
+                // Check if the compiling lane currently has a compiled protocol
+                if (state.opponent.compiled[compilingLaneIndex]) {
+                    // YES! Swap our protocols to win!
+                    return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
+                }
+            }
+
+            // =========================================================================
+            // PRIORITY 1: Use control to prevent player from winning!
             // If player has compiled lanes AND a threatening uncompiled lane (10+),
             // we can swap their protocols to make them recompile instead of winning.
             // =========================================================================
@@ -748,7 +762,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 .map((c, i) => c ? i : -1)
                 .filter(i => i !== -1);
 
-            // PRIORITY 1: Can we force a recompile instead of a winning compile?
+            // PRIORITY 2: Can we force a recompile instead of a winning compile?
             // Player has 10+ in uncompiled lane AND has compiled lanes to swap with
             if (playerThreateningLane !== -1 && playerCompiledLanes.length > 0) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
@@ -764,13 +778,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 return { type: 'resolveControlMechanicPrompt', choice: 'skip' };
             }
 
-            // PRIORITY 2: Try to disrupt player if it actually hurts them
+            // PRIORITY 3: Try to disrupt player if it actually hurts them
             // Pass compilingLaneIndex so that compiling lanes are treated as value 0
             if (canBenefitFromPlayerRearrange(state, compilingLaneIndex)) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'player' };
             }
 
-            // PRIORITY 3: Rearrange own protocols ONLY if it actually helps
+            // PRIORITY 4: Rearrange own protocols ONLY if it actually helps
             if (canBenefitFromOwnRearrange(state, compilingLaneIndex) && !shouldMakeMistake()) {
                 return { type: 'resolveControlMechanicPrompt', choice: 'opponent' };
             }
@@ -1015,14 +1029,7 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'flipCard', cardId: validTargets[0].card.id };
         }
 
-        case 'plague_2_opponent_discard': {
-            // Discard weakest card
-            if (state.opponent.hand.length === 0) return { type: 'skip' };
-            const sortedHand = [...state.opponent.hand].sort((a, b) => getCardPower(a) - getCardPower(b));
-            return { type: 'discardCards', cardIds: [sortedHand[0].id] };
-        }
-
-        // REMOVED: Legacy handlers 'select_cards_from_hand_to_discard_for_fire_4' and
+        // REMOVED: Legacy handlers 'plague_2_opponent_discard', 'select_cards_from_hand_to_discard_for_fire_4',
         // 'select_cards_from_hand_to_discard_for_hate_1' - now using generic 'discard' with variableCount
 
         case 'select_card_from_hand_to_play': {
@@ -2102,15 +2109,6 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
         }
 
-        // REMOVED: Legacy protocol-specific handlers - now using generic handlers:
-        // - select_own_card_to_return_for_water_4 -> select_card_to_return
-        // - select_card_to_shift_for_anarchy_0 -> select_card_to_shift
-        // - select_card_to_shift_for_anarchy_1 -> select_card_to_shift
-        // - select_card_to_shift_for_gravity_1 -> select_card_to_shift
-        // - select_card_to_flip_and_shift_for_gravity_2 -> select_card_to_flip
-        // - select_face_down_card_to_shift_for_gravity_4 -> select_card_to_shift
-        // - select_face_down_card_to_shift_for_darkness_4 -> select_card_to_shift
-
         case 'shift_flipped_card_optional': {
             // Darkness-1, Spirit-3: Shift the flipped card to another lane
             const cardId = (action as any).cardId;
@@ -2474,12 +2472,13 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             // SMART: Generic shift for custom protocols
             const targetFilter = ((action as any).targetFilter || {}) as TargetFilter;
             const scope = (action as any).scope;
+            const destinationRestriction = (action as any).destinationRestriction;
+            const targetLaneIndex = (action as any).targetLaneIndex; // Fixed destination (Gravity-4, etc.)
             const restrictedLaneIndex = scope === 'this_lane'
                 ? ((action as any).sourceLaneIndex ?? (action as any).currentLaneIndex ?? (action as any).laneIndex)
                 : undefined;
             const cardOwner = action.actor;
             const sourceCardId = action.sourceCardId;
-            const positionFilter = targetFilter?.position || 'uncovered';
             const scoredTargets: { cardId: string; score: number }[] = [];
 
             for (const playerKey of ['player', 'opponent'] as const) {
@@ -2487,7 +2486,14 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                 if (targetFilter.owner === 'opponent' && playerKey === cardOwner) continue;
 
                 for (let laneIdx = 0; laneIdx < state[playerKey].lanes.length; laneIdx++) {
+                    // Scope restriction (Fear-3: only this lane)
                     if (restrictedLaneIndex !== undefined && laneIdx !== restrictedLaneIndex) continue;
+
+                    // CRITICAL: For 'to_this_lane' (Gravity-4), card must be FROM ANOTHER lane
+                    // Cannot shift a card from the destination lane to itself
+                    if (destinationRestriction?.type === 'to_this_lane' && targetLaneIndex !== undefined) {
+                        if (laneIdx === targetLaneIndex) continue; // Skip cards in destination lane
+                    }
 
                     const lane = state[playerKey].lanes[laneIdx];
                     const laneValue = state[playerKey].laneValues[laneIdx];
@@ -2501,13 +2507,53 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
                         const cardValue = card.isFaceUp ? card.value : Math.min(card.value, 2);
                         const isOpponentCard = playerKey === 'player'; // AI is 'opponent'
 
-                        // Score: For opponent cards, higher value in stronger lane = better target
-                        // For own cards, high value in weak lane = good to redistribute
+                        // Score: Consider DESTINATION lane when evaluating shift targets
+                        // For Gravity-4 (to_this_lane), destination is fixed
                         let score: number;
+
+                        // Get destination lane info if available
+                        const destLaneIdx = targetLaneIndex ?? -1;
+                        const destAiValue = destLaneIdx >= 0 ? state.opponent.laneValues[destLaneIdx] : 0;
+                        const destPlayerValue = destLaneIdx >= 0 ? state.player.laneValues[destLaneIdx] : 0;
+                        const destAiCompiled = destLaneIdx >= 0 ? state.opponent.compiled[destLaneIdx] : false;
+                        const destPlayerCompiled = destLaneIdx >= 0 ? state.player.compiled[destLaneIdx] : false;
+
                         if (isOpponentCard) {
-                            score = cardValue + laneValue; // Disrupt opponent's strong lanes
+                            // Shifting OPPONENT's card - want to HURT them or NOT HELP them compile
+                            if (destLaneIdx >= 0) {
+                                // CRITICAL: Check if shifting would help opponent compile (BAD!)
+                                const wouldHelpCompile = !destPlayerCompiled &&
+                                    destPlayerValue + cardValue >= 10 &&
+                                    destPlayerValue + cardValue > destAiValue;
+                                if (wouldHelpCompile) {
+                                    score = -1000; // NEVER help opponent compile!
+                                } else if (destPlayerCompiled) {
+                                    score = cardValue + 100; // GOOD: Move to their compiled lane (wasted)
+                                } else {
+                                    // Prefer moving high cards from their strong lanes
+                                    score = cardValue + laneValue;
+                                }
+                            } else {
+                                score = cardValue + laneValue; // Disrupt opponent's strong lanes
+                            }
                         } else {
-                            score = cardValue - laneValue * 0.5; // Move high cards from weak lanes
+                            // Shifting OUR OWN card - want to HELP ourselves compile
+                            if (destLaneIdx >= 0) {
+                                // CRITICAL: Check if shifting would help US compile (GOOD!)
+                                const wouldEnableCompile = !destAiCompiled &&
+                                    destAiValue + cardValue >= 10 &&
+                                    destAiValue + cardValue > destPlayerValue;
+                                if (wouldEnableCompile) {
+                                    score = 1000 + cardValue; // BEST: Enables our compile!
+                                } else if (destAiCompiled) {
+                                    score = -100; // BAD: Wasted in our compiled lane
+                                } else {
+                                    // Good: Building value in uncompiled lane
+                                    score = cardValue + destAiValue * 0.5;
+                                }
+                            } else {
+                                score = cardValue - laneValue * 0.5; // Move high cards from weak lanes
+                            }
                         }
                         scoredTargets.push({ cardId: card.id, score });
                     }
@@ -2718,32 +2764,10 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             return { type: 'skip' };
 
         // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
-
-        case 'plague_4_opponent_delete': {
-            // Plague-4: Opponent (AI) must delete their OWN uncovered face-down card
-            // IMPORTANT: Only UNCOVERED (top) cards can be deleted, not covered ones!
-            const ownFaceDownUncovered: PlayedCard[] = [];
-            state.opponent.lanes.forEach((lane) => {
-                if (lane.length > 0) {
-                    const topCard = lane[lane.length - 1]; // UNCOVERED card
-                    if (!topCard.isFaceUp) {
-                        ownFaceDownUncovered.push(topCard);
-                    }
-                }
-            });
-
-            if (ownFaceDownUncovered.length > 0) {
-                // Delete lowest value face-down UNCOVERED card (minimize loss)
-                ownFaceDownUncovered.sort((a, b) => a.value - b.value);
-                return { type: 'deleteCard', cardId: ownFaceDownUncovered[0].id };
-            }
-            return { type: 'skip' };
-        }
-
+        // REMOVED: plague_4_opponent_delete - Plague-4 now uses generic select_cards_to_delete with actorChooses: card_owner
         // flip_self_for_water_0 is handled by the generic flip_self case above
 
         case 'reveal_opponent_hand':
-        case 'plague_2_player_discard':
         case 'delete_self': {
             // These actions don't require AI decisions - handled automatically
             return { type: 'skip' };

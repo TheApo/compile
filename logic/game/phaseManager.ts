@@ -110,7 +110,8 @@ export const advancePhase = (state: GameState): GameState => {
              nextState = setLogSource(nextState, undefined);
              nextState = setLogPhase(nextState, undefined);
              nextState = { ...nextState, _logIndentLevel: 0 };
-             return { ...nextState, phase: 'hand_limit' };
+             // CRITICAL: Clear the double-play prevention flag when action phase ends
+             return { ...nextState, phase: 'hand_limit', _cardPlayedThisActionPhase: undefined };
 
         case 'hand_limit': {
             const playerState = nextState[turnPlayer];
@@ -412,6 +413,15 @@ export const processQueuedActions = (state: GameState): GameState => {
 
         // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, custom protocols)
         if (nextAction.type === 'flip_self') {
+            // DEFER: If a flip animation is pending (_deferFlipSelf), defer the self-flip
+            // to a separate render cycle so CSS transitions play sequentially
+            if ((mutableState as any)._deferFlipSelf) {
+                delete (mutableState as any)._deferFlipSelf;
+                (mutableState as any)._hasDeferredFlipSelf = true;
+                mutableState.queuedActions = [nextAction, ...queuedActions];
+                break;
+            }
+
             const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
             const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
@@ -421,8 +431,17 @@ export const processQueuedActions = (state: GameState): GameState => {
             if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                 const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                 mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                // Store flip animation request BEFORE state change (new queue system)
+                const flipRequest: AnimationRequest = {
+                    type: 'flip',
+                    cardId: sourceCardId,
+                    owner: sourceCardInfo.owner,
+                    laneIndex: sourceCardInfo.laneIndex,
+                    cardIndex: sourceCardInfo.cardIndex
+                };
+                const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                (mutableState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                 mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
             } else {
                 const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                 const reason = !sourceCardInfo ? 'deleted' :
@@ -614,6 +633,36 @@ export const processQueuedActions = (state: GameState): GameState => {
             // Execute remaining effects sequentially
             for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
                 const effectDef = effects[effectIndex];
+
+                // DEFER flipSelf effects when _deferFlipSelf is set (sequential CSS animation).
+                // Convert to a flip_self queued action so the existing deferral handler can defer it.
+                if (effectDef.params?.flipSelf && (mutableState as any)._deferFlipSelf) {
+                    delete (mutableState as any)._deferFlipSelf;
+                    const flipSelfAction: any = {
+                        type: 'flip_self',
+                        sourceCardId,
+                        actor: context.cardOwner,
+                    };
+                    const remainingEffectsAfterFlip = effects.slice(effectIndex + 1);
+                    const actionsToAdd: any[] = [flipSelfAction];
+                    if (remainingEffectsAfterFlip.length > 0) {
+                        actionsToAdd.push({
+                            type: 'execute_remaining_custom_effects',
+                            sourceCardId,
+                            laneIndex,
+                            effects: remainingEffectsAfterFlip,
+                            context,
+                            actor: context.cardOwner,
+                            logSource: mutableState._currentEffectSource,
+                            logPhase: mutableState._currentPhaseContext,
+                            logIndentLevel: mutableState._logIndentLevel || 0
+                        });
+                    }
+                    mutableState.queuedActions = [...actionsToAdd, ...queuedActions];
+                    (mutableState as any)._hasDeferredFlipSelf = true;
+                    return mutableState;
+                }
+
                 const result = executeCustomEffect(sourceCardInfo.card, laneIndex, mutableState, context, effectDef);
                 mutableState = result.newState;
 
@@ -643,28 +692,10 @@ export const processQueuedActions = (state: GameState): GameState => {
                         mutableState.queuedActions = queuedActions;
                     }
 
-                    // Set animation state so it displays
-                    // Take the FIRST animation request (show one at a time)
-                    const firstAnimation = result.animationRequests[0];
-                    if (firstAnimation.type === 'draw') {
-                        mutableState.animationState = {
-                            type: 'drawCard',
-                            owner: firstAnimation.player as Player,
-                            cardIds: [] // Draw animations are handled separately
-                        };
-                    } else if (firstAnimation.type === 'play') {
-                        mutableState.animationState = {
-                            type: 'playCard',
-                            cardId: firstAnimation.cardId,
-                            owner: firstAnimation.owner
-                        };
-                    } else if (firstAnimation.type === 'delete') {
-                        mutableState.animationState = {
-                            type: 'deleteCard',
-                            cardId: firstAnimation.cardId,
-                            owner: firstAnimation.owner
-                        };
-                    }
+                    // Store ALL animation requests in _pendingAnimationRequests for the new queue system
+                    // The new system handles all animations via AnimationQueue - no old animationState needed
+                    const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                    (mutableState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
 
                     // Return to trigger animation display - queue will continue after animation
                     return mutableState;
@@ -859,6 +890,11 @@ export const processEndOfAction = (state: GameState): GameState => {
         if (stateAfterQueue.actionRequired) {
             return stateAfterQueue;
         }
+        // If flip_self was deferred, return immediately — don't advance phases.
+        // The useEffect in useGameState will process it after animations complete.
+        if ((stateAfterQueue as any)._hasDeferredFlipSelf) {
+            return stateAfterQueue;
+        }
         // Continue with the processed state
         state = stateAfterQueue;
     }
@@ -872,6 +908,12 @@ export const processEndOfAction = (state: GameState): GameState => {
         delete restoredState._interruptedPhase;
         restoredState.turn = originalTurnPlayer;
         restoredState.phase = originalPhase;
+        // CRITICAL FIX: Restore _cardPlayedThisActionPhase from the saved interrupt state
+        // This prevents the AI from playing twice after an interrupt (e.g., Death-0 + Metal-3)
+        if (state._interruptedCardPlayedFlag !== undefined) {
+            restoredState._cardPlayedThisActionPhase = state._interruptedCardPlayedFlag;
+            delete restoredState._interruptedCardPlayedFlag;
+        }
 
         // CRITICAL FIX: If interrupt happened during start/end phase, process queued actions first,
         // then return to let the normal phase progression continue (via runOpponentTurn).
@@ -985,7 +1027,16 @@ export const processEndOfAction = (state: GameState): GameState => {
                 opponent: cardOwner === 'player' ? 'opponent' : 'player',
                 triggerType: 'play'
             };
-            const { newState } = executeOnPlayEffect(cardOnBoard, laneIndex, stateForQueuedEffect, queuedEffectContext);
+            const queuedEffectResult = executeOnPlayEffect(cardOnBoard, laneIndex, stateForQueuedEffect, queuedEffectContext);
+            let newState = queuedEffectResult.newState;
+
+            // Store animation requests from queued effects (like Spirit-1's "Draw 2 cards")
+            // The new queue system handles all animations via _pendingAnimationRequests
+            if (queuedEffectResult.animationRequests && queuedEffectResult.animationRequests.length > 0) {
+                const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                (newState as any)._pendingAnimationRequests = [...existingRequests, ...queuedEffectResult.animationRequests];
+            }
+
             if (newState.actionRequired) {
                 // The queued effect produced an action. Return this new state and wait.
                 return newState;
@@ -1031,6 +1082,15 @@ export const processEndOfAction = (state: GameState): GameState => {
             // --- Auto-resolving actions ---
             // GENERIC: Auto-resolve flip_self actions (Water-0, Psychic-4, Speed-3, custom protocols)
             if (isFlipSelfAction) {
+                // DEFER: If a flip animation is pending (_deferFlipSelf), defer the self-flip
+                // to a separate render cycle so CSS transitions play sequentially
+                if ((mutableState as any)._deferFlipSelf) {
+                    delete (mutableState as any)._deferFlipSelf;
+                    (mutableState as any)._hasDeferredFlipSelf = true;
+                    mutableState.queuedActions = [nextAction, ...queuedActions];
+                    break;
+                }
+
                 const { sourceCardId, actor } = nextAction as { type: string, sourceCardId: string, actor: Player };
                 const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
                 const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
@@ -1040,8 +1100,17 @@ export const processEndOfAction = (state: GameState): GameState => {
                 if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
                     const cardName = `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`;
                     mutableState = log(mutableState, actor, `${cardName}: Flips itself.`);
+                    // Store flip animation request BEFORE state change (new queue system)
+                    const flipRequest: AnimationRequest = {
+                        type: 'flip',
+                        cardId: sourceCardId,
+                        owner: sourceCardInfo.owner,
+                        laneIndex: sourceCardInfo.laneIndex,
+                        cardIndex: sourceCardInfo.cardIndex
+                    };
+                    const existingRequests = (mutableState as any)._pendingAnimationRequests || [];
+                    (mutableState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
                     mutableState = findAndFlipCards(new Set([sourceCardId]), mutableState);
-                    mutableState.animationState = { type: 'flipCard', cardId: sourceCardId };
                 } else {
                     const cardName = sourceCardInfo ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}` : 'the source card';
                     const reason = !sourceCardInfo ? 'deleted' :
@@ -1134,7 +1203,9 @@ export const processEndOfAction = (state: GameState): GameState => {
     // Otherwise, start the end-of-turn sequence from the hand_limit phase.
     const startingPhase = state.phase === 'action' ? 'hand_limit' : state.phase;
     // FIX: Explicitly type `nextState` to prevent a type inference mismatch.
-    let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [] };
+    // CRITICAL: Clear the double-play prevention flag when transitioning from action phase
+    const clearPlayFlag = state.phase === 'action';
+    let nextState: GameState = { ...state, phase: startingPhase as GamePhase, compilableLanes: [], processedUncoverEventIds: [], ...(clearPlayFlag ? { _cardPlayedThisActionPhase: undefined } : {}) };
 
     const originalTurn = state.turn;
 
@@ -1197,7 +1268,6 @@ export const continueTurnProgression = (state: GameState): GameState => {
         if (currentPhase === 'compile') {
             const compilableLanes = calculateCompilableLanes(nextState, originalTurn);
             if (compilableLanes.length > 0) {
-                // Update state with compilable lanes and stop to wait for user input.
                 nextState = { ...nextState, compilableLanes };
                 break;
             }
@@ -1209,19 +1279,10 @@ export const continueTurnProgression = (state: GameState): GameState => {
         // Safety break to prevent infinite loops.
         if (oldPhase === nextState.phase && !nextState.actionRequired) {
             console.error("Game is stuck in an automatic phase loop:", oldPhase);
-            console.error("State:", {
-                phase: nextState.phase,
-                turn: nextState.turn,
-                actionRequired: nextState.actionRequired,
-                queuedActions: nextState.queuedActions,
-                interruptedTurn: nextState._interruptedTurn
-            });
             break;
         }
     }
-    // CRITICAL: Clear animationState when progressing to a new phase/state
-    // Animation should never persist across phase transitions
-    return { ...nextState, animationState: null };
+    return nextState;
 };
 
 export const continueTurnAfterStartPhaseAction = (state: GameState): GameState => {
@@ -1278,11 +1339,7 @@ export const processStartOfTurn = (state: GameState): GameState => {
     if (state.winner) return state;
 
     let stateAfterStartEffects = { ...state, phase: 'start' as GamePhase };
-
-    // CRITICAL: Recalculate ALL lane values for BOTH players at the start of EVERY turn
-    // This ensures passive value modifiers (like Clarity-0's +1 per card in hand) are always current
     stateAfterStartEffects = recalculateAllLaneValues(stateAfterStartEffects);
-
     stateAfterStartEffects = advancePhase(stateAfterStartEffects);
 
     if (stateAfterStartEffects.actionRequired) {

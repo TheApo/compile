@@ -300,13 +300,7 @@ export const isCardTargetable = (card: PlayedCard, gameState: GameState): boolea
             const { disallowedLaneIndex, lanesSelected } = actionRequired;
             return laneIndex !== disallowedLaneIndex && !lanesSelected.includes(laneIndex) && isUncovered;
         }
-        case 'plague_4_opponent_delete': {
-            const actor = gameState.turn === 'player' ? 'opponent' : 'player';
-            if (actor === 'player') { // Human player needs to act
-                return owner === 'player' && !card.isFaceUp && isUncovered;
-            }
-            return false;
-        }
+        // REMOVED: plague_4_opponent_delete - Plague-4 now uses generic select_cards_to_delete with actorChooses: card_owner
         case 'select_any_other_card_to_flip': {
             // Frost-1: Only face-up cards can be flipped (to face-down)
             const frost1Active = isFrost1Active(gameState);

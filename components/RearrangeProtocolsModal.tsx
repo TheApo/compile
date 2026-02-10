@@ -40,21 +40,9 @@ export function RearrangeProtocolsModal({ gameState, targetPlayer, onConfirm }: 
 
     // Check if current arrangement violates Anarchy-3 restriction
     const hasViolation = useMemo(() => {
-        if (!disallowedProtocolForLane) {
-            console.log('[RearrangeModal] No disallowedProtocolForLane set');
-            return false;
-        }
+        if (!disallowedProtocolForLane) return false;
         const { laneIndex, protocol } = disallowedProtocolForLane;
-        const currentProtocolAtLane = protocols[laneIndex];
-        const violation = currentProtocolAtLane === protocol;
-        console.log('[RearrangeModal] Checking violation:', {
-            disallowedProtocol: protocol,
-            disallowedLaneIndex: laneIndex,
-            currentProtocolAtLane,
-            protocols,
-            hasViolation: violation
-        });
-        return violation;
+        return protocols[laneIndex] === protocol;
     }, [protocols, disallowedProtocolForLane]);
 
     const targetPlayerState = gameState[targetPlayer];

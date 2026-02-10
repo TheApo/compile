@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GameState, Player, EffectContext } from '../../../types';
+import { GameState, Player, EffectContext, AnimationRequest } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
 import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets, findCardOnBoard } from '../helpers/actionUtils';
@@ -105,7 +105,15 @@ const executeFollowUpAfterDiscard = (
     };
 
     const result = executeCustomEffect(sourceCardInfo.card, laneIndex, newState, context, followUpEffect);
-    return result.newState;
+
+    // Store animation requests in _pendingAnimationRequests for the new queue system
+    // This handles followUpEffects like Fire-4's "then draw"
+    let finalState = result.newState;
+    if (result.animationRequests && result.animationRequests.length > 0) {
+        const existingRequests = (finalState as any)._pendingAnimationRequests || [];
+        (finalState as any)._pendingAnimationRequests = [...existingRequests, ...result.animationRequests];
+    }
+    return finalState;
 };
 
 export const discardCardFromHand = (prevState: GameState, cardId: string): GameState => {
@@ -233,11 +241,26 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const discardedCards = playerState.hand.filter(c => cardsToDiscardSet.has(c.id));
     if (discardedCards.length === 0) return prevState;
 
+    // Create discard animation requests BEFORE state change (DRY - single place for discard animations)
+    // Store handIndex, cardSnapshot, AND preDiscardHand so animation can create sequential snapshots
+    const preDiscardHand = [...playerState.hand]; // Snapshot of hand BEFORE any discards
+    const discardRequests = discardedCards.map((card, index) => {
+        const handIndex = playerState.hand.findIndex(c => c.id === card.id);
+        return {
+            type: 'discard' as const,
+            cardId: card.id,
+            owner: player,
+            handIndex,            // Position in hand BEFORE discard
+            cardSnapshot: card,   // Card object as snapshot
+            preDiscardHand,       // Full hand BEFORE discard (for sequential snapshots)
+            discardIndex: index   // Order in this batch (for filtering previous discards)
+        };
+    });
+    const existingRequests = (prevState as any)._pendingAnimationRequests || [];
+
     const newHand = playerState.hand.filter(c => !cardsToDiscardSet.has(c.id));
 
-    const originalAction = (prevState.animationState?.type === 'discardCard' && prevState.animationState.originalAction?.type === 'discard')
-        ? prevState.animationState.originalAction
-        : (prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null);
+    const originalAction = prevState.actionRequired?.type === 'discard' ? prevState.actionRequired : null;
 
     // NEW: Check discardTo parameter - determines which trash pile receives the cards
     const discardTo = (originalAction as any)?.discardTo || 'own_trash';
@@ -296,6 +319,9 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         };
     }
 
+    // Store animation requests for discard animations (processed by useGameState useEffect)
+    (newState as any)._pendingAnimationRequests = [...existingRequests, ...discardRequests];
+
     // IMPORTANT: Set context from source card if this discard was caused by an effect
     // Otherwise clear the context AND reset indent level
     if (originalAction?.sourceCardId) {
@@ -322,13 +348,8 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     const playerName = player === 'player' ? 'Player' : 'Opponent';
     const intoTheirTrash = discardPileOwner !== player ? ' into their trash' : '';
     let logMessage: string;
-    if (player === 'player' || discardedCards.every(c => c.isRevealed)) {
-        const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
-        logMessage = `${playerName} discards ${cardNames}${intoTheirTrash}.`;
-    } else {
-        const cardText = discardedCards.length === 1 ? 'card' : 'cards';
-        logMessage = `${playerName} discards ${discardedCards.length} ${cardText}${intoTheirTrash}.`;
-    }
+    const cardNames = discardedCards.map(c => `${c.protocol}-${c.value}`).join(', ');
+    logMessage = `${playerName} discards ${cardNames}${intoTheirTrash}.`;
     newState = log(newState, player, logMessage);
 
     // NOTE: We do NOT change indent here - it's inherited from the effect context
@@ -528,69 +549,18 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     return finalState;
 };
 
-export const resolvePlague2Discard = (prev: GameState, cardIdsToDiscard: string[]): GameState => {
-    if (prev.actionRequired?.type !== 'plague_2_player_discard') return prev;
+// REMOVED: resolvePlague2Discard - Plague-2 now uses generic 'discard' with variableCount + followUpEffect
+// REMOVED: resolvePlague2OpponentDiscard - Plague-2 now uses generic 'discard' with countType: equal_to_discarded
 
-    // FIX: Use actor from actionRequired, not prev.turn (critical for interrupt scenarios)
-    const player = prev.actionRequired.actor;
-    const opponent = player === 'player' ? 'opponent' : 'player';
-    
-    // Discard the player's cards first
-    let newState = discardCards(prev, cardIdsToDiscard, player);
-
-    // Then, determine opponent's discard count and set the next action
-    const opponentDiscardCount = cardIdsToDiscard.length + 1;
-    if (newState[opponent].hand.length > 0) {
-        newState.actionRequired = {
-            type: 'discard',
-            actor: opponent,
-            count: Math.min(opponentDiscardCount, newState[opponent].hand.length),
-            sourceCardId: prev.actionRequired.sourceCardId
-        };
-    } else {
-        // CRITICAL: Queue pending custom effects before clearing actionRequired
-        newState = queuePendingCustomEffects(newState);
-        newState.actionRequired = null;
-    }
-
-    return newState;
-};
-
-export const resolvePlague2OpponentDiscard = (prev: GameState, cardIdsToDiscard: string[]): GameState => {
-    if (prev.actionRequired?.type !== 'plague_2_opponent_discard') return prev;
-
-    // FIX: Use actor from actionRequired, not hardcoded values (critical for interrupt scenarios)
-    const player = prev.actionRequired.actor;
-    const opponent = player === 'player' ? 'opponent' : 'player';
-
-    // The Plague-2 owner (actor) discards their cards first
-    let newState = discardCards(prev, cardIdsToDiscard, player);
-
-    // Now, require the opponent to discard
-    const opponentDiscardCount = cardIdsToDiscard.length + 1;
-    if (newState[opponent].hand.length > 0) {
-        newState.actionRequired = {
-            type: 'discard',
-            actor: opponent,
-            count: Math.min(opponentDiscardCount, newState[opponent].hand.length),
-            sourceCardId: prev.actionRequired.sourceCardId
-        };
-    } else {
-        // CRITICAL: Queue pending custom effects before clearing actionRequired
-        newState = queuePendingCustomEffects(newState);
-        newState.actionRequired = null;
-    }
-
-    return newState;
-};
-
-export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): GameState => {
-    // Handle original Fire-4, custom protocol variable discard, AND batch discard (count > 1)
+/**
+ * Resolve variable count or batch discard (used by custom protocols)
+ * Handles discards where count > 1 or variableCount is true
+ */
+export const resolveVariableDiscard = (prevState: GameState, cardIds: string[]): GameState => {
     const isVariableCount = prevState.actionRequired?.type === 'discard' && (prevState.actionRequired as any)?.variableCount;
     const isBatchDiscard = prevState.actionRequired?.type === 'discard' && prevState.actionRequired.count > 1;
-    const isOriginalFire4 = prevState.actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4';
 
-    if (!isVariableCount && !isBatchDiscard && !isOriginalFire4) return prevState;
+    if (!isVariableCount && !isBatchDiscard) return prevState;
 
     // FIX: Use actor from actionRequired, not prevState.turn (critical for interrupt scenarios)
     const player = prevState.actionRequired.actor;
@@ -599,55 +569,14 @@ export const resolveFire4Discard = (prevState: GameState, cardIds: string[]): Ga
     let newState = discardCards(prevState, cardIds, player);
 
     // CRITICAL FIX: For variableCount and batch discards, discardCards() already handles
-    // the followUpEffect in its else branch (lines 415-448). We should NOT call
-    // handleChainedEffectsOnDiscard here because:
-    // 1. discardCards() already processed the followUpEffect from originalAction
-    // 2. discardCards() cleared actionRequired, so handleChainedEffectsOnDiscard
-    //    would find null and skip the followUp entirely
+    // the followUpEffect in its else branch. We should NOT call handleChainedEffectsOnDiscard here.
     // Just return the state from discardCards - it already did all the work!
     if ((isVariableCount || isBatchDiscard) && sourceCardId) {
         return newState;
     }
 
     // For batch discard without sourceCardId (e.g., hand limit or other), just return
-    if (isBatchDiscard && !sourceCardId) {
-        return newState;
-    }
-
-    // Original Fire-4 logic
-    const amountToDraw = cardIds.length + 1;
-    newState = log(newState, player, `Fire-4: Drawing ${amountToDraw} card(s).`);
-    newState = drawForPlayer(newState, player, amountToDraw);
-
     return newState;
 };
 
-export const resolveHate1Discard = (prevState: GameState, cardIds: string[]): GameState => {
-    if (prevState.actionRequired?.type !== 'select_cards_from_hand_to_discard_for_hate_1') return prevState;
-
-    const { sourceCardId, actor } = prevState.actionRequired;
-
-    let newState = discardCards(prevState, cardIds, actor);
-
-    // NOTE: Hate-1 does NOT say "other cards", so it can delete itself!
-    const disallowedIds: string[] = [];
-    const availableTargets = countValidDeleteTargets(newState, disallowedIds);
-    const deleteCount = Math.min(2, availableTargets);
-
-    if (deleteCount > 0) {
-        newState.actionRequired = {
-            type: 'select_cards_to_delete',
-            count: deleteCount,
-            sourceCardId,
-            disallowedIds: [],
-            actor: actor,
-        };
-    } else {
-        newState = log(newState, actor, `Hate-1: No valid targets to delete.`);
-        // CRITICAL: Queue pending custom effects before clearing actionRequired
-        newState = queuePendingCustomEffects(newState);
-        newState.actionRequired = null;
-    }
-
-    return newState;
-};
+// REMOVED: resolveHate1Discard - Hate-1 now uses generic 'discard' with followUpEffect for delete

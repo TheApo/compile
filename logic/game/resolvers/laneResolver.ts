@@ -6,8 +6,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, AnimationRequest, Player, PlayedCard, EffectResult, ActionRequired, EffectContext } from '../../../types';
 import { drawCards as drawCardsUtil, findAndFlipCards } from '../../../utils/gameStateModifiers';
+import { deleteCardFromBoard } from '../../utils/boardModifiers';
 import { log, decreaseLogIndent } from '../../utils/log';
-import { findCardOnBoard, internalShiftCard, handleUncoverEffect } from '../helpers/actionUtils';
+import { findCardOnBoard, internalShiftCard, handleUncoverEffect, internalReturnCard } from '../helpers/actionUtils';
 import { recalculateAllLaneValues } from '../stateManager';
 import { playCard } from './playResolver';
 // NOTE: Old hardcoded effects removed - all protocols now use custom effects
@@ -16,6 +17,7 @@ import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
 import { executeOnPlayEffect, executeOnCoverEffect } from '../../effectExecutor';
 import { processQueuedActions, queuePendingCustomEffects, processEndOfAction } from '../phaseManager';
 import { canShiftCard, hasAnyProtocolPlayRule, canPlayFaceUpDueToSameProtocolRule } from '../passiveRuleChecker';
+import { queueFollowUpEffectSync, isFollowUpAlreadyQueued } from './followUpHelper';
 
 export type LaneActionResult = {
     nextState: GameState;
@@ -54,7 +56,17 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             const animationRequests: AnimationRequest[] = [];
             const unaffectedCardIds: string[] = [];
 
-            for (const { cardId, owner } of cardsToShift) {
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This prevents index shifts during multi-card operations and ensures correct animation snapshots
+            const sortedCardsToShift = [...cardsToShift].sort((a, b) => {
+                const aLane = prev[a.owner].lanes.find(l => l.some(c => c.id === a.cardId));
+                const bLane = prev[b.owner].lanes.find(l => l.some(c => c.id === b.cardId));
+                const aCardIdx = aLane?.findIndex(c => c.id === a.cardId) ?? -1;
+                const bCardIdx = bLane?.findIndex(c => c.id === b.cardId) ?? -1;
+                return bCardIdx - aCardIdx;
+            });
+
+            for (const { cardId, owner } of sortedCardsToShift) {
                 const cardInfo = findCardOnBoard(currentState, cardId);
                 if (!cardInfo) {
                     // Card no longer exists (was deleted/returned during previous shifts)
@@ -253,6 +265,11 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             // CRITICAL: Check if the shift created an interrupt (e.g., uncover effect)
             const uncoverCreatedInterrupt = newState.actionRequired !== null;
 
+            // === CRITICAL FIX: Queue followUpEffect SYNCHRONOUSLY ===
+            // Using central helper to prevent async timing bugs (AI runs sync, never waits for callbacks)
+            const wasActionExecuted = !!cardToShiftId;  // Did the shift actually happen?
+            newState = queueFollowUpEffectSync(newState, prev.actionRequired, actor, wasActionExecuted);
+
             if (shiftResult.animationRequests) {
                 // FIX: Implemented `onCompleteCallback` to correctly handle post-shift effects like Speed-3's self-flip and Anarchy-0's conditional draw after animations.
                 requiresAnimation = {
@@ -263,6 +280,8 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // CRITICAL: If uncover created an interrupt, we need to queue the follow-up effects
                         if (uncoverCreatedInterrupt) {
                             // LEGACY: Speed-3's speed_3_end effect
+                            // NOTE: This is kept for backwards compatibility with old Speed-3 protocol
+                            // The generic followUpEffect handling is now done synchronously BEFORE this callback
                             if (sourceEffect === 'speed_3_end') {
                                 const speed3CardId = prev.actionRequired.sourceCardId;
                                 const speed3FlipAction: ActionRequired = {
@@ -276,35 +295,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                                 ];
                             }
 
-                            // NEW: Queue generic followUpEffect for custom protocols (Speed-3 "If you do, flip this card")
-                            // This ensures the followUp executes AFTER the uncover interrupt resolves
-                            const followUpEffect = (prev.actionRequired as any)?.followUpEffect;
-                            const conditionalType = (prev.actionRequired as any)?.conditionalType;
-                            if (followUpEffect && sourceCardId) {
-                                const shouldExecute = conditionalType !== 'if_executed' || cardToShiftId;
-                                if (shouldExecute) {
-                                    // Get source card name for log context (state context may already be cleared)
-                                    const sourceCardForLog = findCardOnBoard(finalState, sourceCardId);
-                                    // Determine phase from state (could be 'start' or 'end')
-                                    const phaseContext = prev._currentPhaseContext || (prev.phase === 'start' ? 'start' : 'end');
-                                    const queuedFollowUp = {
-                                        type: 'execute_follow_up_effect',
-                                        sourceCardId: sourceCardId,
-                                        followUpEffect: followUpEffect,
-                                        actor: actor,
-                                        // CRITICAL: Store card name explicitly since state context may be cleared
-                                        logContext: {
-                                            indentLevel: 1,  // Follow-ups are always indented
-                                            sourceCardName: sourceCardForLog ? `${sourceCardForLog.card.protocol}-${sourceCardForLog.card.value}` : undefined,
-                                            phase: phaseContext,
-                                        },
-                                    };
-                                    finalState.queuedActions = [
-                                        ...(finalState.queuedActions || []),
-                                        queuedFollowUp
-                                    ];
-                                }
-                            }
+                            // NOTE: Generic followUpEffect queueing has been moved to SYNCHRONOUS execution
+                            // BEFORE this callback to fix the timing bug where turn changed before callback was called.
+                            // See the code block at line ~257-291.
 
                             const sourceCard = findCardOnBoard(finalState, sourceCardId);
                             // CRITICAL: Only queue Anarchy-0 draw if it's still uncovered AND face-up
@@ -353,9 +346,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // No interrupt - execute follow-up effects immediately
                         if (sourceEffect === 'speed_3_end') {
                             const speed3CardId = prev.actionRequired.sourceCardId;
+                            const speed3CardInfo = findCardOnBoard(finalState, speed3CardId);
                             finalState = log(finalState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                            // Store flip animation request BEFORE state change (new queue system)
+                            if (speed3CardInfo) {
+                                const flipRequest: AnimationRequest = {
+                                    type: 'flip',
+                                    cardId: speed3CardId,
+                                    owner: speed3CardInfo.owner,
+                                    laneIndex: speed3CardInfo.laneIndex,
+                                    cardIndex: speed3CardInfo.cardIndex
+                                };
+                                const existingRequests = (finalState as any)._pendingAnimationRequests || [];
+                                (finalState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+                            }
                             finalState = findAndFlipCards(new Set([speed3CardId]), finalState);
-                            finalState.animationState = { type: 'flipCard', cardId: speed3CardId };
                         }
                         // NOTE: Anarchy-0 conditional draw is now handled via custom protocol pending effects
 
@@ -447,12 +452,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                             if (nextAction.type === 'execute_remaining_custom_effects') {
                                 finalState = processQueuedActions(finalState);
 
-                                // NOTE: If processQueuedActions set an animationState (e.g., draw animation),
-                                // we just continue - the animation was already displayed synchronously
-                                // and the state should now have the updated hand
-                                if (finalState.animationState) {
-                                    finalState = { ...finalState, animationState: null };
-                                }
                             } else {
                                 finalState.queuedActions = finalState.queuedActions.slice(1);
                                 finalState.actionRequired = nextAction;
@@ -526,9 +525,21 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     // No interrupt - execute immediately
                     if (sourceEffect === 'speed_3_end') {
                         const speed3CardId = prev.actionRequired.sourceCardId;
+                        const speed3CardInfo = findCardOnBoard(newState, speed3CardId);
                         newState = log(newState, actor, `Speed-3: Flipping itself after shifting a card.`);
+                        // Store flip animation request BEFORE state change (new queue system)
+                        if (speed3CardInfo) {
+                            const flipRequest: AnimationRequest = {
+                                type: 'flip',
+                                cardId: speed3CardId,
+                                owner: speed3CardInfo.owner,
+                                laneIndex: speed3CardInfo.laneIndex,
+                                cardIndex: speed3CardInfo.cardIndex
+                            };
+                            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+                            (newState as any)._pendingAnimationRequests = [...existingRequests, flipRequest];
+                        }
                         newState = findAndFlipCards(new Set([speed3CardId]), newState);
-                        newState.animationState = { type: 'flipCard', cardId: speed3CardId };
                     }
 
                     // NEW: Execute pending effects from custom cards (e.g., Anarchy_custom-0) - NO ANIMATION case
@@ -621,23 +632,6 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         // that should be processed via processQueuedActions, NOT set as actionRequired
                         if (nextAction.type === 'execute_remaining_custom_effects') {
                             newState = processQueuedActions(newState);
-
-                            // CRITICAL: If processQueuedActions set an animationState (e.g., draw animation),
-                            // we need to convert it to requiresAnimation so useGameState processes it correctly
-                            if (newState.animationState && !newState.actionRequired) {
-                                const animState = newState.animationState;
-                                if (animState.type === 'draw') {
-                                    requiresAnimation = {
-                                        animationRequests: [{ type: 'draw', player: (animState as any).player, count: (animState as any).count }],
-                                        onCompleteCallback: (s, endTurnCb) => {
-                                            // After draw animation, check hand limit and continue turn
-                                            const stateAfterAnim = { ...s, animationState: null };
-                                            return endTurnCb(stateAfterAnim);
-                                        }
-                                    };
-                                    newState = { ...newState, animationState: null };
-                                }
-                            }
                         } else {
                             newState.queuedActions = newState.queuedActions.slice(1);
                             newState.actionRequired = nextAction;
@@ -1147,7 +1141,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.position === 'uncovered' && !isUncovered) continue;
                     if (targetFilter.position === 'covered' && isUncovered) continue;
 
-                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                    // CRITICAL: Include snapshot data for animation - card will be deleted from state immediately
+                    cardsToDelete.push({
+                        type: 'delete',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                     deletedCardIds.add(card.id);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
@@ -1167,6 +1169,18 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const newPlayerState = { ...newState[actor], stats: newStats };
                 newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
             }
+
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we delete from top (uncovered) to bottom (covered), preventing
+            // index shifts during deletion that would cause animation mismatches
+            cardsToDelete.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
+
+            // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
+            // The animation system will use the cardSnapshot data to show cards flying to trash
+            for (const req of cardsToDelete) {
+                newState = deleteCardFromBoard(newState, req.cardId);
+            }
+            newState = recalculateAllLaneValues(newState);
 
             // CRITICAL: Queue pending custom effects before clearing actionRequired
             newState = queuePendingCustomEffects(newState);
@@ -1273,7 +1287,9 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                 const faceDownValueInLane = playerState.lanes[targetLaneIndex]
                     .some(c => c.isFaceUp && c.protocol === 'Darkness' && c.value === 2) ? 4 : 2;
 
-                for (const card of playerState.lanes[targetLaneIndex]) {
+                const laneCards = playerState.lanes[targetLaneIndex];
+                for (let cardIdx = 0; cardIdx < laneCards.length; cardIdx++) {
+                    const card = laneCards[cardIdx];
                     // Apply targetFilter to determine if card should be returned
                     const value = card.isFaceUp ? card.value : faceDownValueInLane;
 
@@ -1290,7 +1306,15 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                     if (targetFilter.owner === 'own' && p !== actor) continue;
                     if (targetFilter.owner === 'opponent' && p === actor) continue;
 
-                    cardsToReturn.push({ type: 'return', cardId: card.id, owner: p });
+                    // CRITICAL: Include snapshot data for animation - card will be returned from state immediately
+                    cardsToReturn.push({
+                        type: 'return',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                     const ownerName = p === 'player' ? "Player's" : "Opponent's";
                     const cardName = card.isFaceUp ? `${card.protocol}-${card.value}` : 'a face-down card';
                     returnedCardNames.push(`${ownerName} ${cardName}`);
@@ -1308,6 +1332,19 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
             if (returnedCardNames.length > 0) {
                 newState = log(newState, actor, `${sourceCardName}: Returning ${returnedCardNames.join(', ')}.`);
             }
+
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we return from top (uncovered) to bottom (covered), preventing
+            // index shifts during removal that would cause animation mismatches
+            cardsToReturn.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
+
+            // CRITICAL: Return ALL cards to hand IMMEDIATELY - logic must be independent of animation!
+            // The animation system will use the cardSnapshot data to show cards flying to hand
+            for (const req of cardsToReturn) {
+                const returnResult = internalReturnCard(newState, req.cardId);
+                newState = returnResult.newState;
+            }
+            newState = recalculateAllLaneValues(newState);
 
             // CRITICAL: Queue pending custom effects before clearing actionRequired
             newState = queuePendingCustomEffects(newState);
@@ -1384,14 +1421,35 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
 
             const cardsToDelete: AnimationRequest[] = [];
             for (const p of ['player', 'opponent'] as Player[]) {
-                for (const card of prev[p].lanes[targetLaneIndex]) {
-                    cardsToDelete.push({ type: 'delete', cardId: card.id, owner: p });
+                const laneCards = prev[p].lanes[targetLaneIndex];
+                for (let cardIdx = 0; cardIdx < laneCards.length; cardIdx++) {
+                    const card = laneCards[cardIdx];
+                    // CRITICAL: Include snapshot data for animation - card will be deleted from state immediately
+                    cardsToDelete.push({
+                        type: 'delete',
+                        cardId: card.id,
+                        owner: p,
+                        cardSnapshot: { ...card },
+                        laneIndex: targetLaneIndex,
+                        cardIndex: cardIdx
+                    } as AnimationRequest);
                 }
             }
 
             const newStats = { ...newState.stats[actor], cardsDeleted: newState.stats[actor].cardsDeleted + cardsToDelete.length };
             const newPlayerState = { ...newState[actor], stats: newStats };
             newState = { ...newState, [actor]: newPlayerState, stats: { ...newState.stats, [actor]: newStats } };
+
+            // CRITICAL: Sort by cardIndex DESCENDING (highest first = uncovered cards first)
+            // This ensures we delete from top (uncovered) to bottom (covered), preventing
+            // index shifts during deletion that would cause animation mismatches
+            cardsToDelete.sort((a, b) => (b.cardIndex ?? 0) - (a.cardIndex ?? 0));
+
+            // CRITICAL: Delete ALL cards from state IMMEDIATELY - logic must be independent of animation!
+            for (const req of cardsToDelete) {
+                newState = deleteCardFromBoard(newState, req.cardId);
+            }
+            newState = recalculateAllLaneValues(newState);
 
             newState = queuePendingCustomEffects(newState);
             newState.actionRequired = null;

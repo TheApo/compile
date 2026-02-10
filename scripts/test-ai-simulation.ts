@@ -14,7 +14,7 @@ import { getAllCustomProtocolCards, getCustomProtocol } from '../logic/customPro
 import { easyAI } from '../logic/ai/easy';
 import { normalAI } from '../logic/ai/normal';
 import { executeOnPlayEffect, executeOnFlipEffect } from '../logic/effectExecutor';
-import { resolveActionWithCard } from '../logic/game/resolvers/cardResolver';
+import { resolveActionWithCard, applyCardActionResult } from '../logic/game/resolvers/cardResolver';
 import { resolveActionWithLane } from '../logic/game/resolvers/laneResolver';
 import { resolveActionWithDiscard } from '../logic/game/resolvers/discardResolver';
 import { resolveActionWithHandCard } from '../logic/game/resolvers/handCardResolver';
@@ -126,7 +126,6 @@ function createBaseState(playerProtocols: string[], opponentProtocols: string[])
             opponent: { cardsPlayed: 0, cardsDeleted: 0, compiledLanes: [] },
         },
         log: [],
-        animationState: null,
         logIndent: 0,
         logSource: null,
         logPhase: null,
@@ -156,14 +155,16 @@ function applyAIAction(state: GameState, action: AIAction): GameState {
         case 'flipCard':
             if (action.cardId) {
                 const result = resolveActionWithCard(newState, action.cardId);
-                newState = result.nextState;
+                // CRITICAL: Use applyCardActionResult to ensure callbacks are processed
+                newState = applyCardActionResult(result, (s) => phaseManager.processEndOfAction(s));
             }
             break;
 
         case 'deleteCard':
             if (action.cardId) {
                 const result = resolveActionWithCard(newState, action.cardId);
-                newState = result.nextState;
+                // CRITICAL: Use applyCardActionResult to ensure followUpEffects are processed
+                newState = applyCardActionResult(result, (s) => phaseManager.processEndOfAction(s));
             }
             break;
 
@@ -211,7 +212,8 @@ function applyAIAction(state: GameState, action: AIAction): GameState {
             // For unhandled types, try card resolver
             if ('cardId' in action && action.cardId) {
                 const result = resolveActionWithCard(newState, action.cardId);
-                newState = result.nextState;
+                // CRITICAL: Use applyCardActionResult to ensure callbacks are processed
+                newState = applyCardActionResult(result, (s) => phaseManager.processEndOfAction(s));
             }
     }
 

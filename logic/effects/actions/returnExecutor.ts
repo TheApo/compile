@@ -127,6 +127,10 @@ export function executeReturnEffect(
                 if (faceState === 'face_down' && c.isFaceUp) continue;
                 // faceState undefined allows both
 
+                // Check valueEquals filter (Water-3: "Return all cards with a value of 2")
+                const valueEquals = params.targetFilter?.valueEquals;
+                if (valueEquals !== undefined && c.value !== valueEquals) continue;
+
                 availableCards.push({ card: c, isUncovered });
             }
         }
@@ -150,6 +154,8 @@ export function executeReturnEffect(
 
     // FIX: Use 'select_card_to_return' (same as Fire-2)
     // Pass owner and position filter so UI can restrict clickable cards
+    // CRITICAL: Pass allowedIds so animation system knows which cards are valid targets
+    const allowedIds = availableCards.map(ac => ac.card.id);
     newState.actionRequired = {
         type: 'select_card_to_return',
         sourceCardId: card.id,
@@ -157,6 +163,7 @@ export function executeReturnEffect(
         targetOwner: owner, // Pass owner filter to UI
         targetFilter: params.targetFilter, // Pass full targetFilter including position and faceState
         destination: destination, // 'owner_hand' or 'actor_hand' (for stealing)
+        allowedIds, // CRITICAL: For animation system to only animate valid targets
         // CRITICAL: Pass conditional info for "If you do" effects
         followUpEffect: conditional?.thenEffect,
         conditionalType: conditional?.type,

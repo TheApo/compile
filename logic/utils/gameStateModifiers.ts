@@ -5,7 +5,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Card } from "../../data/cards";
-import { GameState, PlayedCard, Player, PlayerState, ActionRequired } from "../../types";
+import { GameState, PlayedCard, Player, PlayerState, ActionRequired, AnimationRequest } from "../../types";
 import { shuffleDeck } from '../../utils/gameLogic';
 import { log } from './log';
 import { recalculateAllLaneValues } from '../game/stateManager';
@@ -81,8 +81,16 @@ export function drawForPlayer(state: GameState, player: Player, count: number): 
         }
     };
 
+    // Store draw animation request (new queue system)
     if (drawnCardIds.length > 0) {
-        newState.animationState = { type: 'drawCard', owner: player, cardIds: drawnCardIds };
+        const drawRequest: AnimationRequest = {
+            type: 'draw',
+            player: player,
+            count: drawnCards.length,
+            cardIds: drawnCardIds
+        };
+        const existingRequests = (newState as any)._pendingAnimationRequests || [];
+        (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
     }
 
     if (reshuffled) {
@@ -145,8 +153,18 @@ export function drawFromOpponentDeck(state: GameState, drawingPlayer: Player, co
             },
         };
 
+        // Store draw animation request (new queue system)
+        // CRITICAL: Set fromOpponentDeck: true so animation shows card coming from opponent's deck
         if (drawnCardIds.length > 0) {
-            newState.animationState = { type: 'drawCard', owner: drawingPlayer, cardIds: drawnCardIds };
+            const drawRequest: AnimationRequest = {
+                type: 'draw',
+                player: drawingPlayer,
+                count: drawnCards.length,
+                cardIds: drawnCardIds,
+                fromOpponentDeck: true
+            };
+            const existingRequests = (newState as any)._pendingAnimationRequests || [];
+            (newState as any)._pendingAnimationRequests = [...existingRequests, drawRequest];
         }
 
         if (reshuffled) {

@@ -11,36 +11,56 @@ interface PhaseControllerProps {
     gameState: GameState;
     onFillHand: () => void;
     onSkipAction: () => void;
-    onResolvePlague2Discard: (cardIds: string[]) => void;
-    onResolvePlague4Flip: (accept: boolean) => void;
-    onResolveFire3Prompt: (accept: boolean) => void;
     onResolveOptionalDiscardCustomPrompt: (accept: boolean) => void;
     onResolveOptionalEffectPrompt: (accept: boolean) => void;
-    onResolveFire4Discard: (cardIds: string[]) => void;
-    onResolveHate1Discard: (cardIds: string[]) => void;
+    onResolveVariableDiscard: (cardIds: string[]) => void;
     onResolveRevealBoardCardPrompt: (choice: 'shift' | 'flip' | 'skip') => void;
     onResolveOptionalDrawPrompt: (accept: boolean) => void;
-    onResolveDeath1Prompt: (accept: boolean) => void;
-    onResolveLove1Prompt: (accept: boolean) => void;
-    onResolvePsychic4Prompt: (accept: boolean) => void;
-    onResolveSpirit1Prompt: (choice: 'discard' | 'flip') => void;
     onResolveControlMechanicPrompt: (choice: 'player' | 'opponent' | 'skip') => void;
     onResolveCustomChoice: (optionIndex: number) => void;
     selectedCardId: string | null;
     multiSelectedCardIds: string[];
     actionRequiredClass: string;
+    // Während Animationen: zeige nur Snapshot-Turn/Phase, keine interaktiven Elemente
+    isAnimating?: boolean;
+    snapshotTurn?: Player;
+    snapshotPhase?: string;
 }
 
 export const PhaseController: React.FC<PhaseControllerProps> = ({
     gameState, onFillHand, onSkipAction,
-    onResolvePlague2Discard, onResolvePlague4Flip, onResolveFire3Prompt, onResolveOptionalDiscardCustomPrompt,
-    onResolveOptionalEffectPrompt,
-    onResolveFire4Discard, onResolveHate1Discard, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt, onResolveDeath1Prompt,
-    onResolveLove1Prompt, onResolvePsychic4Prompt, onResolveSpirit1Prompt,
+    onResolveOptionalDiscardCustomPrompt, onResolveOptionalEffectPrompt,
+    onResolveVariableDiscard, onResolveRevealBoardCardPrompt, onResolveOptionalDrawPrompt,
     onResolveControlMechanicPrompt, onResolveCustomChoice,
-    selectedCardId, multiSelectedCardIds, actionRequiredClass
+    selectedCardId, multiSelectedCardIds, actionRequiredClass,
+    isAnimating, snapshotTurn, snapshotPhase
 }) => {
     const { phase, turn, actionRequired, player, compilableLanes } = gameState;
+
+    // Während Animationen: zeige nur Snapshot-Turn/Phase, keine interaktiven Elemente
+    if (isAnimating) {
+        const displayTurn = snapshotTurn || turn;
+        const displayPhase = snapshotPhase || phase;
+        const turnText = displayTurn.charAt(0).toUpperCase() + displayTurn.slice(1);
+        const phaseText = displayPhase.replace('_', ' ');
+        phaseText.charAt(0).toUpperCase() + phaseText.slice(1);
+
+        return (
+            <div className="phase-controller">
+                <div className="effect-source-info">
+                    <span>{turnText}'s Turn</span>
+                </div>
+                <div className="phase-controller-main">
+                    <div className="phase-info">
+                        Phase: {phaseText}
+                    </div>
+                    <div className="phase-actions">
+                        <button className="btn" disabled>Processing...</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const findCardById = (id: string): PlayedCard | null => {
         for (const p of ['player', 'opponent'] as const) {
@@ -84,32 +104,6 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
            );
         }
 
-        if (actionRequired?.type === 'prompt_death_1_effect') {
-             return (
-                <>
-                    <button className="btn" onClick={() => onResolveDeath1Prompt(true)}>Draw & Delete</button>
-                    <button className="btn btn-back" onClick={() => onResolveDeath1Prompt(false)}>Skip</button>
-                </>
-            );
-        }
-
-        if (actionRequired?.type === 'prompt_give_card_for_love_1') {
-            return (
-               <>
-                   <button className="btn" onClick={() => onResolveLove1Prompt(true)}>Give 1 Card</button>
-                   <button className="btn btn-back" onClick={() => onResolveLove1Prompt(false)}>Skip</button>
-               </>
-           );
-       }
-
-        if (actionRequired?.type === 'prompt_fire_3_discard') {
-             return (
-                <>
-                    <button className="btn" onClick={() => onResolveFire3Prompt(true)}>Discard 1 Card</button>
-                    <button className="btn btn-back" onClick={() => onResolveFire3Prompt(false)}>Skip</button>
-                </>
-            );
-        }
 
         if (actionRequired?.type === 'prompt_optional_discard_custom') {
              return (
@@ -132,18 +126,6 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             );
         }
 
-        // REMOVED: prompt_shift_for_speed_3 - Speed-3 now uses custom protocol system
-
-        if (actionRequired?.type === 'prompt_spirit_1_start') {
-            return (
-               <>
-                   <button className="btn" onClick={() => onResolveSpirit1Prompt('discard')}>Discard 1</button>
-                   <button className="btn btn-back" onClick={() => onResolveSpirit1Prompt('flip')}>Flip Card</button>
-               </>
-           );
-        }
-
-        // REMOVED: prompt_shift_for_spirit_3 - Spirit-3 now uses custom protocol system
 
         // NEW: Custom Choice effect (Spirit_custom-1: Either discard or flip)
         if (actionRequired?.type === 'custom_choice') {
@@ -178,16 +160,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             }
         }
 
-        if (actionRequired?.type === 'prompt_return_for_psychic_4') {
-             return (
-                <>
-                    <button className="btn" onClick={() => onResolvePsychic4Prompt(true)}>Return Card</button>
-                    <button className="btn btn-back" onClick={() => onResolvePsychic4Prompt(false)}>Skip</button>
-                </>
-            );
-        }
-
-        // REMOVED: prompt_shift_or_flip_for_light_2 - Light-2 now uses prompt_shift_or_flip_board_card_custom
+        // REMOVED: prompt_return_for_psychic_4 - Psychic-4 now uses custom protocol with prompt_optional_effect
 
         if (actionRequired?.type === 'prompt_shift_or_flip_board_card_custom') {
             return (
@@ -209,7 +182,7 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 return (
                     <button
                         className="btn"
-                        onClick={() => onResolveFire4Discard(multiSelectedCardIds)}
+                        onClick={() => onResolveVariableDiscard(multiSelectedCardIds)}
                         disabled={multiSelectedCardIds.length < requiredCount}
                     >
                         Confirm Discard ({multiSelectedCardIds.length}/{isVariableCount ? '?' : discardCount})
@@ -218,39 +191,9 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
             }
         }
 
-        if (actionRequired?.type === 'plague_2_player_discard' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_fire_4' || actionRequired?.type === 'select_cards_from_hand_to_discard_for_hate_1') {
-            let handler;
-            let requiredCount = 0;
-            if (actionRequired.type === 'plague_2_player_discard') {
-                handler = onResolvePlague2Discard;
-                requiredCount = 1; // At least 1
-            } else if (actionRequired.type === 'select_cards_from_hand_to_discard_for_fire_4') {
-                handler = onResolveFire4Discard;
-                requiredCount = 1; // At least 1
-            } else { // Hate-1
-                handler = onResolveHate1Discard;
-                requiredCount = actionRequired.count;
-            }
-
-            return (
-                <button
-                    className="btn"
-                    onClick={() => handler(multiSelectedCardIds)}
-                    disabled={multiSelectedCardIds.length < requiredCount}
-                >
-                    Confirm Discard ({multiSelectedCardIds.length})
-                </button>
-            );
-        }
-
-        if (actionRequired?.type === 'plague_4_player_flip_optional') {
-            return (
-                <>
-                    <button className="btn" onClick={() => onResolvePlague4Flip(true)}>Flip Plague-4</button>
-                    <button className="btn btn-back" onClick={() => onResolvePlague4Flip(false)}>Skip</button>
-                </>
-            );
-        }
+        // REMOVED: Legacy handlers for plague_2_player_discard, select_cards_from_hand_to_discard_for_fire_4,
+        // select_cards_from_hand_to_discard_for_hate_1, plague_4_player_flip_optional
+        // All now use generic discard with variableCount + followUpEffect
 
         if (actionRequired && 'optional' in actionRequired && actionRequired.optional) {
              return <button className="btn btn-back" onClick={onSkipAction}>Skip Action</button>;
@@ -383,14 +326,10 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select a lane';
                 case 'prompt_optional_draw':
                     return 'Optional: Draw card(s)?';
-                case 'prompt_death_1_effect':
-                    return 'Start Phase: Use Death-1 effect?';
                 case 'select_card_to_delete_for_death_1':
                     return 'Action: Select a card to delete';
                 case 'delete_self':
                     return 'Deleting card...';
-                case 'prompt_give_card_for_love_1':
-                    return 'End Phase: Give 1 card to draw 2?';
                 case 'select_card_from_hand_to_give':
                     return 'Action: Select a card from your hand to give';
                 case 'select_card_from_hand_to_reveal':
@@ -422,8 +361,6 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                 }
                 case 'select_covered_card_to_flip_for_chaos_0':
                     return 'Action: Select a covered card to flip in this lane';
-                case 'prompt_fire_3_discard':
-                    return 'End Phase: Discard 1 card to flip 1 card?';
                 case 'prompt_optional_discard_custom':
                     return `Optional: Discard ${actionRequired.count} card(s) to continue?`;
                 case 'prompt_optional_effect': {
@@ -446,17 +383,11 @@ export const PhaseController: React.FC<PhaseControllerProps> = ({
                     return 'Action: Select one of your cards to shift';
                 case 'select_opponent_face_down_card_to_shift':
                     return 'Action: Select an opponent\'s face-down card to shift';
-                case 'prompt_spirit_1_start':
-                    return 'Start Phase: Discard 1 card or flip Spirit-1?';
                 case 'select_any_card_to_flip_optional':
                     return 'Action: You may flip one card. Select a card or skip.';
                 // REMOVED: prompt_shift_for_spirit_3 - now uses custom protocol with after_draw trigger
                 case 'prompt_swap_protocols':
                     return 'Action: Swap two protocols.';
-                case 'select_cards_from_hand_to_discard_for_fire_4':
-                    return 'Action: Select 1 or more cards to discard';
-                case 'select_cards_from_hand_to_discard_for_hate_1':
-                    return `Action: Select ${actionRequired.count} card(s) to discard for Hate-1`;
                 case 'select_any_card_to_flip':
                     return `Action: Select a card to flip (${actionRequired.count} remaining)`;
                 case 'select_any_face_down_card_to_flip_optional':

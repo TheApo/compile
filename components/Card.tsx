@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { GameState, PlayedCard, Player } from "../types";
+import { PlayedCard } from "../types";
 
 interface CardProps {
   card: PlayedCard;
@@ -19,7 +19,6 @@ interface CardProps {
   isSourceOfEffect?: boolean;
   style?: React.CSSProperties;
   additionalClassName?: string;
-  animationState?: GameState["animationState"];
 }
 
 // FIX: Changed component to React.FC to correctly handle React-specific props like 'key'.
@@ -36,7 +35,6 @@ export const CardComponent: React.FC<CardProps> = ({
   isSourceOfEffect,
   style,
   additionalClassName,
-  animationState,
 }) => {
   // Helper to strip HTML tags for text length calculation
   const getTextLength = (html: string): number => {
@@ -51,6 +49,10 @@ export const CardComponent: React.FC<CardProps> = ({
     content: string;
     className?: string;
   }) => {
+    // Guard against undefined/null content
+    if (!content) {
+      return <div className={`card-rule-box ${className || ""}`} />;
+    }
     // Add size classes if content is too long for the box
     // Each line fits ~25 characters, boxes fit ~3-4 lines comfortably
     const textLength = getTextLength(content);
@@ -69,28 +71,6 @@ export const CardComponent: React.FC<CardProps> = ({
     );
   };
 
-  const isEntering =
-    animationState?.type === "playCard" && animationState.cardId === card.id;
-  const enteringClass = isEntering ? `is-entering-${animationState.owner}` : "";
-
-  const isDeleting =
-    animationState?.type === "deleteCard" && animationState.cardId === card.id;
-  const deletingClass = isDeleting ? `is-deleting-${animationState.owner}` : "";
-
-  const owner: Player | undefined =
-    animationState?.type === "drawCard" ||
-    animationState?.type === "discardCard"
-      ? animationState.owner
-      : undefined;
-  const isDrawing =
-    owner === "player" &&
-    animationState?.type === "drawCard" &&
-    animationState.cardIds.includes(card.id);
-  const isDiscarding =
-    owner === "player" &&
-    animationState?.type === "discardCard" &&
-    animationState.cardIds.includes(card.id);
-
   const classNames = ["card-component"];
   if (card.protocol) {
     classNames.push(`card-protocol-${card.protocol.toLowerCase()}`);
@@ -103,12 +83,8 @@ export const CardComponent: React.FC<CardProps> = ({
   }
   if (isSelected) classNames.push("selected");
   if (isMultiSelected) classNames.push("multi-selected");
-  if (isDiscarding) classNames.push("is-discarding");
   if (isTargetable) classNames.push("is-targetable");
   if (isSourceOfEffect) classNames.push("is-source-of-effect");
-  if (enteringClass) classNames.push(enteringClass);
-  if (deletingClass) classNames.push(deletingClass);
-  if (isDrawing) classNames.push("is-drawing");
   if (additionalClassName) classNames.push(additionalClassName);
 
   // Create inline styles for custom protocol colors

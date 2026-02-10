@@ -554,6 +554,7 @@
 
 /* --- In-Game Card Overrides --- */
 .lane-stack .card-component,
+.pile-card-wrapper .card-component,
 .player-hand-area .card-component.in-hand,
 .card-ticker-track .card-component.in-hand,
 .protocol-card-grid .card-component.in-hand,
@@ -563,6 +564,7 @@
     font-size: 0.6rem;
 }
 .lane-stack .card-front,
+.pile-card-wrapper .card-front,
 .player-hand-area .card-front,
 .card-ticker-track .card-front,
 .protocol-card-grid .card-front,
@@ -573,6 +575,7 @@
 }
 
 .lane-stack .card-component .card-header,
+.pile-card-wrapper .card-component .card-header,
 .player-hand-area .card-component.in-hand .card-header,
 .card-ticker-track .card-component.in-hand .card-header,
 .protocol-card-grid .card-component.in-hand .card-header,
@@ -584,6 +587,7 @@
 }
 
 .lane-stack .card-component .card-protocol,
+.pile-card-wrapper .card-component .card-protocol,
 .player-hand-area .card-component.in-hand .card-protocol,
 .card-ticker-track .card-component.in-hand .card-protocol,
 .protocol-card-grid .card-component.in-hand .card-protocol,
@@ -600,6 +604,7 @@
 }
 
 .lane-stack .card-component .card-value,
+.pile-card-wrapper .card-component .card-value,
 .player-hand-area .card-component.in-hand .card-value,
 .card-ticker-track .card-component.in-hand .card-value,
 .protocol-card-grid .card-component.in-hand .card-value,
@@ -612,6 +617,7 @@
 }
 
 .lane-stack .card-component .card-body,
+.pile-card-wrapper .card-component .card-body,
 .player-hand-area .card-component.in-hand .card-body,
 .card-ticker-track .card-component.in-hand .card-body,
 .protocol-card-grid .card-component.in-hand .card-body,
@@ -622,6 +628,7 @@
 }
 
 .lane-stack .card-component .card-rule-box,
+.pile-card-wrapper .card-component .card-rule-box,
 .player-hand-area .card-component.in-hand .card-rule-box,
 .card-ticker-track .card-component.in-hand .card-rule-box,
 .protocol-card-grid .card-component.in-hand .card-rule-box,
@@ -635,6 +642,8 @@
 
 .lane-stack .card-component .card-rule-box::before,
 .lane-stack .card-component .card-rule-box::after,
+.pile-card-wrapper .card-component .card-rule-box::before,
+.pile-card-wrapper .card-component .card-rule-box::after,
 .player-hand-area .card-component.in-hand .card-rule-box::before,
 .player-hand-area .card-component.in-hand .card-rule-box::after,
 .card-ticker-track .card-component.in-hand .card-rule-box::before,
@@ -815,6 +824,104 @@
   font-weight: 600;
 }
 
+/* --- Info Headers (Opponent/Player labels for new layout) --- */
+.info-header {
+  display: none;  /* Hidden by default, shown in media query */
+  padding: 0.25rem 0.75rem;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+
+.info-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.info-header.opponent-header h3 {
+  color: var(--danger-color);
+}
+
+.info-header.player-header h3 {
+  color: var(--primary-color);
+}
+
+/* --- Turn Phase Indicator --- */
+.turn-phase-indicator {
+  display: none;  /* Hidden by default, shown when DeckTrashArea is visible */
+}
+
+/* Border around ALL phases - color changes based on current player */
+.phase-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 2px solid var(--surface-hover);
+  border-radius: 6px;
+  background-color: var(--surface-color);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.phase-list.player-turn {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 10px rgba(97, 239, 255, 0.3);
+}
+
+.phase-list.opponent-turn {
+  border-color: var(--danger-color);
+  box-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+}
+
+.phase-item {
+  padding: 0.4rem 0.75rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  opacity: 0.4;
+  color: var(--text-muted);
+}
+
+/* Active phase - highlighted by colored text only */
+.phase-item.active {
+  opacity: 1;
+  font-weight: bold;
+}
+
+.phase-item.active.player-turn {
+  color: var(--primary-color);
+  text-shadow: 0 0 8px var(--primary-color);
+}
+
+.phase-item.active.opponent-turn {
+  color: var(--danger-color);
+  text-shadow: 0 0 8px var(--danger-color);
+}
+
+/* Show TurnPhaseIndicator when DeckTrashArea is visible (> 850px) */
+@media (min-width: 851px) {
+  .game-info-panel {
+    gap: 0.25rem;  /* Reduce gap for new layout */
+  }
+
+  .info-header {
+    display: block;
+  }
+
+  .turn-phase-indicator {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    flex: 1;
+  }
+
+  .game-info-panel .info-stats {
+    display: none;  /* Hide Hand/Deck/Trash info when TurnPhaseIndicator is visible */
+  }
+}
+
 /* --- Toaster Notification --- */
 .toaster-container {
   position: fixed;
@@ -872,13 +979,20 @@
 }
 
 .rearrange-board-view .protocol-bars-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     border: none;
     padding: 0;
     padding-top: 2rem;
     gap: 0.75rem;
 }
 
+/* Ensure protocol bars in modal display protocols horizontally */
 .rearrange-board-view .protocol-bar {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.5rem;
     border-radius: 4px;
     overflow: hidden;
 }

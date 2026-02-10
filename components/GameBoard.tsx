@@ -5,11 +5,14 @@
 
 import React from 'react';
 import { GameState, PlayedCard, Player } from '../types';
+import { CardPosition } from '../types/animation';
 import { Lane } from './Lane';
 import { CardComponent } from './Card';
+import { DeckTrashArea } from './DeckTrashArea';
 import { isCardTargetable } from '../utils/targeting';
 import { hasRequireNonMatchingProtocolRule, hasAnyProtocolPlayRule, canShiftCard, hasPlayOnOpponentSideRule, canPlayFaceUpDueToSameProtocolRule } from '../logic/game/passiveRuleChecker';
 import { getEffectiveCardValue } from '../logic/game/stateManager';
+import { useAnimationQueue } from '../contexts/AnimationQueueContext';
 
 interface GameBoardProps {
     gameState: GameState;
@@ -22,10 +25,18 @@ interface GameBoardProps {
     onOpponentHandCardPointerLeave: () => void;
     selectedCardId: string | null;
     sourceCardId: string | null;
+    animatingCardIds?: Set<string>;  // Cards being animated (hide via CSS)
+    animatingCardInfo?: { cardId: string; fromPosition: CardPosition } | null;  // Extended info for shift animation hiding
+    // Deck/Trash callbacks
+    onDeckClick?: (owner: Player) => void;
+    onTrashClick?: (owner: Player) => void;
+    onTrashCardHover?: (card: PlayedCard, owner: Player) => void;
+    onTrashCardLeave?: () => void;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId }) => {
-    const { player, opponent, animationState, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
+export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDown, onPlayFaceDown, onCardPointerDown, onCardPointerEnter, onCardPointerLeave, onOpponentHandCardPointerEnter, onOpponentHandCardPointerLeave, selectedCardId, sourceCardId, animatingCardIds, animatingCardInfo, onDeckClick, onTrashClick, onTrashCardHover, onTrashCardLeave }) => {
+    const { player, opponent, phase, turn, compilableLanes, actionRequired, controlCardHolder } = gameState;
+    const { currentAnimation } = useAnimationQueue();
 
     const getLanePlayability = (laneIndex: number): { isPlayable: boolean, isMatching: boolean, isCompilable: boolean } => {
         const isCompilable = phase === 'compile' && turn === 'player' && !actionRequired && compilableLanes.includes(laneIndex);
@@ -402,7 +413,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     const getProtocolClass = (baseClass: string, isCompiled: boolean, laneIndex: number) => {
         let classes = [baseClass];
         if (isCompiled) classes.push('compiled');
-        if (animationState?.type === 'compile' && animationState.laneIndex === laneIndex) {
+        if (currentAnimation?.type === 'delete' && currentAnimation.laneIndex === laneIndex) {
             classes.push('is-compiling');
         }
         return classes.join(' ');
@@ -430,19 +441,47 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
     return (
         <div className="game-board">
             <div className="opponent-hand-area">
-                {opponent.hand.map(card => (
-                    <CardComponent
-                        key={card.id}
-                        card={card}
-                        isFaceUp={card.isRevealed || false}
-                        additionalClassName="in-hand"
-                        onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
-                    />
-                ))}
+                {(() => {
+                    // DEFENSIVE: Deduplicate hand cards to prevent React key errors
+                    const seenIds = new Set<string>();
+                    return opponent.hand
+                        .filter(card => {
+                            if (seenIds.has(card.id)) {
+                                console.warn('[GameBoard] Duplicate card ID in opponent hand:', card.id);
+                                return false;
+                            }
+                            seenIds.add(card.id);
+                            return true;
+                        })
+                        .map((card, index) => {
+                            // Hide the card if it's being animated (kept in DOM for position detection)
+                            const isBeingAnimated = animatingCardIds?.has(card.id);
+                            return (
+                                <CardComponent
+                                    key={`opp-hand-${card.id}-${index}`}
+                                    card={card}
+                                    isFaceUp={card.isRevealed || false}
+                                    additionalClassName={`in-hand ${isBeingAnimated ? 'animating-hidden' : ''}`}
+                                    onPointerEnter={() => onOpponentHandCardPointerEnter(card)}
+                                />
+                            );
+                        });
+                })()}
             </div>
 
             {/* Opponent's Side */}
             <div className={`player-side opponent-side ${turn === 'opponent' ? 'active-turn' : ''}`}>
+                {/* Deck/Trash for opponent - inside opponent-side so it aligns with lanes */}
+                <DeckTrashArea
+                    owner="opponent"
+                    deckCount={opponent.deck.length}
+                    topTrashCard={opponent.discard.length > 0 ? opponent.discard[opponent.discard.length - 1] : null}
+                    trashCount={opponent.discard.length}
+                    onDeckClick={() => onDeckClick?.('opponent')}
+                    onTrashClick={() => onTrashClick?.('opponent')}
+                    onTrashCardHover={(card) => onTrashCardHover?.(card, 'opponent')}
+                    onTrashCardLeave={onTrashCardLeave}
+                />
                 <div className="lanes">
                     {opponent.lanes.map((laneCards, i) => {
                         const { isPlayable: oppIsPlayable, isMatching: oppIsMatching } = getOpponentLanePlayability(i);
@@ -459,11 +498,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'opponent')}
                             onCardPointerLeave={() => onCardPointerLeave()}
                             owner="opponent"
-                            animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
+                            animatingCardIds={animatingCardIds}
+                            animatingCardInfo={animatingCardInfo}
                         />
                     })}
                 </div>
@@ -504,6 +544,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
 
             {/* Player's Side */}
             <div className={`player-side ${turn === 'player' ? 'active-turn' : ''}`}>
+                {/* Deck/Trash for player - inside player-side so it aligns with lanes */}
+                <DeckTrashArea
+                    owner="player"
+                    deckCount={player.deck.length}
+                    topTrashCard={player.discard.length > 0 ? player.discard[player.discard.length - 1] : null}
+                    trashCount={player.discard.length}
+                    onDeckClick={() => onDeckClick?.('player')}
+                    onTrashClick={() => onTrashClick?.('player')}
+                    onTrashCardHover={(card) => onTrashCardHover?.(card, 'player')}
+                    onTrashCardLeave={onTrashCardLeave}
+                />
                 <div className="lanes">
                     {player.lanes.map((laneCards, i) => {
                         const { isPlayable, isMatching, isCompilable } = getLanePlayability(i);
@@ -521,11 +572,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ gameState, onLanePointerDo
                             onCardPointerEnter={(card) => onCardPointerEnter(card, 'player')}
                             onCardPointerLeave={() => onCardPointerLeave()}
                             owner="player"
-                            animationState={animationState}
                             isCardTargetable={(card) => isCardTargetable(card, gameState)}
                             laneIndex={i}
                             sourceCardId={sourceCardId}
                             gameState={gameState}
+                            animatingCardIds={animatingCardIds}
+                            animatingCardInfo={animatingCardInfo}
                         />
                     })}
                 </div>
