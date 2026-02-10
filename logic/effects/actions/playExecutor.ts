@@ -82,18 +82,28 @@ export function executePlayEffect(
         const newPlayerLanes = [...playerState.lanes];
         const playAnimations: AnimationRequest[] = [];
 
+        // CRITICAL: Snapshot lanes BEFORE playing cards (DRY - like preDiscardHand, preShiftLanes)
+        // This enables sequential snapshot creation in enqueueAnimationsFromRequests
+        const prePlayLanes = {
+            player: state.player.lanes.map(lane => lane.map(card => ({ ...card }))),
+            opponent: state.opponent.lanes.map(lane => lane.map(card => ({ ...card })))
+        };
+
         for (let i = 0; i < newCardsToPlay.length; i++) {
             const targetLaneIndex = otherLaneIndices[i];
             newPlayerLanes[targetLaneIndex] = [...newPlayerLanes[targetLaneIndex], newCardsToPlay[i]];
 
             // Add play animation for each card (from deck)
+            // Include prePlayLanes and playIndex for sequential snapshot (like each_line_with_card path)
             playAnimations.push({
                 type: 'play',
                 cardId: newCardsToPlay[i].id,
                 owner: actor,
                 toLane: targetLaneIndex,
                 fromDeck: true,
-                isFaceUp: false
+                isFaceUp: false,
+                prePlayLanes,
+                playIndex: i
             });
         }
 
