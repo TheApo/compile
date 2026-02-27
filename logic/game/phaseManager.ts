@@ -460,7 +460,10 @@ export const processQueuedActions = (state: GameState): GameState => {
             const sourceIsUncovered = isCardUncovered(mutableState, sourceCardId);
 
             // CRITICAL: Only execute if source card is still on the board, face-up AND uncovered
-            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && sourceIsUncovered) {
+            // EXCEPTION: Top effects (start/end triggers) work even when covered, per rules!
+            const isTopEffect = followUpEffect?.position === 'top' &&
+                (followUpEffect?.trigger === 'start' || followUpEffect?.trigger === 'end');
+            if (sourceCardInfo && sourceCardInfo.card.isFaceUp && (sourceIsUncovered || isTopEffect)) {
                 const lane = mutableState[sourceCardInfo.owner].lanes.find(l => l.some(c => c.id === sourceCardId));
                 const laneIdx = mutableState[sourceCardInfo.owner].lanes.indexOf(lane!);
                 const context = {
