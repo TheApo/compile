@@ -146,7 +146,7 @@
             "deleteSelf": true,
             "protocolCountConditional": {
               "type": "unique_protocols_on_field_below",
-              "threshold": 3
+              "threshold": 4
             }
           },
           "position": "top",
