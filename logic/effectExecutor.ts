@@ -635,6 +635,7 @@ function processTriggeredEffects(
         triggerType: effectKeyword === 'Start' ? 'start' : 'end'
     };
 
+
     // Check if this is a custom protocol card with custom effects
     const customCard = card as any;
     const triggerType = effectKeyword === 'Start' ? 'start' : 'end';

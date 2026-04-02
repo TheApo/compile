@@ -221,6 +221,15 @@ export const handleRequiredActionSync = (
         if (stateAfterCallback.actionRequired && stateAfterCallback.actionRequired.actor === 'opponent') {
             return stateAfterCallback;
         }
+
+        // CRITICAL FIX: If applyCardActionResult already called endTurnCb (via the callback),
+        // the phases have already advanced (e.g., start → action via continueTurnAfterStartPhaseAction).
+        // Calling endActionForPhase AGAIN would double-progress: action → hand_limit → end → turn switch,
+        // skipping the AI's entire action phase (Corruption-0 bug).
+        if (state.phase === 'start' && stateAfterCallback.phase !== 'start') {
+            return stateAfterCallback;
+        }
+
         if (result.requiresTurnEnd || (stateAfterCallback.queuedActions && stateAfterCallback.queuedActions.length > 0)) {
             return endActionForPhase(stateAfterCallback, phaseManager);
         }
