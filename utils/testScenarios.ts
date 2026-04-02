@@ -4683,6 +4683,59 @@ export const scenario89_Speed3Test: TestScenario = {
     }
 };
 
+/**
+ * Scenario 89: Speed-3 Test (Opponent)
+ */
+export const scenario90_Plague0Test: TestScenario = {
+    name: "Plague-0 Block Test",
+    description: "Plague-0 blocks opponent's only uncompiled lane. AI must play in compiled lanes as fallback.",
+    setup: (state: GameState) => {
+        const playerProtocols = ['Plague', 'Fire', 'Water'];
+        const opponentProtocols = ['Death', 'Light', 'Speed'];
+
+        let newState = initScenarioBase(
+            state,
+            playerProtocols,
+            opponentProtocols,
+            'opponent',
+            'start'
+        );
+
+        // Player hand
+        const playerHand = [
+            createCard('Fire', 1, true),
+            createCard('Water', 2, true),
+            createCard('Plague', 3, true),
+        ];
+        newState.player.hand = playerHand;
+
+        // Opponent hand: various cards to test AI fallback to compiled lanes
+        const opponentHand = [
+            createCard('Death', 3, true),
+            createCard('Light', 4, true),
+            createCard('Speed', 2, true),
+            createCard('Speed', 5, true),
+        ];
+        newState.opponent.hand = opponentHand;
+
+        // Player's Plague-0 face-up in lane 0 → blocks opponent from playing in lane 0
+        newState = placeCard(newState, 'player', 0, createCard('Plague', 0, true));
+
+        // Build decks
+        const usedCards = [...playerHand, ...opponentHand, ...newState.player.lanes.flat(), ...newState.opponent.lanes.flat()];
+        newState.player.deck = buildDeckFromProtocols(playerProtocols, usedCards);
+        newState.opponent.deck = buildDeckFromProtocols(opponentProtocols, []);
+
+        newState = recalculateAllLaneValues(newState);
+        newState = finalizeScenario(newState);
+
+        // Opponent has lanes 1 and 2 already compiled → only lane 0 left (blocked by Plague-0)
+        newState.opponent.compiled = [false, true, true];
+
+        return newState;
+    }
+};
+
 
 // Export all scenarios
 export const allScenarios: TestScenario[] = [
@@ -4774,4 +4827,5 @@ export const allScenarios: TestScenario[] = [
     scenario87_UnityCustomPlayground,
     scenario88_UnityAITest,
 	scenario89_Speed3Test,
+	scenario90_Plague0Test
 ];
