@@ -1727,9 +1727,11 @@ export const resolveActionWithCard = (
                 }
             }
 
-            // CRITICAL FIX: execute_remaining_custom_effects is an internal action
-            // It must be processed by processQueuedActions, not set as actionRequired
-            if ((nextAction as any)?.type === 'execute_remaining_custom_effects') {
+            // CRITICAL FIX: Internal actions must NOT be set as actionRequired!
+            // They must be processed by processQueuedActions in phaseManager.
+            // Setting them as actionRequired causes a softlock because useGameState.ts has no handler.
+            if ((nextAction as any)?.type === 'execute_remaining_custom_effects' ||
+                (nextAction as any)?.type === 'execute_follow_up_effect') {
                 const stateWithQueue = { ...newState, queuedActions: [nextAction, ...newQueue] };
                 return { nextState: stateWithQueue, requiresTurnEnd: false };
             }

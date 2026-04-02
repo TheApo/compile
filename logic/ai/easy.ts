@@ -719,6 +719,69 @@ const getBestMove = (state: GameState): AIAction => {
         }
     }
 
+    // =========================================================================
+    // FALLBACK: If no valid plays found in uncompiled lanes, try compiled lanes
+    // This prevents the AI from being completely stuck when all uncompiled lanes
+    // are blocked (e.g., by Plague-0's block_all_play passive rule).
+    // Playing in compiled lanes allows the AI to:
+    // 1. Trigger card effects (flip, delete, shift) to remove blocking cards
+    // 2. Build lane value for control advantage
+    // 3. Potentially recompile (draws from opponent's deck)
+    // =========================================================================
+    if (possibleMoves.length === 0 && state.opponent.hand.length > 0) {
+        for (const card of state.opponent.hand) {
+            for (let i = 0; i < 3; i++) {
+                if (!state.opponent.compiled[i]) continue; // Only compiled lanes in fallback
+
+                const playCheckFaceUp = canPlayCard(state, 'opponent', i, true, card.protocol);
+                const playCheckFaceDown = canPlayCard(state, 'opponent', i, false, card.protocol);
+                if (!playCheckFaceUp.allowed && !playCheckFaceDown.allowed) continue;
+
+                if (playCheckFaceUp.allowed) {
+                    let score = card.value * 5;
+                    let reason = `FALLBACK: Play ${card.protocol}-${card.value} face-up in compiled lane ${i}`;
+
+                    // Bonus for disruption effects that could remove blocking cards
+                    if (DISRUPTION_KEYWORDS.some(kw => card.keywords[kw])) {
+                        score += 80;
+                        reason += ` [Has disruption effect]`;
+                    }
+
+                    // Bonus if this could lead to recompile
+                    const resultingValue = state.opponent.laneValues[i] + card.value;
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score += 50;
+                        reason += ` [Recompile possible: ${resultingValue}]`;
+                    }
+
+                    possibleMoves.push({
+                        move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: true },
+                        score: addNoise(score),
+                        reason
+                    });
+                }
+
+                if (playCheckFaceDown.allowed) {
+                    const valueToAdd = getEffectiveCardValue({ ...card, isFaceUp: false }, state.opponent.lanes[i]);
+                    let score = valueToAdd;
+                    let reason = `FALLBACK: Play ${card.protocol}-${card.value} face-down in compiled lane ${i}`;
+
+                    const resultingValue = state.opponent.laneValues[i] + valueToAdd;
+                    if (resultingValue >= 10 && resultingValue > state.player.laneValues[i]) {
+                        score += 30;
+                        reason += ` [Recompile possible: ${resultingValue}]`;
+                    }
+
+                    possibleMoves.push({
+                        move: { type: 'playCard', cardId: card.id, laneIndex: i, isFaceUp: false },
+                        score: addNoise(score),
+                        reason
+                    });
+                }
+            }
+        }
+    }
+
     // Evaluate filling hand - ONLY draw when absolutely necessary
     // 1. Hand is empty (must draw)
     // 2. Emergency: Player can compile and we have control + player has 1+ compiled (can block with swap)

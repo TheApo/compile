@@ -1127,6 +1127,55 @@ export const processEndOfAction = (state: GameState): GameState => {
             // NOTE: Legacy anarchy_0_conditional_draw and speed_3_self_flip_after_shift removed
             // Now handled via generic flip_self action type
 
+            // GENERIC: Auto-resolve execute_follow_up_effect actions
+            // These are queued by queueFollowUpEffectSync for "if you do" conditionals
+            // (e.g., Speed-3: "Shift 1. If you do, flip this card", Psychic-4: "Return 1. If you do, flip this card")
+            // Without this, the action falls through to actionRequired and causes a softlock
+            // because useGameState.ts has no handler for execute_follow_up_effect.
+            if (nextAction.type === 'execute_follow_up_effect') {
+                const { sourceCardId, followUpEffect, actor, logContext } = nextAction as any;
+                const sourceCardInfo = findCardOnBoard(mutableState, sourceCardId);
+
+                if (!sourceCardInfo || !sourceCardInfo.card.isFaceUp) {
+                    // Source card gone or face-down - skip the follow-up
+                    if (logContext?.sourceCardName) mutableState._currentEffectSource = logContext.sourceCardName;
+                    if (logContext?.phase) mutableState._currentPhaseContext = logContext.phase;
+                    if (logContext?.indentLevel !== undefined) mutableState._logIndentLevel = logContext.indentLevel;
+                    const cardName = sourceCardInfo
+                        ? `${sourceCardInfo.card.protocol}-${sourceCardInfo.card.value}`
+                        : 'the source card';
+                    const reason = !sourceCardInfo ? 'deleted' : 'flipped face-down';
+                    mutableState = log(mutableState, actor, `Follow-up effect from ${cardName} skipped (${reason}).`);
+                    continue; // Cancelled, move to next in queue
+                }
+
+                const laneIdx = mutableState[sourceCardInfo.owner].lanes.findIndex(
+                    l => l.some(c => c.id === sourceCardId)
+                );
+                const context: EffectContext = {
+                    cardOwner: sourceCardInfo.owner,
+                    actor: actor,
+                    currentTurn: mutableState.turn,
+                    opponent: (sourceCardInfo.owner === 'player' ? 'opponent' : 'player') as Player,
+                };
+
+                // Restore log context
+                if (logContext?.sourceCardName) mutableState._currentEffectSource = logContext.sourceCardName;
+                if (logContext?.phase) mutableState._currentPhaseContext = logContext.phase;
+                if (logContext?.indentLevel !== undefined) mutableState._logIndentLevel = logContext.indentLevel;
+
+                const result = executeCustomEffect(sourceCardInfo.card, laneIdx, mutableState, context, followUpEffect);
+                mutableState = result.newState;
+
+                if (mutableState.actionRequired) {
+                    // Effect needs user input - break and return
+                    mutableState.queuedActions = queuedActions;
+                    break;
+                }
+
+                continue; // Effect auto-resolved, move to next in queue
+            }
+
             if (nextAction.type === 'reveal_opponent_hand') {
                 const opponentId = mutableState.turn === 'player' ? 'opponent' : 'player';
                 const opponentState = { ...mutableState[opponentId] };

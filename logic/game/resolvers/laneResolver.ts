@@ -447,9 +447,12 @@ export const resolveActionWithLane = (prev: GameState, targetLaneIndex: number):
                         if (finalState.queuedActions && finalState.queuedActions.length > 0) {
                             const nextAction = finalState.queuedActions[0];
 
-                            // CRITICAL FIX: execute_remaining_custom_effects is an internal action
-                            // that should be processed via processQueuedActions, NOT set as actionRequired
-                            if (nextAction.type === 'execute_remaining_custom_effects') {
+                            // CRITICAL FIX: Internal actions must be auto-resolved, NOT set as actionRequired
+                            // execute_remaining_custom_effects: internal multi-effect continuation
+                            // execute_follow_up_effect: "if you do" conditional (already executed directly above)
+                            //   Setting it as actionRequired causes a softlock because useGameState.ts has no handler for it
+                            if (nextAction.type === 'execute_remaining_custom_effects' ||
+                                nextAction.type === 'execute_follow_up_effect') {
                                 finalState = processQueuedActions(finalState);
 
                             } else {
