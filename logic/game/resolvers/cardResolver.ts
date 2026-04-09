@@ -178,6 +178,14 @@ function handleMetal6Flip(state: GameState, targetCardId: string, action: Action
             }
 
             stateAfterTriggers = phaseManager.queuePendingCustomEffects(stateAfterTriggers);
+
+            // CRITICAL FIX: If uncover/reactive effects created an actionRequired
+            // (e.g., Metal-5 discard after Metal-6 self-delete uncovers it),
+            // preserve it. Queued effects (e.g., Water-0's flip_self) will run after.
+            if (stateAfterTriggers.actionRequired) {
+                return stateAfterTriggers;
+            }
+
             stateAfterTriggers.actionRequired = null;
 
             if (stateAfterTriggers.queuedActions && stateAfterTriggers.queuedActions.length > 0) {
