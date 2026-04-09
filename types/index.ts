@@ -622,7 +622,6 @@ export interface GameState {
     // Selected phase effect ID - set by cardResolver when player chooses which effect to execute first
     _selectedStartEffectId?: string;
     _selectedEndEffectId?: string;
-    processedSpeed1TriggerThisTurn?: boolean;
     processedUncoverEventIds?: string[];
     lastPlayedCardId?: string;
     lastCustomEffectTargetCardId?: string | null;

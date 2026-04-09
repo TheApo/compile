@@ -5,43 +5,11 @@
 
 import { GameState, Player, EffectContext, AnimationRequest } from '../../../types';
 import { log, setLogSource, setLogPhase, increaseLogIndent, decreaseLogIndent } from '../../utils/log';
-import { drawForPlayer } from '../../../utils/gameStateModifiers';
 import { handleChainedEffectsOnDiscard, countValidDeleteTargets, findCardOnBoard } from '../helpers/actionUtils';
 // NOTE: checkForPlague1Trigger removed - Plague-1 is now custom protocol, triggers via processReactiveEffects
 import { processReactiveEffects } from '../reactiveEffectProcessor';
 import { queuePendingCustomEffects } from '../phaseManager';
 import { executeCustomEffect } from '../../customProtocols/effectInterpreter';
-
-const checkForSpeed1Trigger = (state: GameState, player: Player): GameState => {
-    if (state.processedSpeed1TriggerThisTurn) {
-        return state;
-    }
-    const playerState = state[player];
-    // Speed-1's effect is in the TOP box, so it doesn't need to be uncovered.
-    const hasSpeed1 = playerState.lanes.flat().some(c => c.isFaceUp && c.protocol === 'Speed' && c.value === 1);
-
-    if (hasSpeed1) {
-        let newState = { ...state };
-
-        // Set context for Speed-1 trigger (no phase marker - it's a triggered effect)
-        newState = setLogSource(newState, "Speed-1");
-        newState = setLogPhase(newState, undefined);
-
-        newState = log(newState, player, "Triggers after clearing cache: Draw 1 card.");
-        newState = drawForPlayer(newState, player, 1);
-        newState.processedSpeed1TriggerThisTurn = true;
-
-        // Clear context after trigger
-        newState = setLogSource(newState, undefined);
-
-        // After drawing, the hand limit check for this turn is definitively over.
-        // Forcibly advance to the 'end' phase to prevent a loop.
-        newState.phase = 'end';
-        return newState;
-    }
-
-    return state;
-};
 
 /**
  * Helper to execute followUpEffect directly after discard completes.
@@ -157,9 +125,7 @@ export const discardCardFromHand = (prevState: GameState, cardId: string): GameS
             // Decrease indent after completing Check Cache discards
             stateAfterDiscard = decreaseLogIndent(stateAfterDiscard);
 
-            stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, 'player');
-
-            // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+            // Trigger reactive effects after clear cache (Speed-1 custom protocol)
             const reactiveResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player: 'player' });
             stateAfterDiscard = reactiveResult.newState;
 
@@ -360,9 +326,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
         if (isHandLimitDiscard) {
             // Decrease indent after completing Check Cache discards
             stateAfterDiscard = decreaseLogIndent(stateAfterDiscard);
-            stateAfterDiscard = checkForSpeed1Trigger(stateAfterDiscard, player);
-
-            // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+            // Trigger reactive effects after clear cache (Speed-1 custom protocol)
             const reactiveClearResult = processReactiveEffects(stateAfterDiscard, 'after_clear_cache', { player });
             stateAfterDiscard = reactiveClearResult.newState;
 
@@ -533,9 +497,7 @@ export const discardCards = (prevState: GameState, cardIds: string[], player: Pl
     let finalState = reactiveResult.newState;
 
     if (isHandLimitDiscard) {
-        finalState = checkForSpeed1Trigger(finalState, player);
-
-        // NEW: Trigger reactive effects after clear cache (Speed-1 custom protocol)
+        // Trigger reactive effects after clear cache (Speed-1 custom protocol)
         const reactiveClearResult = processReactiveEffects(finalState, 'after_clear_cache', { player });
         finalState = reactiveClearResult.newState;
 

@@ -210,7 +210,7 @@ export const advancePhase = (state: GameState): GameState => {
                 phase: 'start',
                 processedStartEffectIds: [],
                 processedEndEffectIds: [],
-                processedSpeed1TriggerThisTurn: false,
+
                 processedUncoverEventIds: [],
                 // CRITICAL: Clear phase effect snapshots when starting a new turn
                 _startPhaseEffectSnapshot: undefined,
@@ -954,7 +954,7 @@ export const processEndOfAction = (state: GameState): GameState => {
                     phase: 'start',
                     processedStartEffectIds: [],
                     processedEndEffectIds: [],
-                    processedSpeed1TriggerThisTurn: false,
+    
                     processedUncoverEventIds: [],
                     // CRITICAL: Clear phase effect snapshots when starting a new turn
                     _startPhaseEffectSnapshot: undefined,
