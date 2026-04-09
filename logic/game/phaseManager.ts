@@ -639,7 +639,10 @@ export const processQueuedActions = (state: GameState): GameState => {
 
                 // DEFER flipSelf effects when _deferFlipSelf is set (sequential CSS animation).
                 // Convert to a flip_self queued action so the existing deferral handler can defer it.
-                if (effectDef.params?.flipSelf && (mutableState as any)._deferFlipSelf) {
+                // CRITICAL: Never defer optional flipSelf effects (e.g., Plague-4 "You may flip this card")
+                // Optional effects must go through prompt_optional_effect to give the player a choice.
+                // A stale _deferFlipSelf flag from a previous flip action would skip the prompt otherwise.
+                if (effectDef.params?.flipSelf && !effectDef.params?.optional && (mutableState as any)._deferFlipSelf) {
                     delete (mutableState as any)._deferFlipSelf;
                     const flipSelfAction: any = {
                         type: 'flip_self',
