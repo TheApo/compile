@@ -2988,7 +2988,11 @@ const handleRequiredAction = (state: GameState, action: ActionRequired): AIActio
             const eligibleCardIds = revealAction.eligibleCardIds || [];
 
             if (eligibleCardIds.length === 0) {
-                return { type: 'skip' };
+                // CRITICAL: Cannot use 'skip' here - this action is not optional,
+                // so skipAction would not clear it, causing an infinite AI loop.
+                // Pass empty cardId to resolveSelectFromDrawnToReveal which clears
+                // the action and continues the chain via queuePendingCustomEffects.
+                return { type: 'selectFromDrawnToReveal', cardId: '' };
             }
 
             // Normal AI: Pick the card that would be most valuable to play
